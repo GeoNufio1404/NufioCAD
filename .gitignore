@@ -1,0 +1,17 @@
+# Compilación
+build/
+out/
+vcpkg_installed/
+
+# IDEs
+.vs/
+.vscode/
+.idea/
+*.user
+CMakeUserPresets.json
+compile_commands.json
+.cache/
+
+# Sistema
+.DS_Store
+Thumbs.db

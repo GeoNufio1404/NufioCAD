@@ -1,0 +1,140 @@
+# Hoja de ruta — CAD paramétrico de escritorio (C++)
+
+## Visión
+
+Un CAD paramétrico de escritorio para **Windows y Linux**, **offline y con archivos locales privados**, con la facilidad de uso de **Fusion 360** como meta. El flujo principal: hacer un sketch 2D sobre un plano o una cara, extruirlo y construir la pieza en 3D con un historial editable, para luego exportarla a STL, OBJ o STEP e imprimirla en 3D.
+
+**Motivación:**
+- FreeCAD: mismo tipo de kernel, pero su UX no resulta intuitiva (workbenches separados, flujo confuso).
+- Onshape: requiere internet y, en el plan gratuito, los modelos son públicos.
+- Fusion 360: es la referencia de UX a alcanzar.
+
+---
+
+## Stack tecnológico
+
+| Capa | Tecnología |
+|---|---|
+| Lenguaje | C++ |
+| Kernel geométrico (B-Rep) | OpenCASCADE (OCCT) |
+| Interfaz | Qt 6 Widgets (Dear ImGui solo para prototipos) |
+| Archivo nativo | `.nuf` sobre SQLite (parámetros en JSON) |
+| Render 3D | Visor AIS de OCCT al inicio; OpenGL propio más adelante si hace falta |
+| Solver de restricciones 2D | `libslvs` (SolveSpace) o PlaneGCS (FreeCAD) |
+| Plataformas | Windows y Linux, compilación nativa (sin Docker para distribuir) |
+| Build | CMake + CMakePresets + vcpkg (manifiesto); CI en Windows y Linux |
+
+**Capacidades de OCCT que aprovechamos:** extrusión, revolución, sweep, loft, booleanas, chaflán, fillet, shell; exportación STEP (`STEPControl_Writer`); mallado para STL (`BRepMesh_IncrementalMesh` + `StlAPI_Writer`).
+
+---
+
+## Principios de UX (referencia: Fusion 360)
+
+1. **Timeline** abajo, siempre visible: arrastrar, editar o suprimir operaciones.
+2. **Un solo espacio de trabajo**, sin workbenches separados.
+3. **Manipuladores en pantalla**: flechas para extruir, valores editables junto al cursor.
+4. **Sketch con restricciones automáticas** (horizontal, tangente, coincidente) mientras se dibuja.
+5. **Menú radial** con clic derecho y **atajos de una tecla** (E = extruir, L = línea).
+6. **Vista previa en vivo** antes de confirmar cada operación.
+
+---
+
+## Concepto central: modelado paramétrico
+
+- El modelo es un **árbol/historial de operaciones** (Sketch1 → Extrude1 → Fillet1 → …).
+- Cada operación guarda sus **parámetros**, no su resultado; al editar una, se reconstruye todo lo que viene después.
+- **Riesgo principal: problema de nombrado topológico.** Las referencias a caras y aristas (ej. "arista 7") pueden cambiar al editar operaciones anteriores. Debe resolverse en la Fase 3 (OCCT ofrece OCAF/TNaming como apoyo); si se pospone, chaflanes y fillets romperán el historial.
+
+---
+
+## Formatos de archivo (decisión)
+
+| Uso | Formato | Notas |
+|---|---|---|
+| Nativo (guardar/abrir) | **`.nuf`** | Formato propio sobre SQLite: local, privado, guarda el historial completo, guardado atómico |
+| Exportar | STL, OBJ, STEP | STL/OBJ como malla para el slicer; STEP como sólido exacto |
+| Importar | STEP | Entra como sólido sin historial (una operación «Importación» en el timeline), igual que en Fusion 360 |
+
+**Descartado: `.f3d` de Fusion 360.** Es un formato propietario de Autodesk sin documentación pública; su geometría usa el formato del kernel de Autodesk (ShapeManager), que OCCT no lee, y reconstruir su historial implicaría replicar el comportamiento interno de Fusion. Solo lo abre Fusion, así que no aporta como estándar de intercambio.
+
+---
+
+## Fases
+
+### Fase 0 — Diseño y fundamentos
+- Principios de UX documentados.
+- Mockups de la interfaz: modelado, sketch, inicio, importar y exportar.
+- Arquitectura: kernel (OCCT) / modelo del documento (features) / sistema de comandos (deshacer/rehacer) / UI (Qt).
+- Entorno: CMake + Qt + OCCT, estructura de carpetas, repositorio Git.
+- Nombre del proyecto (extensión de archivo ya decidida: `.nuf`).
+
+### Fase 1 — Visor y navegación
+- Viewport 3D.
+- Órbita, pan y zoom estilo Fusion.
+- ViewCube.
+- Selección de caras y aristas con resaltado al pasar el cursor.
+
+### Fase 2 — Sketcher 2D
+- Sketch sobre un plano o una cara seleccionada.
+- Líneas, rectángulos, círculos, arcos y splines.
+- Restricciones automáticas y manuales.
+- Cotas editables.
+
+### Fase 3 — Modelado básico + timeline
+- Extruir (unir, cortar, nuevo cuerpo).
+- Revolución.
+- Timeline editable.
+- Deshacer/rehacer.
+- Reconstrucción paramétrica.
+- Solución al problema de nombrado topológico.
+
+### Fase 4 — Archivos y exportación
+- Formato nativo `.nuf` (offline y privado), guardando el historial.
+- Pantalla de inicio con diseños recientes.
+- Exportación a STL, OBJ y STEP (con control de calidad de malla).
+- Importación de STEP.
+
+> Hito: desde aquí ya es posible diseñar una pieza simple, exportarla e imprimirla.
+
+### Fase 5 — Operaciones de acabado
+- Chaflán y fillet.
+- Shell (vaciado).
+- Agujeros (con avellanado/abocardado).
+- Patrones lineales y circulares.
+- Espejo.
+
+### Fase 6 — Geometría de referencia y parámetros
+- Planos y ejes de construcción.
+- Tabla de parámetros con nombre (ej. `grosor = 3 mm`).
+- Expresiones entre parámetros.
+
+### Fase 7 — Generadores
+- Engranajes rectos y helicoidales (perfil de involuta).
+- Roscas y tornillos métricos (sweep helicoidal).
+- Sweep y loft.
+
+### Fase 8 — Multi-cuerpo y ensambles
+- Varios cuerpos en un mismo diseño.
+- Componentes.
+- Uniones básicas (joints).
+
+### Fase 9 — Pulido para impresión 3D
+- Herramientas de medición.
+- Análisis de sección.
+- Control de calidad de malla al exportar.
+- Posible envío directo al slicer.
+
+---
+
+## Notas de planificación
+
+- **Orden:** la Fase 4 va justo después del modelado básico para tener un flujo útil de punta a punta lo antes posible; cada fase siguiente agrega valor real.
+- **Esfuerzo:** las Fases 1–3 son alcanzables en semanas; las Fases 4–5 bien hechas (incluyendo robustez del historial) concentran la mayor parte del esfuerzo.
+
+## Estado
+
+| Fase | Estado |
+|---|---|
+| Hoja de ruta | ✅ Aprobada |
+| Fase 0 | 🔄 En progreso — ✅ mockups (modelado, sketch, inicio, importar, exportar) · ✅ formatos de archivo · ✅ arquitectura (`arquitectura-cad.md`) · ✅ entorno (repositorio `nuf`: CMake + presets, vcpkg, módulos, pruebas, CI) · ⏭️ siguiente: nombre del proyecto |
+| Fases 1–9 | Pendientes |

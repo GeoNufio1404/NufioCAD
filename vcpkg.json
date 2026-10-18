@@ -1,0 +1,11 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "nuf",
+  "version": "0.1.0",
+  "description": "CAD paramétrico de escritorio. Qt 6 se instala aparte (instalador oficial en Windows, paquetes del sistema en Linux).",
+  "dependencies": [
+    "opencascade",
+    "sqlite3",
+    "catch2"
+  ]
+}

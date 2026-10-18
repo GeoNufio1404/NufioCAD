@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  linux:
+    name: Linux (Ubuntu, paquetes del sistema)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar dependencias
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build \
+            libocct-foundation-dev libocct-modeling-data-dev \
+            libocct-modeling-algorithms-dev libocct-visualization-dev \
+            libocct-data-exchange-dev libocct-ocaf-dev libocct-draw-dev \
+            occt-misc libtbb-dev \
+            qt6-base-dev libgl-dev libglu1-mesa-dev \
+            libsqlite3-dev catch2
+
+      - name: Configurar
+        run: cmake --preset linux-release
+
+      - name: Compilar
+        run: cmake --build --preset linux-release
+
+      - name: Pruebas del núcleo
+        run: ctest --preset linux-release
+
+      - name: Autoprueba de la app
+        run: ./build/linux-release/src/app/nuf --self-check
+
+  windows:
+    name: Windows (MSVC + vcpkg)
+    runs-on: windows-latest
+    env:
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-cache
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.*'
+          arch: win64_msvc2022_64
+          cache: true
+
+      - name: Variables de entorno
+        shell: pwsh
+        run: |
+          "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+          "QT_ROOT=$env:QT_ROOT_DIR" >> $env:GITHUB_ENV
+          New-Item -ItemType Directory -Force -Path "$env:VCPKG_DEFAULT_BINARY_CACHE" | Out-Null
+
+      - name: Caché de vcpkg (OCCT tarda en compilar la primera vez)
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}\vcpkg-cache
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Configurar
+        run: cmake --preset windows-release
+
+      - name: Compilar
+        run: cmake --build --preset windows-release
+
+      - name: Pruebas del núcleo
+        run: ctest --preset windows-release
+
+      - name: Autoprueba de la app
+        shell: pwsh
+        run: |
+          $env:PATH = "$env:QT_ROOT\bin;$env:PATH"
+          & .\build\windows-release\src\app\nuf.exe --self-check | Out-Host
+          if ($LASTEXITCODE -ne 0) { exit 1 }
