@@ -1,4 +1,4 @@
-# Arquitectura — CAD paramétrico (Fase 0)
+# Arquitectura — NufioCAD (Fase 0)
 
 > Estado: **aprobada** tras evaluar alternativas (sección 10). Complementa `hoja-de-ruta-cad.md`.
 

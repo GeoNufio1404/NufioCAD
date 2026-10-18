@@ -1,10 +1,11 @@
-# nuf — CAD paramétrico de escritorio
+# NufioCAD — CAD paramétrico de escritorio
 
 CAD paramétrico **offline**, con archivos locales privados, para **Windows y Linux**.
 Meta de usabilidad: Fusion 360. Kernel: OpenCASCADE. Interfaz: Qt 6.
 
-> `nuf` es el nombre en clave del proyecto y coincide con la extensión de sus
-> archivos (`.nuf`). El nombre definitivo se decide al cerrar la Fase 0.
+> **NufioCAD** es el nombre de trabajo. En el código se usa el prefijo corto
+> `nuf` (namespaces `nuf::`, targets `nuf::<módulo>`), igual que la extensión
+> de los archivos de diseño (`.nuf`).
 
 Documentación de diseño en [`docs/`](docs/):
 [hoja de ruta](docs/hoja-de-ruta-cad.md) · [arquitectura](docs/arquitectura-cad.md).
@@ -22,7 +23,7 @@ un `.nuf`, y deshacer/rehacer funciona con el primer comando real.
 ## Estructura
 
 ```
-nuf/
+NufioCAD/
 ├── CMakeLists.txt         proyecto raíz
 ├── CMakePresets.json      un preset por sistema (Linux / Windows)
 ├── vcpkg.json             dependencias con versión fijada (OCCT, SQLite, Catch2)
@@ -68,8 +69,8 @@ ctest --preset linux-debug
 ### 3. Ejecutar
 
 ```bash
-./build/linux-debug/src/app/nuf                # abre la app
-./build/linux-debug/src/app/nuf --self-check   # verifica el stack sin ventana
+./build/linux-debug/src/app/NufioCAD                # abre la app
+./build/linux-debug/src/app/NufioCAD --self-check   # verifica el stack sin ventana
 ```
 
 > Para usar las mismas versiones fijadas que Windows, existe el preset
@@ -121,7 +122,7 @@ También puedes abrir la carpeta directamente en Visual Studio: detecta
 
 ```powershell
 $env:PATH = "$env:QT_ROOT\bin;$env:PATH"
-.\build\windows-debug\src\app\nuf.exe
+.\build\windows-debug\src\app\NufioCAD.exe
 ```
 
 ---

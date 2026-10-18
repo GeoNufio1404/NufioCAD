@@ -1,4 +1,4 @@
-# Hoja de ruta — CAD paramétrico de escritorio (C++)
+# Hoja de ruta — NufioCAD (CAD paramétrico de escritorio en C++)
 
 ## Visión
 
@@ -66,7 +66,7 @@ Un CAD paramétrico de escritorio para **Windows y Linux**, **offline y con arch
 - Mockups de la interfaz: modelado, sketch, inicio, importar y exportar.
 - Arquitectura: kernel (OCCT) / modelo del documento (features) / sistema de comandos (deshacer/rehacer) / UI (Qt).
 - Entorno: CMake + Qt + OCCT, estructura de carpetas, repositorio Git.
-- Nombre del proyecto (extensión de archivo ya decidida: `.nuf`).
+- Nombre de trabajo: **NufioCAD** (puede cambiar); extensión de archivo `.nuf`; prefijo `nuf` en el código.
 
 ### Fase 1 — Visor y navegación
 - Viewport 3D.
@@ -136,5 +136,6 @@ Un CAD paramétrico de escritorio para **Windows y Linux**, **offline y con arch
 | Fase | Estado |
 |---|---|
 | Hoja de ruta | ✅ Aprobada |
-| Fase 0 | 🔄 En progreso — ✅ mockups (modelado, sketch, inicio, importar, exportar) · ✅ formatos de archivo · ✅ arquitectura (`arquitectura-cad.md`) · ✅ entorno (repositorio `nuf`: CMake + presets, vcpkg, módulos, pruebas, CI) · ⏭️ siguiente: nombre del proyecto |
-| Fases 1–9 | Pendientes |
+| Fase 0 | ✅ Completa — mockups, formatos de archivo, arquitectura, entorno (repositorio con CMake, vcpkg, pruebas y CI) y nombre de trabajo NufioCAD |
+| Fase 1 | ⏭️ Siguiente: visor y navegación |
+| Fases 2–9 | Pendientes |

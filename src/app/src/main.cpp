@@ -16,8 +16,8 @@ int main(int argc, char* argv[])
     }
 
     QApplication app(argc, argv);
-    QApplication::setApplicationName(QStringLiteral("nuf"));
-    QApplication::setApplicationDisplayName(QStringLiteral("nuf (nombre provisional)"));
+    QApplication::setApplicationName(QStringLiteral("NufioCAD"));
+    QApplication::setApplicationDisplayName(QStringLiteral("NufioCAD"));
     QApplication::setApplicationVersion(QStringLiteral("0.1.0"));
 
     nuf::app::MainWindow window;

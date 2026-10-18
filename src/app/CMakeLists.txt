@@ -10,7 +10,7 @@ add_executable(nuf_app
     src/SelfCheck.hpp)
 
 set_target_properties(nuf_app PROPERTIES
-    OUTPUT_NAME nuf
+    OUTPUT_NAME NufioCAD
     WIN32_EXECUTABLE ON)   # sin consola en Windows
 
 nuf_set_warnings(nuf_app)

@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.25)
 
-# "nuf" es el nombre en clave del proyecto (coincide con la extensión .nuf).
-# El nombre comercial se decide al cerrar la Fase 0.
-project(nuf
+# NufioCAD (nombre de trabajo). Internamente el código usa el prefijo corto
+# "nuf" (namespaces, targets), igual que la extensión de archivo .nuf.
+project(NufioCAD
     VERSION 0.1.0
     DESCRIPTION "CAD paramétrico de escritorio (Windows y Linux)"
     LANGUAGES CXX)

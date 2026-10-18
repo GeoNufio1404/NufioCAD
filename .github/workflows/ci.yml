@@ -32,7 +32,7 @@ jobs:
         run: ctest --preset linux-release
 
       - name: Autoprueba de la app
-        run: ./build/linux-release/src/app/nuf --self-check
+        run: ./build/linux-release/src/app/NufioCAD --self-check
 
   windows:
     name: Windows (MSVC + vcpkg)
@@ -77,5 +77,5 @@ jobs:
         shell: pwsh
         run: |
           $env:PATH = "$env:QT_ROOT\bin;$env:PATH"
-          & .\build\windows-release\src\app\nuf.exe --self-check | Out-Host
+          & .\build\windows-release\src\app\NufioCAD.exe --self-check | Out-Host
           if ($LASTEXITCODE -ne 0) { exit 1 }
