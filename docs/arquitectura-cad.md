@@ -230,7 +230,8 @@ La app se compila de forma **nativa** en cada sistema a partir del mismo código
 
 **Gráficos**
 - El viewport usa OpenGL a través de OCCT dentro de `QOpenGLWidget`, igual en ambos sistemas.
-- Riesgo a vigilar: en Linux (Fedora usa Wayland por defecto) hay que probar el visor desde la Fase 1; si da problemas, se puede forzar XWayland (`QT_QPA_PLATFORM=xcb`) mientras se resuelve.
+- **Wayland (probado en Fedora 44, OCCT 7.9.3, Qt 6.11):** el OCCT de la distribución está compilado con GLX/X11 y no puede adoptar el contexto EGL que Qt crea en Wayland nativo (`OpenGl_Context::Init` falla). Con XWayland (`QT_QPA_PLATFORM=xcb`) el visor V3d/AIS dentro de `QOpenGLWidget` funciona. Por eso `main.cpp` fuerza `xcb` en sesiones Wayland, salvo que el usuario defina `QT_QPA_PLATFORM`. Soporte nativo de Wayland: requiere un OCCT compilado con EGL (opción a evaluar al empaquetar).
+- El `QSurfaceFormat` del viewport debe pedir depth buffer (24) y stencil (8); sin ellos OCCT advierte que la ventana está incompleta.
 
 **Distribución**
 - **Windows**: `windeployqt` para reunir las DLL de Qt + instalador (CPack con NSIS o WiX), con asociación de `.nuf` y entrada en el menú Inicio.

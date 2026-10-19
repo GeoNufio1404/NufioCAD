@@ -15,6 +15,17 @@ int main(int argc, char* argv[])
         }
     }
 
+#ifdef Q_OS_LINUX
+    // El OpenCASCADE de las distribuciones usa GLX (X11) y no puede adoptar
+    // el contexto EGL que Qt crea en Wayland. Mientras tanto se usa XWayland,
+    // salvo que el usuario elija otra plataforma con QT_QPA_PLATFORM.
+    if (qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM")
+        && !qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY")
+        && !qEnvironmentVariableIsEmpty("DISPLAY")) {
+        qputenv("QT_QPA_PLATFORM", "xcb");
+    }
+#endif
+
     QApplication app(argc, argv);
     QApplication::setApplicationName(QStringLiteral("NufioCAD"));
     QApplication::setApplicationDisplayName(QStringLiteral("NufioCAD"));
