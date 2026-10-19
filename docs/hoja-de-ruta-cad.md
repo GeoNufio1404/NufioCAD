@@ -137,5 +137,5 @@ Un CAD paramétrico de escritorio para **Windows y Linux**, **offline y con arch
 |---|---|
 | Hoja de ruta | ✅ Aprobada |
 | Fase 0 | ✅ Completa — mockups, formatos de archivo, arquitectura, entorno (repositorio con CMake, vcpkg, pruebas y CI) y nombre de trabajo NufioCAD |
-| Fase 1 | ⏭️ Siguiente: visor y navegación |
+| Fase 1 | 🚧 Implementada y probada en Linux (Fedora): visor OCCT en Qt, órbita/pan/zoom estilo Fusion, ViewCube, resaltado y selección de caras y aristas. Falta probarla en Windows |
 | Fases 2–9 | Pendientes |

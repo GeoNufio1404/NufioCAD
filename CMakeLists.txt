@@ -40,7 +40,7 @@ add_subdirectory(src/io)
 # Interfaz (Qt solo vive aquí)
 # ---------------------------------------------------------------------------
 if(NUF_BUILD_APP)
-    find_package(Qt6 REQUIRED COMPONENTS Widgets)
+    find_package(Qt6 REQUIRED COMPONENTS Widgets OpenGLWidgets)
     message(STATUS "Qt ${Qt6_VERSION}")
     add_subdirectory(src/render)
     add_subdirectory(src/app)

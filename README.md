@@ -14,9 +14,21 @@ Documentación de diseño en [`docs/`](docs/):
 
 ## Estado
 
-Fase 0 (fundamentos). La app abre una ventana con la distribución del mockup y
-valida el stack completo: OpenCASCADE construye un sólido, SQLite crea y reabre
-un `.nuf`, y deshacer/rehacer funciona con el primer comando real.
+Fase 1 (visor y navegación). El viewport muestra una pieza de muestra con el
+visor de OpenCASCADE y se navega como en Fusion 360:
+
+| Acción | Ratón / teclado |
+|---|---|
+| Desplazar (pan) | botón central |
+| Orbitar | Shift + botón central |
+| Zoom hacia el cursor | rueda |
+| Seleccionar cara o arista | clic izquierdo (Shift/Ctrl: agregar) |
+| Selección por rectángulo | arrastre izquierdo |
+| Vista inicial / ajustar a la ventana | Inicio / F6 |
+
+Además: ViewCube (clic en una cara para orientar la vista), tema claro/oscuro
+(Ver › Tema) y, en Linux con Wayland, la app usa XWayland porque el OCCT de
+las distribuciones solo trae GLX.
 
 ---
 

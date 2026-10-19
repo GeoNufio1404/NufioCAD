@@ -7,6 +7,10 @@
 
 class QAction;
 
+namespace nuf::render {
+class Viewport;
+}
+
 namespace nuf::app {
 
 // Ventana principal: reproduce la distribución del mockup (navegador a la
@@ -27,6 +31,7 @@ private:
     document::Document document_;
     commands::CommandStack commands_{document_};
 
+    render::Viewport* viewport_ = nullptr;
     QAction* undoAction_ = nullptr;
     QAction* redoAction_ = nullptr;
 };

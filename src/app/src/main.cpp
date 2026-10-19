@@ -2,6 +2,8 @@
 #include "SelfCheck.hpp"
 #include "Theme.hpp"
 
+#include <nuf/render/Viewport.hpp>
+
 #include <QApplication>
 #include <QIcon>
 
@@ -33,6 +35,7 @@ int main(int argc, char* argv[])
     }
 #endif
 
+    QSurfaceFormat::setDefaultFormat(nuf::render::Viewport::defaultFormat());
     QApplication app(argc, argv);
     QApplication::setOrganizationName(QStringLiteral("NufioCAD"));
     QApplication::setApplicationName(QStringLiteral("NufioCAD"));

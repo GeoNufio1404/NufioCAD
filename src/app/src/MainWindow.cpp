@@ -37,15 +37,18 @@ QWidget* placeholder(const QString& text)
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
 {
-    setCentralWidget(new render::Viewport(this));
+    viewport_ = new render::Viewport(this);
+    setCentralWidget(viewport_);
     createMenus();
     createDocks();
 
-    statusBar()->showMessage(
-        QStringLiteral("OCCT %1 · SQLite %2 · Qt %3")
-            .arg(QString::fromStdString(geometry::kernelVersion()),
-                 QString::fromStdString(io::NufFile::sqliteVersion()),
-                 QString::fromLatin1(qVersion())));
+    auto* versions = new QLabel(QStringLiteral("OCCT %1 · SQLite %2 · Qt %3")
+                                    .arg(QString::fromStdString(geometry::kernelVersion()),
+                                         QString::fromStdString(io::NufFile::sqliteVersion()),
+                                         QString::fromLatin1(qVersion())));
+    statusBar()->addPermanentWidget(versions);
+    connect(viewport_, &render::Viewport::selectionChanged, this,
+            [this](const QString& description) { statusBar()->showMessage(description); });
 
     document_.changed.connect([this] { updateTitle(); });
     commands_.changed.connect([this] { updateUndoActions(); });
@@ -87,6 +90,11 @@ void MainWindow::createMenus()
     });
 
     QMenu* view = menuBar()->addMenu(QStringLiteral("&Ver"));
+    view->addAction(QStringLiteral("Vista &inicial"), QKeySequence(Qt::Key_Home), this,
+                    [this] { viewport_->resetView(); });
+    view->addAction(QStringLiteral("&Ajustar a la ventana"), QKeySequence(Qt::Key_F6), this,
+                    [this] { viewport_->fitAll(); });
+    view->addSeparator();
     QMenu* themeMenu = view->addMenu(QStringLiteral("&Tema"));
     auto* themeGroup = new QActionGroup(this);
     for (const auto& [text, theme] : {std::pair{QStringLiteral("&Sistema"), Theme::System},

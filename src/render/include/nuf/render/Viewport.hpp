@@ -1,16 +1,54 @@
 #pragma once
 
-#include <QWidget>
+#include <QOpenGLWidget>
+#include <QSurfaceFormat>
+#include <QString>
+
+#include <memory>
 
 namespace nuf::render {
 
-// Marcador de posición del viewport 3D (se implementa en la Fase 1).
-class Viewport final : public QWidget {
+// Viewport 3D: visor V3d/AIS de OpenCASCADE dentro de un QOpenGLWidget.
+// Navegación estilo Fusion 360:
+//   botón central         desplazar (pan)
+//   Shift + botón central orbitar
+//   rueda                 zoom hacia el cursor
+//   clic izquierdo        seleccionar cara o arista (Shift/Ctrl: agregar)
+//   arrastre izquierdo    selección por rectángulo
+// Las cabeceras de OCCT quedan en el .cpp para que app/ no dependa de ellas.
+class Viewport final : public QOpenGLWidget {
+    Q_OBJECT
+
 public:
     explicit Viewport(QWidget* parent = nullptr);
+    ~Viewport() override;
+
+    // Formato OpenGL que necesita OCCT. Debe fijarse como formato por defecto
+    // antes de crear QApplication, para que la ventana principal también lo use.
+    static QSurfaceFormat defaultFormat();
+
+    // Encuadra todo el modelo.
+    void fitAll();
+    // Vista isométrica inicial, encuadrando el modelo.
+    void resetView();
+
+signals:
+    // Texto breve para la barra de estado ("Cara seleccionada", "2 aristas"…).
+    void selectionChanged(const QString& description);
 
 protected:
-    void paintEvent(QPaintEvent* event) override;
+    void initializeGL() override;
+    void paintGL() override;
+    void changeEvent(QEvent* event) override;
+    void mousePressEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void wheelEvent(QWheelEvent* event) override;
+
+private:
+    class Impl;
+    friend class Impl;
+    std::unique_ptr<Impl> impl_;
 };
 
 } // namespace nuf::render
