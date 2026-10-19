@@ -3,9 +3,11 @@
 #include <nuf/commands/CommandStack.hpp>
 #include <nuf/document/Document.hpp>
 
+#include <QByteArray>
 #include <QMainWindow>
 
 class QAction;
+class QDockWidget;
 
 namespace nuf::render {
 class Viewport;
@@ -22,6 +24,9 @@ class MainWindow final : public QMainWindow {
 public:
     explicit MainWindow(QWidget* parent = nullptr);
 
+protected:
+    void closeEvent(QCloseEvent* event) override;
+
 private:
     void createMenus();
     void createDocks();
@@ -32,6 +37,10 @@ private:
     commands::CommandStack commands_{document_};
 
     render::Viewport* viewport_ = nullptr;
+    QDockWidget* navigatorDock_ = nullptr;
+    QDockWidget* propertiesDock_ = nullptr;
+    QDockWidget* timelineDock_ = nullptr;
+    QByteArray defaultLayout_; // distribución original, para "Restablecer paneles"
     QAction* undoAction_ = nullptr;
     QAction* redoAction_ = nullptr;
 };

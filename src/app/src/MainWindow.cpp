@@ -8,12 +8,14 @@
 
 #include <QAction>
 #include <QActionGroup>
+#include <QCloseEvent>
 #include <QDockWidget>
 #include <QInputDialog>
 #include <QKeySequence>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenuBar>
+#include <QSettings>
 #include <QStatusBar>
 
 #include <memory>
@@ -39,8 +41,8 @@ MainWindow::MainWindow(QWidget* parent)
 {
     viewport_ = new render::Viewport(this);
     setCentralWidget(viewport_);
-    createMenus();
     createDocks();
+    createMenus();
 
     auto* versions = new QLabel(QStringLiteral("OCCT %1 · SQLite %2 · Qt %3")
                                     .arg(QString::fromStdString(geometry::kernelVersion()),
@@ -55,6 +57,20 @@ MainWindow::MainWindow(QWidget* parent)
     updateTitle();
     updateUndoActions();
     resize(1440, 900);
+
+    // Recuerda tamaño de la ventana y distribución de paneles entre sesiones.
+    defaultLayout_ = saveState();
+    const QSettings settings;
+    restoreGeometry(settings.value(QStringLiteral("ui/geometry")).toByteArray());
+    restoreState(settings.value(QStringLiteral("ui/layout")).toByteArray());
+}
+
+void MainWindow::closeEvent(QCloseEvent* event)
+{
+    QSettings settings;
+    settings.setValue(QStringLiteral("ui/geometry"), saveGeometry());
+    settings.setValue(QStringLiteral("ui/layout"), saveState());
+    QMainWindow::closeEvent(event);
 }
 
 void MainWindow::createMenus()
@@ -95,6 +111,17 @@ void MainWindow::createMenus()
     view->addAction(QStringLiteral("&Ajustar a la ventana"), QKeySequence(Qt::Key_F6), this,
                     [this] { viewport_->fitAll(); });
     view->addSeparator();
+    QMenu* panels = view->addMenu(QStringLiteral("&Paneles"));
+    panels->addAction(navigatorDock_->toggleViewAction());
+    panels->addAction(propertiesDock_->toggleViewAction());
+    view->addAction(QStringLiteral("&Restablecer paneles"), this, [this] {
+        restoreState(defaultLayout_);
+        for (QDockWidget* dock : {navigatorDock_, propertiesDock_, timelineDock_}) {
+            dock->setFloating(false);
+            dock->show();
+        }
+    });
+    view->addSeparator();
     QMenu* themeMenu = view->addMenu(QStringLiteral("&Tema"));
     auto* themeGroup = new QActionGroup(this);
     for (const auto& [text, theme] : {std::pair{QStringLiteral("&Sistema"), Theme::System},
@@ -109,20 +136,24 @@ void MainWindow::createMenus()
 
 void MainWindow::createDocks()
 {
-    auto* navigator = new QDockWidget(QStringLiteral("Navegador"), this);
-    navigator->setWidget(placeholder(QStringLiteral("Navegador\n(Fase 3)")));
-    navigator->setMinimumWidth(240);
-    addDockWidget(Qt::LeftDockWidgetArea, navigator);
+    // objectName: lo usa saveState()/restoreState() para recordar cada panel.
+    navigatorDock_ = new QDockWidget(QStringLiteral("Navegador"), this);
+    navigatorDock_->setObjectName(QStringLiteral("navigator"));
+    navigatorDock_->setWidget(placeholder(QStringLiteral("Navegador\n(Fase 3)")));
+    navigatorDock_->setMinimumWidth(240);
+    addDockWidget(Qt::LeftDockWidgetArea, navigatorDock_);
 
-    auto* properties = new QDockWidget(QStringLiteral("Propiedades"), this);
-    properties->setWidget(placeholder(QStringLiteral("Panel de propiedades\n(Fase 3)")));
-    properties->setMinimumWidth(300);
-    addDockWidget(Qt::RightDockWidgetArea, properties);
+    propertiesDock_ = new QDockWidget(QStringLiteral("Propiedades"), this);
+    propertiesDock_->setObjectName(QStringLiteral("properties"));
+    propertiesDock_->setWidget(placeholder(QStringLiteral("Panel de propiedades\n(Fase 3)")));
+    propertiesDock_->setMinimumWidth(300);
+    addDockWidget(Qt::RightDockWidgetArea, propertiesDock_);
 
-    auto* timeline = new QDockWidget(QStringLiteral("Timeline"), this);
-    timeline->setWidget(placeholder(QStringLiteral("Timeline (Fase 3)")));
-    timeline->setFeatures(QDockWidget::NoDockWidgetFeatures);
-    addDockWidget(Qt::BottomDockWidgetArea, timeline);
+    timelineDock_ = new QDockWidget(QStringLiteral("Timeline"), this);
+    timelineDock_->setObjectName(QStringLiteral("timeline"));
+    timelineDock_->setWidget(placeholder(QStringLiteral("Timeline (Fase 3)")));
+    timelineDock_->setFeatures(QDockWidget::NoDockWidgetFeatures);
+    addDockWidget(Qt::BottomDockWidgetArea, timelineDock_);
 }
 
 void MainWindow::updateUndoActions()
