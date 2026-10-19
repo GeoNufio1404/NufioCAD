@@ -127,16 +127,25 @@ $env:PATH = "$env:QT_ROOT\bin;$env:PATH"
 
 ---
 
-## Fijar versiones de vcpkg (una sola vez)
+## Versiones fijadas de vcpkg
 
-Para que todos compilen con las mismas versiones de las dependencias:
+`vcpkg.json` tiene una `builtin-baseline`: el commit del catálogo de vcpkg
+que define qué versión de cada dependencia se usa. Con ella, todos compilan
+con lo mismo (al fijarla: OpenCASCADE 8.0.1, SQLite 3.53.4, Catch2 3.16.0).
+
+Tu clon local de vcpkg debe ser **completo** (no `--depth 1`) y estar al día
+para conocer ese commit: `git -C %VCPKG_ROOT% pull`.
+
+Para actualizar las dependencias en el futuro:
 
 ```bash
-vcpkg x-update-baseline --add-initial-baseline
-git commit -am "Fijar baseline de vcpkg"
+vcpkg x-update-baseline
+git commit -am "Actualizar baseline de vcpkg"
 ```
 
-Esto agrega `builtin-baseline` a `vcpkg.json`.
+> Nota: en Linux con paquetes del sistema la versión de OCCT es la de la
+> distribución (Fedora 43/44: 7.9.3). El código usa solo APIs presentes en
+> OCCT 7.x y 8.x.
 
 ---
 

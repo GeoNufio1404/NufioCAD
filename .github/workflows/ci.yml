@@ -49,10 +49,19 @@ jobs:
           arch: win64_msvc2022_64
           cache: true
 
+      # Clon propio de vcpkg (completo, no superficial): la baseline fijada en
+      # vcpkg.json debe existir en su historial, y el vcpkg preinstalado del
+      # runner puede ser más viejo que esa baseline.
+      - name: Preparar vcpkg
+        shell: pwsh
+        run: |
+          git clone https://github.com/microsoft/vcpkg "$env:GITHUB_WORKSPACE\vcpkg"
+          & "$env:GITHUB_WORKSPACE\vcpkg\bootstrap-vcpkg.bat" -disableMetrics
+
       - name: Variables de entorno
         shell: pwsh
         run: |
-          "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+          "VCPKG_ROOT=$env:GITHUB_WORKSPACE\vcpkg" >> $env:GITHUB_ENV
           "QT_ROOT=$env:QT_ROOT_DIR" >> $env:GITHUB_ENV
           New-Item -ItemType Directory -Force -Path "$env:VCPKG_DEFAULT_BINARY_CACHE" | Out-Null
 
@@ -61,6 +70,7 @@ jobs:
         with:
           path: ${{ github.workspace }}\vcpkg-cache
           key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: vcpkg-${{ runner.os }}-
 
       - uses: ilammy/msvc-dev-cmd@v1
 
