@@ -62,6 +62,20 @@ public:
     }
 };
 
+// Ventana nativa que OCCT asocia a la vista. En Linux se usa la ventana
+// principal y no winId() del viewport: eso lo convertiría en una ventana X11
+// propia que Qt alterna con la principal (al maximizar o desacoplar paneles),
+// y OCCT se quedaría con una que ya no existe al cerrar la app.
+Aspect_Drawable nativeDrawable(QWidget& widget)
+{
+#ifdef _WIN32
+    (void)widget;
+    return reinterpret_cast<Aspect_Drawable>(WindowFromDC(wglGetCurrentDC()));
+#else
+    return static_cast<Aspect_Drawable>(widget.window()->winId());
+#endif
+}
+
 Aspect_VKeyMouse toOcctButtons(Qt::MouseButtons buttons)
 {
     Aspect_VKeyMouse result = Aspect_VKeyMouse_NONE;
@@ -369,11 +383,7 @@ void Viewport::initializeGL()
     const qreal ratio = devicePixelRatioF();
     const Graphic3d_Vec2i viewSize(int(width() * ratio), int(height() * ratio));
 
-#ifdef _WIN32
-    const auto nativeWindow = reinterpret_cast<Aspect_Drawable>(WindowFromDC(wglGetCurrentDC()));
-#else
-    const auto nativeWindow = static_cast<Aspect_Drawable>(winId());
-#endif
+    const Aspect_Drawable nativeWindow = nativeDrawable(*this);
 
     Handle(OpenGl_Context) glContext = new OpenGl_Context();
     if (!glContext->Init(kCoreProfile)) {
@@ -402,6 +412,11 @@ void Viewport::paintGL()
 {
     if (impl_->view->Window().IsNull()) {
         return;
+    }
+    // Qt cambió la ventana nativa (por ejemplo, al recrearla): se enlaza OCCT
+    // de nuevo, como en el ejemplo oficial de OCCT para Qt.
+    if (impl_->view->Window()->NativeHandle() != nativeDrawable(*this)) {
+        initializeGL();
     }
 
     Handle(OpenGl_Context) glContext =
