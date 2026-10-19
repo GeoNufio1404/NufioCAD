@@ -14,7 +14,9 @@ namespace nuf::render {
 //   clic izquierdo               seleccionar cara o arista
 //   Shift + clic izquierdo       agregar/quitar de la selección
 //   Shift + arrastre izquierdo   selección por rectángulo
-//   botón central                desplazar (pan)
+//   arrastre derecho             desplazar (pan); el clic derecho queda
+//                                libre para el menú rápido
+//   botón central                desplazar (alternativa)
 //   Shift + botón central        orbitar (como en Fusion 360)
 //   rueda                        zoom hacia el cursor
 // Las cabeceras de OCCT quedan en el .cpp para que app/ no dependa de ellas.

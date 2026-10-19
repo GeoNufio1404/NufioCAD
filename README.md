@@ -20,7 +20,7 @@ visor de OpenCASCADE:
 | Acción | Ratón / teclado |
 |---|---|
 | Orbitar | arrastre izquierdo (o Shift + botón central, como en Fusion 360) |
-| Desplazar (pan) | botón central |
+| Desplazar (pan) | arrastre derecho (o botón central) |
 | Zoom hacia el cursor | rueda |
 | Seleccionar cara o arista | clic izquierdo |
 | Agregar/quitar de la selección | Shift + clic izquierdo |

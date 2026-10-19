@@ -231,13 +231,15 @@ private:
     {
         // Izquierdo: clic selecciona y arrastre orbita. Shift + izquierdo: clic
         // agrega/quita de la selección y arrastre selecciona por rectángulo.
-        // Botón central: desplaza; Shift + central también orbita (Fusion 360).
+        // Derecho: arrastre desplaza; el clic queda libre para el menú rápido.
+        // Botón central: también desplaza; Shift + central orbita (Fusion 360).
         // Botón + modificadores, como clave del mapa (enums distintos en OCCT).
         const auto key = [](unsigned int button, unsigned int modifiers = 0) { return button | modifiers; };
         AIS_MouseGestureMap& gestures = ChangeMouseGestureMap();
         gestures.Clear();
         gestures.Bind(key(Aspect_VKeyMouse_LeftButton), AIS_MouseGesture_RotateOrbit);
         gestures.Bind(key(Aspect_VKeyMouse_LeftButton, Aspect_VKeyFlags_SHIFT), AIS_MouseGesture_SelectRectangle);
+        gestures.Bind(key(Aspect_VKeyMouse_RightButton), AIS_MouseGesture_Pan);
         gestures.Bind(key(Aspect_VKeyMouse_MiddleButton), AIS_MouseGesture_Pan);
         gestures.Bind(key(Aspect_VKeyMouse_MiddleButton, Aspect_VKeyFlags_SHIFT), AIS_MouseGesture_RotateOrbit);
     }
