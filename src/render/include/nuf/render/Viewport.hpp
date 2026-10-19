@@ -9,12 +9,14 @@
 namespace nuf::render {
 
 // Viewport 3D: visor V3d/AIS de OpenCASCADE dentro de un QOpenGLWidget.
-// Navegación estilo Fusion 360:
-//   botón central         desplazar (pan)
-//   Shift + botón central orbitar
-//   rueda                 zoom hacia el cursor
-//   clic izquierdo        seleccionar cara o arista (Shift/Ctrl: agregar)
-//   arrastre izquierdo    selección por rectángulo
+// Navegación:
+//   arrastre izquierdo           orbitar
+//   clic izquierdo               seleccionar cara o arista
+//   Shift + clic izquierdo       agregar/quitar de la selección
+//   Shift + arrastre izquierdo   selección por rectángulo
+//   botón central                desplazar (pan)
+//   Shift + botón central        orbitar (como en Fusion 360)
+//   rueda                        zoom hacia el cursor
 // Las cabeceras de OCCT quedan en el .cpp para que app/ no dependa de ellas.
 class Viewport final : public QOpenGLWidget {
     Q_OBJECT

@@ -15,15 +15,16 @@ Documentación de diseño en [`docs/`](docs/):
 ## Estado
 
 Fase 1 (visor y navegación). El viewport muestra una pieza de muestra con el
-visor de OpenCASCADE y se navega como en Fusion 360:
+visor de OpenCASCADE:
 
 | Acción | Ratón / teclado |
 |---|---|
+| Orbitar | arrastre izquierdo (o Shift + botón central, como en Fusion 360) |
 | Desplazar (pan) | botón central |
-| Orbitar | Shift + botón central |
 | Zoom hacia el cursor | rueda |
-| Seleccionar cara o arista | clic izquierdo (Shift/Ctrl: agregar) |
-| Selección por rectángulo | arrastre izquierdo |
+| Seleccionar cara o arista | clic izquierdo |
+| Agregar/quitar de la selección | Shift + clic izquierdo |
+| Selección por rectángulo | Shift + arrastre izquierdo |
 | Vista inicial / ajustar a la ventana | Inicio / F6 |
 
 Además: ViewCube (clic en una cara para orientar la vista), tema claro/oscuro
