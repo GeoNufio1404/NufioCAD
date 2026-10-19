@@ -9,7 +9,7 @@ jobs:
     name: Linux (Ubuntu, paquetes del sistema)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Instalar dependencias
         run: |
@@ -40,7 +40,7 @@ jobs:
     env:
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-cache
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Instalar Qt
         uses: jurplel/install-qt-action@v4
@@ -65,8 +65,11 @@ jobs:
           "QT_ROOT=$env:QT_ROOT_DIR" >> $env:GITHUB_ENV
           New-Item -ItemType Directory -Force -Path "$env:VCPKG_DEFAULT_BINARY_CACHE" | Out-Null
 
-      - name: Caché de vcpkg (OCCT tarda en compilar la primera vez)
-        uses: actions/cache@v4
+      # La caché se restaura aquí y se guarda justo después de configurar
+      # (cuando vcpkg ya compiló OCCT), aunque fallen los pasos siguientes.
+      - name: Restaurar caché de vcpkg (OCCT tarda en compilar la primera vez)
+        id: vcpkg-cache
+        uses: actions/cache/restore@v6
         with:
           path: ${{ github.workspace }}\vcpkg-cache
           key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
@@ -76,6 +79,13 @@ jobs:
 
       - name: Configurar
         run: cmake --preset windows-release
+
+      - name: Guardar caché de vcpkg
+        if: always() && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ github.workspace }}\vcpkg-cache
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
 
       - name: Compilar
         run: cmake --build --preset windows-release
