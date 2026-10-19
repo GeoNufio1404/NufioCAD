@@ -1,7 +1,9 @@
 #include "MainWindow.hpp"
 #include "SelfCheck.hpp"
+#include "Theme.hpp"
 
 #include <QApplication>
+#include <QIcon>
 
 #include <iostream>
 #include <string_view>
@@ -24,12 +26,26 @@ int main(int argc, char* argv[])
         && !qEnvironmentVariableIsEmpty("DISPLAY")) {
         qputenv("QT_QPA_PLATFORM", "xcb");
     }
+    // El tema gtk3 (predeterminado en GNOME) no informa la preferencia de
+    // modo oscuro; el portal de escritorio sí, y la sigue en vivo.
+    if (qEnvironmentVariableIsEmpty("QT_QPA_PLATFORMTHEME")) {
+        qputenv("QT_QPA_PLATFORMTHEME", "xdgdesktopportal");
+    }
 #endif
 
     QApplication app(argc, argv);
+    QApplication::setOrganizationName(QStringLiteral("NufioCAD"));
     QApplication::setApplicationName(QStringLiteral("NufioCAD"));
     QApplication::setApplicationDisplayName(QStringLiteral("NufioCAD"));
     QApplication::setApplicationVersion(QStringLiteral("0.1.0"));
+    // Varios tamaños: X11 descarta los iconos demasiado grandes (1024 px).
+    QIcon icon;
+    for (int size : {16, 24, 32, 48, 64, 128, 256}) {
+        icon.addFile(QStringLiteral(":/icons/app/%1.png").arg(size), QSize(size, size));
+    }
+    QApplication::setWindowIcon(icon);
+
+    nuf::app::initTheme(app);
 
     nuf::app::MainWindow window;
     window.show();

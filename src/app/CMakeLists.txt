@@ -1,13 +1,17 @@
 # app: ejecutable con la interfaz Qt. Es el único lugar (junto con render/)
 # que conoce Qt.
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
 
 add_executable(nuf_app
     src/main.cpp
     src/MainWindow.cpp
     src/MainWindow.hpp
     src/SelfCheck.cpp
-    src/SelfCheck.hpp)
+    src/SelfCheck.hpp
+    src/Theme.cpp
+    src/Theme.hpp
+    resources/resources.qrc)
 
 set_target_properties(nuf_app PROPERTIES
     OUTPUT_NAME NufioCAD

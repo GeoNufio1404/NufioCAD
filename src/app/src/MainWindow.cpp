@@ -1,4 +1,5 @@
 #include "MainWindow.hpp"
+#include "Theme.hpp"
 
 #include <nuf/commands/RenameDocument.hpp>
 #include <nuf/geometry/Kernel.hpp>
@@ -6,6 +7,7 @@
 #include <nuf/render/Viewport.hpp>
 
 #include <QAction>
+#include <QActionGroup>
 #include <QDockWidget>
 #include <QInputDialog>
 #include <QKeySequence>
@@ -83,6 +85,18 @@ void MainWindow::createMenus()
             commands_.push(std::make_unique<commands::RenameDocument>(name.trimmed().toStdString()));
         }
     });
+
+    QMenu* view = menuBar()->addMenu(QStringLiteral("&Ver"));
+    QMenu* themeMenu = view->addMenu(QStringLiteral("&Tema"));
+    auto* themeGroup = new QActionGroup(this);
+    for (const auto& [text, theme] : {std::pair{QStringLiteral("&Sistema"), Theme::System},
+                                      std::pair{QStringLiteral("&Claro"), Theme::Light},
+                                      std::pair{QStringLiteral("&Oscuro"), Theme::Dark}}) {
+        QAction* action = themeMenu->addAction(text, this, [theme] { setTheme(theme); });
+        action->setCheckable(true);
+        action->setChecked(theme == currentTheme());
+        themeGroup->addAction(action);
+    }
 }
 
 void MainWindow::createDocks()

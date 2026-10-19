@@ -13,8 +13,10 @@ Viewport::Viewport(QWidget* parent)
 void Viewport::paintEvent(QPaintEvent* /*event*/)
 {
     QPainter painter(this);
-    painter.fillRect(rect(), QColor(0xE6, 0xE9, 0xED));
-    painter.setPen(QColor(0x5B, 0x64, 0x70));
+    // Fondo del mockup en claro; un gris azulado oscuro en el tema oscuro.
+    const bool dark = palette().color(QPalette::Window).lightness() < 128;
+    painter.fillRect(rect(), dark ? QColor(0x2B, 0x2F, 0x36) : QColor(0xE6, 0xE9, 0xED));
+    painter.setPen(palette().color(QPalette::PlaceholderText));
     painter.drawText(rect(), Qt::AlignCenter,
                      QStringLiteral("Viewport 3D\n(se implementa en la Fase 1)"));
 }
