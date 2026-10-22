@@ -13,7 +13,10 @@
 #include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
 #include <BRepExtrema_DistShapeShape.hxx>
+#include <BRepGProp.hxx>
 #include <BRepOffsetAPI_DraftAngle.hxx>
+#include <BRepOffsetAPI_MakeOffset.hxx>
+#include <GProp_GProps.hxx>
 #include <BRepPrimAPI_MakeHalfSpace.hxx>
 #include <BRepPrimAPI_MakePrism.hxx>
 #include <BRepPrimAPI_MakeRevol.hxx>
@@ -137,6 +140,27 @@ ProfileFace bodyFace(const Shape& body, int faceIndex)
     return pf;
 }
 
+// ¿Se cierra la cara al encogerla «inset» hacia dentro? (un ángulo que
+// estrecha tanto haría pasar las laterales por su vértice).
+bool collapses(const TopoDS_Face& face, double inset)
+{
+    if (inset <= kTiny) {
+        return false;
+    }
+    try {
+        BRepOffsetAPI_MakeOffset offset(face, GeomAbs_Arc);
+        offset.Perform(-inset);
+        if (!offset.IsDone() || offset.Shape().IsNull()) {
+            return true;
+        }
+        GProp_GProps props;
+        BRepGProp::LinearProperties(offset.Shape(), props);
+        return props.Mass() < 1e-6;
+    } catch (const Standard_Failure&) {
+        return true;
+    }
+}
+
 // Longitud que seguro atraviesa todo el contexto desde el plano.
 double throughLength(const std::vector<Shape>& context, const TopoDS_Shape& start)
 {
@@ -236,6 +260,10 @@ Shape extrudeSide(const std::string& tag, const std::vector<ProfileFace>& faces,
         }
         Shape part = namer.finish(tag);
 
+        if (side.taper < -kTiny && collapses(face, length * std::tan(-side.taper))) {
+            throw GeometryError("Con ese ángulo el perfil se cierra antes de llegar a la distancia: "
+                                "reduce el ángulo o la distancia");
+        }
         if (std::abs(side.taper) > kTiny) {
             // Ángulo: las laterales giran alrededor de su arista en el plano
             // del perfil (DraftAngle cierra con ángulo positivo; aquí abre).

@@ -323,3 +323,19 @@ TEST_CASE("Revolución que corta desde el eje: el sólido queda cerrado", "[geom
         REQUIRE(cut.isValid());
     }
 }
+
+TEST_CASE("Un ángulo que cierra el perfil antes de la distancia se rechaza", "[geometry][modeling]")
+{
+    // Círculo de radio 10, 30 mm de alto: estrechar 16 mm lo haría pasar por
+    // su vértice (un reloj de arena con la tapa del revés).
+    sketch::Sketch c;
+    c.addCircle({0, 0}, 10);
+    ExtrudeSpec spec = distance(30);
+    spec.side1.taper = -0.5;
+    REQUIRE_THROWS_AS(extrude("f1", allProfiles(c), spec), GeometryError);
+    spec.side1.taper = -0.2;  // estrecha 6 mm: bien
+    REQUIRE(extrude("f1", allProfiles(c), spec).isValid());
+    // Abrir nunca cierra.
+    spec.side1.taper = 0.5;
+    REQUIRE(extrude("f1", allProfiles(c), spec).isValid());
+}
