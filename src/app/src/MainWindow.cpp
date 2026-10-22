@@ -19,6 +19,7 @@
 #include <QSettings>
 #include <QStatusBar>
 #include <QToolBar>
+#include <QToolButton>
 
 #include <memory>
 #include <tuple>
@@ -142,24 +143,58 @@ void MainWindow::createMenus()
     finishSketchAction_ = sketchMenu->addAction(QStringLiteral("&Terminar sketch"), this, &MainWindow::finishSketch);
     sketchMenu->addSeparator();
 
-    // Herramientas de dibujo, con las teclas de Fusion 360.
+    // Herramientas de dibujo por familias (como en Fusion 360); la primera
+    // de cada familia lleva su tecla.
+    using Tool = SketchSession::Tool;
+    struct ToolEntry {
+        Tool tool;
+        QString text;
+        QKeySequence key;
+    };
+    const std::vector<std::pair<QString, std::vector<ToolEntry>>> families{
+        {QStringLiteral("Línea"), {{Tool::Line, QStringLiteral("Línea"), QKeySequence(Qt::Key_L)}}},
+        {QStringLiteral("Rectángulo"),
+         {{Tool::Rectangle, QStringLiteral("Rectángulo por 2 esquinas"), QKeySequence(Qt::Key_R)},
+          {Tool::Rectangle3Point, QStringLiteral("Rectángulo por 3 puntos"), {}},
+          {Tool::RectangleCenter, QStringLiteral("Rectángulo por centro"), {}}}},
+        {QStringLiteral("Círculo"),
+         {{Tool::Circle, QStringLiteral("Círculo por centro y diámetro"), QKeySequence(Qt::Key_C)},
+          {Tool::Circle2Point, QStringLiteral("Círculo por 2 puntos"), {}},
+          {Tool::Circle3Point, QStringLiteral("Círculo por 3 puntos"), {}},
+          {Tool::CircleTangent2, QStringLiteral("Círculo tangente a 2 curvas"), {}},
+          {Tool::CircleTangent3, QStringLiteral("Círculo tangente a 3 curvas"), {}}}},
+        {QStringLiteral("Arco"),
+         {{Tool::Arc, QStringLiteral("Arco por 3 puntos"), QKeySequence(Qt::Key_A)},
+          {Tool::ArcCenter, QStringLiteral("Arco por centro"), {}},
+          {Tool::ArcTangent, QStringLiteral("Arco tangente"), {}}}},
+        {QStringLiteral("Polígono"),
+         {{Tool::PolygonCircumscribed, QStringLiteral("Polígono circunscrito"), QKeySequence(Qt::Key_P)},
+          {Tool::PolygonInscribed, QStringLiteral("Polígono inscrito"), {}},
+          {Tool::PolygonEdge, QStringLiteral("Polígono por lado"), {}}}},
+        {QStringLiteral("Ranura"),
+         {{Tool::SlotCenterToCenter, QStringLiteral("Ranura centro a centro"), {}},
+          {Tool::SlotOverall, QStringLiteral("Ranura total"), {}},
+          {Tool::SlotCenterPoint, QStringLiteral("Ranura por punto central"), {}}}},
+    };
     auto* toolGroup = new QActionGroup(this);
     toolGroup->setExclusionPolicy(QActionGroup::ExclusionPolicy::ExclusiveOptional);
-    for (const auto& [tool, text, key] :
-         {std::tuple{SketchSession::Tool::Line, QStringLiteral("&Línea"), Qt::Key_L},
-          std::tuple{SketchSession::Tool::Rectangle, QStringLiteral("&Rectángulo"), Qt::Key_R},
-          std::tuple{SketchSession::Tool::Circle, QStringLiteral("&Círculo"), Qt::Key_C},
-          std::tuple{SketchSession::Tool::Arc, QStringLiteral("&Arco por 3 puntos"), Qt::Key_A}}) {
-        QAction* action = sketchMenu->addAction(text);
-        action->setShortcut(QKeySequence(key));
-        action->setCheckable(true);
-        toolGroup->addAction(action);
-        connect(action, &QAction::triggered, this, [this, tool = tool](bool checked) {
-            if (sketch_) {
-                sketch_->setTool(checked ? tool : SketchSession::Tool::None);
-            }
-        });
-        toolActions_[tool] = action;
+    for (const auto& [family, entries] : families) {
+        QMenu* menu = entries.size() > 1 ? sketchMenu->addMenu(family) : sketchMenu;
+        std::vector<QAction*> actions;
+        for (const ToolEntry& entry : entries) {
+            QAction* action = menu->addAction(entry.text);
+            action->setShortcut(entry.key);
+            action->setCheckable(true);
+            toolGroup->addAction(action);
+            connect(action, &QAction::triggered, this, [this, tool = entry.tool](bool checked) {
+                if (sketch_) {
+                    sketch_->setTool(checked ? tool : Tool::None);
+                }
+            });
+            toolActions_[entry.tool] = action;
+            actions.push_back(action);
+        }
+        toolFamilies_.push_back({entries.size() > 1 ? menu : nullptr, actions});
     }
 
     sketchMenu->addSeparator();
@@ -199,8 +234,21 @@ void MainWindow::createMenus()
     toolbar->addAction(createSketchAction_);
     toolbar->addAction(finishSketchAction_);
     toolbar->addSeparator();
-    for (const auto& [tool, action] : toolActions_) {
-        toolbar->addAction(action);
+    // Un botón por familia; la flecha despliega sus variantes y el botón se
+    // queda con la última usada.
+    for (const ToolFamily& family : toolFamilies_) {
+        if (!family.menu) {
+            toolbar->addAction(family.actions.front());
+            continue;
+        }
+        auto* button = new QToolButton(toolbar);
+        button->setPopupMode(QToolButton::MenuButtonPopup);
+        button->setMenu(family.menu);
+        button->setDefaultAction(family.actions.front());
+        for (QAction* action : family.actions) {
+            connect(action, &QAction::triggered, button, [button, action] { button->setDefaultAction(action); });
+        }
+        toolbar->addWidget(button);
     }
     toolbar->addSeparator();
     toolbar->addAction(dimensionAction_);

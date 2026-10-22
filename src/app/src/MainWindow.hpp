@@ -16,6 +16,7 @@
 class QAction;
 class QDockWidget;
 class QLabel;
+class QMenu;
 
 namespace nuf::render {
 class Viewport;
@@ -61,6 +62,12 @@ private:
     // Sketch en edición. En la Fase 3 pasa a ser una operación del documento.
     std::unique_ptr<SketchSession> sketch_;
     std::map<SketchSession::Tool, QAction*> toolActions_;
+    // Familias de herramientas (rectángulo, círculo…) para la barra.
+    struct ToolFamily {
+        QMenu* menu = nullptr;  // nullptr si la familia tiene una sola herramienta
+        std::vector<QAction*> actions;
+    };
+    std::vector<ToolFamily> toolFamilies_;
     QLabel* sketchStatusLabel_ = nullptr;
     QAction* createSketchAction_ = nullptr;
     QAction* finishSketchAction_ = nullptr;

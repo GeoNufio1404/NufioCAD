@@ -60,6 +60,20 @@ void SketchSession::setTool(Tool tool)
     case Tool::Rectangle: tool_ = sketch::makeRectangleTool(); break;
     case Tool::Circle: tool_ = sketch::makeCircleTool(); break;
     case Tool::Arc: tool_ = sketch::makeArcTool(); break;
+    case Tool::Rectangle3Point: tool_ = sketch::makeThreePointRectangleTool(); break;
+    case Tool::RectangleCenter: tool_ = sketch::makeCenterRectangleTool(); break;
+    case Tool::Circle2Point: tool_ = sketch::makeTwoPointCircleTool(); break;
+    case Tool::Circle3Point: tool_ = sketch::makeThreePointCircleTool(); break;
+    case Tool::CircleTangent2: tool_ = sketch::makeTangentCircleTool(2); break;
+    case Tool::CircleTangent3: tool_ = sketch::makeTangentCircleTool(3); break;
+    case Tool::ArcCenter: tool_ = sketch::makeCenterArcTool(); break;
+    case Tool::ArcTangent: tool_ = sketch::makeTangentArcTool(); break;
+    case Tool::PolygonCircumscribed: tool_ = sketch::makePolygonTool(sketch::PolygonMode::Circumscribed); break;
+    case Tool::PolygonInscribed: tool_ = sketch::makePolygonTool(sketch::PolygonMode::Inscribed); break;
+    case Tool::PolygonEdge: tool_ = sketch::makePolygonTool(sketch::PolygonMode::Edge); break;
+    case Tool::SlotCenterToCenter: tool_ = sketch::makeSlotTool(sketch::SlotMode::CenterToCenter); break;
+    case Tool::SlotOverall: tool_ = sketch::makeSlotTool(sketch::SlotMode::Overall); break;
+    case Tool::SlotCenterPoint: tool_ = sketch::makeSlotTool(sketch::SlotMode::CenterPoint); break;
     }
     toolKind_ = tool;
     viewport_.setSketchToolActive(tool_ != nullptr);

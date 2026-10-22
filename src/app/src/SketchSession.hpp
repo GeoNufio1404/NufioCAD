@@ -27,7 +27,15 @@ class SketchSession final : public QObject {
     Q_OBJECT
 
 public:
-    enum class Tool { None, Line, Rectangle, Circle, Arc };
+    enum class Tool {
+        None,
+        Line,
+        Rectangle, Rectangle3Point, RectangleCenter,
+        Circle, Circle2Point, Circle3Point, CircleTangent2, CircleTangent3,
+        Arc, ArcCenter, ArcTangent,
+        PolygonCircumscribed, PolygonInscribed, PolygonEdge,
+        SlotCenterToCenter, SlotOverall, SlotCenterPoint,
+    };
 
     SketchSession(render::Viewport& viewport, const sketch::Plane& plane, QObject* parent = nullptr);
     ~SketchSession() override;
