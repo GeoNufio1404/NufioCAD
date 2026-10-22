@@ -33,8 +33,12 @@ int runSelfCheck(std::ostream& out)
             auto file = io::NufFile::create(path);
             file.setMeta("unidades", "mm");
         }
-        const auto reopened = io::NufFile::open(path);
-        const bool ok = reopened.meta("unidades") == std::string("mm");
+        bool ok = false;
+        {
+            // Cerrado antes de borrarlo: Windows no deja borrar un archivo abierto.
+            const auto reopened = io::NufFile::open(path);
+            ok = reopened.meta("unidades") == std::string("mm");
+        }
         std::filesystem::remove(path);
         out << "Archivo .nuf: " << (ok ? "crear y reabrir OK" : "ERROR") << '\n';
         return ok ? 0 : 1;
