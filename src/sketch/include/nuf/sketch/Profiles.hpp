@@ -5,19 +5,29 @@
 // Se buscan las caras del grafo plano que forman las líneas, arcos y círculos
 // (sin construcción) unidos por sus extremos. Una región puede tener agujeros
 // (otras regiones dentro, como un círculo dentro de un rectángulo); el
-// agujero es además una región propia. Limitación actual: las curvas que se
-// cruzan sin compartir un extremo no se parten en el cruce.
+// agujero es además una región propia. Las curvas que se cruzan se parten en
+// el cruce: una línea que atraviesa un polígono lo divide en dos regiones.
 
 #include <nuf/sketch/Sketch.hpp>
 
+#include <optional>
 #include <vector>
 
 namespace nuf::sketch {
 
+// Tramo de una curva partida por sus cruces: de «start» a «end» en el
+// sentido propio de la curva (el de su parámetro).
+struct Trim {
+    Vec2 start;
+    Vec2 end;
+};
+
 struct ProfileEdge {
     EntityId entity = 0;
-    // true si la curva se recorre de su fin a su inicio.
+    // true si la curva (o su tramo) se recorre de su fin a su inicio.
     bool reversed = false;
+    // Solo un tramo de la curva (si se cruza con otras).
+    std::optional<Trim> trim;
 };
 
 // Contorno cerrado, recorrido en sentido antihorario.

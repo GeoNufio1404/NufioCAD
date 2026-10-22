@@ -285,11 +285,11 @@ void ExtrudeTool::createFields(QFormLayout* form)
         return combo({QStringLiteral("Distancia"), QStringLiteral("A través de todo"), QStringLiteral("Hasta una cara")});
     };
     extent1_ = extentCombo();
-    distance1_ = lengthBox(10.0);
+    distance1_ = lengthBox(1.0);
     taper1_ = angleBox(0.0, 89.0);
     target1_ = new QPushButton(QStringLiteral("Elegir cara de destino"));
     extent2_ = extentCombo();
-    distance2_ = lengthBox(10.0);
+    distance2_ = lengthBox(1.0);
     distance2_->setMinimum(0.0);
     taper2_ = angleBox(0.0, 89.0);
     target2_ = new QPushButton(QStringLiteral("Elegir cara de destino"));

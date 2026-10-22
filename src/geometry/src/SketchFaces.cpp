@@ -6,7 +6,9 @@
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepBuilderAPI_MakeWire.hxx>
+#include <BRep_Tool.hxx>
 #include <GC_MakeArcOfCircle.hxx>
+#include <Geom_TrimmedCurve.hxx>
 #include <GC_MakeArcOfEllipse.hxx>
 #include <GeomConvert.hxx>
 #include <GeomConvert_BSplineCurveToBezierCurve.hxx>
@@ -176,6 +178,34 @@ std::optional<TopoDS_Edge> sketchEdge(const sketch::Entity& e, const gp_Ax3& pla
     return std::nullopt;
 }
 
+namespace {
+
+// El tramo de la arista entre dos puntos suyos (en el sentido de su curva).
+std::optional<TopoDS_Edge> trimmedEdge(const TopoDS_Edge& edge, const gp_Ax3& plane, const sketch::Trim& trim)
+{
+    const auto at = [&](sketch::Vec2 p) {
+        return plane.Location().Translated(gp_Vec(plane.XDirection()) * p.x + gp_Vec(plane.YDirection()) * p.y);
+    };
+    double first = 0.0;
+    double last = 0.0;
+    Handle(Geom_Curve) curve = BRep_Tool::Curve(edge, first, last);
+    if (curve.IsNull()) {
+        return std::nullopt;
+    }
+    // Las curvas recortadas (arcos) se proyectan sobre su curva base, que
+    // puede ser periódica; MakeEdge ajusta el segundo parámetro tras el primero.
+    if (const auto trimmed = Handle(Geom_TrimmedCurve)::DownCast(curve); !trimmed.IsNull()) {
+        curve = trimmed->BasisCurve();
+    }
+    BRepBuilderAPI_MakeEdge piece(curve, at(trim.start), at(trim.end));
+    if (!piece.IsDone()) {
+        return std::nullopt;
+    }
+    return piece.Edge();
+}
+
+} // namespace
+
 std::optional<TopoDS_Face> profileFace(const sketch::Sketch& sketch, const sketch::Profile& profile,
                                        const gp_Ax3& plane, std::vector<EdgeOrigin>* origins)
 {
@@ -186,6 +216,13 @@ std::optional<TopoDS_Face> profileFace(const sketch::Sketch& sketch, const sketc
             auto edge = e ? sketchEdge(*e, plane) : std::nullopt;
             if (!edge) {
                 return std::nullopt;
+            }
+            if (pe.trim) {
+                // Solo el tramo entre los cruces, en el sentido de la curva.
+                edge = trimmedEdge(*edge, plane, *pe.trim);
+                if (!edge) {
+                    return std::nullopt;
+                }
             }
             if (pe.reversed) {
                 edge->Reverse();

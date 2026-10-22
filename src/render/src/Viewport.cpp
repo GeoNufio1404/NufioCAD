@@ -487,6 +487,13 @@ public:
 
         planeFilter = new SketchPlaneFilter();
         grid = new SketchGrid();
+        // Rejilla del suelo (plano XY): referencia de dónde está «abajo»
+        // fuera del sketch, como en Fusion 360.
+        ground = new SketchGrid();
+        ground->plane = gp_Ax3(gp::XOY());
+        // Las rejillas no cuentan al encuadrar (Ajustar a la ventana).
+        grid->SetInfiniteState(true);
+        ground->SetInfiniteState(true);
         // Capa propia para las regiones (perfiles) de los sketches: respeta la
         // profundidad de la pieza (lo que está delante la tapa) y, por ser una
         // capa superior, al seleccionar gana a la pieza. Para que sobre una
@@ -530,6 +537,9 @@ public:
         if (context->IsDisplayed(grid)) {
             context->Redisplay(grid, false);
         }
+        ground->minorColor = dark ? rgb(0x3A, 0x3F, 0x47) : rgb(0xD5, 0xD9, 0xDF);
+        ground->majorColor = dark ? rgb(0x52, 0x59, 0x63) : rgb(0xAE, 0xB5, 0xBF);
+        updateGround(true);
         if (dark) {
             view->SetBgGradientColors(rgb(0x3A, 0x3F, 0x47), rgb(0x1E, 0x21, 0x26),
                                       Aspect_GradientFillMethod_Vertical, false);
@@ -841,6 +851,7 @@ public:
         grid->plane = toAx3(plane);
         updateGrid(true);
         context->Display(grid, 0, -1, false);
+        context->Erase(ground, false);
         for (const Handle(SketchDrawing)& d : {drawing, preview}) {
             d->plane = toAx3(plane);
             d->clear();
@@ -870,6 +881,7 @@ public:
         images.clear();
         mode = Mode::Model;
         activateBodies();
+        updateGround(true);
         emit widget_.sketchCursorMoved(false, 0.0, 0.0);
     }
 
@@ -1269,6 +1281,7 @@ public:
     double annotationScale = 0.0;
     bool leftPressed = false;
     std::map<document::FeatureId, FinishedSketch> finished;
+    std::vector<ShownBody> bodies;
     bool originShown = false;
     Handle(AIS_Shape) handle;  // flecha de distancia
     double handleDistance = 0.0;
@@ -1285,6 +1298,9 @@ protected:
     {
         // La cámara ya está actualizada para este cuadro: se ajusta la rejilla
         // antes de dibujar.
+        if (mode != Mode::Sketch) {
+            updateGround(false);
+        }
         if (mode == Mode::Sketch) {
             updateGrid(false);
             if (shownSketch && std::abs(pixelSize() - annotationScale) > 0.01 * annotationScale) {
@@ -1421,9 +1437,9 @@ private:
         originPlanes.clear();
         Bnd_Box box;
         BRepBndLib::Add(allBodies(), box);
-        double size = 20.0;
+        double size = 10.0;
         if (!box.IsVoid()) {
-            size = std::max(size, 0.6 * std::sqrt(box.SquareExtent()) / std::sqrt(3.0));
+            size = std::max(size, 0.3 * std::sqrt(box.SquareExtent()) / std::sqrt(3.0));
         }
         const std::tuple<sketch::Plane, QString, document::OriginPlane> planes[] = {
             {sketch::Plane::xy(), QStringLiteral("Plano XY"), document::OriginPlane::XY},
@@ -1488,9 +1504,25 @@ private:
             Qt::QueuedConnection);
     }
 
-    // Paso de la rejilla según el zoom: la menor potencia de 10 cuyas líneas
-    // queden a 7 px o más. Región centrada en lo que se mira.
-    void updateGrid(bool force)
+    // Rejilla del suelo (fuera del sketch).
+    void updateGround(bool force)
+    {
+        if (mode == Mode::Sketch || view->Window().IsNull()) {
+            return;
+        }
+        const bool changed = fitGrid(*ground, sketch::Plane::xy(), force);
+        if (!context->IsDisplayed(ground)) {
+            ground->SetToUpdate();
+            context->Display(ground, 0, -1, false);
+        } else if (changed) {
+            context->Redisplay(ground, false);
+        }
+    }
+
+    // Paso y región de una rejilla según el zoom: la menor potencia de 10
+    // cuyas líneas queden a 7 px o más, centrada en lo que se mira. true si
+    // cambió.
+    bool fitGrid(SketchGrid& target, const sketch::Plane& plane, bool force) const
     {
         double width = 0, height = 0;
         view->Size(width, height);
@@ -1498,17 +1530,26 @@ private:
         constexpr double kMinSpacingPx = 7.0;
         const double step = std::pow(10.0, std::ceil(std::log10(kMinSpacingPx * pixelSize())));
         const double block = 10.0 * step;
-        const sketch::Vec2 c = sketchPlane.toLocal(toVec3(view->Camera()->Center().XYZ()));
+        const sketch::Vec2 c = plane.toLocal(toVec3(view->Camera()->Center().XYZ()));
         const double cx = std::round(c.x / block) * block;
         const double cy = std::round(c.y / block) * block;
         const double half = std::ceil(1.5 * size / block) * block;
-        if (!force && step == grid->step && cx == grid->centerX && cy == grid->centerY && half == grid->half) {
+        if (!force && step == target.step && cx == target.centerX && cy == target.centerY && half == target.half) {
+            return false;
+        }
+        target.step = step;
+        target.centerX = cx;
+        target.centerY = cy;
+        target.half = half;
+        return true;
+    }
+
+    // La rejilla del sketch.
+    void updateGrid(bool force)
+    {
+        if (!fitGrid(*grid, sketchPlane, force)) {
             return;
         }
-        grid->step = step;
-        grid->centerX = cx;
-        grid->centerY = cy;
-        grid->half = half;
         if (context->IsDisplayed(grid)) {
             context->Redisplay(grid, false);
         } else {
@@ -1517,7 +1558,6 @@ private:
     }
 
     Viewport& widget_;
-    std::vector<ShownBody> bodies;
     Handle(AIS_Shape) toolPreview;
     gp_Pnt handleOrigin;
     gp_Dir handleDirection;
@@ -1525,6 +1565,7 @@ private:
     std::vector<OriginPlane> originPlanes;
     Handle(SketchPlaneFilter) planeFilter;
     Handle(SketchGrid) grid;
+    Handle(SketchGrid) ground;
     Handle(SketchDrawing) drawing;
     Handle(SketchDrawing) preview;
     Handle(AIS_Shape) profiles;
@@ -1573,7 +1614,21 @@ Viewport::~Viewport()
 
 void Viewport::fitAll()
 {
-    impl_->view->FitAll(0.05, false);
+    // Solo lo que es del modelo (las rejillas no cuentan).
+    Bnd_Box box;
+    for (const auto& body : impl_->bodies) {
+        BRepBndLib::Add(geometry::occtShape(body.shape), box);
+    }
+    for (const auto& [id, shown] : impl_->finished) {
+        for (const auto& [region, index] : shown.regions) {
+            BRepBndLib::Add(region->Shape(), box);
+        }
+        BRepBndLib::Add(shown.curves->Shape(), box);
+    }
+    if (box.IsVoid()) {
+        box.Update(-50.0, -50.0, -50.0, 50.0, 50.0, 50.0);
+    }
+    impl_->view->FitAll(box, 0.05, false);
     update();
 }
 

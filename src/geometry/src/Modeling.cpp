@@ -433,7 +433,9 @@ Shape boolean(BooleanOp op, const Shape& target, const Shape& tool)
         if (result.solidCount() == 0) {
             return {};
         }
-        return unify(result, "bool");
+        // Si unir las caras coplanares estropea el sólido, mejor sin unirlas.
+        Shape unified = unify(result, "bool");
+        return unified.isValid() || !result.isValid() ? unified : result;
     } catch (const Standard_Failure& e) {
         throw GeometryError(std::string("Error del kernel en la booleana: ") + kernelMessage(e));
     }

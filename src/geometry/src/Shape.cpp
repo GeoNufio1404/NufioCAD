@@ -5,7 +5,9 @@
 #include <BRepAdaptor_Curve.hxx>
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepBndLib.hxx>
+#include <BRepCheck_Analyzer.hxx>
 #include <BRepGProp.hxx>
+#include <BRep_Tool.hxx>
 #include <Bnd_Box.hxx>
 #include <GProp_GProps.hxx>
 #include <TopExp.hxx>
@@ -88,6 +90,23 @@ Shape::Shape(std::shared_ptr<const Impl> impl)
 }
 
 bool Shape::isNull() const { return !impl_ || impl_->shape.IsNull(); }
+
+bool Shape::isValid() const
+{
+    if (isNull()) {
+        return false;
+    }
+    if (!BRepCheck_Analyzer(impl_->shape).IsValid()) {
+        return false;
+    }
+    // Cada cara con vecinas en todas sus aristas (sin bordes abiertos).
+    for (TopExp_Explorer ex(impl_->shape, TopAbs_SHELL); ex.More(); ex.Next()) {
+        if (!BRep_Tool::IsClosed(ex.Current())) {
+            return false;
+        }
+    }
+    return solidCount() > 0;
+}
 
 int Shape::solidCount() const
 {

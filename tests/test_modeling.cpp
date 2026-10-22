@@ -4,6 +4,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <numbers>
 
@@ -275,4 +276,50 @@ TEST_CASE("Errores de modelado con mensaje", "[geometry][modeling]")
     spec.side1.extent = Extent::ToFace;
     spec.side1.face = {"f9:nada", 0};
     REQUIRE_THROWS_AS(extrude("f1", allProfiles(s), spec), GeometryError);
+}
+
+TEST_CASE("Extruir solo una de las regiones que deja una línea que cruza", "[geometry][modeling]")
+{
+    sketch::Sketch s;
+    rectangle(s, 0, 0, 40, 20);
+    s.addLine({10, -5}, {10, 25});
+    const auto profiles = sketch::findProfiles(s);
+    REQUIRE(profiles.size() == 2);
+    const auto small = std::ranges::min_element(profiles, {}, &sketch::Profile::area);
+    const Shape part = extrude("f1", {&s, sketch::Plane::xy(), {*small}}, distance(5));
+    REQUIRE_THAT(part.volume(), WithinRel(10.0 * 20.0 * 5.0, 1e-9));
+
+    // Medio círculo (arco recortado de la circunferencia + tramo de recta).
+    sketch::Sketch c;
+    c.addCircle({0, 0}, 10);
+    c.addLine({-20, 0}, {20, 0});
+    for (const sketch::Profile& half : sketch::findProfiles(c)) {
+        const Shape solid = extrude("f2", {&c, sketch::Plane::xy(), {half}}, distance(2));
+        REQUIRE_THAT(solid.volume(), WithinRel(std::numbers::pi * 50.0 * 2.0, 1e-6));
+    }
+}
+
+TEST_CASE("Revolución que corta desde el eje: el sólido queda cerrado", "[geometry][modeling]")
+{
+    sketch::Sketch base;
+    rectangle(base, -20, -20, 20, 20);
+    const Shape block = extrude("f1", allProfiles(base), distance(10));
+    REQUIRE(block.isValid());
+
+    // Rectángulo en XZ apoyado en el eje Z (x = 0..8, z = 4..14).
+    sketch::Sketch s;
+    rectangle(s, 0, 4, 8, 14);
+    const SketchRegion region{&s, sketch::Plane::xz(), sketch::findProfiles(s)};
+    const Axis z{{0, 0, 0}, {0, 0, 1}};
+    for (const auto& [extent, angle] : {std::pair{RevolveExtent::Full, 0.0}, std::pair{RevolveExtent::Angle, 1.5},
+                                        std::pair{RevolveExtent::Angle, std::numbers::pi}}) {
+        RevolveSpec spec;
+        spec.extent = extent;
+        spec.angle1 = angle;
+        const Shape tool = revolve("f2", region, z, spec);
+        INFO("ángulo " << angle);
+        REQUIRE(tool.isValid());
+        const Shape cut = boolean(BooleanOp::Cut, block, tool);
+        REQUIRE(cut.isValid());
+    }
 }

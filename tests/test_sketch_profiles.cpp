@@ -5,6 +5,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <numbers>
 
 using namespace nuf::sketch;
@@ -117,4 +118,48 @@ TEST_CASE("Perfiles: rectángulos anidados", "[sketch][profiles]")
     REQUIRE(profiles.size() == 2);
     REQUIRE_THAT(areas(profiles)[0], WithinAbs(400.0, 1e-9));
     REQUIRE_THAT(areas(profiles)[1], WithinAbs(9600.0, 1e-9));
+}
+
+TEST_CASE("Perfiles: una línea que cruza un rectángulo lo parte en dos", "[sketch][profiles]")
+{
+    Sketch s;
+    rectangle(s, 0, 0, 40, 20);
+    s.addLine({10, -5}, {10, 25});  // cruza sin tocar extremos y sobresale
+    auto profiles = findProfiles(s);
+    REQUIRE(profiles.size() == 2);
+    REQUIRE(areas(profiles) == std::vector<double>{200.0, 600.0});
+    // Los tramos partidos lo indican.
+    const bool trimmed = std::ranges::any_of(profiles.front().outer.edges, [](const ProfileEdge& e) { return e.trim.has_value(); });
+    REQUIRE(trimmed);
+}
+
+TEST_CASE("Perfiles: polígono partido por una diagonal y círculo partido por una recta", "[sketch][profiles]")
+{
+    Sketch s;
+    // Hexágono regular de radio 10 y una recta horizontal por el centro.
+    std::vector<Vec2> v;
+    for (int i = 0; i < 6; ++i) {
+        v.push_back({10 * std::cos(i * std::numbers::pi / 3), 10 * std::sin(i * std::numbers::pi / 3)});
+    }
+    for (int i = 0; i < 6; ++i) {
+        s.addLine(v[std::size_t(i)], v[std::size_t((i + 1) % 6)]);
+    }
+    s.addLine({-15, 1}, {15, 1});
+    auto profiles = findProfiles(s);
+    REQUIRE(profiles.size() == 2);
+    const double hexArea = 1.5 * std::sqrt(3.0) * 100.0;
+    double total = 0.0;
+    for (const Profile& p : profiles) {
+        total += p.area;
+    }
+    REQUIRE_THAT(total, WithinAbs(hexArea, 1e-6));
+
+    Sketch c;
+    c.addCircle({0, 0}, 10);
+    c.addLine({-20, 0}, {20, 0});
+    auto halves = findProfiles(c);
+    REQUIRE(halves.size() == 2);
+    for (const Profile& p : halves) {
+        REQUIRE_THAT(p.area, WithinAbs(std::numbers::pi * 50.0, 0.5));  // polilínea del círculo
+    }
 }

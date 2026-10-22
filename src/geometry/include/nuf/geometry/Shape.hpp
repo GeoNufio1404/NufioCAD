@@ -48,6 +48,8 @@ public:
     Shape() = default;
 
     bool isNull() const;
+    // Sólido(s) cerrados y sin errores topológicos.
+    bool isValid() const;
     int solidCount() const;
     double volume() const;
     Box bounds() const;
