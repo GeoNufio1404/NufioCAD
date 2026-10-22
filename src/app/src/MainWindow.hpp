@@ -64,6 +64,8 @@ private:
     QAction* createSketchAction_ = nullptr;
     QAction* finishSketchAction_ = nullptr;
     QAction* lookAtSketchAction_ = nullptr;
+    QAction* deleteAction_ = nullptr;
+    QAction* constructionAction_ = nullptr;
     QLabel* cursorLabel_ = nullptr;
 };
 

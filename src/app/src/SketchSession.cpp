@@ -1,6 +1,9 @@
 #include "SketchSession.hpp"
 
 #include <nuf/render/Viewport.hpp>
+#include <nuf/sketch/Pick.hpp>
+
+#include <algorithm>
 
 namespace nuf::app {
 
@@ -44,6 +47,10 @@ void SketchSession::setTool(Tool tool)
     if (tool_ && cursor_) {
         tool_->move(*cursor_);
     }
+    if (tool_ && !hovered_.empty()) {
+        hovered_ = {};
+        showSketch();
+    }
     showPreview();
     emit toolChanged(tool);
     emit hintChanged(tool_ ? QString::fromStdString(tool_->hint()) : QString());
@@ -52,7 +59,13 @@ void SketchSession::setTool(Tool tool)
 bool SketchSession::cancel()
 {
     if (!tool_) {
-        return false;
+        if (selection_.empty()) {
+            return false;
+        }
+        selection_.clear();
+        showSketch();
+        emit selectionChanged();
+        return true;
     }
     if (tool_->cancel()) {
         showPreview();
@@ -81,21 +94,141 @@ void SketchSession::cursorMoved(bool hasPoint, double x, double y)
             tool_->move(*cursor_);
         }
     }
+    // Sin herramienta, se resalta lo que se seleccionaría con un clic.
+    const sketch::Ref hovered =
+        (!tool_ && hasPoint) ? sketch::pick(sketch_, {x, y}, kSnapRadiusPx * viewport_.sketchPixelSize())
+                             : sketch::Ref{};
+    if (hovered.entity != hovered_.entity || hovered.part != hovered_.part) {
+        hovered_ = hovered;
+        showSketch();
+    }
     showPreview();
 }
 
-void SketchSession::clicked(double x, double y)
+void SketchSession::clicked(double x, double y, Qt::KeyboardModifiers modifiers)
 {
     if (!tool_) {
+        // Clic: selecciona; Shift+clic: agrega o quita; clic en vacío: limpia.
+        const sketch::Ref picked = sketch::pick(sketch_, {x, y}, kSnapRadiusPx * viewport_.sketchPixelSize());
+        const auto same = [&](sketch::Ref r) { return r.entity == picked.entity && r.part == picked.part; };
+        if (modifiers & Qt::ShiftModifier) {
+            if (!picked.empty() && std::erase_if(selection_, same) == 0) {
+                selection_.push_back(picked);
+            }
+        } else {
+            selection_.clear();
+            if (!picked.empty()) {
+                selection_.push_back(picked);
+            }
+        }
+        showSketch();
+        emit selectionChanged();
         return;
     }
     const sketch::Snap s = snapAt({x, y});
     tool_->move(s);
+    sketch::Sketch before = sketch_;
     if (tool_->click(sketch_, s)) {
+        remember(std::move(before));
         solveAndShow();
     }
     showPreview();
     emit hintChanged(QString::fromStdString(tool_->hint()));
+}
+
+std::vector<sketch::EntityId> SketchSession::selectedEntities() const
+{
+    std::vector<sketch::EntityId> ids;
+    for (const sketch::Ref& r : selection_) {
+        const sketch::Entity* e = sketch_.entity(r.entity);
+        if (e && !e->reference && std::ranges::find(ids, r.entity) == ids.end()) {
+            ids.push_back(r.entity);
+        }
+    }
+    return ids;
+}
+
+void SketchSession::deleteSelection()
+{
+    // Un extremo seleccionado borra su entidad. El origen y los ejes no se borran.
+    const std::vector<sketch::EntityId> ids = selectedEntities();
+    if (ids.empty()) {
+        return;
+    }
+    remember(sketch_);
+    for (sketch::EntityId id : ids) {
+        sketch_.removeEntity(id);
+    }
+    selection_.clear();
+    emit selectionChanged();
+    solveAndShow();
+}
+
+void SketchSession::toggleConstruction()
+{
+    const std::vector<sketch::EntityId> ids = selectedEntities();
+    if (ids.empty()) {
+        return;
+    }
+    remember(sketch_);
+    for (sketch::EntityId id : ids) {
+        sketch::Entity* e = sketch_.entity(id);
+        e->construction = !e->construction;
+    }
+    showSketch();
+}
+
+void SketchSession::remember(sketch::Sketch before)
+{
+    undo_.push_back(std::move(before));
+    redo_.clear();
+    emit historyChanged();
+}
+
+void SketchSession::undo()
+{
+    if (undo_.empty()) {
+        return;
+    }
+    // Lo que la herramienta tenga a medias puede apuntar a geometría que desaparece.
+    if (tool_) {
+        tool_->cancel();
+    }
+    redo_.push_back(std::move(sketch_));
+    sketch_ = std::move(undo_.back());
+    undo_.pop_back();
+    pruneSelection();
+    solveAndShow();
+    showPreview();
+    emit historyChanged();
+}
+
+void SketchSession::redo()
+{
+    if (redo_.empty()) {
+        return;
+    }
+    if (tool_) {
+        tool_->cancel();
+    }
+    undo_.push_back(std::move(sketch_));
+    sketch_ = std::move(redo_.back());
+    redo_.pop_back();
+    pruneSelection();
+    solveAndShow();
+    showPreview();
+    emit historyChanged();
+}
+
+void SketchSession::pruneSelection()
+{
+    const auto gone = [this](const sketch::Ref& r) { return sketch_.entity(r.entity) == nullptr; };
+    if (std::erase_if(selection_, gone) > 0) {
+        emit selectionChanged();
+    }
+    if (gone(hovered_)) {
+        hovered_ = {};
+    }
 }
 
 void SketchSession::doubleClicked()
@@ -107,10 +240,16 @@ void SketchSession::doubleClicked()
     }
 }
 
+void SketchSession::showSketch()
+{
+    viewport_.showSketch(sketch_, underconstrained_, {selection_, hovered_});
+}
+
 void SketchSession::solveAndShow()
 {
     const sketch::SolveResult result = solver_->solve(sketch_);
-    viewport_.showSketch(sketch_, result.underconstrained);
+    underconstrained_ = result.underconstrained;
+    showSketch();
 
     QString status;
     switch (result.status) {

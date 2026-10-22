@@ -618,20 +618,57 @@ public:
     SketchStroke fixedStroke() const { return {darkTheme ? rgb(0xE6, 0xE9, 0xED) : rgb(0x1F, 0x23, 0x29)}; }
     SketchStroke constructionStroke() const { return {rgb(0xF2, 0xA3, 0x4B), 1.5, Aspect_TOL_DASH}; }
 
-    void showSketch(const sketch::Sketch& sketch, const std::vector<sketch::EntityId>& underconstrained)
+    static Quantity_Color selectedColor() { return rgb(0xFF, 0xAA, 0x33); }
+    static Quantity_Color hoveredColor() { return rgb(0xFF, 0xD5, 0x8A); }
+
+    void showSketch(const sketch::Sketch& sketch, const std::vector<sketch::EntityId>& underconstrained,
+                    const SketchHighlight& highlight)
     {
+        const auto same = [](sketch::Ref a, sketch::Ref b) { return a.entity == b.entity && a.part == b.part; };
+        const auto isSelected = [&](sketch::Ref r) {
+            return std::ranges::any_of(highlight.selected, [&](sketch::Ref s) { return same(s, r); });
+        };
+        // Color de resaltado de una referencia, si lo tiene.
+        const auto highlightOf = [&](sketch::Ref r) -> std::optional<Quantity_Color> {
+            if (isSelected(r)) {
+                return selectedColor();
+            }
+            if (same(highlight.hovered, r)) {
+                return hoveredColor();
+            }
+            return std::nullopt;
+        };
+
         drawing->clear();
         for (const sketch::Entity& e : sketch.entities()) {
+            const auto whole = highlightOf(sketch::Ref::of(e.id));
             if (e.reference) {
+                // El origen y los ejes ya los dibuja la rejilla: solo se
+                // resaltan (los ejes, como un tramo largo).
+                if (!whole) {
+                    continue;
+                }
+                if (const auto* axis = std::get_if<sketch::Line>(&e.geometry)) {
+                    constexpr double kLong = 1e4;
+                    const sketch::Vec2 d{axis->end.x - axis->start.x, axis->end.y - axis->start.y};
+                    drawing->addGeometry(sketch::Line{{-kLong * d.x, -kLong * d.y}, {kLong * d.x, kLong * d.y}},
+                                         {*whole, 2.0});
+                } else if (const auto* origin = std::get_if<sketch::Point>(&e.geometry)) {
+                    drawing->addPoint(origin->position, *whole, 2.2);
+                }
                 continue;
             }
             const bool loose = std::ranges::find(underconstrained, e.id) != underconstrained.end();
-            const SketchStroke stroke = e.construction ? constructionStroke() : (loose ? freeStroke() : fixedStroke());
+            SketchStroke stroke = e.construction ? constructionStroke() : (loose ? freeStroke() : fixedStroke());
+            if (whole) {
+                stroke.color = *whole;
+            }
             drawing->addGeometry(e.geometry, stroke);
-            // Extremos y centros como puntos.
+            // Extremos y centros como puntos (más grandes si están resaltados).
             const auto mark = [&](sketch::Part which) {
                 if (const auto p = sketch.point({e.id, which})) {
-                    drawing->addPoint(*p, stroke.color, 1.6);
+                    const auto own = highlightOf({e.id, which});
+                    drawing->addPoint(*p, own ? *own : stroke.color, own ? 2.2 : 1.6);
                 }
             };
             if (std::holds_alternative<sketch::Line>(e.geometry) || std::holds_alternative<sketch::Arc>(e.geometry)) {
@@ -988,10 +1025,11 @@ void Viewport::lookAtSketch()
     update();
 }
 
-void Viewport::showSketch(const sketch::Sketch& sketch, const std::vector<sketch::EntityId>& underconstrained)
+void Viewport::showSketch(const sketch::Sketch& sketch, const std::vector<sketch::EntityId>& underconstrained,
+                          const SketchHighlight& highlight)
 {
     if (isSketching()) {
-        impl_->showSketch(sketch, underconstrained);
+        impl_->showSketch(sketch, underconstrained, highlight);
         update();
     }
 }
@@ -1103,7 +1141,7 @@ void Viewport::changeEvent(QEvent* event)
 
 void Viewport::mousePressEvent(QMouseEvent* event)
 {
-    if (event->button() == Qt::LeftButton && navigationButtons(Qt::LeftButton) == Qt::NoButton) {
+    if (event->button() == Qt::LeftButton && isSketching()) {
         impl_->leftPressed = true;
         impl_->pressPosition = event->position();
     }
@@ -1127,7 +1165,7 @@ void Viewport::mouseReleaseEvent(QMouseEvent* event)
             impl_->ignoreNextRelease = false;
         } else if (moved.manhattanLength() <= 5.0) {
             if (const auto p = impl_->sketchPointAt(point)) {
-                emit sketchClicked(p->x, p->y);
+                emit sketchClicked(p->x, p->y, event->modifiers());
             }
         }
     }

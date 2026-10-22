@@ -12,6 +12,12 @@
 
 namespace nuf::render {
 
+// Qué resaltar al dibujar el sketch.
+struct SketchHighlight {
+    std::vector<sketch::Ref> selected;
+    sketch::Ref hovered;
+};
+
 // Viewport 3D: visor V3d/AIS de OpenCASCADE dentro de un QOpenGLWidget.
 // Navegación:
 //   arrastre izquierdo           orbitar
@@ -57,11 +63,13 @@ public:
 
     // Dibuja la geometría del sketch; las entidades de «underconstrained»
     // (aún libres) en azul y el resto como totalmente restringidas.
-    void showSketch(const sketch::Sketch& sketch, const std::vector<sketch::EntityId>& underconstrained);
+    void showSketch(const sketch::Sketch& sketch, const std::vector<sketch::EntityId>& underconstrained,
+                    const SketchHighlight& highlight = {});
     // Vista previa de la herramienta activa y marcador del punto de ajuste.
     void showSketchPreview(const std::vector<sketch::Geometry>& geometry, std::optional<sketch::Vec2> snapPoint);
-    // Con una herramienta de dibujo activa, el clic izquierdo no selecciona
-    // ni orbita: se emite sketchClicked (doble clic: sketchDoubleClicked).
+    // En el sketch, un clic izquierdo (sin arrastrar) emite sketchClicked.
+    // Con una herramienta de dibujo activa, además, el arrastre izquierdo no
+    // orbita y el doble clic emite sketchDoubleClicked.
     void setSketchToolActive(bool active);
     // Tamaño de un píxel en el plano del sketch (mm) y paso de la rejilla.
     double sketchPixelSize() const;
@@ -75,7 +83,7 @@ signals:
     // Posición del cursor en coordenadas del sketch (mm); hasPoint = false
     // si el cursor no corta el plano (vista de canto o fuera del visor).
     void sketchCursorMoved(bool hasPoint, double x, double y);
-    void sketchClicked(double x, double y);
+    void sketchClicked(double x, double y, Qt::KeyboardModifiers modifiers);
     void sketchDoubleClicked();
 
 protected:

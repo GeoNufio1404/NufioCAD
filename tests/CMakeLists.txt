@@ -5,6 +5,7 @@ add_executable(nuf_tests
     test_geometry.cpp
     test_nuf_file.cpp
     test_sketch.cpp
+    test_sketch_pick.cpp
     test_sketch_plane.cpp
     test_sketch_tools.cpp)
 

@@ -104,10 +104,21 @@ void MainWindow::createMenus()
     file->addAction(QStringLiteral("&Salir"), QKeySequence(QKeySequence::Quit), this, &QWidget::close);
 
     QMenu* edit = menuBar()->addMenu(QStringLiteral("&Editar"));
-    undoAction_ = edit->addAction(QStringLiteral("Deshacer"), QKeySequence(QKeySequence::Undo), this,
-                                  [this] { commands_.undo(); });
-    redoAction_ = edit->addAction(QStringLiteral("Rehacer"), QKeySequence(QKeySequence::Redo), this,
-                                  [this] { commands_.redo(); });
+    // Mientras se edita un sketch, deshacer/rehacer actúan dentro del sketch.
+    undoAction_ = edit->addAction(QStringLiteral("Deshacer"), QKeySequence(QKeySequence::Undo), this, [this] {
+        if (sketch_) {
+            sketch_->undo();
+        } else {
+            commands_.undo();
+        }
+    });
+    redoAction_ = edit->addAction(QStringLiteral("Rehacer"), QKeySequence(QKeySequence::Redo), this, [this] {
+        if (sketch_) {
+            sketch_->redo();
+        } else {
+            commands_.redo();
+        }
+    });
     edit->addSeparator();
     edit->addAction(QStringLiteral("Renombrar diseño…"), this, [this] {
         bool ok = false;
@@ -150,6 +161,12 @@ void MainWindow::createMenus()
         });
         toolActions_[tool] = action;
     }
+
+    sketchMenu->addSeparator();
+    deleteAction_ = sketchMenu->addAction(QStringLiteral("&Borrar"), QKeySequence(QKeySequence::Delete), this,
+                                          [this] { sketch_->deleteSelection(); });
+    constructionAction_ = sketchMenu->addAction(QStringLiteral("Alternar &construcción"), QKeySequence(Qt::Key_X),
+                                                this, [this] { sketch_->toggleConstruction(); });
 
     QToolBar* toolbar = addToolBar(QStringLiteral("Sketch"));
     toolbar->setObjectName(QStringLiteral("sketchToolbar"));
@@ -217,6 +234,13 @@ void MainWindow::createDocks()
 
 void MainWindow::updateUndoActions()
 {
+    if (sketch_) {
+        undoAction_->setEnabled(sketch_->canUndo());
+        redoAction_->setEnabled(sketch_->canRedo());
+        undoAction_->setText(QStringLiteral("Deshacer en el sketch"));
+        redoAction_->setText(QStringLiteral("Rehacer en el sketch"));
+        return;
+    }
     undoAction_->setEnabled(commands_.canUndo());
     redoAction_->setEnabled(commands_.canRedo());
     undoAction_->setText(commands_.canUndo()
@@ -254,9 +278,12 @@ void MainWindow::startSketch(const sketch::Plane& plane, const QString& descript
         statusBar()->showMessage(hint.isEmpty() ? QStringLiteral("Sketch en %1").arg(description) : hint);
     });
     connect(sketch_.get(), &SketchSession::statusChanged, sketchStatusLabel_, &QLabel::setText);
+    connect(sketch_.get(), &SketchSession::historyChanged, this, &MainWindow::updateUndoActions);
+    connect(sketch_.get(), &SketchSession::selectionChanged, this, &MainWindow::updateSketchActions);
     statusBar()->showMessage(QStringLiteral("Sketch en %1 · L línea, R rectángulo, C círculo, A arco").arg(description));
     sketchStatusLabel_->setText(QStringLiteral("Sin geometría"));
     updateSketchActions();
+    updateUndoActions();
 }
 
 void MainWindow::finishSketch()
@@ -268,6 +295,7 @@ void MainWindow::finishSketch()
     sketchStatusLabel_->clear();
     statusBar()->clearMessage();
     updateSketchActions();
+    updateUndoActions();
 }
 
 void MainWindow::cancel()
@@ -294,6 +322,8 @@ void MainWindow::updateSketchActions()
             action->setChecked(false);
         }
     }
+    deleteAction_->setEnabled(sketch_ && sketch_->hasSelection());
+    constructionAction_->setEnabled(sketch_ && sketch_->hasSelection());
 }
 
 } // namespace nuf::app

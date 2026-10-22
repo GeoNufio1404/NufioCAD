@@ -11,6 +11,7 @@
 
 #include <memory>
 #include <optional>
+#include <vector>
 
 namespace nuf::render {
 class Viewport;
@@ -36,8 +37,20 @@ public:
     Tool tool() const noexcept { return toolKind_; }
 
     // Esc: abandona lo que la herramienta tenga a medias o, si no hay nada,
-    // sale de la herramienta. Devuelve false si no había herramienta activa.
+    // sale de la herramienta; sin herramienta, vacía la selección. Devuelve
+    // false si no había nada que cancelar.
     bool cancel();
+
+    // Edición de la selección (clic y Shift+clic sin herramienta activa).
+    void deleteSelection();
+    void toggleConstruction();
+    bool hasSelection() const noexcept { return !selection_.empty(); }
+
+    // Deshacer/rehacer dentro del sketch.
+    bool canUndo() const noexcept { return !undo_.empty(); }
+    bool canRedo() const noexcept { return !redo_.empty(); }
+    void undo();
+    void redo();
 
 signals:
     void toolChanged(nuf::app::SketchSession::Tool tool);
@@ -45,15 +58,23 @@ signals:
     void hintChanged(const QString& hint);
     // Estado tras resolver: "4 grados de libertad", "Totalmente restringido"…
     void statusChanged(const QString& status);
+    void historyChanged();
+    void selectionChanged();
 
 private:
     void cursorMoved(bool hasPoint, double x, double y);
-    void clicked(double x, double y);
+    void clicked(double x, double y, Qt::KeyboardModifiers modifiers);
     void doubleClicked();
 
     sketch::Snap snapAt(sketch::Vec2 point) const;
     void solveAndShow();
+    void showSketch();
     void showPreview();
+    // Guarda el estado actual para deshacer (antes de cambiar el sketch).
+    void remember(sketch::Sketch before);
+    // Quita de la selección lo que ya no existe.
+    void pruneSelection();
+    std::vector<sketch::EntityId> selectedEntities() const;
 
     render::Viewport& viewport_;
     sketch::Sketch sketch_;
@@ -62,6 +83,11 @@ private:
     std::unique_ptr<sketch::SketchTool> tool_;
     Tool toolKind_ = Tool::None;
     std::optional<sketch::Snap> cursor_;
+    std::vector<sketch::EntityId> underconstrained_;
+    std::vector<sketch::Ref> selection_;
+    sketch::Ref hovered_;
+    std::vector<sketch::Sketch> undo_;
+    std::vector<sketch::Sketch> redo_;
 };
 
 } // namespace nuf::app
