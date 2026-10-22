@@ -77,6 +77,12 @@ public:
     // un doble clic, sketchDoubleClicked. Con una herramienta de dibujo
     // activa, además, el arrastre izquierdo no orbita.
     void setSketchToolActive(bool active);
+    // Proyectar: las aristas de la pieza se resaltan y un clic en una emite
+    // sketchEdgeProjected con su proyección sobre el plano del sketch.
+    void setSketchProjectMode(bool on);
+    // Intersección de la pieza con el plano del sketch (en coordenadas del sketch).
+    std::vector<sketch::Geometry> sketchSection() const;
+
     // Llamado al recibir sketchPressed: este arrastre izquierdo mueve
     // geometría (sketchDragged / sketchDragFinished) en lugar de orbitar.
     void grabSketchDrag();
@@ -103,6 +109,7 @@ signals:
     void sketchTyped(const QString& text);
     // Enter en el sketch (terminar una spline, por ejemplo).
     void sketchEnterPressed();
+    void sketchEdgeProjected(const std::vector<nuf::sketch::Geometry>& geometry);
     // Arrastre izquierdo con una herramienta activa: desde (x0, y0), donde
     // se pulsó, hasta (x, y). Al soltar se emite DragReleased en vez de un clic.
     void sketchToolDragged(double x0, double y0, double x, double y);

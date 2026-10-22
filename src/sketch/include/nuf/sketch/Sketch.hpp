@@ -237,6 +237,8 @@ public:
     EntityId addEllipseArc(const EllipseArc& arc, bool construction = false);
     // Lanza std::invalid_argument con menos de 2 polos o pesos no positivos.
     EntityId addBSpline(const BSpline& spline, bool construction = false);
+    // Cualquier tipo de geometría (con las mismas comprobaciones).
+    EntityId addGeometry(const Geometry& geometry, bool construction = false);
 
     // Borra la entidad y las restricciones que la usan. Las referencias
     // (origen y ejes) no se pueden borrar: lanza std::invalid_argument.

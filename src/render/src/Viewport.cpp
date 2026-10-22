@@ -8,6 +8,7 @@
 
 #include <nuf/sketch/Annotations.hpp>
 #include <nuf/sketch/Profiles.hpp>
+#include <nuf/sketch/Tools.hpp>
 
 #include <AIS_AnimationCamera.hxx>
 #include <AIS_InteractiveContext.hxx>
@@ -17,7 +18,11 @@
 #include <AIS_ViewCube.hxx>
 #include <Aspect_DisplayConnection.hxx>
 #include <Aspect_NeutralWindow.hxx>
+#include <BRepAdaptor_Curve.hxx>
 #include <BRepAdaptor_Surface.hxx>
+#include <BRepAlgoAPI_Section.hxx>
+#include <BRep_Tool.hxx>
+#include <TopExp_Explorer.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepBndLib.hxx>
@@ -184,6 +189,64 @@ sketch::Vec3 toVec3(const gp_XYZ& v) { return {v.X(), v.Y(), v.Z()}; }
 gp_Ax3 toAx3(const sketch::Plane& plane)
 {
     return gp_Ax3(toPnt(plane.origin), toDir(plane.normal), toDir(plane.xAxis));
+}
+
+// Arista 3D proyectada sobre el plano del sketch, como geometría del sketch:
+// líneas y circunferencias paralelas al plano, exactas; el resto, como una
+// spline por puntos de la proyección. Vacío si la proyección es un punto.
+std::vector<sketch::Geometry> projectEdge(const TopoDS_Edge& edge, const sketch::Plane& plane)
+{
+    const BRepAdaptor_Curve curve(edge);
+    const double first = curve.FirstParameter();
+    const double last = curve.LastParameter();
+    const auto local = [&](const gp_Pnt& p) { return plane.toLocal(toVec3(p.XYZ())); };
+    const sketch::Vec2 a = local(curve.Value(first));
+    const sketch::Vec2 b = local(curve.Value(last));
+    const bool closed = std::hypot(b.x - a.x, b.y - a.y) < 1e-7;
+    const gp_Dir normal = toDir(plane.normal);
+
+    switch (curve.GetType()) {
+    case GeomAbs_Line:
+        if (std::hypot(b.x - a.x, b.y - a.y) < 1e-7) {
+            return {};  // perpendicular al plano: se proyecta en un punto
+        }
+        return {sketch::Line{a, b}};
+    case GeomAbs_Circle: {
+        const gp_Circ c = curve.Circle();
+        const double facing = c.Axis().Direction().Dot(normal);
+        if (std::abs(facing) < 1.0 - 1e-9) {
+            break;  // inclinada: su proyección es una elipse (spline abajo)
+        }
+        const sketch::Vec2 center = local(c.Location());
+        if (closed) {
+            return {sketch::Circle{center, c.Radius()}};
+        }
+        const double angleA = std::atan2(a.y - center.y, a.x - center.x);
+        const double angleB = std::atan2(b.y - center.y, b.x - center.x);
+        // Sentido del arco visto desde el lado de la normal del sketch.
+        const double from = facing > 0.0 ? angleA : angleB;
+        double to = facing > 0.0 ? angleB : angleA;
+        while (to <= from) {
+            to += 2.0 * std::numbers::pi;
+        }
+        return {sketch::Arc{center, c.Radius(), from, to}};
+    }
+    default:
+        break;
+    }
+    // Cualquier otra curva: spline por puntos de su proyección.
+    constexpr int kSamples = 24;
+    std::vector<sketch::Vec2> points;
+    for (int i = 0; i <= kSamples; ++i) {
+        const sketch::Vec2 p = local(curve.Value(first + (last - first) * i / kSamples));
+        if (points.empty() || std::hypot(p.x - points.back().x, p.y - points.back().y) > 1e-7) {
+            points.push_back(p);
+        }
+    }
+    if (points.size() < 2) {
+        return {};
+    }
+    return {sketch::interpolatingSpline(points)};
 }
 
 // Caras planas de los perfiles cerrados del sketch (para sombrearlos). En la
@@ -698,6 +761,7 @@ public:
         context->Erase(preview, false);
         context->Erase(profiles, false);
         shownSketch.reset();
+        projectMode = false;
         context->Activate(part, AIS_Shape::SelectionMode(TopAbs_FACE));
         context->Activate(part, AIS_Shape::SelectionMode(TopAbs_EDGE));
         mode = Mode::Model;
@@ -889,6 +953,52 @@ public:
 
     double gridStep() const { return grid->step; }
 
+    void setProjectMode(bool on)
+    {
+        projectMode = on;
+        if (on) {
+            context->Activate(part, AIS_Shape::SelectionMode(TopAbs_EDGE));
+        } else {
+            context->Deactivate(part);
+        }
+        context->ClearDetected(false);
+    }
+
+    // Arista de la pieza bajo el píxel, proyectada.
+    std::vector<sketch::Geometry> projectionAt(const Vec2i& pixel)
+    {
+        context->MoveTo(pixel.x(), pixel.y(), view, false);
+        // Bajo el cursor puede haber varias aristas (por ejemplo, la costura
+        // de un cilindro, que vista de frente se proyecta en un punto): se
+        // usa la primera que da algo.
+        for (context->InitDetected(); context->MoreDetected(); context->NextDetected()) {
+            Handle(StdSelect_BRepOwner) owner = Handle(StdSelect_BRepOwner)::DownCast(context->DetectedCurrentOwner());
+            if (owner.IsNull() || !owner->HasShape() || owner->Shape().ShapeType() != TopAbs_EDGE) {
+                continue;
+            }
+            auto projected = projectEdge(TopoDS::Edge(owner->Shape()), sketchPlane);
+            if (!projected.empty()) {
+                return projected;
+            }
+        }
+        return {};
+    }
+
+    std::vector<sketch::Geometry> section() const
+    {
+        std::vector<sketch::Geometry> result;
+        BRepAlgoAPI_Section cut(part->Shape(), gp_Pln(toAx3(sketchPlane)));
+        if (!cut.IsDone()) {
+            return result;
+        }
+        for (TopExp_Explorer it(cut.Shape(), TopAbs_EDGE); it.More(); it.Next()) {
+            for (const sketch::Geometry& g : projectEdge(TopoDS::Edge(it.Current()), sketchPlane)) {
+                result.push_back(g);
+            }
+        }
+        return result;
+    }
+
     void showFinishedSketch(const sketch::Sketch& sketch, const sketch::Plane& plane)
     {
         Handle(SketchDrawing) curves = new SketchDrawing();
@@ -918,6 +1028,7 @@ public:
     Handle(AIS_ViewCube) viewCube;
     Mode mode = Mode::Model;
     bool sketchToolActive = false;
+    bool projectMode = false;
     bool sketchDragging = false;
     std::optional<sketch::Sketch> shownSketch;
     std::vector<sketch::EntityId> shownUnderconstrained;
@@ -1272,6 +1383,20 @@ void Viewport::setSketchToolActive(bool active)
     setCursor(active ? Qt::CrossCursor : Qt::ArrowCursor);
 }
 
+void Viewport::setSketchProjectMode(bool on)
+{
+    if (isSketching()) {
+        impl_->setProjectMode(on);
+        impl_->view->Invalidate();
+        update();
+    }
+}
+
+std::vector<sketch::Geometry> Viewport::sketchSection() const
+{
+    return isSketching() ? impl_->section() : std::vector<sketch::Geometry>{};
+}
+
 void Viewport::grabSketchDrag()
 {
     if (impl_->leftPressed) {
@@ -1411,6 +1536,11 @@ void Viewport::mouseReleaseEvent(QMouseEvent* event)
         const QPointF moved = event->position() - impl_->pressPosition;
         if (impl_->ignoreNextRelease) {
             impl_->ignoreNextRelease = false;
+        } else if (moved.manhattanLength() <= 5.0 && impl_->projectMode) {
+            const auto projected = impl_->projectionAt(point);
+            if (!projected.empty()) {
+                emit sketchEdgeProjected(projected);
+            }
         } else if (moved.manhattanLength() <= 5.0) {
             if (const auto p = impl_->sketchPointAt(point)) {
                 emit sketchClicked(p->x, p->y, event->modifiers());

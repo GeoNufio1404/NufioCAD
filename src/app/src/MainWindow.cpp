@@ -206,6 +206,7 @@ void MainWindow::createMenus()
         {QStringLiteral("Patrón"),
          {{Tool::PatternRectangular, QStringLiteral("Patrón rectangular"), {}},
           {Tool::PatternCircular, QStringLiteral("Patrón circular"), {}}}},
+        {QStringLiteral("Proyectar"), {{Tool::Project, QStringLiteral("Proyectar aristas"), QKeySequence(Qt::Key_P | Qt::ShiftModifier)}}},
     };
     // A partir de esta familia van a la barra «Modificar».
     const std::size_t firstModifyFamily = 9;
@@ -263,6 +264,8 @@ void MainWindow::createMenus()
     }
     dimensionAction_ = sketchMenu->addAction(QStringLiteral("C&ota"), QKeySequence(Qt::Key_D), this,
                                              [this] { sketch_->addDimension(); });
+    intersectAction_ = sketchMenu->addAction(QStringLiteral("&Intersección con la pieza"), this,
+                                             [this] { sketch_->intersectModel(); });
     dimensionAction_->setToolTip(QStringLiteral("Acotar la selección (D)"));
 
     QToolBar* toolbar = addToolBar(QStringLiteral("Sketch"));
@@ -293,6 +296,7 @@ void MainWindow::createMenus()
         }
         bar->addWidget(button);
     }
+    modifyBar->addAction(intersectAction_);
     modifyBar->addSeparator();
     modifyBar->addAction(dimensionAction_);
     for (QAction* action : constraintActions_) {
@@ -452,6 +456,7 @@ void MainWindow::updateSketchActions()
     deleteAction_->setEnabled(sketch_ && sketch_->hasSelection());
     constructionAction_->setEnabled(sketch_ && sketch_->hasSelection());
     dimensionAction_->setEnabled(sketch_ != nullptr);
+    intersectAction_->setEnabled(sketch_ != nullptr);
     for (QAction* action : constraintActions_) {
         action->setEnabled(sketch_ != nullptr);
     }

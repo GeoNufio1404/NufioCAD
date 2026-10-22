@@ -353,6 +353,17 @@ EntityId Sketch::addBSpline(const BSpline& spline, bool construction)
     return addEntity(s, construction, false);
 }
 
+EntityId Sketch::addGeometry(const Geometry& g, bool construction)
+{
+    if (const auto* p = std::get_if<Point>(&g)) return addPoint(p->position, construction);
+    if (const auto* l = std::get_if<Line>(&g)) return addLine(l->start, l->end, construction);
+    if (const auto* c = std::get_if<Circle>(&g)) return addCircle(c->center, c->radius, construction);
+    if (const auto* a = std::get_if<Arc>(&g)) return addArc(a->center, a->radius, a->startAngle, a->endAngle, construction);
+    if (const auto* e = std::get_if<Ellipse>(&g)) return addEllipse(*e, construction);
+    if (const auto* ea = std::get_if<EllipseArc>(&g)) return addEllipseArc(*ea, construction);
+    return addBSpline(std::get<BSpline>(g), construction);
+}
+
 void Sketch::removeEntity(EntityId id)
 {
     const Entity* target = entity(id);

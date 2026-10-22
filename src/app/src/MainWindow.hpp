@@ -75,6 +75,7 @@ private:
     QAction* deleteAction_ = nullptr;
     QAction* constructionAction_ = nullptr;
     QAction* dimensionAction_ = nullptr;
+    QAction* intersectAction_ = nullptr;
     std::vector<QAction*> constraintActions_;
     QLabel* cursorLabel_ = nullptr;
 };

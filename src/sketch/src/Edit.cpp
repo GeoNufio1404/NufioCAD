@@ -991,15 +991,7 @@ std::vector<EntityId> transform(Sketch& sketch, const std::vector<EntityId>& ent
     for (EntityId id : set) {
         const Entity e = *sketch.entity(id);
         const Geometry g = transformed(e.geometry, t);
-        EntityId dst = 0;
-        if (const auto* p = std::get_if<Point>(&g)) dst = sketch.addPoint(p->position, e.construction);
-        else if (const auto* l = std::get_if<Line>(&g)) dst = sketch.addLine(l->start, l->end, e.construction);
-        else if (const auto* c = std::get_if<Circle>(&g)) dst = sketch.addCircle(c->center, c->radius, e.construction);
-        else if (const auto* a = std::get_if<Arc>(&g)) dst = sketch.addArc(a->center, a->radius, a->startAngle, a->endAngle, e.construction);
-        else if (const auto* el = std::get_if<Ellipse>(&g)) dst = sketch.addEllipse(*el, e.construction);
-        else if (const auto* ea = std::get_if<EllipseArc>(&g)) dst = sketch.addEllipseArc(*ea, e.construction);
-        else if (const auto* b = std::get_if<BSpline>(&g)) dst = sketch.addBSpline(*b, e.construction);
-        mapping[id] = dst;
+        mapping[id] = sketch.addGeometry(g, e.construction);
     }
     for (const Constraint& c : std::vector<Constraint>(sketch.constraints())) {
         if (!isInternal(c, set)) {

@@ -58,6 +58,7 @@ SketchSession::SketchSession(render::Viewport& viewport, const sketch::Plane& pl
     connect(&viewport_, &render::Viewport::sketchEnterPressed, this, &SketchSession::finishShape);
     connect(&viewport_, &render::Viewport::sketchToolDragged, this, &SketchSession::toolDragged);
     connect(&viewport_, &render::Viewport::sketchToolDragReleased, this, &SketchSession::toolDragReleased);
+    connect(&viewport_, &render::Viewport::sketchEdgeProjected, this, &SketchSession::addFromModel);
     valueInput_ = new ValueInput(&viewport_);
     connect(valueInput_, &ValueInput::accepted, this, &SketchSession::applyTypedValues);
     solveAndShow();
@@ -123,9 +124,11 @@ void SketchSession::setTool(Tool tool)
     case Tool::Scale: tool_ = sketch::makeScaleTool(sketch_, selected); break;
     case Tool::PatternRectangular: tool_ = sketch::makeRectangularPatternTool(sketch_, selected); break;
     case Tool::PatternCircular: tool_ = sketch::makeCircularPatternTool(sketch_, selected); break;
+    case Tool::Project: tool_.reset(); break;  // lo resuelve el viewport (clic en aristas)
     }
     toolKind_ = tool;
-    viewport_.setSketchToolActive(tool_ != nullptr);
+    viewport_.setSketchProjectMode(tool == Tool::Project);
+    viewport_.setSketchToolActive(tool_ != nullptr || tool == Tool::Project);
     if (tool_ && cursor_) {
         tool_->move(*cursor_);
     }
@@ -136,11 +139,19 @@ void SketchSession::setTool(Tool tool)
     }
     showPreview();
     emit toolChanged(tool);
-    emit hintChanged(tool_ ? QString::fromStdString(tool_->hint()) : QString());
+    if (tool == Tool::Project) {
+        emit hintChanged(QStringLiteral("Clic en aristas de la pieza para proyectarlas en el sketch · Esc para terminar"));
+    } else {
+        emit hintChanged(tool_ ? QString::fromStdString(tool_->hint()) : QString());
+    }
 }
 
 bool SketchSession::cancel()
 {
+    if (toolKind_ == Tool::Project) {
+        setTool(Tool::None);
+        return true;
+    }
     if (valueInput_->isTyping()) {
         valueInput_->clear();
         viewport_.setFocus();
@@ -235,6 +246,31 @@ void SketchSession::clicked(double x, double y, Qt::KeyboardModifiers modifiers)
         solveAndShow();
     }
     afterToolChange();
+}
+
+void SketchSession::addFromModel(const std::vector<sketch::Geometry>& geometry)
+{
+    if (geometry.empty()) {
+        return;
+    }
+    // Fija, como referencia del modelo (en la Fase 3 quedará vinculada a la
+    // arista original y se actualizará con ella).
+    remember(sketch_);
+    for (const sketch::Geometry& g : geometry) {
+        const sketch::EntityId id = sketch_.addGeometry(g);
+        sketch_.addConstraint(sketch::Constraint::fix(sketch::Ref::of(id)));
+    }
+    solveAndShow();
+}
+
+void SketchSession::intersectModel()
+{
+    const std::vector<sketch::Geometry> section = viewport_.sketchSection();
+    if (section.empty()) {
+        emit message(QStringLiteral("El plano del sketch no corta la pieza"));
+        return;
+    }
+    addFromModel(section);
 }
 
 void SketchSession::afterToolChange()

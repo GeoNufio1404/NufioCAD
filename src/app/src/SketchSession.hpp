@@ -44,6 +44,7 @@ public:
         Offset,
         Mirror, Move, Copy, Rotate, Scale,
         PatternRectangular, PatternCircular,
+        Project,
     };
 
     SketchSession(render::Viewport& viewport, const sketch::Plane& plane, QObject* parent = nullptr);
@@ -65,6 +66,10 @@ public:
     void deleteSelection();
     void toggleConstruction();
     bool hasSelection() const noexcept { return !selection_.empty() || !selectedConstraints_.empty(); }
+
+    // Intersección de la pieza con el plano del sketch: la añade como
+    // geometría fija.
+    void intersectModel();
 
     // Aplica una restricción geométrica a la selección. Si no encaja con la
     // selección, entra en conflicto o ya se cumple, no cambia nada y lo
@@ -109,6 +114,8 @@ private:
     // Tras un cambio hecho por la herramienta: vista previa, indicación y,
     // si ya terminó, salir de ella.
     void afterToolChange();
+    // Añade geometría que viene del modelo (proyección, intersección) fija.
+    void addFromModel(const std::vector<sketch::Geometry>& geometry);
     void updateValueInput();
     // Pide un valor nuevo para la cota; false si se canceló.
     bool askDimensionValue(sketch::Constraint& dimension);
