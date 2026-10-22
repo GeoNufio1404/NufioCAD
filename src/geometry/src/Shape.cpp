@@ -190,6 +190,14 @@ sketch::Vec3 Shape::faceCenter(int index) const
     return toVec3(props.CentreOfMass().XYZ());
 }
 
+std::vector<sketch::Geometry> Shape::projectEdge(int index, const sketch::Plane& plane) const
+{
+    if (index < 0 || index >= edgeCount()) {
+        return {};
+    }
+    return geometry::projectEdge(edgeAt(*this, index), plane);
+}
+
 std::optional<std::pair<sketch::Vec3, sketch::Vec3>> Shape::edgeLine(int index) const
 {
     if (index < 0 || index >= edgeCount()) {

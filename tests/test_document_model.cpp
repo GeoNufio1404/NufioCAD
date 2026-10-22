@@ -293,3 +293,49 @@ TEST_CASE("Documento: referencias a operaciones dentro de los nombres", "[docume
     REQUIRE(featuresIn({"f12:fin:e7", 0}) == std::vector<FeatureId>{12});
     REQUIRE(featuresIn({"bool:?3", 0}).empty());
 }
+
+TEST_CASE("Documento: lo proyectado sigue a la arista al cambiar la pieza", "[document][model]")
+{
+    Document doc;
+    const FeatureId sk = doc.addFeature(sketchOn(rectangleSketch(0, 0, 20, 10)));
+    const FeatureId ex = doc.addFeature(extrudeAll(doc, sk, 5));
+
+    // Arista superior de la cara frontal (y = 0), proyectada sobre XY.
+    const geometry::Shape& body = doc.result().bodies.front().shape;
+    std::optional<int> edge;
+    for (int i = 0; i < body.edgeCount(); ++i) {
+        const auto line = body.edgeLine(i);
+        const std::string& name = body.edgeName(i);
+        if (line && name.find(":fin:") != std::string::npos && std::abs(line->first.y) < 1e-9
+            && std::abs(line->second.x) > 0.5) {
+            edge = i;
+        }
+    }
+    REQUIRE(edge);
+    const geometry::ElementRef ref = body.edgeRef(*edge);
+    const std::vector<sketch::Geometry> projected = body.projectEdge(*edge, sketch::Plane::xy());
+    REQUIRE(projected.size() == 1);
+
+    sketch::Sketch s2;
+    const sketch::EntityId linked = s2.addGeometry(projected.front());
+    s2.entity(linked)->locked = true;
+    s2.entity(linked)->link = sketch::ModelLink{ref.name, ref.occurrence, 0};
+    const FeatureId sk2 = doc.addFeature(sketchOn(std::move(s2)));
+    REQUIRE(doc.status(sk2).health == Health::Ok);
+
+    // Más ancho: la línea proyectada se alarga hasta x = 30.
+    doc.replaceFeature(sk, sketchOn(rectangleSketch(0, 0, 30, 10)));
+    REQUIRE(doc.status(ex).health == Health::Ok);
+    REQUIRE(doc.status(sk2).health == Health::Ok);
+    const sketch::Entity* e = doc.result().sketches.at(sk2).sketch->entity(linked);
+    const auto& line = std::get<sketch::Line>(e->geometry);
+    REQUIRE_THAT(std::max(line.start.x, line.end.x), WithinAbs(30.0, 1e-9));
+    // El sketch guardado no cambia (solo el calculado).
+    const auto* stored = static_cast<const SketchFeature*>(doc.findFeature(sk2));
+    const auto& old = std::get<sketch::Line>(stored->sketch().entity(linked)->geometry);
+    REQUIRE_THAT(std::max(old.start.x, old.end.x), WithinAbs(20.0, 1e-9));
+
+    // Si la arista desaparece, se mantiene como estaba y avisa.
+    doc.setSuppressed(ex, true);
+    REQUIRE(doc.status(sk2).health == Health::Warning);
+}

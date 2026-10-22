@@ -126,6 +126,7 @@ private:
     QAction* importDxfAction_ = nullptr;
     std::vector<QAction*> constraintActions_;
     QLabel* cursorLabel_ = nullptr;
+    QLabel* modelStatusLabel_ = nullptr;  // primera operación con error o aviso
 };
 
 } // namespace nuf::app

@@ -64,6 +64,8 @@ MainWindow::MainWindow(QWidget* parent)
                                          QString::fromLatin1(qVersion())));
     sketchStatusLabel_ = new QLabel(this);
     statusBar()->addPermanentWidget(sketchStatusLabel_);
+    modelStatusLabel_ = new QLabel(this);
+    statusBar()->addPermanentWidget(modelStatusLabel_);
     cursorLabel_ = new QLabel(this);
     cursorLabel_->setMinimumWidth(190);
     statusBar()->addPermanentWidget(cursorLabel_);
@@ -504,9 +506,11 @@ void MainWindow::editSketch(document::FeatureId id)
     const auto& after = document_.stateBefore(*index + 1).sketches;
     const auto placed = after.find(id);
     const sketch::Plane plane = placed != after.end() ? placed->second.plane : feature->attachment().lastPlane;
+    // Con lo proyectado ya actualizado.
+    const sketch::Sketch sketch = placed != after.end() ? *placed->second.sketch : feature->sketch();
     editingSketch_ = id;
     refreshModel();  // el modelo como estaba antes de este sketch
-    openSession(plane, QString::fromStdString(feature->name()), feature->sketch());
+    openSession(plane, QString::fromStdString(feature->name()), sketch);
 }
 
 void MainWindow::openSession(const sketch::Plane& plane, const QString& description,
@@ -725,7 +729,7 @@ bool MainWindow::sketchVisible(document::FeatureId id, std::size_t upTo) const
 
 void MainWindow::refreshModel()
 {
-    if (!viewport_ || !timeline_ || !navigator_) {
+    if (!viewport_ || !timeline_ || !navigator_ || !modelStatusLabel_) {
         return;
     }
     const std::size_t upTo = shownUpTo();
@@ -758,7 +762,8 @@ void MainWindow::refreshModel()
             continue;
         }
         visibleIds.insert(sk->id());
-        wanted[sk->id()] = {&sk->sketch(), placed->second.plane, sk->name()};
+        // El calculado: lo proyectado del modelo ya está al día.
+        wanted[sk->id()] = {placed->second.sketch.get(), placed->second.plane, sk->name()};
     }
     for (auto it = shownSketches_.begin(); it != shownSketches_.end();) {
         const auto keep = wanted.find(it->first);
@@ -784,6 +789,27 @@ void MainWindow::refreshModel()
         }
     }
     navigator_->refresh(document_, state, upTo, hiddenBodies_, visibleIds, originVisible_);
+
+    // La primera operación con problemas, en la barra de estado.
+    QString problem;
+    int problems = 0;
+    for (std::size_t i = 0; i < document_.featureCount(); ++i) {
+        const document::Feature& f = document_.feature(i);
+        const document::FeatureStatus& st = document_.status(f.id());
+        if (st.health != document::Health::Error && st.health != document::Health::Warning) {
+            continue;
+        }
+        if (problems++ == 0) {
+            problem = QStringLiteral("%1 %2: %3")
+                          .arg(st.health == document::Health::Error ? QStringLiteral("⛔") : QStringLiteral("⚠"),
+                               QString::fromStdString(f.name()), QString::fromStdString(st.message));
+        }
+    }
+    if (problems > 1) {
+        problem += QStringLiteral(" (y %1 más)").arg(problems - 1);
+    }
+    modelStatusLabel_->setText(problem);
+    modelStatusLabel_->setToolTip(problem);
     timeline_->updateGeometry();
     timeline_->update();
 }

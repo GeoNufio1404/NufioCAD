@@ -1,5 +1,6 @@
 #pragma once
 
+#include <nuf/geometry/Shape.hpp>
 #include <nuf/sketch/Plane.hpp>
 #include <nuf/sketch/Sketch.hpp>
 #include <nuf/sketch/Snap.hpp>
@@ -127,7 +128,7 @@ private:
     // si ya terminó, salir de ella.
     void afterToolChange();
     // Añade geometría que viene del modelo (proyección, intersección) fija.
-    void addFromModel(const std::vector<sketch::Geometry>& geometry);
+    void addFromModel(const std::vector<sketch::Geometry>& geometry, const geometry::ElementRef& source);
     void boxSelected(double x0, double y0, double x1, double y1);
     // Texto e imagen: piden datos con diálogos al hacer clic.
     void placeText(sketch::Vec2 at);

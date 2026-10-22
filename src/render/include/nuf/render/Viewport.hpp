@@ -176,7 +176,9 @@ signals:
     void sketchTyped(const QString& text);
     // Enter en el sketch (terminar una spline, por ejemplo).
     void sketchEnterPressed();
-    void sketchEdgeProjected(const std::vector<nuf::sketch::Geometry>& geometry);
+    // source: la arista de la que sale (para vincular la proyección).
+    void sketchEdgeProjected(const std::vector<nuf::sketch::Geometry>& geometry,
+                             const nuf::geometry::ElementRef& source);
     // Shift + arrastre sin herramienta: rectángulo de selección (esquinas).
     void sketchBoxSelected(double x0, double y0, double x1, double y1);
     // Arrastre izquierdo con una herramienta activa: desde (x0, y0), donde

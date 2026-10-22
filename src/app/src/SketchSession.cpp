@@ -276,16 +276,20 @@ void SketchSession::clicked(double x, double y, Qt::KeyboardModifiers modifiers)
     afterToolChange();
 }
 
-void SketchSession::addFromModel(const std::vector<sketch::Geometry>& geometry)
+void SketchSession::addFromModel(const std::vector<sketch::Geometry>& geometry, const geometry::ElementRef& source)
 {
     if (geometry.empty()) {
         return;
     }
-    // Fija, como referencia del modelo (en la Fase 3 quedará vinculada a la
-    // arista original y se actualizará con ella).
+    // Bloqueada y vinculada a la arista original: se actualiza con ella al
+    // recalcular el modelo (desbloquearla rompe el vínculo).
     remember(sketch_);
-    for (const sketch::Geometry& g : geometry) {
-        sketch_.entity(sketch_.addGeometry(g))->locked = true;
+    for (std::size_t i = 0; i < geometry.size(); ++i) {
+        sketch::Entity* e = sketch_.entity(sketch_.addGeometry(geometry[i]));
+        e->locked = true;
+        if (!source.empty()) {
+            e->link = sketch::ModelLink{source.name, source.occurrence, int(i)};
+        }
     }
     solveAndShow();
 }
@@ -400,7 +404,7 @@ void SketchSession::intersectModel()
         emit message(QStringLiteral("El plano del sketch no corta la pieza"));
         return;
     }
-    addFromModel(section);
+    addFromModel(section, {});  // la sección no tiene una arista de origen
 }
 
 void SketchSession::afterToolChange()
@@ -461,6 +465,9 @@ void SketchSession::toggleLock()
     for (sketch::EntityId id : ids) {
         sketch::Entity* e = sketch_.entity(id);
         e->locked = !e->locked;
+        if (!e->locked) {
+            e->link.reset();
+        }
     }
     solveAndShow();
 }

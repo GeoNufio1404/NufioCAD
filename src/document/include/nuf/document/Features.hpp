@@ -19,6 +19,8 @@ struct SketchAttachment {
     sketch::Plane lastPlane = sketch::Plane::xy();
 };
 
+// El sketch ya calculado (SketchOutput) puede diferir del guardado: lo
+// proyectado del modelo se actualiza con la pieza.
 class SketchFeature final : public Feature {
 public:
     SketchFeature() = default;
@@ -35,6 +37,10 @@ public:
     std::vector<FeatureId> dependencies() const override;
 
 private:
+    // El sketch con lo proyectado al día (el mismo si no tiene vínculos).
+    std::shared_ptr<const sketch::Sketch> updatedSketch(const ModelState& state, const sketch::Plane& plane,
+                                                        std::optional<std::string>& warning) const;
+
     // Compartido e inmutable: las copias (deshacer, caché) no lo duplican.
     std::shared_ptr<const sketch::Sketch> sketch_ = std::make_shared<sketch::Sketch>();
     SketchAttachment attachment_;

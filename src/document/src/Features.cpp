@@ -1,5 +1,7 @@
 #include <nuf/document/Features.hpp>
 
+#include <nuf/sketch/Solver.hpp>
+
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -131,8 +133,50 @@ std::optional<std::string> SketchFeature::compute(ModelState& state) const
     } else {
         warning = "La cara del sketch ya no existe; se mantiene en su última posición.";
     }
-    state.sketches[id()] = {sketch_, plane};
+    state.sketches[id()] = {updatedSketch(state, plane, warning), plane};
     return warning;
+}
+
+std::shared_ptr<const sketch::Sketch> SketchFeature::updatedSketch(const ModelState& state, const sketch::Plane& plane,
+                                                                   std::optional<std::string>& warning) const
+{
+    const auto& entities = sketch_->entities();
+    if (std::ranges::none_of(entities, [](const sketch::Entity& e) { return e.link.has_value(); })) {
+        return sketch_;
+    }
+    // Lo proyectado se vuelve a proyectar desde la pieza actual y el resto
+    // del sketch se ajusta a ello con el solver.
+    auto updated = std::make_shared<sketch::Sketch>(*sketch_);
+    int lost = 0;
+    int changedType = 0;
+    for (const sketch::Entity& e : entities) {
+        if (!e.link) {
+            continue;
+        }
+        const auto hit = state.findEdge({e.link->edge, e.link->occurrence});
+        if (!hit) {
+            ++lost;
+            continue;
+        }
+        const std::vector<sketch::Geometry> pieces =
+            state.bodies[hit->body].shape.projectEdge(hit->edge, plane);
+        if (e.link->piece >= int(pieces.size())) {
+            ++lost;
+            continue;
+        }
+        const sketch::Geometry& fresh = pieces[std::size_t(e.link->piece)];
+        if (fresh.index() != e.geometry.index()) {
+            ++changedType;  // la arista cambió de tipo (p. ej. de recta a curva)
+            continue;
+        }
+        updated->entity(e.id)->geometry = fresh;
+    }
+    sketch::makePlaneGcsSolver()->solve(*updated);
+    if (lost > 0 || changedType > 0) {
+        const std::string note = "Algunas aristas proyectadas ya no existen o cambiaron; se mantienen como estaban.";
+        warning = warning ? *warning + " " + note : note;
+    }
+    return updated;
 }
 
 std::vector<FeatureId> SketchFeature::dependencies() const

@@ -192,6 +192,11 @@ pieza es solo el resultado. Se divide así:
 27. **Timeline**: arrastrar el marcador naranja hacia atrás y adelante; clic derecho en una ficha → Suprimir / Reactivar / Renombrar / Borrar (avisa si otras dependen de ella) / Mover el marcador aquí; arrastrar una ficha a otro sitio (no deja poner una extrusión antes de su sketch).
 28. **Navegador**: casillas para mostrar/ocultar cuerpos, sketches y el origen; doble clic en un sketch para editarlo.
 
+**Pruebas manuales pendientes (3c)**
+
+29. **Proyección vinculada**: extruir un rectángulo; nuevo sketch en XY → Proyectar aristas (Mayús+P) → clic en un borde del cuerpo → Terminar. Editar Sketch1 y agrandar el rectángulo: al terminar, la línea proyectada en el segundo sketch se alarga sola. Desbloquearla (K) rompe el vínculo.
+30. **Avisos**: suprimir la extrusión de la que salen un sketch en cara o una proyección → las fichas afectadas muestran «!» (motivo en el tooltip) y la barra de estado indica la primera con problemas.
+
 ### Fase 4 — Archivos y exportación
 - Formato nativo `.nuf` (offline y privado), guardando el historial.
 - Pantalla de inicio con diseños recientes.
@@ -243,5 +248,5 @@ pieza es solo el resultado. Se divide así:
 | Fase 0 | ✅ Completa — mockups, formatos de archivo, arquitectura, entorno (repositorio con CMake, vcpkg, pruebas y CI) y nombre de trabajo NufioCAD |
 | Fase 1 | 🚧 Implementada y probada en Linux (Fedora): visor OCCT en Qt, órbita/pan/zoom estilo Fusion, ViewCube, resaltado y selección de caras y aristas. Falta probarla en Windows |
 | Fase 2 | 🚧 Implementada (2a–2d) — sketch completo: dibujo con variantes, elipse, spline y cónica; restricciones (incluida G2), cotas y valores junto al cursor; selección (también por rectángulo), deshacer, arrastre y perfiles; edición (recortar, extender, partir, empalme, chaflán, desfase, simetría, patrones, mover/copiar/girar/escalar); proyectar aristas, intersección, texto, imagen de referencia e importar DXF; los sketches terminados se guardan, sus perfiles y curvas se seleccionan en la vista 3D y se reabren con doble clic. Pendiente: las pruebas manuales de abajo y probar en Windows. Limitaciones: lo proyectado y el texto quedan bloqueados (no se actualizan con la pieza ni se editan como texto hasta la Fase 3); recortar/extender/partir y desfase trabajan con líneas, arcos y círculos; los patrones son copias independientes; las curvas que se cruzan sin compartir extremo no parten los perfiles |
-| Fase 3 | 🚧 En curso — 3a (núcleo: operaciones, recálculo, nombres estables) y 3b (sketches en el historial, Extruir, Revolución, timeline, navegador, deshacer) implementadas; ya se puede editar cualquier operación pasada, mover el marcador, reordenar, suprimir y borrar. Falta la 3c (vínculo de lo proyectado y avisos más visibles) y las pruebas manuales 20–28 |
+| Fase 3 | 🚧 Implementada (3a–3c) — núcleo paramétrico con nombres estables de caras y aristas; sketches en el historial (sobre planos de origen o caras que siguen a la pieza); Extruir (todas sus variantes, empujar una cara) y Revolución con vista previa y flecha; timeline editable (editar, marcador, reordenar, suprimir, borrar, renombrar), navegador y deshacer/rehacer; lo proyectado sigue a su arista. Pendiente: las pruebas manuales 20–30 y probar en Windows. Limitaciones: los cuerpos que participan en unir/cortar son todos los que toca (sin elegirlos); «hasta una cara» solo con caras planas; el ángulo de la revolución se escribe en el panel (sin flecha) |
 | Fases 4–9 | Pendientes |

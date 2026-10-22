@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <variant>
 #include <vector>
 
@@ -97,6 +98,14 @@ std::vector<Vec2> polyline(const Geometry& geometry);
 // true si la curva es cerrada por sí sola (círculo, elipse).
 bool isClosedCurve(const Geometry& geometry);
 
+// Vínculo de lo proyectado con la arista del modelo de la que sale: al
+// recalcular, el documento la vuelve a proyectar y actualiza la entidad.
+struct ModelLink {
+    std::string edge;    // nombre estable de la arista
+    int occurrence = 0;  // cuál, si varias comparten nombre
+    int piece = 0;       // qué trozo de su proyección (una spline se trocea)
+};
+
 struct Entity {
     EntityId id = 0;
     Geometry geometry;
@@ -107,6 +116,8 @@ struct Entity {
     // Bloqueada (lo proyectado del modelo, texto, DXF): el solver no la
     // mueve, pero cuenta para los perfiles y se puede borrar o desbloquear.
     bool locked = false;
+    // Con vínculo, además se actualiza con el modelo.
+    std::optional<ModelLink> link;
 };
 
 // ---------------------------------------------------------------------------

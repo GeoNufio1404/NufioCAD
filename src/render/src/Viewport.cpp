@@ -1082,8 +1082,8 @@ public:
         context->ClearDetected(false);
     }
 
-    // Arista de la pieza bajo el píxel, proyectada.
-    std::vector<sketch::Geometry> projectionAt(const Vec2i& pixel)
+    // Arista de la pieza bajo el píxel, proyectada, y su referencia.
+    std::pair<std::vector<sketch::Geometry>, geometry::ElementRef> projectionAt(const Vec2i& pixel)
     {
         context->MoveTo(pixel.x(), pixel.y(), view, false);
         // Bajo el cursor puede haber varias aristas (por ejemplo, la costura
@@ -1096,7 +1096,14 @@ public:
             }
             auto projected = projectEdge(TopoDS::Edge(owner->Shape()), sketchPlane);
             if (!projected.empty()) {
-                return projected;
+                geometry::ElementRef source;
+                const Handle(AIS_InteractiveObject) object = Handle(AIS_InteractiveObject)::DownCast(owner->Selectable());
+                if (const ShownBody* body = bodyOf(object)) {
+                    if (const auto index = geometry::edgeIndexOf(body->shape, owner->Shape())) {
+                        source = body->shape.edgeRef(*index);
+                    }
+                }
+                return {projected, source};
             }
         }
         return {};
@@ -1910,9 +1917,9 @@ void Viewport::mouseReleaseEvent(QMouseEvent* event)
         if (impl_->ignoreNextRelease) {
             impl_->ignoreNextRelease = false;
         } else if (moved.manhattanLength() <= 5.0 && impl_->projectMode) {
-            const auto projected = impl_->projectionAt(point);
+            const auto [projected, source] = impl_->projectionAt(point);
             if (!projected.empty()) {
-                emit sketchEdgeProjected(projected);
+                emit sketchEdgeProjected(projected, source);
             }
         } else if (moved.manhattanLength() <= 5.0) {
             if (const auto p = impl_->sketchPointAt(point)) {

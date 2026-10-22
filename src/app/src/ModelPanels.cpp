@@ -184,6 +184,19 @@ void TimelineWidget::paintEvent(QPaintEvent* /*event*/)
         const QString name = fm.elidedText(QString::fromStdString(f.name()), Qt::ElideRight, r.width() - 6);
         p.drawText(QRect(r.x() + 3, r.y() + 28, r.width() - 6, 22), Qt::AlignCenter, name);
         p.setOpacity(1.0);
+        // Insignia «!» en la esquina (el motivo, en el tooltip).
+        if (status.health == document::Health::Error || status.health == document::Health::Warning) {
+            const QRectF badge(r.right() - 15, r.top() + 3, 12, 12);
+            p.setPen(Qt::NoPen);
+            p.setBrush(border);
+            p.drawEllipse(badge);
+            QFont tiny = font();
+            tiny.setBold(true);
+            tiny.setPointSizeF(tiny.pointSizeF() * 0.7);
+            p.setFont(tiny);
+            p.setPen(Qt::white);
+            p.drawText(badge, Qt::AlignCenter, QStringLiteral("!"));
+        }
     }
 
     // Marcador (y, al arrastrar, dónde caería).

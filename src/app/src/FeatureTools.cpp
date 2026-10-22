@@ -62,6 +62,17 @@ const document::SketchFeature* sketchFeature(const document::Document& doc, docu
     return f && f->kind() == document::FeatureKind::Sketch ? static_cast<const document::SketchFeature*>(f) : nullptr;
 }
 
+// El sketch tal como quedó calculado en «state» (con lo proyectado al día),
+// o el guardado si no está.
+const sketch::Sketch* sketchIn(const document::Document& doc, const document::ModelState& state, document::FeatureId id)
+{
+    if (const auto out = state.sketches.find(id); out != state.sketches.end()) {
+        return out->second.sketch.get();
+    }
+    const document::SketchFeature* sk = sketchFeature(doc, id);
+    return sk ? &sk->sketch() : nullptr;
+}
+
 // Centro aproximado de un perfil (media de su polígono).
 sketch::Vec2 profileCenter(const sketch::Profile& profile)
 {
@@ -153,11 +164,11 @@ void FeatureTool::start()
         }
         std::vector<render::ModelSelection::Profile> regions;
         for (const document::ProfileRef& ref : used) {
-            const document::SketchFeature* sk = sketchFeature(document_, ref.sketch);
+            const sketch::Sketch* sk = sketchIn(document_, before(), ref.sketch);
             if (sk == nullptr) {
                 continue;
             }
-            const std::vector<sketch::Profile> found = sketch::findProfiles(sk->sketch());
+            const std::vector<sketch::Profile> found = sketch::findProfiles(*sk);
             if (const auto profile = document::resolveProfile(found, ref)) {
                 const document::ProfileRef exact = document::profileRef(ref.sketch, *profile);
                 for (std::size_t i = 0; i < found.size(); ++i) {
@@ -186,11 +197,11 @@ std::vector<document::ProfileRef> FeatureTool::profilesOf(const render::ModelSel
 {
     std::vector<document::ProfileRef> refs;
     for (const render::ModelSelection::Profile& p : selection.profiles) {
-        const document::SketchFeature* sk = sketchFeature(document_, p.sketch);
+        const sketch::Sketch* sk = sketchIn(document_, before(), p.sketch);
         if (sk == nullptr) {
             continue;
         }
-        const std::vector<sketch::Profile> found = sketch::findProfiles(sk->sketch());
+        const std::vector<sketch::Profile> found = sketch::findProfiles(*sk);
         if (p.index >= 0 && p.index < int(found.size())) {
             refs.push_back(document::profileRef(p.sketch, found[std::size_t(p.index)]));
         }
@@ -598,8 +609,8 @@ void RevolveTool::selectionChanged(const render::ModelSelection& selection)
     }
     // Una línea del sketch o una arista recta elegidas son el eje.
     for (const render::ModelSelection::Curve& c : selection.curves) {
-        const auto* sk = sketchFeature(document_, c.sketch);
-        const sketch::Entity* e = sk ? sk->sketch().entity(c.entity) : nullptr;
+        const sketch::Sketch* sk = sketchIn(document_, before(), c.sketch);
+        const sketch::Entity* e = sk ? sk->entity(c.entity) : nullptr;
         if (e && std::holds_alternative<sketch::Line>(e->geometry)) {
             axis_ = {document::AxisRef::Kind::SketchLine, c.sketch, c.entity, {}};
             axisKind_->setCurrentIndex(3);
