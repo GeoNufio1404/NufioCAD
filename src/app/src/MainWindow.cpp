@@ -174,7 +174,15 @@ void MainWindow::createMenus()
         {QStringLiteral("Ranura"),
          {{Tool::SlotCenterToCenter, QStringLiteral("Ranura centro a centro"), {}},
           {Tool::SlotOverall, QStringLiteral("Ranura total"), {}},
-          {Tool::SlotCenterPoint, QStringLiteral("Ranura por punto central"), {}}}},
+          {Tool::SlotCenterPoint, QStringLiteral("Ranura por punto central"), {}},
+          {Tool::SlotArc, QStringLiteral("Ranura en arco"), {}}}},
+        {QStringLiteral("Elipse"),
+         {{Tool::Ellipse, QStringLiteral("Elipse"), {}},
+          {Tool::EllipseArc, QStringLiteral("Arco de elipse"), {}}}},
+        {QStringLiteral("Spline"),
+         {{Tool::SplineFit, QStringLiteral("Spline por puntos de paso"), {}},
+          {Tool::SplineControl, QStringLiteral("Spline por polos"), {}}}},
+        {QStringLiteral("Cónica"), {{Tool::Conic, QStringLiteral("Curva cónica"), {}}}},
     };
     auto* toolGroup = new QActionGroup(this);
     toolGroup->setExclusionPolicy(QActionGroup::ExclusionPolicy::ExclusiveOptional);
@@ -218,7 +226,8 @@ void MainWindow::createMenus()
           std::tuple{T::Concentric, QStringLiteral("Concéntrica"), QStringLiteral("◎")},
           std::tuple{T::Midpoint, QStringLiteral("Punto medio"), QStringLiteral("M")},
           std::tuple{T::Symmetric, QStringLiteral("Simetría"), QStringLiteral("S")},
-          std::tuple{T::Fix, QStringLiteral("Fijar"), QStringLiteral("F")}}) {
+          std::tuple{T::Fix, QStringLiteral("Fijar"), QStringLiteral("F")},
+          std::tuple{T::Curvature, QStringLiteral("Curvatura (G2)"), QStringLiteral("G2")}}) {
         QAction* action = constraintMenu->addAction(text, this, [this, type = type] { sketch_->applyConstraint(type); });
         action->setIconText(icon);
         action->setToolTip(QStringLiteral("%1 (selecciona y aplica)").arg(text));

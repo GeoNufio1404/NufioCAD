@@ -14,7 +14,7 @@ namespace nuf::sketch {
 struct Annotation {
     ConstraintId constraint = 0;
     Vec2 anchor;                  // centro del texto
-    std::string text;             // UTF-8: "H", "∥", "40", "R5", "30°"…
+    std::string text;             // UTF-8: "H", "//", "40", "R5", "30°"…
     std::vector<Geometry> lines;  // líneas de cota, de referencia y flechas
     bool dimension = false;
     bool reference = false;       // cota de referencia (se muestra entre paréntesis)

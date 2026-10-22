@@ -34,7 +34,10 @@ public:
         Circle, Circle2Point, Circle3Point, CircleTangent2, CircleTangent3,
         Arc, ArcCenter, ArcTangent,
         PolygonCircumscribed, PolygonInscribed, PolygonEdge,
-        SlotCenterToCenter, SlotOverall, SlotCenterPoint,
+        SlotCenterToCenter, SlotOverall, SlotCenterPoint, SlotArc,
+        Ellipse, EllipseArc,
+        SplineFit, SplineControl,
+        Conic,
     };
 
     SketchSession(render::Viewport& viewport, const sketch::Plane& plane, QObject* parent = nullptr);
@@ -92,6 +95,10 @@ private:
     void dragFinished();
     // Valores escritos junto al cursor.
     void typed(const QString& text);
+    // Terminar la figura en curso (splines): doble clic o Enter.
+    void finishShape();
+    void toolDragged(double x0, double y0, double x, double y);
+    void toolDragReleased(double x0, double y0, double x, double y);
     void applyTypedValues();
     void updateValueInput();
     // Pide un valor nuevo para la cota; false si se canceló.

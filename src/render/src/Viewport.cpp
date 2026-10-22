@@ -928,6 +928,7 @@ public:
     bool leftPressed = false;
     bool ignoreNextRelease = false;
     QPointF pressPosition;
+    std::optional<sketch::Vec2> pressSketchPoint;  // dónde se pulsó, en el plano
 
 protected:
     // Pide otro cuadro mientras haya animaciones (ViewCube, inercia).
@@ -1377,6 +1378,7 @@ void Viewport::mousePressEvent(QMouseEvent* event)
     if (event->button() == Qt::LeftButton && isSketching()) {
         impl_->leftPressed = true;
         impl_->pressPosition = event->position();
+        impl_->pressSketchPoint = impl_->sketchPointAt(point);
         // Quien escucha puede llamar a grabSketchDrag() para arrastrar geometría.
         if (!impl_->sketchToolActive) {
             if (const auto p = impl_->sketchPointAt(point)) {
@@ -1414,6 +1416,10 @@ void Viewport::mouseReleaseEvent(QMouseEvent* event)
         } else if (moved.manhattanLength() <= 5.0) {
             if (const auto p = impl_->sketchPointAt(point)) {
                 emit sketchClicked(p->x, p->y, event->modifiers());
+            }
+        } else if (impl_->sketchToolActive && impl_->pressSketchPoint) {
+            if (const auto p = impl_->sketchPointAt(point)) {
+                emit sketchToolDragReleased(impl_->pressSketchPoint->x, impl_->pressSketchPoint->y, p->x, p->y);
             }
         }
     }
@@ -1454,11 +1460,18 @@ void Viewport::mouseMoveEvent(QMouseEvent* event)
         if (impl_->sketchDragging && p && moved) {
             emit sketchDragged(p->x, p->y);
         }
+        if (impl_->sketchToolActive && impl_->leftPressed && impl_->pressSketchPoint && p && moved) {
+            emit sketchToolDragged(impl_->pressSketchPoint->x, impl_->pressSketchPoint->y, p->x, p->y);
+        }
     }
 }
 
 void Viewport::keyPressEvent(QKeyEvent* event)
 {
+    if (isSketching() && (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)) {
+        emit sketchEnterPressed();
+        return;
+    }
     const QString text = event->text();
     if (isSketching() && text.size() == 1
         && (text.front().isDigit() || text == QLatin1String(".") || text == QLatin1String(",")

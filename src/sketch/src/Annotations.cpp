@@ -129,17 +129,19 @@ std::optional<Subject> subjectOf(const Sketch& sketch, Ref ref, double px)
     return std::nullopt;
 }
 
+// Solo caracteres que tienen todas las fuentes: OCCT no busca en otras
+// fuentes como Qt (hasta que haya iconos propios).
 const char* glyph(ConstraintType type)
 {
     switch (type) {
     case ConstraintType::Horizontal: return "H";
     case ConstraintType::Vertical: return "V";
-    case ConstraintType::Parallel: return "∥";
-    case ConstraintType::Perpendicular: return "⊥";
+    case ConstraintType::Parallel: return "//";
+    case ConstraintType::Perpendicular: return "L";
     case ConstraintType::Tangent: return "T";
     case ConstraintType::Equal: return "=";
-    case ConstraintType::Collinear: return "≡";
-    case ConstraintType::Concentric: return "◎";
+    case ConstraintType::Collinear: return "CL";
+    case ConstraintType::Concentric: return "CC";
     case ConstraintType::Midpoint: return "M";
     case ConstraintType::Symmetric: return "S";
     case ConstraintType::Fix: return "F";

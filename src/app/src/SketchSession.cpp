@@ -55,6 +55,9 @@ SketchSession::SketchSession(render::Viewport& viewport, const sketch::Plane& pl
     connect(&viewport_, &render::Viewport::sketchDragged, this, &SketchSession::dragged);
     connect(&viewport_, &render::Viewport::sketchDragFinished, this, &SketchSession::dragFinished);
     connect(&viewport_, &render::Viewport::sketchTyped, this, &SketchSession::typed);
+    connect(&viewport_, &render::Viewport::sketchEnterPressed, this, &SketchSession::finishShape);
+    connect(&viewport_, &render::Viewport::sketchToolDragged, this, &SketchSession::toolDragged);
+    connect(&viewport_, &render::Viewport::sketchToolDragReleased, this, &SketchSession::toolDragReleased);
     valueInput_ = new ValueInput(&viewport_);
     connect(valueInput_, &ValueInput::accepted, this, &SketchSession::applyTypedValues);
     solveAndShow();
@@ -92,6 +95,12 @@ void SketchSession::setTool(Tool tool)
     case Tool::SlotCenterToCenter: tool_ = sketch::makeSlotTool(sketch::SlotMode::CenterToCenter); break;
     case Tool::SlotOverall: tool_ = sketch::makeSlotTool(sketch::SlotMode::Overall); break;
     case Tool::SlotCenterPoint: tool_ = sketch::makeSlotTool(sketch::SlotMode::CenterPoint); break;
+    case Tool::SlotArc: tool_ = sketch::makeArcSlotTool(); break;
+    case Tool::Ellipse: tool_ = sketch::makeEllipseTool(); break;
+    case Tool::EllipseArc: tool_ = sketch::makeEllipseArcTool(); break;
+    case Tool::SplineFit: tool_ = sketch::makeSplineTool(sketch::SplineMode::FitPoints); break;
+    case Tool::SplineControl: tool_ = sketch::makeSplineTool(sketch::SplineMode::ControlPoints); break;
+    case Tool::Conic: tool_ = sketch::makeConicTool(); break;
     }
     toolKind_ = tool;
     viewport_.setSketchToolActive(tool_ != nullptr);
@@ -322,11 +331,46 @@ void SketchSession::doubleClicked(double x, double y)
         }
         return;
     }
-    // El primer clic ya colocó el punto; el doble clic termina la cadena.
-    if (tool_->cancel()) {
-        showPreview();
-        emit hintChanged(QString::fromStdString(tool_->hint()));
+    // El primer clic ya colocó el punto; el doble clic termina la figura
+    // (splines) o la cadena (líneas).
+    finishShape();
+}
+
+void SketchSession::finishShape()
+{
+    if (!tool_) {
+        return;
     }
+    sketch::Sketch before = sketch_;
+    if (tool_->finish(sketch_)) {
+        remember(std::move(before));
+        solveAndShow();
+    } else {
+        tool_->cancel();
+    }
+    showPreview();
+    emit hintChanged(QString::fromStdString(tool_->hint()));
+}
+
+void SketchSession::toolDragged(double x0, double y0, double x, double y)
+{
+    if (tool_ && tool_->dragMove(snapAt({x0, y0}), snapAt({x, y}))) {
+        showPreview();
+    }
+}
+
+void SketchSession::toolDragReleased(double x0, double y0, double x, double y)
+{
+    if (!tool_) {
+        return;
+    }
+    sketch::Sketch before = sketch_;
+    if (tool_->dragRelease(sketch_, snapAt({x0, y0}), snapAt({x, y}))) {
+        remember(std::move(before));
+        solveAndShow();
+    }
+    showPreview();
+    emit hintChanged(QString::fromStdString(tool_->hint()));
 }
 
 void SketchSession::pressed(double x, double y)
@@ -430,6 +474,7 @@ QString constraintName(sketch::ConstraintType type)
     case T::Midpoint: return QStringLiteral("Punto medio");
     case T::Symmetric: return QStringLiteral("Simetría");
     case T::Fix: return QStringLiteral("Fijar");
+    case T::Curvature: return QStringLiteral("Curvatura (G2)");
     default: return QStringLiteral("Restricción");
     }
 }

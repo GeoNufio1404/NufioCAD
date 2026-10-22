@@ -101,6 +101,12 @@ signals:
     // Tecla de un número (o «.», «,», «-») pulsada en el sketch: valores
     // escritos junto al cursor.
     void sketchTyped(const QString& text);
+    // Enter en el sketch (terminar una spline, por ejemplo).
+    void sketchEnterPressed();
+    // Arrastre izquierdo con una herramienta activa: desde (x0, y0), donde
+    // se pulsó, hasta (x, y). Al soltar se emite DragReleased en vez de un clic.
+    void sketchToolDragged(double x0, double y0, double x, double y);
+    void sketchToolDragReleased(double x0, double y0, double x, double y);
 
 protected:
     void initializeGL() override;
