@@ -179,5 +179,5 @@ solver. Por eso la fase se divide así:
 | Hoja de ruta | ✅ Aprobada |
 | Fase 0 | ✅ Completa — mockups, formatos de archivo, arquitectura, entorno (repositorio con CMake, vcpkg, pruebas y CI) y nombre de trabajo NufioCAD |
 | Fase 1 | 🚧 Implementada y probada en Linux (Fedora): visor OCCT en Qt, órbita/pan/zoom estilo Fusion, ViewCube, resaltado y selección de caras y aristas. Falta probarla en Windows |
-| Fase 2 | 🚧 En curso — **2a completa** (solver PlaneGCS, modo sketch, línea/rectángulo/círculo/arco con snap y restricciones automáticas, valores junto al cursor, selección, borrar, deshacer, restricciones y cotas, arrastre y perfiles cerrados). Siguiente: 2b (variantes de creación). Limitación: las curvas que se cruzan sin compartir extremo no parten los perfiles |
+| Fase 2 | 🚧 En curso — **2a y 2b completas**: solver PlaneGCS, modo sketch, línea/rectángulo/círculo/arco con snap, restricciones automáticas y valores junto al cursor, selección, deshacer, restricciones y cotas, arrastre, perfiles; variantes (rectángulo 3 puntos/centro, círculo 2/3 puntos/tangente, arco centro/tangente, polígonos, ranuras), elipse, spline, cónica y continuidad G2. Siguiente: 2c (edición del sketch). Limitación: las curvas que se cruzan sin compartir extremo no parten los perfiles |
 | Fases 3–9 | Pendientes |
