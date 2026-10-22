@@ -4,7 +4,8 @@ add_executable(nuf_tests
     test_command_stack.cpp
     test_geometry.cpp
     test_nuf_file.cpp
-    test_sketch.cpp)
+    test_sketch.cpp
+    test_sketch_plane.cpp)
 
 nuf_set_warnings(nuf_tests)
 target_link_libraries(nuf_tests PRIVATE

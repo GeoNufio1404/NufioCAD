@@ -1,26 +1,39 @@
 #include <nuf/render/Viewport.hpp>
 
+#include <AIS_AnimationCamera.hxx>
 #include <AIS_InteractiveContext.hxx>
 #include <AIS_Shape.hxx>
 #include <AIS_ViewController.hxx>
 #include <AIS_ViewCube.hxx>
 #include <Aspect_DisplayConnection.hxx>
 #include <Aspect_NeutralWindow.hxx>
-#include <Font_FontMgr.hxx>
+#include <BRepAdaptor_Surface.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
+#include <BRepBndLib.hxx>
+#include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepPrimAPI_MakeBox.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
+#include <Bnd_Box.hxx>
+#include <Font_FontMgr.hxx>
+#include <Graphic3d_ArrayOfSegments.hxx>
+#include <Graphic3d_AspectLine3d.hxx>
+#include <Graphic3d_Camera.hxx>
 #include <OpenGl_Context.hxx>
 #include <OpenGl_FrameBuffer.hxx>
 #include <OpenGl_GraphicDriver.hxx>
 #include <Prs3d_DatumAspect.hxx>
 #include <Prs3d_LineAspect.hxx>
 #include <Prs3d_ShadingAspect.hxx>
+#include <SelectMgr_Filter.hxx>
+#include <StdSelect_BRepOwner.hxx>
 #include <TopAbs_ShapeEnum.hxx>
+#include <TopoDS.hxx>
 #include <V3d_View.hxx>
 #include <V3d_Viewer.hxx>
 #include <gp_Ax2.hxx>
+#include <gp_Ax3.hxx>
+#include <gp_Pln.hxx>
 
 #include <QFontDatabase>
 #include <QMouseEvent>
@@ -28,7 +41,11 @@
 #include <QSurfaceFormat>
 #include <QWheelEvent>
 
+#include <algorithm>
+#include <cmath>
+#include <optional>
 #include <utility>
+#include <vector>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -131,6 +148,120 @@ Quantity_Color rgb(int r, int g, int b)
     return Quantity_Color(r / 255.0, g / 255.0, b / 255.0, Quantity_TOC_sRGB);
 }
 
+gp_Pnt toPnt(const sketch::Vec3& v) { return gp_Pnt(v.x, v.y, v.z); }
+gp_Dir toDir(const sketch::Vec3& v) { return gp_Dir(v.x, v.y, v.z); }
+sketch::Vec3 toVec3(const gp_XYZ& v) { return {v.X(), v.Y(), v.Z()}; }
+
+gp_Ax3 toAx3(const sketch::Plane& plane)
+{
+    return gp_Ax3(toPnt(plane.origin), toDir(plane.normal), toDir(plane.xAxis));
+}
+
+// Durante la elección del plano del sketch solo se aceptan caras planas de la
+// pieza; lo que no es una forma (planos de origen, ViewCube) pasa siempre.
+class SketchPlaneFilter final : public SelectMgr_Filter {
+    DEFINE_STANDARD_RTTI_INLINE(SketchPlaneFilter, SelectMgr_Filter)
+
+public:
+    Standard_Boolean IsOk(const Handle(SelectMgr_EntityOwner)& owner) const override
+    {
+        Handle(StdSelect_BRepOwner) brep = Handle(StdSelect_BRepOwner)::DownCast(owner);
+        if (brep.IsNull() || !brep->HasShape()) {
+            return Standard_True;
+        }
+        const TopoDS_Shape& shape = brep->Shape();
+        return shape.ShapeType() == TopAbs_FACE
+               && BRepAdaptor_Surface(TopoDS::Face(shape)).GetType() == GeomAbs_Plane;
+    }
+};
+
+// Rejilla del sketch sobre su plano: líneas finas cada «step», más marcadas
+// cada 10 y los ejes X (rojo) e Y (verde) del sketch. Cubre un cuadrado
+// alrededor del centro de la vista; Viewport ajusta paso y región al zoom.
+class SketchGrid final : public AIS_InteractiveObject {
+    DEFINE_STANDARD_RTTI_INLINE(SketchGrid, AIS_InteractiveObject)
+
+public:
+    gp_Ax3 plane;
+    double step = 10.0;
+    double centerX = 0.0;
+    double centerY = 0.0;
+    double half = 100.0;
+    Quantity_Color minorColor;
+    Quantity_Color majorColor;
+
+    void Compute(const Handle(PrsMgr_PresentationManager)& /*manager*/,
+                 const Handle(Prs3d_Presentation)& prs, const Standard_Integer mode) override
+    {
+        if (mode != 0) {
+            return;
+        }
+        const gp_Pnt origin = plane.Location();
+        const gp_Vec xDir(plane.XDirection());
+        const gp_Vec yDir(plane.YDirection());
+        const auto at = [&](double x, double y) { return origin.Translated(xDir * x + yDir * y); };
+
+        const int lines = int(std::lround(half / step));
+        const int capacity = 4 * (2 * lines + 1);
+        Handle(Graphic3d_ArrayOfSegments) minor = new Graphic3d_ArrayOfSegments(capacity);
+        Handle(Graphic3d_ArrayOfSegments) major = new Graphic3d_ArrayOfSegments(capacity);
+        const double x0 = centerX - half;
+        const double x1 = centerX + half;
+        const double y0 = centerY - half;
+        const double y1 = centerY + half;
+        for (int i = -lines; i <= lines; ++i) {
+            // Índice global de la línea: múltiplo de 10 = línea marcada; 0 = eje.
+            const long long kx = std::llround(centerX / step) + i;
+            const long long ky = std::llround(centerY / step) + i;
+            const double x = double(kx) * step;
+            const double y = double(ky) * step;
+            if (kx != 0) {
+                Handle(Graphic3d_ArrayOfSegments)& array = kx % 10 == 0 ? major : minor;
+                array->AddVertex(at(x, y0));
+                array->AddVertex(at(x, y1));
+            }
+            if (ky != 0) {
+                Handle(Graphic3d_ArrayOfSegments)& array = ky % 10 == 0 ? major : minor;
+                array->AddVertex(at(x0, y));
+                array->AddVertex(at(x1, y));
+            }
+        }
+        addLines(prs, minor, minorColor, 1.0);
+        addLines(prs, major, majorColor, 1.0);
+
+        if (y0 <= 0.0 && 0.0 <= y1) {
+            Handle(Graphic3d_ArrayOfSegments) axis = new Graphic3d_ArrayOfSegments(2);
+            axis->AddVertex(at(x0, 0.0));
+            axis->AddVertex(at(x1, 0.0));
+            addLines(prs, axis, rgb(0xE5, 0x48, 0x4D), 1.5);
+        }
+        if (x0 <= 0.0 && 0.0 <= x1) {
+            Handle(Graphic3d_ArrayOfSegments) axis = new Graphic3d_ArrayOfSegments(2);
+            axis->AddVertex(at(0.0, y0));
+            axis->AddVertex(at(0.0, y1));
+            addLines(prs, axis, rgb(0x2F, 0x9E, 0x44), 1.5);
+        }
+    }
+
+    void ComputeSelection(const Handle(SelectMgr_Selection)& /*selection*/,
+                          const Standard_Integer /*mode*/) override
+    {
+        // La rejilla no se selecciona.
+    }
+
+private:
+    static void addLines(const Handle(Prs3d_Presentation)& prs, const Handle(Graphic3d_ArrayOfSegments)& lines,
+                         const Quantity_Color& color, double width)
+    {
+        if (lines->VertexNumber() == 0) {
+            return;
+        }
+        Handle(Graphic3d_Group) group = prs->NewGroup();
+        group->SetGroupPrimitivesAspect(new Graphic3d_AspectLine3d(color, Aspect_TOL_SOLID, width));
+        group->AddPrimitiveArray(lines);
+    }
+};
+
 // Pieza de muestra (como "soporte_sensor" del mockup) para probar la
 // navegación y la selección. En la Fase 3 la reemplaza el resultado del
 // documento.
@@ -171,10 +302,20 @@ public:
         configureNavigation();
         createViewCube();
         showDemoPart();
+
+        planeFilter = new SketchPlaneFilter();
+        grid = new SketchGrid();
     }
+
+    enum class Mode { Model, PickPlane, Sketch };
 
     void applyTheme(bool dark)
     {
+        grid->minorColor = dark ? rgb(0x41, 0x46, 0x4E) : rgb(0xCC, 0xD1, 0xD8);
+        grid->majorColor = dark ? rgb(0x63, 0x6B, 0x76) : rgb(0x95, 0x9E, 0xAA);
+        if (context->IsDisplayed(grid)) {
+            context->Redisplay(grid, false);
+        }
         if (dark) {
             view->SetBgGradientColors(rgb(0x3A, 0x3F, 0x47), rgb(0x1E, 0x21, 0x26),
                                       Aspect_GradientFillMethod_Vertical, false);
@@ -218,16 +359,129 @@ public:
                                                       : QStringLiteral("Seleccionado: ") + parts.join(QStringLiteral(", ")));
     }
 
+    // --- Modo sketch -------------------------------------------------------
+
+    void pickSketchPlane()
+    {
+        if (mode != Mode::Model) {
+            return;
+        }
+        if (originPlanes.empty()) {
+            createOriginPlanes();
+        }
+        context->ClearSelected(false);
+        for (const OriginPlane& origin : originPlanes) {
+            context->Display(origin.shape, AIS_Shaded, 0, false);
+        }
+        context->Deactivate(part, AIS_Shape::SelectionMode(TopAbs_EDGE));
+        context->AddFilter(planeFilter);
+        mode = Mode::PickPlane;
+        emit widget_.selectionChanged(QString());
+    }
+
+    void cancelPickSketchPlane()
+    {
+        if (mode != Mode::PickPlane) {
+            return;
+        }
+        context->ClearSelected(false);
+        for (const OriginPlane& origin : originPlanes) {
+            context->Erase(origin.shape, false);
+        }
+        context->RemoveFilter(planeFilter);
+        context->Activate(part, AIS_Shape::SelectionMode(TopAbs_EDGE));
+        mode = Mode::Model;
+    }
+
+    void beginSketch(const sketch::Plane& plane)
+    {
+        cancelPickSketchPlane();
+        if (mode == Mode::Sketch) {
+            endSketch();
+        }
+        context->ClearSelected(false);
+        context->Deactivate(part);
+        sketchPlane = plane;
+        grid->plane = toAx3(plane);
+        updateGrid(true);
+        context->Display(grid, 0, -1, false);
+        mode = Mode::Sketch;
+        lookAtSketch();
+        emit widget_.selectionChanged(QString());
+    }
+
+    void endSketch()
+    {
+        if (mode != Mode::Sketch) {
+            return;
+        }
+        context->Erase(grid, false);
+        context->Activate(part, AIS_Shape::SelectionMode(TopAbs_FACE));
+        context->Activate(part, AIS_Shape::SelectionMode(TopAbs_EDGE));
+        mode = Mode::Model;
+        emit widget_.sketchCursorMoved(false, 0.0, 0.0);
+    }
+
+    // Anima la cámara hasta mirar el plano de frente, con el eje Y del sketch
+    // hacia arriba, sin cambiar el zoom ni alejarse del punto que se miraba.
+    void lookAtSketch()
+    {
+        if (mode != Mode::Sketch) {
+            return;
+        }
+        const Handle(Graphic3d_Camera)& current = view->Camera();
+        Handle(Graphic3d_Camera) start = new Graphic3d_Camera();
+        start->Copy(current);
+        Handle(Graphic3d_Camera) end = new Graphic3d_Camera();
+        end->Copy(current);
+
+        const sketch::Vec2 c = sketchPlane.toLocal(toVec3(current->Center().XYZ()));
+        const gp_Pnt center = toPnt(sketchPlane.toWorld(c));
+        const gp_Vec normal(toDir(sketchPlane.normal));
+        end->SetEyeAndCenter(center.Translated(normal * current->Distance()), center);
+        end->SetUp(toDir(sketchPlane.yAxis));
+
+        const Handle(AIS_AnimationCamera)& animation = ViewAnimation();
+        animation->Stop();
+        animation->SetView(view);
+        animation->SetCameraStart(start);
+        animation->SetCameraEnd(end);
+        animation->SetOwnDuration(0.4);
+        animation->StartTimer(0.0, 1.0, true, false);
+    }
+
+    // Punto del plano del sketch bajo el píxel, si el rayo lo corta.
+    std::optional<sketch::Vec2> sketchPointAt(const Graphic3d_Vec2i& pixel) const
+    {
+        Standard_Real x = 0, y = 0, z = 0, dx = 0, dy = 0, dz = 0;
+        view->ConvertWithProj(pixel.x(), pixel.y(), x, y, z, dx, dy, dz);
+        const gp_XYZ from(x, y, z);
+        const gp_XYZ dir(dx, dy, dz);
+        const gp_XYZ normal = toDir(sketchPlane.normal).XYZ();
+        const double facing = normal.Dot(dir);
+        if (std::abs(facing) < 1e-9) {
+            return std::nullopt;
+        }
+        const double t = normal.Dot(toPnt(sketchPlane.origin).XYZ() - from) / facing;
+        return sketchPlane.toLocal(toVec3(from + dir * t));
+    }
+
     Handle(V3d_Viewer) viewer;
     Handle(V3d_View) view;
     Handle(AIS_InteractiveContext) context;
     Handle(AIS_ViewCube) viewCube;
+    Mode mode = Mode::Model;
 
 protected:
     // Pide otro cuadro mientras haya animaciones (ViewCube, inercia).
     void handleViewRedraw(const Handle(AIS_InteractiveContext)& ctx,
                           const Handle(V3d_View)& v) override
     {
+        // La cámara ya está actualizada para este cuadro: se ajusta la rejilla
+        // antes de dibujar.
+        if (mode == Mode::Sketch) {
+            updateGrid(false);
+        }
         AIS_ViewController::handleViewRedraw(ctx, v);
         if (toAskNextFrame()) {
             widget_.update();
@@ -237,7 +491,11 @@ protected:
     void OnSelectionChanged(const Handle(AIS_InteractiveContext)& /*ctx*/,
                             const Handle(V3d_View)& /*v*/) override
     {
-        describeSelection();
+        if (mode == Mode::PickPlane) {
+            pickedSketchPlane();
+        } else {
+            describeSelection();
+        }
     }
 
 private:
@@ -300,9 +558,9 @@ private:
             {Prs3d_DatumParts_XAxis, rgb(0xE5, 0x48, 0x4D)},
             {Prs3d_DatumParts_YAxis, rgb(0x2F, 0x9E, 0x44)},
             {Prs3d_DatumParts_ZAxis, rgb(0x3B, 0x82, 0xF6)}};
-        for (const auto& [part, color] : axes) {
-            datum->TextAspect(part)->Aspect()->SetFont(font);
-            datum->TextAspect(part)->SetColor(color);
+        for (const auto& [datumPart, color] : axes) {
+            datum->TextAspect(datumPart)->Aspect()->SetFont(font);
+            datum->TextAspect(datumPart)->SetColor(color);
         }
         viewCube->SetTransformPersistence(
             new Graphic3d_TransformPers(Graphic3d_TMF_TriedronPers, Aspect_TOTP_RIGHT_UPPER, Graphic3d_Vec2i(85, 85)));
@@ -315,9 +573,110 @@ private:
         viewCube->SetBoxSideLabel(V3d_Zneg, "ABAJO");
     }
 
+    struct OriginPlane {
+        Handle(AIS_Shape) shape;
+        sketch::Plane plane;
+        QString name;
+    };
+
+    // Planos XY, XZ e YZ como cuadrados translúcidos en el cuadrante positivo,
+    // con un tamaño proporcional a la pieza (como en Fusion 360).
+    void createOriginPlanes()
+    {
+        Bnd_Box box;
+        BRepBndLib::Add(part->Shape(), box);
+        double size = 20.0;
+        if (!box.IsVoid()) {
+            size = std::max(size, 0.6 * std::sqrt(box.SquareExtent()) / std::sqrt(3.0));
+        }
+        const std::pair<sketch::Plane, QString> planes[] = {
+            {sketch::Plane::xy(), QStringLiteral("Plano XY")},
+            {sketch::Plane::xz(), QStringLiteral("Plano XZ")},
+            {sketch::Plane::yz(), QStringLiteral("Plano YZ")}};
+        for (const auto& [plane, name] : planes) {
+            const TopoDS_Face face = BRepBuilderAPI_MakeFace(gp_Pln(toAx3(plane)), 0.0, size, 0.0, size);
+            Handle(AIS_Shape) shape = new AIS_Shape(face);
+            shape->SetColor(rgb(0xF2, 0xA3, 0x4B));
+            shape->SetTransparency(0.6);
+            // Por encima de la pieza: suelen atravesarla y quedarían ocultos.
+            shape->SetZLayer(Graphic3d_ZLayerId_Topmost);
+            originPlanes.push_back({shape, plane, name});
+        }
+    }
+
+    void pickedSketchPlane()
+    {
+        context->InitSelected();
+        if (!context->MoreSelected()) {
+            return;
+        }
+        std::optional<std::pair<sketch::Plane, QString>> picked;
+        const Handle(AIS_InteractiveObject) object = context->SelectedInteractive();
+        for (const OriginPlane& origin : originPlanes) {
+            if (origin.shape == object) {
+                picked.emplace(origin.plane, origin.name);
+            }
+        }
+        if (!picked && context->HasSelectedShape() && context->SelectedShape().ShapeType() == TopAbs_FACE) {
+            const TopoDS_Face face = TopoDS::Face(context->SelectedShape());
+            const BRepAdaptor_Surface surface(face);
+            if (surface.GetType() == GeomAbs_Plane) {
+                const gp_Pln pln = surface.Plane();
+                gp_Dir normal = pln.Axis().Direction();
+                if (face.Orientation() == TopAbs_REVERSED) {
+                    normal.Reverse();
+                }
+                picked.emplace(sketch::Plane::fromPointAndNormal(toVec3(pln.Location().XYZ()), toVec3(normal.XYZ())),
+                               QStringLiteral("Cara plana"));
+            }
+        }
+        context->ClearSelected(false);
+        if (!picked) {
+            return;
+        }
+        // Se avisa fuera del procesado de eventos de OCCT: quien recibe la
+        // señal cambia el contexto (beginSketch).
+        QMetaObject::invokeMethod(
+            &widget_, [widget = &widget_, plane = picked->first, name = picked->second] {
+                emit widget->sketchPlanePicked(plane, name);
+            },
+            Qt::QueuedConnection);
+    }
+
+    // Paso de la rejilla según el zoom: la menor potencia de 10 cuyas líneas
+    // queden a 7 px o más. Región centrada en lo que se mira.
+    void updateGrid(bool force)
+    {
+        Standard_Real width = 0, height = 0;
+        view->Size(width, height);
+        const double size = std::max({width, height, 1e-3});
+        Standard_Integer pixelsWide = 0, pixelsHigh = 0;
+        view->Window()->Size(pixelsWide, pixelsHigh);
+        const double pixelsPerMm = std::max(pixelsWide, 1) / std::max(width, 1e-6);
+        constexpr double kMinSpacingPx = 7.0;
+        const double step = std::pow(10.0, std::ceil(std::log10(kMinSpacingPx / pixelsPerMm)));
+        const double block = 10.0 * step;
+        const sketch::Vec2 c = sketchPlane.toLocal(toVec3(view->Camera()->Center().XYZ()));
+        const double cx = std::round(c.x / block) * block;
+        const double cy = std::round(c.y / block) * block;
+        const double half = std::ceil(1.5 * size / block) * block;
+        if (!force && step == grid->step && cx == grid->centerX && cy == grid->centerY && half == grid->half) {
+            return;
+        }
+        grid->step = step;
+        grid->centerX = cx;
+        grid->centerY = cy;
+        grid->half = half;
+        if (context->IsDisplayed(grid)) {
+            context->Redisplay(grid, false);
+        } else {
+            grid->SetToUpdate(); // si no, Display reutiliza la presentación vieja
+        }
+    }
+
     void showDemoPart()
     {
-        Handle(AIS_Shape) part = new AIS_Shape(makeDemoPart());
+        part = new AIS_Shape(makeDemoPart());
         part->SetMaterial(Graphic3d_MaterialAspect(Graphic3d_NameOfMaterial_Plastified));
         part->SetColor(rgb(0xB7, 0xBE, 0xC7));
         // El modo de selección va en Display: con -1 la pieza queda como no
@@ -327,6 +686,11 @@ private:
     }
 
     Viewport& widget_;
+    Handle(AIS_Shape) part;
+    std::vector<OriginPlane> originPlanes;
+    Handle(SketchPlaneFilter) planeFilter;
+    Handle(SketchGrid) grid;
+    sketch::Plane sketchPlane;
 };
 
 Viewport::Viewport(QWidget* parent)
@@ -376,6 +740,44 @@ void Viewport::resetView()
 {
     impl_->view->SetProj(V3d_TypeOfOrientation_Zup_AxoRight, false);
     fitAll();
+}
+
+void Viewport::pickSketchPlane()
+{
+    impl_->pickSketchPlane();
+    impl_->view->Invalidate();
+    update();
+}
+
+void Viewport::cancelPickSketchPlane()
+{
+    impl_->cancelPickSketchPlane();
+    impl_->view->Invalidate();
+    update();
+}
+
+bool Viewport::isPickingSketchPlane() const { return impl_->mode == Impl::Mode::PickPlane; }
+
+void Viewport::beginSketch(const sketch::Plane& plane)
+{
+    impl_->beginSketch(plane);
+    impl_->view->Invalidate();
+    update();
+}
+
+void Viewport::endSketch()
+{
+    impl_->endSketch();
+    impl_->view->Invalidate();
+    update();
+}
+
+bool Viewport::isSketching() const { return impl_->mode == Impl::Mode::Sketch; }
+
+void Viewport::lookAtSketch()
+{
+    impl_->lookAtSketch();
+    update();
 }
 
 void Viewport::initializeGL()
@@ -483,6 +885,18 @@ void Viewport::mouseMoveEvent(QMouseEvent* event)
     if (impl_->UpdateMousePosition(point, toOcctButtons(event->buttons()), toOcctModifiers(event->modifiers()),
                                    false)) {
         update();
+    }
+    if (isSketching()) {
+        const auto p = impl_->sketchPointAt(point);
+        emit sketchCursorMoved(p.has_value(), p ? p->x : 0.0, p ? p->y : 0.0);
+    }
+}
+
+void Viewport::leaveEvent(QEvent* event)
+{
+    QOpenGLWidget::leaveEvent(event);
+    if (isSketching()) {
+        emit sketchCursorMoved(false, 0.0, 0.0);
     }
 }
 

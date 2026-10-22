@@ -7,7 +7,7 @@ nuf_add_library(render SOURCES
 set_target_properties(nuf_render PROPERTIES AUTOMOC ON)
 target_include_directories(nuf_render SYSTEM PRIVATE ${OpenCASCADE_INCLUDE_DIR})
 target_link_libraries(nuf_render
-    PUBLIC Qt6::Widgets Qt6::OpenGLWidgets
+    PUBLIC Qt6::Widgets Qt6::OpenGLWidgets nuf::sketch
     PRIVATE
         TKernel TKMath TKG3d TKGeomBase TKBRep TKPrim TKTopAlgo TKBO
         TKService TKV3d TKOpenGl)

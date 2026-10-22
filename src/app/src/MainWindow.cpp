@@ -14,9 +14,11 @@
 #include <QKeySequence>
 #include <QLabel>
 #include <QLineEdit>
+#include <QLocale>
 #include <QMenuBar>
 #include <QSettings>
 #include <QStatusBar>
+#include <QToolBar>
 
 #include <memory>
 #include <utility>
@@ -48,9 +50,18 @@ MainWindow::MainWindow(QWidget* parent)
                                     .arg(QString::fromStdString(geometry::kernelVersion()),
                                          QString::fromStdString(io::NufFile::sqliteVersion()),
                                          QString::fromLatin1(qVersion())));
+    cursorLabel_ = new QLabel(this);
+    cursorLabel_->setMinimumWidth(190);
+    statusBar()->addPermanentWidget(cursorLabel_);
     statusBar()->addPermanentWidget(versions);
     connect(viewport_, &render::Viewport::selectionChanged, this,
             [this](const QString& description) { statusBar()->showMessage(description); });
+    connect(viewport_, &render::Viewport::sketchPlanePicked, this, &MainWindow::startSketch);
+    connect(viewport_, &render::Viewport::sketchCursorMoved, this, [this](bool hasPoint, double x, double y) {
+        cursorLabel_->setText(hasPoint ? QStringLiteral("X %1   Y %2 mm")
+                                             .arg(QLocale().toString(x, 'f', 2), QLocale().toString(y, 'f', 2))
+                                       : QString());
+    });
 
     document_.changed.connect([this] { updateTitle(); });
     commands_.changed.connect([this] { updateUndoActions(); });
@@ -105,11 +116,31 @@ void MainWindow::createMenus()
         }
     });
 
+    // Esc cancela lo que esté en curso (por ahora, elegir el plano del sketch).
+    QAction* cancelAction = new QAction(QStringLiteral("Cancelar"), this);
+    cancelAction->setShortcut(QKeySequence(Qt::Key_Escape));
+    connect(cancelAction, &QAction::triggered, this, &MainWindow::cancel);
+    addAction(cancelAction);
+
+    QMenu* sketchMenu = menuBar()->addMenu(QStringLiteral("&Sketch"));
+    createSketchAction_ = sketchMenu->addAction(QStringLiteral("&Crear sketch"), this, &MainWindow::createSketch);
+    createSketchAction_->setToolTip(QStringLiteral("Crear un sketch en un plano de origen o en una cara plana"));
+    finishSketchAction_ = sketchMenu->addAction(QStringLiteral("&Terminar sketch"), this, &MainWindow::finishSketch);
+
+    QToolBar* toolbar = addToolBar(QStringLiteral("Sketch"));
+    toolbar->setObjectName(QStringLiteral("sketchToolbar"));
+    toolbar->setMovable(false);
+    toolbar->addAction(createSketchAction_);
+    toolbar->addAction(finishSketchAction_);
+
     QMenu* view = menuBar()->addMenu(QStringLiteral("&Ver"));
     view->addAction(QStringLiteral("Vista &inicial"), QKeySequence(Qt::Key_Home), this,
                     [this] { viewport_->resetView(); });
     view->addAction(QStringLiteral("&Ajustar a la ventana"), QKeySequence(Qt::Key_F6), this,
                     [this] { viewport_->fitAll(); });
+    lookAtSketchAction_ = view->addAction(QStringLiteral("&Mirar al sketch"), this,
+                                          [this] { viewport_->lookAtSketch(); });
+    updateSketchActions();
     view->addSeparator();
     QMenu* panels = view->addMenu(QStringLiteral("&Paneles"));
     panels->addAction(navigatorDock_->toggleViewAction());
@@ -171,6 +202,54 @@ void MainWindow::updateUndoActions()
 void MainWindow::updateTitle()
 {
     setWindowTitle(QString::fromStdString(document_.name()));
+}
+
+void MainWindow::createSketch()
+{
+    if (sketch_ || viewport_->isPickingSketchPlane()) {
+        return;
+    }
+    viewport_->pickSketchPlane();
+    statusBar()->showMessage(QStringLiteral("Elige un plano de origen o una cara plana · Esc para cancelar"));
+    updateSketchActions();
+}
+
+void MainWindow::startSketch(const sketch::Plane& plane, const QString& description)
+{
+    sketch_.emplace();
+    sketchPlane_ = plane;
+    sketchPlaneName_ = description;
+    viewport_->beginSketch(plane);
+    statusBar()->showMessage(QStringLiteral("Sketch en %1").arg(description));
+    updateSketchActions();
+}
+
+void MainWindow::finishSketch()
+{
+    if (!sketch_) {
+        return;
+    }
+    viewport_->endSketch();
+    sketch_.reset();
+    statusBar()->clearMessage();
+    updateSketchActions();
+}
+
+void MainWindow::cancel()
+{
+    if (viewport_->isPickingSketchPlane()) {
+        viewport_->cancelPickSketchPlane();
+        statusBar()->clearMessage();
+        updateSketchActions();
+    }
+}
+
+void MainWindow::updateSketchActions()
+{
+    const bool picking = viewport_->isPickingSketchPlane();
+    createSketchAction_->setEnabled(!sketch_ && !picking);
+    finishSketchAction_->setEnabled(sketch_.has_value());
+    lookAtSketchAction_->setEnabled(sketch_.has_value());
 }
 
 } // namespace nuf::app

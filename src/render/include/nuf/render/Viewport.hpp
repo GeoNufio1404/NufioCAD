@@ -1,5 +1,7 @@
 #pragma once
 
+#include <nuf/sketch/Plane.hpp>
+
 #include <QOpenGLWidget>
 #include <QSurfaceFormat>
 #include <QString>
@@ -19,6 +21,8 @@ namespace nuf::render {
 //   botón central                desplazar (alternativa)
 //   Shift + botón central        orbitar (como en Fusion 360)
 //   rueda                        zoom hacia el cursor
+// Modo sketch: pickSketchPlane() muestra los planos de origen y deja elegir
+// uno o una cara plana; beginSketch() orienta la cámara y muestra la rejilla.
 // Las cabeceras de OCCT quedan en el .cpp para que app/ no dependa de ellas.
 class Viewport final : public QOpenGLWidget {
     Q_OBJECT
@@ -36,9 +40,27 @@ public:
     // Vista isométrica inicial, encuadrando el modelo.
     void resetView();
 
+    // Muestra los planos de origen y deja elegir uno o una cara plana;
+    // al hacerlo emite sketchPlanePicked.
+    void pickSketchPlane();
+    void cancelPickSketchPlane();
+    bool isPickingSketchPlane() const;
+
+    // Entra al sketch: cámara de frente al plano, rejilla y coordenadas.
+    void beginSketch(const sketch::Plane& plane);
+    void endSketch();
+    bool isSketching() const;
+    // Vuelve a poner la cámara de frente al plano del sketch.
+    void lookAtSketch();
+
 signals:
     // Texto breve para la barra de estado ("Cara seleccionada", "2 aristas"…).
     void selectionChanged(const QString& description);
+    // description: "Plano XY", "Cara plana"…
+    void sketchPlanePicked(const nuf::sketch::Plane& plane, const QString& description);
+    // Posición del cursor en coordenadas del sketch (mm); hasPoint = false
+    // si el cursor no corta el plano (vista de canto o fuera del visor).
+    void sketchCursorMoved(bool hasPoint, double x, double y);
 
 protected:
     void initializeGL() override;
@@ -48,6 +70,7 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
+    void leaveEvent(QEvent* event) override;
 
 private:
     class Impl;

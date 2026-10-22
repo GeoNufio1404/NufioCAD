@@ -24,4 +24,5 @@ target_link_libraries(nuf_app PRIVATE
     nuf::commands
     nuf::document
     nuf::geometry
-    nuf::io)
+    nuf::io
+    nuf::sketch)
