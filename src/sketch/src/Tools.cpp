@@ -76,6 +76,69 @@ public:
         }
         Snap end = cursor;
         const Straight straight = straighten(start_->point, end);
+        return commit(sketch, end, straight, std::nullopt, std::nullopt);
+    }
+
+    std::vector<std::string> valueFields() const override
+    {
+        if (!start_) {
+            return {};
+        }
+        return {"Longitud", "Ángulo"};
+    }
+
+    std::vector<double> currentValues() const override
+    {
+        if (!start_) {
+            return {};
+        }
+        Snap end = cursor_;
+        straighten(start_->point, end);
+        const double dx = end.point.x - start_->point.x;
+        const double dy = end.point.y - start_->point.y;
+        return {std::hypot(dx, dy), std::atan2(dy, dx) * 180.0 / std::numbers::pi};
+    }
+
+    bool applyValues(Sketch& sketch, const std::vector<std::optional<double>>& values) override
+    {
+        if (!start_ || values.size() < 2) {
+            return false;
+        }
+        const std::vector<double> current = currentValues();
+        const double length = values[0].value_or(current[0]);
+        const double degrees = values[1].value_or(current[1]);
+        if (!(length > kMinLength)) {
+            return false;
+        }
+        const double radians = degrees * std::numbers::pi / 180.0;
+        Snap end{{start_->point.x + length * std::cos(radians), start_->point.y + length * std::sin(radians)}};
+        // Un ángulo escrito múltiplo de 90° se fija como horizontal/vertical.
+        Straight straight = Straight::None;
+        std::optional<double> angle;
+        if (values[1]) {
+            const double quarter = std::remainder(degrees, 90.0);
+            if (std::abs(quarter) < 1e-9) {
+                straight = std::abs(std::remainder(degrees, 180.0)) < 1e-9 ? Straight::Horizontal : Straight::Vertical;
+            } else {
+                angle = radians;
+            }
+        } else {
+            straight = straighten(start_->point, end);
+            if (straight != Straight::None) {
+                // Enderezado: se conserva la longitud escrita.
+                const double sx = end.point.x >= start_->point.x ? 1.0 : -1.0;
+                const double sy = end.point.y >= start_->point.y ? 1.0 : -1.0;
+                end.point = straight == Straight::Horizontal ? Vec2{start_->point.x + sx * length, start_->point.y}
+                                                             : Vec2{start_->point.x, start_->point.y + sy * length};
+            }
+        }
+        return commit(sketch, end, straight, values[0], angle);
+    }
+
+private:
+    bool commit(Sketch& sketch, const Snap& end, Straight straight, std::optional<double> length,
+                std::optional<double> angle)
+    {
         if (distance(start_->point, end.point) < kMinLength) {
             return false;
         }
@@ -86,6 +149,12 @@ public:
             sketch.addConstraint(Constraint::horizontal(line));
         } else if (straight == Straight::Vertical) {
             sketch.addConstraint(Constraint::vertical(line));
+        }
+        if (length) {
+            sketch.addConstraint(Constraint::length(line, *length));
+        }
+        if (angle) {
+            sketch.addConstraint(Constraint::angle(Sketch::kAxisX, line, *angle));
         }
 
         // Cerrar en el primer punto de la cadena la termina.
@@ -103,6 +172,7 @@ public:
         return true;
     }
 
+public:
     bool cancel() override
     {
         const bool active = start_.has_value();
@@ -123,7 +193,7 @@ public:
 
     std::string hint() const override
     {
-        return start_ ? "Clic para el siguiente punto · Esc o doble clic para terminar · Ctrl: sin ajustes"
+        return start_ ? "Clic para el siguiente punto (o escribe la longitud) · Esc o doble clic para terminar · Ctrl: sin ajustes"
                       : "Clic para el primer punto de la línea · Ctrl: sin ajustes";
     }
 
@@ -145,6 +215,42 @@ public:
             corner_ = cursor;
             return false;
         }
+        return create(sketch, cursor, std::nullopt, std::nullopt);
+    }
+
+    std::vector<std::string> valueFields() const override
+    {
+        if (!corner_) {
+            return {};
+        }
+        return {"Ancho", "Alto"};
+    }
+
+    std::vector<double> currentValues() const override
+    {
+        if (!corner_) {
+            return {};
+        }
+        return {std::abs(cursor_.point.x - corner_->point.x), std::abs(cursor_.point.y - corner_->point.y)};
+    }
+
+    bool applyValues(Sketch& sketch, const std::vector<std::optional<double>>& values) override
+    {
+        if (!corner_ || values.size() < 2) {
+            return false;
+        }
+        // El cuadrante lo da el cursor; el tamaño, lo escrito.
+        const Vec2 a = corner_->point;
+        const double sx = cursor_.point.x >= a.x ? 1.0 : -1.0;
+        const double sy = cursor_.point.y >= a.y ? 1.0 : -1.0;
+        const std::vector<double> current = currentValues();
+        const Snap opposite{{a.x + sx * values[0].value_or(current[0]), a.y + sy * values[1].value_or(current[1])}};
+        return create(sketch, opposite, values[0], values[1]);
+    }
+
+private:
+    bool create(Sketch& sketch, const Snap& cursor, std::optional<double> width, std::optional<double> height)
+    {
         const Vec2 a = corner_->point;
         const Vec2 c = cursor.point;
         if (std::abs(c.x - a.x) < kMinLength || std::abs(c.y - a.y) < kMinLength) {
@@ -166,10 +272,17 @@ public:
         sketch.addConstraint(Constraint::vertical(da));
         attach(sketch, Ref::start(ab), *corner_);
         attach(sketch, Ref::start(cd), cursor);
+        if (width) {
+            sketch.addConstraint(Constraint::length(ab, *width));
+        }
+        if (height) {
+            sketch.addConstraint(Constraint::length(bc, *height));
+        }
         corner_.reset();
         return true;
     }
 
+public:
     bool cancel() override
     {
         const bool active = corner_.has_value();
@@ -191,7 +304,8 @@ public:
 
     std::string hint() const override
     {
-        return corner_ ? "Clic para la esquina opuesta" : "Clic para la primera esquina del rectángulo";
+        return corner_ ? "Clic para la esquina opuesta (o escribe ancho, Tab, alto)"
+                       : "Clic para la primera esquina del rectángulo";
     }
 
 private:
@@ -211,15 +325,50 @@ public:
             center_ = cursor;
             return false;
         }
-        const double radius = distance(center_->point, cursor.point);
+        return create(sketch, distance(center_->point, cursor.point), std::nullopt);
+    }
+
+    std::vector<std::string> valueFields() const override
+    {
+        if (!center_) {
+            return {};
+        }
+        return {"Diámetro"};
+    }
+
+    std::vector<double> currentValues() const override
+    {
+        if (!center_) {
+            return {};
+        }
+        return {2.0 * distance(center_->point, cursor_.point)};
+    }
+
+    bool applyValues(Sketch& sketch, const std::vector<std::optional<double>>& values) override
+    {
+        if (!center_ || values.empty()) {
+            return false;
+        }
+        const double diameter = values[0].value_or(currentValues()[0]);
+        return create(sketch, diameter / 2.0, values[0]);
+    }
+
+private:
+    bool create(Sketch& sketch, double radius, std::optional<double> diameter)
+    {
         if (radius < kMinLength) {
             return false;
         }
         const EntityId circle = sketch.addCircle(center_->point, radius);
         attach(sketch, Ref::center(circle), *center_);
+        if (diameter) {
+            sketch.addConstraint(Constraint::diameter(circle, *diameter));
+        }
         center_.reset();
         return true;
     }
+
+public:
 
     bool cancel() override
     {
@@ -242,7 +391,7 @@ public:
 
     std::string hint() const override
     {
-        return center_ ? "Clic para fijar el radio" : "Clic para el centro del círculo";
+        return center_ ? "Clic para fijar el tamaño (o escribe el diámetro)" : "Clic para el centro del círculo";
     }
 
 private:

@@ -50,6 +50,7 @@
 #include <gp_Pln.hxx>
 
 #include <QFontDatabase>
+#include <QKeyEvent>
 #include <QMouseEvent>
 #include <QStringList>
 #include <QSurfaceFormat>
@@ -1391,6 +1392,18 @@ void Viewport::mouseMoveEvent(QMouseEvent* event)
             emit sketchDragged(p->x, p->y);
         }
     }
+}
+
+void Viewport::keyPressEvent(QKeyEvent* event)
+{
+    const QString text = event->text();
+    if (isSketching() && text.size() == 1
+        && (text.front().isDigit() || text == QLatin1String(".") || text == QLatin1String(",")
+            || text == QLatin1String("-"))) {
+        emit sketchTyped(text);
+        return;
+    }
+    QOpenGLWidget::keyPressEvent(event);
 }
 
 void Viewport::leaveEvent(QEvent* event)

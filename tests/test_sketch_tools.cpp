@@ -286,3 +286,68 @@ TEST_CASE("Ctrl: la línea no se endereza", "[sketch][tools]")
     REQUIRE(count(s, ConstraintType::Horizontal) == 0);
     REQUIRE(count(s, ConstraintType::Coincident) == 0);
 }
+
+TEST_CASE("Valores escritos junto al cursor", "[sketch][tools]")
+{
+    SECTION("Línea: longitud con el ángulo del cursor")
+    {
+        Session ui;
+        auto tool = makeLineTool();
+        REQUIRE(tool->valueFields().empty());
+        ui.click(*tool, 0.0, 0.0);
+        tool->move(ui.at(10.0, 0.3));  // casi horizontal
+        REQUIRE(tool->valueFields() == std::vector<std::string>{"Longitud", "Ángulo"});
+        REQUIRE(tool->applyValues(ui.sketch, {35.0, std::nullopt}));
+        const EntityId line = created(ui.sketch)[0];
+        REQUIRE_THAT(ui.sketch.point(Ref::end(line))->x, WithinAbs(35.0, kTol));
+        REQUIRE(count(ui.sketch, ConstraintType::Horizontal) == 1);
+        REQUIRE(count(ui.sketch, ConstraintType::Distance) == 1);
+        // La cadena sigue desde el final.
+        REQUIRE_FALSE(tool->valueFields().empty());
+    }
+    SECTION("Línea: longitud y ángulo")
+    {
+        Session ui;
+        auto tool = makeLineTool();
+        ui.click(*tool, 0.0, 0.0);
+        REQUIRE(tool->applyValues(ui.sketch, {20.0, 30.0}));
+        const EntityId line = created(ui.sketch)[0];
+        REQUIRE_THAT(ui.sketch.point(Ref::end(line))->y, WithinAbs(10.0, kTol));
+        REQUIRE(count(ui.sketch, ConstraintType::Angle) == 1);
+        auto result = makePlaneGcsSolver()->solve(ui.sketch);
+        REQUIRE(result.degreesOfFreedom == 0);  // empieza en el origen
+    }
+    SECTION("Línea: ángulo de 90° es vertical")
+    {
+        Session ui;
+        auto tool = makeLineTool();
+        ui.click(*tool, 5.0, 5.0);
+        tool->move(ui.at(12.0, 17.0));  // la longitud sale del cursor
+        REQUIRE(tool->applyValues(ui.sketch, {std::nullopt, 90.0}));
+        REQUIRE(count(ui.sketch, ConstraintType::Vertical) == 1);
+        REQUIRE(count(ui.sketch, ConstraintType::Angle) == 0);
+    }
+    SECTION("Rectángulo: ancho y alto en el cuadrante del cursor")
+    {
+        Session ui;
+        auto tool = makeRectangleTool();
+        ui.click(*tool, 0.0, 0.0);
+        tool->move(ui.at(-3.0, -3.0));
+        REQUIRE(tool->applyValues(ui.sketch, {40.0, 25.0}));
+        auto result = makePlaneGcsSolver()->solve(ui.sketch);
+        REQUIRE(result.status == SolveStatus::Solved);
+        REQUIRE(result.degreesOfFreedom == 0);
+        const auto ids = created(ui.sketch);
+        REQUIRE_THAT(ui.sketch.point(Ref::start(ids[2]))->x, WithinAbs(-40.0, kTol));
+        REQUIRE_THAT(ui.sketch.point(Ref::start(ids[2]))->y, WithinAbs(-25.0, kTol));
+    }
+    SECTION("Círculo: diámetro")
+    {
+        Session ui;
+        auto tool = makeCircleTool();
+        ui.click(*tool, 0.0, 0.0);
+        REQUIRE(tool->valueFields() == std::vector<std::string>{"Diámetro"});
+        REQUIRE(tool->applyValues(ui.sketch, {12.0}));
+        REQUIRE(makePlaneGcsSolver()->solve(ui.sketch).degreesOfFreedom == 0);
+    }
+}

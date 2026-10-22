@@ -10,6 +10,8 @@ add_executable(nuf_app
     src/SelfCheck.cpp
     src/SketchSession.cpp
     src/SketchSession.hpp
+    src/ValueInput.cpp
+    src/ValueInput.hpp
     src/SelfCheck.hpp
     src/Theme.cpp
     src/Theme.hpp

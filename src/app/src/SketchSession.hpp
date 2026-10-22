@@ -19,6 +19,8 @@ class Viewport;
 
 namespace nuf::app {
 
+class ValueInput;
+
 // Edición de un sketch: une el modelo, el solver, la herramienta activa y el
 // viewport (clics, cursor, vista previa). Existe mientras se edita el sketch.
 class SketchSession final : public QObject {
@@ -80,6 +82,10 @@ private:
     void pressed(double x, double y);
     void dragged(double x, double y);
     void dragFinished();
+    // Valores escritos junto al cursor.
+    void typed(const QString& text);
+    void applyTypedValues();
+    void updateValueInput();
     // Pide un valor nuevo para la cota; false si se canceló.
     bool askDimensionValue(sketch::Constraint& dimension);
     void editDimension(sketch::ConstraintId id);
@@ -118,6 +124,7 @@ private:
         bool moved = false;
     };
     std::optional<Drag> drag_;
+    ValueInput* valueInput_ = nullptr;  // hijo del viewport
 };
 
 } // namespace nuf::app

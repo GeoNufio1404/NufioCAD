@@ -10,6 +10,7 @@
 #include <nuf/sketch/Snap.hpp>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -35,6 +36,18 @@ public:
     virtual Preview preview() const = 0;
     // Indicación para la barra de estado ("Clic para el segundo extremo").
     virtual std::string hint() const = 0;
+
+    // Valores que se pueden escribir junto al cursor en el paso actual
+    // ("Longitud", "Ángulo"…; vacío si ninguno) y su valor según el cursor.
+    // Los ángulos van en grados.
+    virtual std::vector<std::string> valueFields() const { return {}; }
+    virtual std::vector<double> currentValues() const { return {}; }
+    // Termina el paso con los valores escritos (nullopt = tomar el del
+    // cursor) y los fija con cotas. Devuelve true si cambió el sketch.
+    virtual bool applyValues(Sketch& /*sketch*/, const std::vector<std::optional<double>>& /*values*/)
+    {
+        return false;
+    }
 };
 
 // Ángulo (radianes) por debajo del cual una línea se endereza a horizontal o

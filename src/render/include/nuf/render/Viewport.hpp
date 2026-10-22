@@ -95,6 +95,9 @@ signals:
     void sketchPressed(double x, double y);
     void sketchDragged(double x, double y);
     void sketchDragFinished();
+    // Tecla de un número (o «.», «,», «-») pulsada en el sketch: valores
+    // escritos junto al cursor.
+    void sketchTyped(const QString& text);
 
 protected:
     void initializeGL() override;
@@ -104,6 +107,7 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseDoubleClickEvent(QMouseEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
     void leaveEvent(QEvent* event) override;
 

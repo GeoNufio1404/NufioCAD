@@ -1,10 +1,12 @@
 #include "SketchSession.hpp"
+#include "ValueInput.hpp"
 
 #include <nuf/render/Viewport.hpp>
 #include <nuf/sketch/Annotations.hpp>
 #include <nuf/sketch/FromSelection.hpp>
 #include <nuf/sketch/Pick.hpp>
 
+#include <QCursor>
 #include <QGuiApplication>
 #include <QInputDialog>
 
@@ -34,13 +36,20 @@ SketchSession::SketchSession(render::Viewport& viewport, const sketch::Plane& pl
     connect(&viewport_, &render::Viewport::sketchPressed, this, &SketchSession::pressed);
     connect(&viewport_, &render::Viewport::sketchDragged, this, &SketchSession::dragged);
     connect(&viewport_, &render::Viewport::sketchDragFinished, this, &SketchSession::dragFinished);
+    connect(&viewport_, &render::Viewport::sketchTyped, this, &SketchSession::typed);
+    valueInput_ = new ValueInput(&viewport_);
+    connect(valueInput_, &ValueInput::accepted, this, &SketchSession::applyTypedValues);
     solveAndShow();
 }
 
 SketchSession::~SketchSession()
 {
+    // Primero se desconecta: endSketch() emite señales que ya no deben
+    // llegar a esta sesión a medio destruir.
+    disconnect(&viewport_, nullptr, this, nullptr);
     viewport_.setSketchToolActive(false);
     viewport_.endSketch();
+    delete valueInput_;
 }
 
 void SketchSession::setTool(Tool tool)
@@ -69,6 +78,11 @@ void SketchSession::setTool(Tool tool)
 
 bool SketchSession::cancel()
 {
+    if (valueInput_->isTyping()) {
+        valueInput_->clear();
+        viewport_.setFocus();
+        return true;
+    }
     if (!tool_) {
         if (!hasSelection()) {
             return false;
@@ -500,8 +514,58 @@ void SketchSession::solveAndShow()
     emit statusChanged(status);
 }
 
+void SketchSession::typed(const QString& text)
+{
+    if (valueInput_->isVisible()) {
+        valueInput_->startTyping(text);
+    }
+}
+
+void SketchSession::applyTypedValues()
+{
+    if (!tool_) {
+        return;
+    }
+    sketch::Sketch before = sketch_;
+    if (tool_->applyValues(sketch_, valueInput_->values())) {
+        remember(std::move(before));
+        solveAndShow();
+    }
+    valueInput_->clear();
+    viewport_.setFocus();
+    showPreview();
+    emit hintChanged(QString::fromStdString(tool_->hint()));
+}
+
+// Muestra el recuadro de valores junto al cursor si la herramienta admite
+// valores en este paso.
+void SketchSession::updateValueInput()
+{
+    const std::vector<std::string> fields = tool_ ? tool_->valueFields() : std::vector<std::string>{};
+    if (fields.empty()) {
+        valueInput_->clear();
+        valueInput_->hide();
+        return;
+    }
+    std::vector<QString> labels;
+    for (const std::string& f : fields) {
+        labels.push_back(QString::fromStdString(f));
+    }
+    valueInput_->setFields(labels, tool_->currentValues());
+    // Mientras se escribe, el recuadro se queda quieto.
+    if (!valueInput_->isTyping()) {
+        QPoint at = viewport_.mapFromGlobal(QCursor::pos()) + QPoint(18, 18);
+        at.setX(std::clamp(at.x(), 0, std::max(0, viewport_.width() - valueInput_->width())));
+        at.setY(std::clamp(at.y(), 0, std::max(0, viewport_.height() - valueInput_->height())));
+        valueInput_->move(at);
+    }
+    valueInput_->show();
+    valueInput_->raise();
+}
+
 void SketchSession::showPreview()
 {
+    updateValueInput();
     std::vector<sketch::Geometry> geometry;
     if (tool_) {
         geometry = tool_->preview().geometry;
