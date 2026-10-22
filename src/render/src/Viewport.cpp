@@ -27,7 +27,8 @@
 #include <StdPrs_BRepTextBuilder.hxx>
 #include <TopExp.hxx>
 #include <TopExp_Explorer.hxx>
-#include <TopTools_IndexedMapOfShape.hxx>
+#include <NCollection_IndexedMap.hxx>
+#include <TopTools_ShapeMapHasher.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepBndLib.hxx>
@@ -1059,7 +1060,7 @@ public:
         const TopoDS_Shape shape = builder.Perform(font, NCollection_String(text.toUtf8().constData()));
         // El texto se crea en el plano XY del modelo: sus coordenadas son ya
         // las del sketch.
-        TopTools_IndexedMapOfShape edges;
+        NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> edges;
         TopExp::MapShapes(shape, TopAbs_EDGE, edges);
         std::vector<sketch::Geometry> result;
         for (int i = 1; i <= edges.Extent(); ++i) {
