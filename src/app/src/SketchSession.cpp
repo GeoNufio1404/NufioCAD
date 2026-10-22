@@ -47,9 +47,11 @@ sketch::Geometry translated(sketch::Geometry geometry, sketch::Vec2 d)
 
 } // namespace
 
-SketchSession::SketchSession(render::Viewport& viewport, const sketch::Plane& plane, QObject* parent)
+SketchSession::SketchSession(render::Viewport& viewport, const sketch::Plane& plane,
+                             std::optional<sketch::Sketch> initial, QObject* parent)
     : QObject(parent)
     , viewport_(viewport)
+    , sketch_(initial ? std::move(*initial) : sketch::Sketch{})
     , plane_(plane)
     , solver_(sketch::makePlaneGcsSolver())
 {
@@ -68,6 +70,10 @@ SketchSession::SketchSession(render::Viewport& viewport, const sketch::Plane& pl
     connect(&viewport_, &render::Viewport::sketchBoxSelected, this, &SketchSession::boxSelected);
     valueInput_ = new ValueInput(&viewport_);
     connect(valueInput_, &ValueInput::accepted, this, &SketchSession::applyTypedValues);
+}
+
+void SketchSession::start()
+{
     solveAndShow();
 }
 

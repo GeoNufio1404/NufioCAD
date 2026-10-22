@@ -59,9 +59,11 @@ public:
     // Entra al sketch: cámara de frente al plano, rejilla y coordenadas.
     void beginSketch(const sketch::Plane& plane);
     void endSketch();
-    // Deja a la vista un sketch ya terminado (curvas y regiones), en su
-    // plano. Hasta la Fase 3 no se puede volver a editar.
-    void showFinishedSketch(const sketch::Sketch& sketch, const sketch::Plane& plane);
+    // Muestra un sketch terminado en su plano: sus regiones (perfiles) y sus
+    // curvas se pueden seleccionar en la vista 3D, por encima de la pieza.
+    // Con el mismo id, sustituye al anterior.
+    void showFinishedSketch(int id, const QString& name, const sketch::Sketch& sketch, const sketch::Plane& plane);
+    void hideFinishedSketch(int id);
     bool isSketching() const;
     // Vuelve a poner la cámara de frente al plano del sketch.
     void lookAtSketch();
@@ -99,6 +101,8 @@ public:
 signals:
     // Texto breve para la barra de estado ("Cara seleccionada", "2 aristas"…).
     void selectionChanged(const QString& description);
+    // Doble clic sobre un sketch terminado (para volver a editarlo).
+    void finishedSketchActivated(int id);
     // description: "Plano XY", "Cara plana"…
     void sketchPlanePicked(const nuf::sketch::Plane& plane, const QString& description);
     // Posición del cursor en coordenadas del sketch (mm); hasPoint = false

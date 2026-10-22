@@ -11,6 +11,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <vector>
 
 class QAction;
@@ -44,6 +45,9 @@ private:
 
     void createSketch();
     void startSketch(const sketch::Plane& plane, const QString& description);
+    // Reabre un sketch terminado (doble clic en la vista 3D).
+    void editSketch(int id);
+    void openSession(const sketch::Plane& plane, const QString& description, std::optional<sketch::Sketch> initial);
     void finishSketch();
     void cancel();
     void updateSketchActions();
@@ -61,6 +65,16 @@ private:
 
     // Sketch en edición. En la Fase 3 pasa a ser una operación del documento.
     std::unique_ptr<SketchSession> sketch_;
+    // Sketches terminados (hasta la Fase 3, que los guardará en el documento).
+    struct StoredSketch {
+        int id = 0;
+        QString name;
+        sketch::Sketch sketch;
+        sketch::Plane plane;
+    };
+    std::vector<StoredSketch> sketches_;
+    std::optional<int> editingSketch_;  // el que se está reeditando
+    int nextSketchId_ = 1;
     std::map<SketchSession::Tool, QAction*> toolActions_;
     // Familias de herramientas (rectángulo, círculo…) para la barra.
     struct ToolFamily {

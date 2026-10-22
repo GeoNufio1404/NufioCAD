@@ -141,6 +141,7 @@ Abrir con `./build/linux-debug/src/app/NufioCAD` y comprobar:
 16. **Proyectar aristas** (Mayús+P) en un sketch sobre XY: clic en el borde de la torre → círculo violeta (bloqueado; K lo desbloquea). **Intersección con la pieza** en un sketch sobre XZ.
 17. **Texto**: clic, escribir el texto y la altura → letras violetas que forman perfiles. **Imagen de referencia**: clic, elegir un PNG/JPG y el ancho.
 18. **Importar DXF…** (menú Sketch) con un dibujo de otro programa.
+19. **Sketch terminado en la vista 3D**: tras Terminar sketch, clic dentro de una región (p. ej. un círculo dentro de un rectángulo) → se selecciona ese perfil («1 perfil de Sketch 1»); clic en una línea → esa curva. Doble clic → se reabre para editarlo.
 
 **2d — Extras**
 - Texto (con fuentes del sistema), para grabados y relieves.
@@ -148,7 +149,8 @@ Abrir con `./build/linux-debug/src/app/NufioCAD` y comprobar:
 - Importar DXF a un sketch.
 
 ### Fase 3 — Modelado básico + timeline
-- Extruir (unir, cortar, nuevo cuerpo).
+- Los sketches pasan a ser operaciones del documento (hoy se guardan en la ventana).
+- Extruir (unir, cortar, nuevo cuerpo) eligiendo perfiles de un sketch (ya seleccionables en la vista 3D).
 - Revolución.
 - Timeline editable.
 - Deshacer/rehacer.
@@ -205,5 +207,5 @@ Abrir con `./build/linux-debug/src/app/NufioCAD` y comprobar:
 | Hoja de ruta | ✅ Aprobada |
 | Fase 0 | ✅ Completa — mockups, formatos de archivo, arquitectura, entorno (repositorio con CMake, vcpkg, pruebas y CI) y nombre de trabajo NufioCAD |
 | Fase 1 | 🚧 Implementada y probada en Linux (Fedora): visor OCCT en Qt, órbita/pan/zoom estilo Fusion, ViewCube, resaltado y selección de caras y aristas. Falta probarla en Windows |
-| Fase 2 | 🚧 Implementada (2a–2d) — sketch completo: dibujo con variantes, elipse, spline y cónica; restricciones (incluida G2), cotas y valores junto al cursor; selección (también por rectángulo), deshacer, arrastre y perfiles; edición (recortar, extender, partir, empalme, chaflán, desfase, simetría, patrones, mover/copiar/girar/escalar); proyectar aristas, intersección, texto, imagen de referencia e importar DXF. Pendiente: las pruebas manuales de abajo y probar en Windows. Limitaciones: lo proyectado y el texto quedan bloqueados (no se actualizan con la pieza ni se editan como texto hasta la Fase 3); recortar/extender/partir y desfase trabajan con líneas, arcos y círculos; los patrones son copias independientes; las curvas que se cruzan sin compartir extremo no parten los perfiles |
+| Fase 2 | 🚧 Implementada (2a–2d) — sketch completo: dibujo con variantes, elipse, spline y cónica; restricciones (incluida G2), cotas y valores junto al cursor; selección (también por rectángulo), deshacer, arrastre y perfiles; edición (recortar, extender, partir, empalme, chaflán, desfase, simetría, patrones, mover/copiar/girar/escalar); proyectar aristas, intersección, texto, imagen de referencia e importar DXF; los sketches terminados se guardan, sus perfiles y curvas se seleccionan en la vista 3D y se reabren con doble clic. Pendiente: las pruebas manuales de abajo y probar en Windows. Limitaciones: lo proyectado y el texto quedan bloqueados (no se actualizan con la pieza ni se editan como texto hasta la Fase 3); recortar/extender/partir y desfase trabajan con líneas, arcos y círculos; los patrones son copias independientes; las curvas que se cruzan sin compartir extremo no parten los perfiles |
 | Fases 3–9 | Pendientes |

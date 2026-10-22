@@ -294,9 +294,8 @@ std::vector<sketch::Geometry> projectEdge(const TopoDS_Edge& edge, const sketch:
     return {sketch::interpolatingSpline(points)};
 }
 
-// Caras planas de los perfiles cerrados del sketch (para sombrearlos). En la
-// Fase 3 esto pasa a geometry/, que lo necesitará para extruir.
-TopoDS_Shape profileFaces(const sketch::Sketch& sketch, const gp_Ax3& plane)
+// Arista OCCT de una curva del sketch (nullopt si es un punto o falla).
+std::optional<TopoDS_Edge> sketchEdge(const sketch::Entity& e, const gp_Ax3& plane)
 {
     const auto at = [&](sketch::Vec2 p) {
         return plane.Location().Translated(gp_Vec(plane.XDirection()) * p.x + gp_Vec(plane.YDirection()) * p.y);
@@ -304,62 +303,67 @@ TopoDS_Shape profileFaces(const sketch::Sketch& sketch, const gp_Ax3& plane)
     const auto circleOf = [&](sketch::Vec2 center, double radius) {
         return gp_Circ(gp_Ax2(at(center), plane.Direction(), plane.XDirection()), radius);
     };
-    const auto ellipseOf = [&](const sketch::Ellipse& e) {
+    const auto ellipseOf = [&](const sketch::Ellipse& el) {
         // Eje mayor girado «rotation» dentro del plano del sketch.
-        const gp_Dir major(gp_Vec(plane.XDirection()) * std::cos(e.rotation)
-                           + gp_Vec(plane.YDirection()) * std::sin(e.rotation));
-        return gp_Elips(gp_Ax2(at(e.center), plane.Direction(), major), e.majorRadius, e.minorRadius);
+        const gp_Dir major(gp_Vec(plane.XDirection()) * std::cos(el.rotation)
+                           + gp_Vec(plane.YDirection()) * std::sin(el.rotation));
+        return gp_Elips(gp_Ax2(at(el.center), plane.Direction(), major), el.majorRadius, el.minorRadius);
     };
+    if (const auto* l = std::get_if<sketch::Line>(&e.geometry)) {
+        return BRepBuilderAPI_MakeEdge(at(l->start), at(l->end)).Edge();
+    }
+    if (const auto* a = std::get_if<sketch::Arc>(&e.geometry)) {
+        GC_MakeArcOfCircle arc(circleOf(a->center, a->radius), a->startAngle, a->endAngle, true);
+        return arc.IsDone() ? std::optional(BRepBuilderAPI_MakeEdge(arc.Value()).Edge()) : std::nullopt;
+    }
+    if (const auto* c = std::get_if<sketch::Circle>(&e.geometry)) {
+        return BRepBuilderAPI_MakeEdge(circleOf(c->center, c->radius)).Edge();
+    }
+    if (const auto* el = std::get_if<sketch::Ellipse>(&e.geometry)) {
+        return BRepBuilderAPI_MakeEdge(ellipseOf(*el)).Edge();
+    }
+    if (const auto* ea = std::get_if<sketch::EllipseArc>(&e.geometry)) {
+        GC_MakeArcOfEllipse arc(ellipseOf(ea->ellipse), ea->startParam, ea->endParam, true);
+        return arc.IsDone() ? std::optional(BRepBuilderAPI_MakeEdge(arc.Value()).Edge()) : std::nullopt;
+    }
+    if (const auto* b = std::get_if<sketch::BSpline>(&e.geometry)) {
+        const int n = int(b->poles.size());
+        NCollection_Array1<gp_Pnt> poles(1, n);
+        NCollection_Array1<double> weights(1, n);
+        for (int i = 0; i < n; ++i) {
+            poles.SetValue(i + 1, at(b->poles[std::size_t(i)]));
+            weights.SetValue(i + 1, b->weights.empty() ? 1.0 : b->weights[std::size_t(i)]);
+        }
+        const auto knotValues = b->knots();
+        const auto multiplicities = b->multiplicities();
+        NCollection_Array1<double> knots(1, int(knotValues.size()));
+        NCollection_Array1<int> mults(1, int(knotValues.size()));
+        for (std::size_t i = 0; i < knotValues.size(); ++i) {
+            knots.SetValue(int(i) + 1, knotValues[i]);
+            mults.SetValue(int(i) + 1, multiplicities[i]);
+        }
+        Handle(Geom_BSplineCurve) curve = new Geom_BSplineCurve(poles, weights, knots, mults, b->effectiveDegree());
+        return BRepBuilderAPI_MakeEdge(curve).Edge();
+    }
+    return std::nullopt;
+}
+
+// Una cara plana por perfil cerrado del sketch (con sus agujeros). En la
+// Fase 3 esto pasa a geometry/, que lo necesitará para extruir.
+std::vector<TopoDS_Face> profileFaceList(const sketch::Sketch& sketch, const gp_Ax3& plane)
+{
     const auto wireOf = [&](const sketch::Loop& loop) -> std::optional<TopoDS_Wire> {
         BRepBuilderAPI_MakeWire wire;
         for (const sketch::ProfileEdge& pe : loop.edges) {
             const sketch::Entity* e = sketch.entity(pe.entity);
-            if (!e) {
+            auto edge = e ? sketchEdge(*e, plane) : std::nullopt;
+            if (!edge) {
                 return std::nullopt;
             }
-            TopoDS_Edge edge;
-            if (const auto* l = std::get_if<sketch::Line>(&e->geometry)) {
-                edge = BRepBuilderAPI_MakeEdge(at(l->start), at(l->end));
-            } else if (const auto* a = std::get_if<sketch::Arc>(&e->geometry)) {
-                GC_MakeArcOfCircle arc(circleOf(a->center, a->radius), a->startAngle, a->endAngle, true);
-                if (!arc.IsDone()) {
-                    return std::nullopt;
-                }
-                edge = BRepBuilderAPI_MakeEdge(arc.Value());
-            } else if (const auto* c = std::get_if<sketch::Circle>(&e->geometry)) {
-                edge = BRepBuilderAPI_MakeEdge(circleOf(c->center, c->radius));
-            } else if (const auto* el = std::get_if<sketch::Ellipse>(&e->geometry)) {
-                edge = BRepBuilderAPI_MakeEdge(ellipseOf(*el));
-            } else if (const auto* ea = std::get_if<sketch::EllipseArc>(&e->geometry)) {
-                GC_MakeArcOfEllipse arc(ellipseOf(ea->ellipse), ea->startParam, ea->endParam, true);
-                if (!arc.IsDone()) {
-                    return std::nullopt;
-                }
-                edge = BRepBuilderAPI_MakeEdge(arc.Value());
-            } else if (const auto* b = std::get_if<sketch::BSpline>(&e->geometry)) {
-                const int n = int(b->poles.size());
-                NCollection_Array1<gp_Pnt> poles(1, n);
-                NCollection_Array1<double> weights(1, n);
-                for (int i = 0; i < n; ++i) {
-                    poles.SetValue(i + 1, at(b->poles[std::size_t(i)]));
-                    weights.SetValue(i + 1, b->weights.empty() ? 1.0 : b->weights[std::size_t(i)]);
-                }
-                const auto knotValues = b->knots();
-                const auto multiplicities = b->multiplicities();
-                NCollection_Array1<double> knots(1, int(knotValues.size()));
-                NCollection_Array1<int> mults(1, int(knotValues.size()));
-                for (std::size_t i = 0; i < knotValues.size(); ++i) {
-                    knots.SetValue(int(i) + 1, knotValues[i]);
-                    mults.SetValue(int(i) + 1, multiplicities[i]);
-                }
-                Handle(Geom_BSplineCurve) curve =
-                    new Geom_BSplineCurve(poles, weights, knots, mults, b->effectiveDegree());
-                edge = BRepBuilderAPI_MakeEdge(curve);
-            }
             if (pe.reversed) {
-                edge.Reverse();
+                edge->Reverse();
             }
-            wire.Add(edge);
+            wire.Add(*edge);
             if (!wire.IsDone()) {
                 return std::nullopt;
             }
@@ -367,9 +371,7 @@ TopoDS_Shape profileFaces(const sketch::Sketch& sketch, const gp_Ax3& plane)
         return wire.Wire();
     };
 
-    BRep_Builder builder;
-    TopoDS_Compound compound;
-    builder.MakeCompound(compound);
+    std::vector<TopoDS_Face> faces;
     for (const sketch::Profile& profile : sketch::findProfiles(sketch)) {
         const auto outer = wireOf(profile.outer);
         if (!outer) {
@@ -382,8 +384,20 @@ TopoDS_Shape profileFaces(const sketch::Sketch& sketch, const gp_Ax3& plane)
             }
         }
         if (face.IsDone()) {
-            builder.Add(compound, face.Face());
+            faces.push_back(face.Face());
         }
+    }
+    return faces;
+}
+
+// Todas las caras de los perfiles, juntas (para sombrearlas).
+TopoDS_Shape profileFaces(const sketch::Sketch& sketch, const gp_Ax3& plane)
+{
+    BRep_Builder builder;
+    TopoDS_Compound compound;
+    builder.MakeCompound(compound);
+    for (const TopoDS_Face& face : profileFaceList(sketch, plane)) {
+        builder.Add(compound, face);
     }
     return compound;
 }
@@ -679,8 +693,10 @@ public:
         drawing->font = pickLabelFont();
         preview = new SketchDrawing();
         preview->SetZLayer(Graphic3d_ZLayerId_Topmost);
+        // Capa Top (por debajo de las líneas, en Topmost): si estuvieran en la
+        // misma capa, línea y sombreado coplanarios se pelearían (z-fighting).
         profiles = new AIS_Shape(TopoDS_Shape());
-        profiles->SetZLayer(Graphic3d_ZLayerId_Topmost);
+        profiles->SetZLayer(Graphic3d_ZLayerId_Top);
         profiles->SetColor(rgb(0x6C, 0xA6, 0xFF));
         profiles->SetTransparency(0.82);
         profiles->Attributes()->SetFaceBoundaryDraw(false);
@@ -713,7 +729,19 @@ public:
     {
         int faces = 0;
         int edges = 0;
+        int regions = 0;
+        int curves = 0;
+        QStringList sketchNames;
         for (context->InitSelected(); context->MoreSelected(); context->NextSelected()) {
+            // Lo de un sketch terminado: perfiles (regiones) y curvas.
+            if (const auto owner = finishedOwner(context->SelectedInteractive())) {
+                ++(owner->second ? regions : curves);
+                const QString& name = finished.at(owner->first).name;
+                if (!sketchNames.contains(name)) {
+                    sketchNames << name;
+                }
+                continue;
+            }
             if (!context->HasSelectedShape()) {
                 continue;
             }
@@ -734,6 +762,16 @@ public:
             parts << QStringLiteral("1 arista");
         } else if (edges > 1) {
             parts << QStringLiteral("%1 aristas").arg(edges);
+        }
+        if (regions + curves > 0) {
+            QStringList what;
+            if (regions > 0) {
+                what << (regions == 1 ? QStringLiteral("1 perfil") : QStringLiteral("%1 perfiles").arg(regions));
+            }
+            if (curves > 0) {
+                what << (curves == 1 ? QStringLiteral("1 curva") : QStringLiteral("%1 curvas").arg(curves));
+            }
+            parts << QStringLiteral("%1 de %2").arg(what.join(QStringLiteral(" y ")), sketchNames.join(QStringLiteral(", ")));
         }
         emit widget_.selectionChanged(parts.isEmpty() ? QString()
                                                       : QStringLiteral("Seleccionado: ") + parts.join(QStringLiteral(", ")));
@@ -1115,27 +1153,78 @@ public:
         return result;
     }
 
-    void showFinishedSketch(const sketch::Sketch& sketch, const sketch::Plane& plane)
+    // Sketch terminado en la vista 3D: una forma por región (perfil),
+    // seleccionable entera, y una con todas las curvas, seleccionables por
+    // arista. Van por encima de la pieza: un sketch suele quedar dentro o
+    // debajo de ella, y lo que se dibuja ahí debe poder elegirse.
+    struct FinishedSketch {
+        QString name;
+        std::vector<Handle(AIS_Shape)> regions;
+        Handle(AIS_Shape) curves;
+    };
+
+    void showFinishedSketch(int id, const QString& name, const sketch::Sketch& sketch, const sketch::Plane& plane)
     {
-        Handle(SketchDrawing) curves = new SketchDrawing();
-        curves->plane = toAx3(plane);
-        // Las curvas por encima de la pieza: un sketch suele quedar dentro o
-        // debajo de ella (por ejemplo, en el plano XY bajo la base).
-        curves->SetZLayer(Graphic3d_ZLayerId_Topmost);
-        const SketchStroke stroke{rgb(0x8F, 0xB3, 0xE8), 1.5};
+        hideFinishedSketch(id);
+        FinishedSketch shown;
+        shown.name = name;
+        const gp_Ax3 ax3 = toAx3(plane);
+        for (const TopoDS_Face& face : profileFaceList(sketch, ax3)) {
+            Handle(AIS_Shape) region = new AIS_Shape(face);
+            region->SetColor(rgb(0x6C, 0xA6, 0xFF));
+            region->SetTransparency(0.8);
+            region->Attributes()->SetFaceBoundaryDraw(false);
+            // Top: por debajo de las curvas (Topmost) para que no se peleen al
+            // dibujarse; al seleccionar, la capa sigue ganando a la pieza.
+            region->SetZLayer(Graphic3d_ZLayerId_Top);
+            context->Display(region, AIS_Shaded, 0, false);
+            shown.regions.push_back(region);
+        }
+        BRep_Builder builder;
+        TopoDS_Compound edges;
+        builder.MakeCompound(edges);
         for (const sketch::Entity& e : sketch.entities()) {
             if (!e.reference && !e.construction) {
-                curves->addGeometry(e.geometry, stroke);
+                if (const auto edge = sketchEdge(e, ax3)) {
+                    builder.Add(edges, *edge);
+                }
             }
         }
-        Handle(AIS_Shape) regions = new AIS_Shape(profileFaces(sketch, toAx3(plane)));
-        regions->SetColor(rgb(0x6C, 0xA6, 0xFF));
-        regions->SetTransparency(0.8);
-        regions->Attributes()->SetFaceBoundaryDraw(false);
-        context->Display(regions, AIS_Shaded, -1, false);
-        context->Display(curves, 0, -1, false);
-        finishedSketches.push_back(curves);
-        finishedSketches.push_back(regions);
+        shown.curves = new AIS_Shape(edges);
+        shown.curves->SetColor(rgb(0x8F, 0xB3, 0xE8));
+        shown.curves->SetWidth(2.0);
+        shown.curves->SetZLayer(Graphic3d_ZLayerId_Topmost);
+        context->Display(shown.curves, AIS_WireFrame, AIS_Shape::SelectionMode(TopAbs_EDGE), false);
+        finished[id] = shown;
+    }
+
+    void hideFinishedSketch(int id)
+    {
+        const auto it = finished.find(id);
+        if (it == finished.end()) {
+            return;
+        }
+        for (const Handle(AIS_Shape)& region : it->second.regions) {
+            context->Remove(region, false);
+        }
+        context->Remove(it->second.curves, false);
+        finished.erase(it);
+    }
+
+    // Sketch terminado al que pertenece un objeto, y si es una región.
+    std::optional<std::pair<int, bool>> finishedOwner(const Handle(AIS_InteractiveObject)& object) const
+    {
+        for (const auto& [id, shown] : finished) {
+            if (object == shown.curves) {
+                return std::pair{id, false};
+            }
+            for (const Handle(AIS_Shape)& region : shown.regions) {
+                if (object == region) {
+                    return std::pair{id, true};
+                }
+            }
+        }
+        return std::nullopt;
     }
 
     Handle(V3d_Viewer) viewer;
@@ -1376,7 +1465,7 @@ private:
     Handle(SketchDrawing) drawing;
     Handle(SketchDrawing) preview;
     Handle(AIS_Shape) profiles;
-    std::vector<Handle(AIS_InteractiveObject)> finishedSketches;
+    std::map<int, FinishedSketch> finished;
     std::vector<Handle(AIS_InteractiveObject)> images;  // de referencia, del sketch en curso
     sketch::Plane sketchPlane;
     bool darkTheme = true;
@@ -1461,9 +1550,16 @@ void Viewport::endSketch()
     update();
 }
 
-void Viewport::showFinishedSketch(const sketch::Sketch& sketch, const sketch::Plane& plane)
+void Viewport::hideFinishedSketch(int id)
 {
-    impl_->showFinishedSketch(sketch, plane);
+    impl_->hideFinishedSketch(id);
+    impl_->view->Invalidate();
+    update();
+}
+
+void Viewport::showFinishedSketch(int id, const QString& name, const sketch::Sketch& sketch, const sketch::Plane& plane)
+{
+    impl_->showFinishedSketch(id, name, sketch, plane);
     impl_->view->Invalidate();
     update();
 }
@@ -1697,6 +1793,18 @@ void Viewport::mouseReleaseEvent(QMouseEvent* event)
 
 void Viewport::mouseDoubleClickEvent(QMouseEvent* event)
 {
+    // Doble clic sobre un sketch terminado: volver a editarlo.
+    if (event->button() == Qt::LeftButton && !isSketching() && impl_->mode == Impl::Mode::Model) {
+        const qreal ratio = devicePixelRatioF();
+        impl_->context->MoveTo(int(event->position().x() * ratio), int(event->position().y() * ratio), impl_->view,
+                               false);
+        if (impl_->context->HasDetected()) {
+            if (const auto owner = impl_->finishedOwner(impl_->context->DetectedInteractive())) {
+                emit finishedSketchActivated(owner->first);
+                return;
+            }
+        }
+    }
     if (event->button() == Qt::LeftButton && isSketching()) {
         impl_->leftPressed = true;
         impl_->pressPosition = event->position();

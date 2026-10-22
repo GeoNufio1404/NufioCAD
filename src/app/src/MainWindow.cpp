@@ -22,6 +22,7 @@
 #include <QToolBar>
 #include <QToolButton>
 
+#include <algorithm>
 #include <memory>
 #include <tuple>
 #include <utility>
@@ -65,6 +66,7 @@ MainWindow::MainWindow(QWidget* parent)
     connect(viewport_, &render::Viewport::selectionChanged, this,
             [this](const QString& description) { statusBar()->showMessage(description); });
     connect(viewport_, &render::Viewport::sketchPlanePicked, this, &MainWindow::startSketch);
+    connect(viewport_, &render::Viewport::finishedSketchActivated, this, &MainWindow::editSketch);
     connect(viewport_, &render::Viewport::sketchCursorMoved, this, [this](bool hasPoint, double x, double y) {
         cursorLabel_->setText(hasPoint ? QStringLiteral("X %1   Y %2 mm")
                                              .arg(QLocale().toString(x, 'f', 2), QLocale().toString(y, 'f', 2))
@@ -406,7 +408,28 @@ void MainWindow::createSketch()
 
 void MainWindow::startSketch(const sketch::Plane& plane, const QString& description)
 {
-    sketch_ = std::make_unique<SketchSession>(*viewport_, plane);
+    editingSketch_.reset();
+    openSession(plane, description, std::nullopt);
+}
+
+void MainWindow::editSketch(int id)
+{
+    if (sketch_ || viewport_->isPickingSketchPlane()) {
+        return;
+    }
+    const auto it = std::ranges::find(sketches_, id, &StoredSketch::id);
+    if (it == sketches_.end()) {
+        return;
+    }
+    editingSketch_ = id;
+    viewport_->hideFinishedSketch(id);
+    openSession(it->plane, it->name, it->sketch);
+}
+
+void MainWindow::openSession(const sketch::Plane& plane, const QString& description,
+                             std::optional<sketch::Sketch> initial)
+{
+    sketch_ = std::make_unique<SketchSession>(*viewport_, plane, std::move(initial));
     connect(sketch_.get(), &SketchSession::toolChanged, this, [this](SketchSession::Tool tool) {
         for (const auto& [kind, action] : toolActions_) {
             action->setChecked(kind == tool);
@@ -421,7 +444,7 @@ void MainWindow::startSketch(const sketch::Plane& plane, const QString& descript
     connect(sketch_.get(), &SketchSession::message, this,
             [this](const QString& text) { statusBar()->showMessage(text, 6000); });
     statusBar()->showMessage(QStringLiteral("Sketch en %1 · L línea, R rectángulo, C círculo, A arco").arg(description));
-    sketchStatusLabel_->setText(QStringLiteral("Sin geometría"));
+    sketch_->start();
     updateSketchActions();
     updateUndoActions();
 }
@@ -431,11 +454,29 @@ void MainWindow::finishSketch()
     if (!sketch_) {
         return;
     }
-    // Hasta la Fase 3 (historial) el sketch no se guarda, pero queda a la vista.
+    // Hasta la Fase 3 (historial) se guarda aquí y queda a la vista; doble
+    // clic sobre él para volver a editarlo.
     const sketch::Sketch finished = sketch_->sketch();
     const sketch::Plane plane = sketch_->plane();
     sketch_.reset();
-    viewport_->showFinishedSketch(finished, plane);
+    const bool empty = std::ranges::none_of(finished.entities(), [](const sketch::Entity& e) { return !e.reference; });
+    auto it = editingSketch_ ? std::ranges::find(sketches_, *editingSketch_, &StoredSketch::id) : sketches_.end();
+    if (empty) {
+        // Un sketch vacío no se guarda (y si se vació al reeditarlo, se quita).
+        if (it != sketches_.end()) {
+            sketches_.erase(it);
+        }
+    } else {
+        if (it == sketches_.end()) {
+            sketches_.push_back({nextSketchId_, QStringLiteral("Sketch %1").arg(nextSketchId_), finished, plane});
+            ++nextSketchId_;
+            it = sketches_.end() - 1;
+        } else {
+            it->sketch = finished;
+        }
+        viewport_->showFinishedSketch(it->id, it->name, it->sketch, it->plane);
+    }
+    editingSketch_.reset();
     sketchStatusLabel_->clear();
     statusBar()->clearMessage();
     updateSketchActions();

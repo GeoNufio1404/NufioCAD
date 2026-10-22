@@ -49,8 +49,14 @@ public:
         Text, Image,
     };
 
-    SketchSession(render::Viewport& viewport, const sketch::Plane& plane, QObject* parent = nullptr);
+    // «initial»: un sketch ya hecho que se vuelve a editar.
+    SketchSession(render::Viewport& viewport, const sketch::Plane& plane,
+                  std::optional<sketch::Sketch> initial = std::nullopt, QObject* parent = nullptr);
     ~SketchSession() override;
+
+    // Resuelve y muestra el sketch por primera vez (después de conectar sus
+    // señales, para que lleguen el estado y los grados de libertad).
+    void start();
 
     const sketch::Sketch& sketch() const noexcept { return sketch_; }
     const sketch::Plane& plane() const noexcept { return plane_; }
