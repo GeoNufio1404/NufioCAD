@@ -116,6 +116,21 @@ solver. Por eso la fase se divide así:
 - Mover, copiar, rotar y escalar selecciones.
 - Proyectar aristas y caras del modelo al sketch (con vínculo al original) e intersección del modelo con el plano del sketch.
 
+**Pruebas manuales pendientes (2a y 2b)**
+
+Abrir con `./build/linux-debug/src/app/NufioCAD` y comprobar:
+
+1. **Crear sketch** → plano XY. La cámara mira el plano de frente y aparece la rejilla.
+2. Familias con desplegable (Rectángulo, Círculo, Arco, Polígono, Ranura, Elipse, Spline): el botón recuerda la última variante usada.
+3. **Polígono** (P): clic en el centro, mover, escribir `8`, Tab, `30`, Enter → octógono de 30 mm.
+4. **Ranura en arco**: tres clics para el arco central y uno para el ancho.
+5. **Elipse**: centro, extremo del eje mayor y ancho.
+6. **Spline por puntos de paso**: varios clics y Enter; luego, sin herramienta, arrastrar uno de sus puntos.
+7. **Arco tangente arrastrando**: L, dibujar una línea y arrastrar desde su extremo; la cadena sigue.
+8. **Curvatura (G2)**: con una línea y una spline unidas, seleccionar los dos extremos y aplicar G2.
+9. **Cónica**: inicio, fin; escribir `0.3` (rho) y clic para el vértice.
+10. Rectángulo desde el origen con `40` Tab `25` Enter → queda en blanco (totalmente restringido); doble clic en una cota para cambiarla; Ctrl+Z / Ctrl+Y; Terminar sketch → queda visible en el modelo.
+
 **2d — Extras**
 - Texto (con fuentes del sistema), para grabados y relieves.
 - Imagen de referencia (*canvas*) para calcar.
