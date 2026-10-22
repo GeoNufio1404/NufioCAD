@@ -16,8 +16,11 @@
 #include <BRepPrimAPI_MakeCylinder.hxx>
 #include <Bnd_Box.hxx>
 #include <Font_FontMgr.hxx>
+#include <Graphic3d_ArrayOfPoints.hxx>
+#include <Graphic3d_ArrayOfPolylines.hxx>
 #include <Graphic3d_ArrayOfSegments.hxx>
 #include <Graphic3d_AspectLine3d.hxx>
+#include <Graphic3d_AspectMarker3d.hxx>
 #include <Graphic3d_Camera.hxx>
 #include <OpenGl_Context.hxx>
 #include <OpenGl_FrameBuffer.hxx>
@@ -43,7 +46,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
+#include <numbers>
 #include <optional>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -262,6 +268,132 @@ private:
     }
 };
 
+// Estilo de trazo de la geometría del sketch.
+struct SketchStroke {
+    Quantity_Color color;
+    double width = 2.0;
+    Aspect_TypeOfLine type = Aspect_TOL_SOLID;
+
+    auto key() const
+    {
+        return std::make_tuple(color.Red(), color.Green(), color.Blue(), width, int(type));
+    }
+};
+
+// Curvas y puntos del sketch en su plano, agrupados por estilo. No se
+// selecciona: los clics los interpreta la herramienta activa.
+class SketchDrawing final : public AIS_InteractiveObject {
+    DEFINE_STANDARD_RTTI_INLINE(SketchDrawing, AIS_InteractiveObject)
+
+public:
+    gp_Ax3 plane;
+
+    void clear()
+    {
+        curves_.clear();
+        points_.clear();
+    }
+
+    void addGeometry(const sketch::Geometry& geometry, const SketchStroke& stroke)
+    {
+        std::vector<sketch::Vec2> polyline;
+        if (const auto* line = std::get_if<sketch::Line>(&geometry)) {
+            polyline = {line->start, line->end};
+        } else if (const auto* circle = std::get_if<sketch::Circle>(&geometry)) {
+            polyline = arcPoints(circle->center, circle->radius, 0.0, 2.0 * std::numbers::pi);
+        } else if (const auto* arc = std::get_if<sketch::Arc>(&geometry)) {
+            double end = arc->endAngle;
+            while (end <= arc->startAngle) {
+                end += 2.0 * std::numbers::pi;
+            }
+            polyline = arcPoints(arc->center, arc->radius, arc->startAngle, end);
+        } else if (const auto* point = std::get_if<sketch::Point>(&geometry)) {
+            addPoint(point->position, stroke.color, 1.0);
+        }
+        if (!polyline.empty()) {
+            curves_.push_back({std::move(polyline), stroke});
+        }
+    }
+
+    void addPoint(sketch::Vec2 p, const Quantity_Color& color, double scale)
+    {
+        points_.push_back({p, color, scale});
+    }
+
+    void Compute(const Handle(PrsMgr_PresentationManager)& /*manager*/,
+                 const Handle(Prs3d_Presentation)& prs, const Standard_Integer mode) override
+    {
+        if (mode != 0) {
+            return;
+        }
+        // Una matriz de polilíneas por estilo.
+        std::map<decltype(SketchStroke{}.key()), std::vector<const Curve*>> groups;
+        for (const Curve& curve : curves_) {
+            groups[curve.stroke.key()].push_back(&curve);
+        }
+        for (const auto& [key, curves] : groups) {
+            int vertices = 0;
+            for (const Curve* curve : curves) {
+                vertices += int(curve->points.size());
+            }
+            Handle(Graphic3d_ArrayOfPolylines) array = new Graphic3d_ArrayOfPolylines(vertices, int(curves.size()));
+            for (const Curve* curve : curves) {
+                array->AddBound(int(curve->points.size()));
+                for (const sketch::Vec2& p : curve->points) {
+                    array->AddVertex(at(p));
+                }
+            }
+            const SketchStroke& stroke = curves.front()->stroke;
+            Handle(Graphic3d_Group) group = prs->NewGroup();
+            group->SetGroupPrimitivesAspect(new Graphic3d_AspectLine3d(stroke.color, stroke.type, stroke.width));
+            group->AddPrimitiveArray(array);
+        }
+        for (const Marker& marker : points_) {
+            Handle(Graphic3d_ArrayOfPoints) array = new Graphic3d_ArrayOfPoints(1);
+            array->AddVertex(at(marker.position));
+            Handle(Graphic3d_Group) group = prs->NewGroup();
+            group->SetGroupPrimitivesAspect(new Graphic3d_AspectMarker3d(Aspect_TOM_BALL, marker.color, marker.scale));
+            group->AddPrimitiveArray(array);
+        }
+    }
+
+    void ComputeSelection(const Handle(SelectMgr_Selection)& /*selection*/,
+                          const Standard_Integer /*mode*/) override
+    {}
+
+private:
+    struct Curve {
+        std::vector<sketch::Vec2> points;
+        SketchStroke stroke;
+    };
+    struct Marker {
+        sketch::Vec2 position;
+        Quantity_Color color;
+        double scale;
+    };
+
+    gp_Pnt at(sketch::Vec2 p) const
+    {
+        return plane.Location().Translated(gp_Vec(plane.XDirection()) * p.x + gp_Vec(plane.YDirection()) * p.y);
+    }
+
+    // Un vértice cada 4° como máximo (y al menos 8 tramos).
+    static std::vector<sketch::Vec2> arcPoints(sketch::Vec2 c, double r, double from, double to)
+    {
+        const int segments = std::max(8, int(std::ceil((to - from) / (4.0 * std::numbers::pi / 180.0))));
+        std::vector<sketch::Vec2> points;
+        points.reserve(segments + 1);
+        for (int i = 0; i <= segments; ++i) {
+            const double t = from + (to - from) * i / segments;
+            points.push_back({c.x + r * std::cos(t), c.y + r * std::sin(t)});
+        }
+        return points;
+    }
+
+    std::vector<Curve> curves_;
+    std::vector<Marker> points_;
+};
+
 // Pieza de muestra (como "soporte_sensor" del mockup) para probar la
 // navegación y la selección. En la Fase 3 la reemplaza el resultado del
 // documento.
@@ -305,12 +437,19 @@ public:
 
         planeFilter = new SketchPlaneFilter();
         grid = new SketchGrid();
+        // La geometría del sketch se ve aunque la pieza la tape (por ejemplo,
+        // un sketch en el plano XY bajo la pieza).
+        drawing = new SketchDrawing();
+        drawing->SetZLayer(Graphic3d_ZLayerId_Topmost);
+        preview = new SketchDrawing();
+        preview->SetZLayer(Graphic3d_ZLayerId_Topmost);
     }
 
     enum class Mode { Model, PickPlane, Sketch };
 
     void applyTheme(bool dark)
     {
+        darkTheme = dark;
         grid->minorColor = dark ? rgb(0x41, 0x46, 0x4E) : rgb(0xCC, 0xD1, 0xD8);
         grid->majorColor = dark ? rgb(0x63, 0x6B, 0x76) : rgb(0x95, 0x9E, 0xAA);
         if (context->IsDisplayed(grid)) {
@@ -405,6 +544,12 @@ public:
         grid->plane = toAx3(plane);
         updateGrid(true);
         context->Display(grid, 0, -1, false);
+        for (const Handle(SketchDrawing)& d : {drawing, preview}) {
+            d->plane = toAx3(plane);
+            d->clear();
+            d->SetToUpdate();
+            context->Display(d, 0, -1, false);
+        }
         mode = Mode::Sketch;
         lookAtSketch();
         emit widget_.selectionChanged(QString());
@@ -416,6 +561,8 @@ public:
             return;
         }
         context->Erase(grid, false);
+        context->Erase(drawing, false);
+        context->Erase(preview, false);
         context->Activate(part, AIS_Shape::SelectionMode(TopAbs_FACE));
         context->Activate(part, AIS_Shape::SelectionMode(TopAbs_EDGE));
         mode = Mode::Model;
@@ -466,11 +613,72 @@ public:
         return sketchPlane.toLocal(toVec3(from + dir * t));
     }
 
+    // Colores de la geometría del sketch (como en Fusion: azul = aún libre).
+    SketchStroke freeStroke() const { return {darkTheme ? rgb(0x6C, 0xA6, 0xFF) : rgb(0x1F, 0x6F, 0xEB)}; }
+    SketchStroke fixedStroke() const { return {darkTheme ? rgb(0xE6, 0xE9, 0xED) : rgb(0x1F, 0x23, 0x29)}; }
+    SketchStroke constructionStroke() const { return {rgb(0xF2, 0xA3, 0x4B), 1.5, Aspect_TOL_DASH}; }
+
+    void showSketch(const sketch::Sketch& sketch, const std::vector<sketch::EntityId>& underconstrained)
+    {
+        drawing->clear();
+        for (const sketch::Entity& e : sketch.entities()) {
+            if (e.reference) {
+                continue;
+            }
+            const bool loose = std::ranges::find(underconstrained, e.id) != underconstrained.end();
+            const SketchStroke stroke = e.construction ? constructionStroke() : (loose ? freeStroke() : fixedStroke());
+            drawing->addGeometry(e.geometry, stroke);
+            // Extremos y centros como puntos.
+            const auto mark = [&](sketch::Part which) {
+                if (const auto p = sketch.point({e.id, which})) {
+                    drawing->addPoint(*p, stroke.color, 1.6);
+                }
+            };
+            if (std::holds_alternative<sketch::Line>(e.geometry) || std::holds_alternative<sketch::Arc>(e.geometry)) {
+                mark(sketch::Part::Start);
+                mark(sketch::Part::End);
+            }
+            if (std::holds_alternative<sketch::Circle>(e.geometry) || std::holds_alternative<sketch::Arc>(e.geometry)) {
+                mark(sketch::Part::Center);
+            }
+        }
+        context->Redisplay(drawing, false);
+    }
+
+    void showSketchPreview(const std::vector<sketch::Geometry>& geometry, std::optional<sketch::Vec2> snapPoint)
+    {
+        preview->clear();
+        SketchStroke stroke = freeStroke();
+        stroke.width = 1.5;
+        for (const sketch::Geometry& g : geometry) {
+            preview->addGeometry(g, stroke);
+        }
+        if (snapPoint) {
+            preview->addPoint(*snapPoint, rgb(0xFF, 0xC9, 0x40), 3.0);
+        }
+        context->Redisplay(preview, false);
+    }
+
+    double pixelSize() const
+    {
+        Standard_Real width = 0, height = 0;
+        view->Size(width, height);
+        Standard_Integer pixelsWide = 0, pixelsHigh = 0;
+        view->Window()->Size(pixelsWide, pixelsHigh);
+        return width / std::max(pixelsWide, 1);
+    }
+
+    double gridStep() const { return grid->step; }
+
     Handle(V3d_Viewer) viewer;
     Handle(V3d_View) view;
     Handle(AIS_InteractiveContext) context;
     Handle(AIS_ViewCube) viewCube;
     Mode mode = Mode::Model;
+    bool sketchToolActive = false;
+    bool leftPressed = false;
+    bool ignoreNextRelease = false;
+    QPointF pressPosition;
 
 protected:
     // Pide otro cuadro mientras haya animaciones (ViewCube, inercia).
@@ -650,11 +858,8 @@ private:
         Standard_Real width = 0, height = 0;
         view->Size(width, height);
         const double size = std::max({width, height, 1e-3});
-        Standard_Integer pixelsWide = 0, pixelsHigh = 0;
-        view->Window()->Size(pixelsWide, pixelsHigh);
-        const double pixelsPerMm = std::max(pixelsWide, 1) / std::max(width, 1e-6);
         constexpr double kMinSpacingPx = 7.0;
-        const double step = std::pow(10.0, std::ceil(std::log10(kMinSpacingPx / pixelsPerMm)));
+        const double step = std::pow(10.0, std::ceil(std::log10(kMinSpacingPx * pixelSize())));
         const double block = 10.0 * step;
         const sketch::Vec2 c = sketchPlane.toLocal(toVec3(view->Camera()->Center().XYZ()));
         const double cx = std::round(c.x / block) * block;
@@ -690,7 +895,10 @@ private:
     std::vector<OriginPlane> originPlanes;
     Handle(SketchPlaneFilter) planeFilter;
     Handle(SketchGrid) grid;
+    Handle(SketchDrawing) drawing;
+    Handle(SketchDrawing) preview;
     sketch::Plane sketchPlane;
+    bool darkTheme = true;
 };
 
 Viewport::Viewport(QWidget* parent)
@@ -780,6 +988,41 @@ void Viewport::lookAtSketch()
     update();
 }
 
+void Viewport::showSketch(const sketch::Sketch& sketch, const std::vector<sketch::EntityId>& underconstrained)
+{
+    if (isSketching()) {
+        impl_->showSketch(sketch, underconstrained);
+        update();
+    }
+}
+
+void Viewport::showSketchPreview(const std::vector<sketch::Geometry>& geometry, std::optional<sketch::Vec2> snapPoint)
+{
+    if (isSketching()) {
+        impl_->showSketchPreview(geometry, snapPoint);
+        update();
+    }
+}
+
+void Viewport::setSketchToolActive(bool active)
+{
+    impl_->sketchToolActive = active;
+    impl_->leftPressed = false;
+    setCursor(active ? Qt::CrossCursor : Qt::ArrowCursor);
+}
+
+double Viewport::sketchPixelSize() const { return impl_->pixelSize(); }
+
+double Viewport::sketchGridStep() const { return impl_->gridStep(); }
+
+Qt::MouseButtons Viewport::navigationButtons(Qt::MouseButtons buttons) const
+{
+    if (impl_->sketchToolActive && isSketching()) {
+        buttons &= ~Qt::MouseButtons(Qt::LeftButton);
+    }
+    return buttons;
+}
+
 void Viewport::initializeGL()
 {
     const qreal ratio = devicePixelRatioF();
@@ -860,10 +1103,14 @@ void Viewport::changeEvent(QEvent* event)
 
 void Viewport::mousePressEvent(QMouseEvent* event)
 {
+    if (event->button() == Qt::LeftButton && navigationButtons(Qt::LeftButton) == Qt::NoButton) {
+        impl_->leftPressed = true;
+        impl_->pressPosition = event->position();
+    }
     const qreal ratio = devicePixelRatioF();
     const Graphic3d_Vec2i point(int(event->position().x() * ratio), int(event->position().y() * ratio));
-    if (impl_->UpdateMouseButtons(point, toOcctButtons(event->buttons()), toOcctModifiers(event->modifiers()),
-                                  false)) {
+    if (impl_->UpdateMouseButtons(point, toOcctButtons(navigationButtons(event->buttons())),
+                                  toOcctModifiers(event->modifiers()), false)) {
         update();
     }
 }
@@ -872,18 +1119,42 @@ void Viewport::mouseReleaseEvent(QMouseEvent* event)
 {
     const qreal ratio = devicePixelRatioF();
     const Graphic3d_Vec2i point(int(event->position().x() * ratio), int(event->position().y() * ratio));
-    if (impl_->UpdateMouseButtons(point, toOcctButtons(event->buttons()), toOcctModifiers(event->modifiers()),
-                                  false)) {
+    if (event->button() == Qt::LeftButton && impl_->leftPressed) {
+        impl_->leftPressed = false;
+        // Un clic, no un arrastre; tras un doble clic se ignora la suelta.
+        const QPointF moved = event->position() - impl_->pressPosition;
+        if (impl_->ignoreNextRelease) {
+            impl_->ignoreNextRelease = false;
+        } else if (moved.manhattanLength() <= 5.0) {
+            if (const auto p = impl_->sketchPointAt(point)) {
+                emit sketchClicked(p->x, p->y);
+            }
+        }
+    }
+    if (impl_->UpdateMouseButtons(point, toOcctButtons(navigationButtons(event->buttons())),
+                                  toOcctModifiers(event->modifiers()), false)) {
         update();
     }
+}
+
+void Viewport::mouseDoubleClickEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::LeftButton && navigationButtons(Qt::LeftButton) == Qt::NoButton) {
+        impl_->leftPressed = true;
+        impl_->pressPosition = event->position();
+        impl_->ignoreNextRelease = true;
+        emit sketchDoubleClicked();
+        return;
+    }
+    QOpenGLWidget::mouseDoubleClickEvent(event);
 }
 
 void Viewport::mouseMoveEvent(QMouseEvent* event)
 {
     const qreal ratio = devicePixelRatioF();
     const Graphic3d_Vec2i point(int(event->position().x() * ratio), int(event->position().y() * ratio));
-    if (impl_->UpdateMousePosition(point, toOcctButtons(event->buttons()), toOcctModifiers(event->modifiers()),
-                                   false)) {
+    if (impl_->UpdateMousePosition(point, toOcctButtons(navigationButtons(event->buttons())),
+                                   toOcctModifiers(event->modifiers()), false)) {
         update();
     }
     if (isSketching()) {

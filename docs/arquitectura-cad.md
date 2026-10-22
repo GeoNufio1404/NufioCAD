@@ -135,6 +135,7 @@ Inactiva → Seleccionando entrada → Ajustando parámetros (vista previa) → 
 
 - La **vista previa** crea una operación temporal y la calcula con `compute()` **fuera** del documento; `render/` la dibuja en naranja.
 - Solo al **Aceptar** se emite un `AddFeature` (o `EditFeatureParams`) al `CommandStack`. Cancelar no deja rastro en el historial.
+- **Excepción: herramientas de dibujo del sketch.** Su lógica (estados, vista previa, restricciones automáticas) vive en `sketch/` (`Tools.hpp`, `Snap.hpp`) sin Qt, para probarla sin ventana; `app/SketchSession` solo traduce clics y cursor del viewport y dibuja `preview()`.
 
 ---
 

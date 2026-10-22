@@ -3,12 +3,14 @@
 #include <nuf/commands/CommandStack.hpp>
 #include <nuf/document/Document.hpp>
 #include <nuf/sketch/Plane.hpp>
-#include <nuf/sketch/Sketch.hpp>
+
+#include "SketchSession.hpp"
 
 #include <QByteArray>
 #include <QMainWindow>
 
-#include <optional>
+#include <map>
+#include <memory>
 
 class QAction;
 class QDockWidget;
@@ -56,9 +58,9 @@ private:
     QAction* redoAction_ = nullptr;
 
     // Sketch en edición. En la Fase 3 pasa a ser una operación del documento.
-    std::optional<sketch::Sketch> sketch_;
-    sketch::Plane sketchPlane_;
-    QString sketchPlaneName_;
+    std::unique_ptr<SketchSession> sketch_;
+    std::map<SketchSession::Tool, QAction*> toolActions_;
+    QLabel* sketchStatusLabel_ = nullptr;
     QAction* createSketchAction_ = nullptr;
     QAction* finishSketchAction_ = nullptr;
     QAction* lookAtSketchAction_ = nullptr;

@@ -8,6 +8,8 @@ add_executable(nuf_app
     src/MainWindow.cpp
     src/MainWindow.hpp
     src/SelfCheck.cpp
+    src/SketchSession.cpp
+    src/SketchSession.hpp
     src/SelfCheck.hpp
     src/Theme.cpp
     src/Theme.hpp

@@ -21,6 +21,7 @@
 #include <QToolBar>
 
 #include <memory>
+#include <tuple>
 #include <utility>
 
 namespace nuf::app {
@@ -50,6 +51,8 @@ MainWindow::MainWindow(QWidget* parent)
                                     .arg(QString::fromStdString(geometry::kernelVersion()),
                                          QString::fromStdString(io::NufFile::sqliteVersion()),
                                          QString::fromLatin1(qVersion())));
+    sketchStatusLabel_ = new QLabel(this);
+    statusBar()->addPermanentWidget(sketchStatusLabel_);
     cursorLabel_ = new QLabel(this);
     cursorLabel_->setMinimumWidth(190);
     statusBar()->addPermanentWidget(cursorLabel_);
@@ -126,12 +129,37 @@ void MainWindow::createMenus()
     createSketchAction_ = sketchMenu->addAction(QStringLiteral("&Crear sketch"), this, &MainWindow::createSketch);
     createSketchAction_->setToolTip(QStringLiteral("Crear un sketch en un plano de origen o en una cara plana"));
     finishSketchAction_ = sketchMenu->addAction(QStringLiteral("&Terminar sketch"), this, &MainWindow::finishSketch);
+    sketchMenu->addSeparator();
+
+    // Herramientas de dibujo, con las teclas de Fusion 360.
+    auto* toolGroup = new QActionGroup(this);
+    toolGroup->setExclusionPolicy(QActionGroup::ExclusionPolicy::ExclusiveOptional);
+    for (const auto& [tool, text, key] :
+         {std::tuple{SketchSession::Tool::Line, QStringLiteral("&Línea"), Qt::Key_L},
+          std::tuple{SketchSession::Tool::Rectangle, QStringLiteral("&Rectángulo"), Qt::Key_R},
+          std::tuple{SketchSession::Tool::Circle, QStringLiteral("&Círculo"), Qt::Key_C},
+          std::tuple{SketchSession::Tool::Arc, QStringLiteral("&Arco por 3 puntos"), Qt::Key_A}}) {
+        QAction* action = sketchMenu->addAction(text);
+        action->setShortcut(QKeySequence(key));
+        action->setCheckable(true);
+        toolGroup->addAction(action);
+        connect(action, &QAction::triggered, this, [this, tool = tool](bool checked) {
+            if (sketch_) {
+                sketch_->setTool(checked ? tool : SketchSession::Tool::None);
+            }
+        });
+        toolActions_[tool] = action;
+    }
 
     QToolBar* toolbar = addToolBar(QStringLiteral("Sketch"));
     toolbar->setObjectName(QStringLiteral("sketchToolbar"));
     toolbar->setMovable(false);
     toolbar->addAction(createSketchAction_);
     toolbar->addAction(finishSketchAction_);
+    toolbar->addSeparator();
+    for (const auto& [tool, action] : toolActions_) {
+        toolbar->addAction(action);
+    }
 
     QMenu* view = menuBar()->addMenu(QStringLiteral("&Ver"));
     view->addAction(QStringLiteral("Vista &inicial"), QKeySequence(Qt::Key_Home), this,
@@ -216,11 +244,18 @@ void MainWindow::createSketch()
 
 void MainWindow::startSketch(const sketch::Plane& plane, const QString& description)
 {
-    sketch_.emplace();
-    sketchPlane_ = plane;
-    sketchPlaneName_ = description;
-    viewport_->beginSketch(plane);
-    statusBar()->showMessage(QStringLiteral("Sketch en %1").arg(description));
+    sketch_ = std::make_unique<SketchSession>(*viewport_, plane);
+    connect(sketch_.get(), &SketchSession::toolChanged, this, [this](SketchSession::Tool tool) {
+        for (const auto& [kind, action] : toolActions_) {
+            action->setChecked(kind == tool);
+        }
+    });
+    connect(sketch_.get(), &SketchSession::hintChanged, this, [this, description](const QString& hint) {
+        statusBar()->showMessage(hint.isEmpty() ? QStringLiteral("Sketch en %1").arg(description) : hint);
+    });
+    connect(sketch_.get(), &SketchSession::statusChanged, sketchStatusLabel_, &QLabel::setText);
+    statusBar()->showMessage(QStringLiteral("Sketch en %1 · L línea, R rectángulo, C círculo, A arco").arg(description));
+    sketchStatusLabel_->setText(QStringLiteral("Sin geometría"));
     updateSketchActions();
 }
 
@@ -229,14 +264,17 @@ void MainWindow::finishSketch()
     if (!sketch_) {
         return;
     }
-    viewport_->endSketch();
     sketch_.reset();
+    sketchStatusLabel_->clear();
     statusBar()->clearMessage();
     updateSketchActions();
 }
 
 void MainWindow::cancel()
 {
+    if (sketch_ && sketch_->cancel()) {
+        return;
+    }
     if (viewport_->isPickingSketchPlane()) {
         viewport_->cancelPickSketchPlane();
         statusBar()->clearMessage();
@@ -248,8 +286,14 @@ void MainWindow::updateSketchActions()
 {
     const bool picking = viewport_->isPickingSketchPlane();
     createSketchAction_->setEnabled(!sketch_ && !picking);
-    finishSketchAction_->setEnabled(sketch_.has_value());
-    lookAtSketchAction_->setEnabled(sketch_.has_value());
+    finishSketchAction_->setEnabled(sketch_ != nullptr);
+    lookAtSketchAction_->setEnabled(sketch_ != nullptr);
+    for (const auto& [tool, action] : toolActions_) {
+        action->setEnabled(sketch_ != nullptr);
+        if (!sketch_) {
+            action->setChecked(false);
+        }
+    }
 }
 
 } // namespace nuf::app
