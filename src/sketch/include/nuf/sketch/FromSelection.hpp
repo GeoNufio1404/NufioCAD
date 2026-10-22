@@ -14,6 +14,7 @@ namespace nuf::sketch {
 //   Coincident     2 puntos | punto + curva (punto sobre la curva)
 //   Horizontal…    1 o más líneas (una por línea) | 2 puntos
 //   Parallel, Perpendicular, Collinear, Tangent, Concentric   2 curvas
+//   Tangent        también 2 extremos de curvas (tangentes en la unión)
 //   Parallel, Collinear, Equal   también más de 2 (la primera con cada otra)
 //   Midpoint       punto + línea
 //   Symmetric      2 puntos + línea (o + un tercer punto como centro)

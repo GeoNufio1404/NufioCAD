@@ -83,6 +83,7 @@ Constraint Constraint::tangent(EntityId a, EntityId b)
 {
     return make(ConstraintType::Tangent, Ref::of(a), Ref::of(b));
 }
+Constraint Constraint::tangentAt(Ref a, Ref b) { return make(ConstraintType::Tangent, a, b); }
 Constraint Constraint::equal(EntityId a, EntityId b)
 {
     return make(ConstraintType::Equal, Ref::of(a), Ref::of(b));
@@ -317,10 +318,23 @@ void Sketch::validate(const Constraint& c) const
     case ConstraintType::Angle:
         ok = twoLines();
         break;
-    case ConstraintType::Tangent:
-        ok = isCurve(c.first) && isCurve(c.second) && c.first.entity != c.second.entity
-             && !(isLine(c.first) && isLine(c.second));
+    case ConstraintType::Tangent: {
+        // Extremo de una línea o un arco.
+        const auto isEndpoint = [&](Ref r) {
+            const Entity* e = entity(r.entity);
+            return e && (r.part == Part::Start || r.part == Part::End)
+                   && (std::holds_alternative<Line>(e->geometry) || std::holds_alternative<Arc>(e->geometry));
+        };
+        const auto lineEntity = [&](Ref r) { return isLine(Ref::of(r.entity)); };
+        if (c.first.part == Part::Whole) {
+            ok = isCurve(c.first) && isCurve(c.second) && c.first.entity != c.second.entity
+                 && !(isLine(c.first) && isLine(c.second));
+        } else {
+            ok = isEndpoint(c.first) && isEndpoint(c.second) && c.first.entity != c.second.entity
+                 && !(lineEntity(c.first) && lineEntity(c.second));
+        }
         break;
+    }
     case ConstraintType::Equal:
         ok = twoLines()
              || (isRound(c.first) && isRound(c.second) && c.first.entity != c.second.entity);

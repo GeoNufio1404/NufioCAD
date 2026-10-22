@@ -94,7 +94,8 @@ enum class ConstraintType : std::uint8_t {
     Vertical,       // línea | punto, punto
     Parallel,       // línea, línea
     Perpendicular,  // línea, línea
-    Tangent,        // curva, curva (no ambas líneas)
+    Tangent,        // curva, curva (no ambas líneas) | extremo, extremo: une los dos
+                    // extremos y deja las curvas tangentes en ese punto
     Equal,          // línea, línea (longitud) | círculo/arco, círculo/arco (radio)
     Collinear,      // línea, línea
     Concentric,     // círculo/arco, círculo/arco
@@ -132,6 +133,8 @@ struct Constraint {
     static Constraint parallel(EntityId a, EntityId b);
     static Constraint perpendicular(EntityId a, EntityId b);
     static Constraint tangent(EntityId a, EntityId b);
+    // Tangencia en el punto de unión de dos curvas (Ref::start/end de cada una).
+    static Constraint tangentAt(Ref a, Ref b);
     static Constraint equal(EntityId a, EntityId b);
     static Constraint collinear(EntityId a, EntityId b);
     static Constraint concentric(EntityId a, EntityId b);

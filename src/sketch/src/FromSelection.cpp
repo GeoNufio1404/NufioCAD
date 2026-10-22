@@ -100,6 +100,9 @@ std::vector<Constraint> constraintsFromSelection(ConstraintType type, const Sket
     case ConstraintType::Tangent:
         if (total == 2 && c.curves.size() == 2) {
             result.push_back(Constraint::tangent(c.curves[0].entity, c.curves[1].entity));
+        } else if (total == 2 && c.points.size() == 2) {
+            // Dos extremos: tangencia en el punto de unión.
+            result.push_back(Constraint::tangentAt(c.points[0], c.points[1]));
         }
         break;
     case ConstraintType::Concentric:

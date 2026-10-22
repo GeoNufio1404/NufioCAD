@@ -7,7 +7,10 @@ nuf_add_library(sketch SOURCES
     src/Profiles.cpp
     src/Sketch.cpp
     src/Snap.cpp
+    src/ToolSupport.cpp
     src/Tools.cpp
+    src/ShapeTools.cpp
+    src/CircleTools.cpp
     src/PlaneGcsSolver.cpp)
 
 target_link_libraries(nuf_sketch PRIVATE planegcs::planegcs)

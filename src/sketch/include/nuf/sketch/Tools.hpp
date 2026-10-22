@@ -64,4 +64,34 @@ std::unique_ptr<SketchTool> makeCircleTool();
 // Arco por 3 puntos: inicio, fin y un punto por el que pasa.
 std::unique_ptr<SketchTool> makeArcTool();
 
+// --- Variantes (Fase 2b) ---------------------------------------------------
+
+// Rectángulo por 3 puntos: un lado (girado como se quiera) y la altura.
+std::unique_ptr<SketchTool> makeThreePointRectangleTool();
+// Rectángulo por el centro y una esquina.
+std::unique_ptr<SketchTool> makeCenterRectangleTool();
+
+// Círculo por los dos extremos de un diámetro.
+std::unique_ptr<SketchTool> makeTwoPointCircleTool();
+// Círculo por 3 puntos.
+std::unique_ptr<SketchTool> makeThreePointCircleTool();
+// Círculo tangente a 2 o 3 curvas: se eligen las curvas y un clic indica
+// por dónde va (el solver lo ajusta).
+std::unique_ptr<SketchTool> makeTangentCircleTool(int curves);
+
+// Arco por centro, inicio y fin (el sentido lo da el movimiento del cursor).
+std::unique_ptr<SketchTool> makeCenterArcTool();
+// Arco tangente desde el extremo de una línea o arco.
+std::unique_ptr<SketchTool> makeTangentArcTool();
+
+// Polígono regular: inscrito (centro y vértice), circunscrito (centro y
+// punto medio de un lado) o por un lado (sus dos vértices).
+enum class PolygonMode { Inscribed, Circumscribed, Edge };
+std::unique_ptr<SketchTool> makePolygonTool(PolygonMode mode);
+
+// Ranura: centro a centro, por su longitud total o desde el punto central;
+// el tercer clic da el ancho.
+enum class SlotMode { CenterToCenter, Overall, CenterPoint };
+std::unique_ptr<SketchTool> makeSlotTool(SlotMode mode);
+
 } // namespace nuf::sketch

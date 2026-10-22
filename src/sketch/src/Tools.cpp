@@ -1,5 +1,7 @@
 #include <nuf/sketch/Tools.hpp>
 
+#include "ToolSupport.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <numbers>
@@ -9,57 +11,7 @@ namespace nuf::sketch {
 
 namespace {
 
-constexpr double kMinLength = 1e-6;
-
-double distance(Vec2 a, Vec2 b) { return std::hypot(b.x - a.x, b.y - a.y); }
-
-// Une un punto recién creado con aquello a lo que se ajustó el cursor.
-void attach(Sketch& sketch, Ref created, const Snap& snapped)
-{
-    switch (snapped.kind) {
-    case SnapKind::Point:
-    case SnapKind::Center:
-        sketch.addConstraint(Constraint::coincident(created, snapped.ref));
-        break;
-    case SnapKind::Midpoint:
-        sketch.addConstraint(Constraint::midpoint(created, snapped.ref.entity));
-        break;
-    case SnapKind::OnCurve:
-        sketch.addConstraint(Constraint::pointOnObject(created, snapped.ref.entity));
-        break;
-    case SnapKind::Intersection:
-        sketch.addConstraint(Constraint::pointOnObject(created, snapped.ref.entity));
-        sketch.addConstraint(Constraint::pointOnObject(created, snapped.ref2.entity));
-        break;
-    case SnapKind::None:
-    case SnapKind::Grid:
-        break;
-    }
-}
-
-// Si el segmento start→end está a menos de kStraightenAngle de la horizontal
-// o la vertical, lo endereza. No si el extremo se apoya en algo (moverlo
-// rompería esa restricción) ni con Ctrl (snap.free).
-enum class Straight { None, Horizontal, Vertical };
-
-Straight straighten(Vec2 start, Snap& end)
-{
-    if (end.free || (end.kind != SnapKind::None && end.kind != SnapKind::Grid)) {
-        return Straight::None;
-    }
-    const double dx = end.point.x - start.x;
-    const double dy = end.point.y - start.y;
-    const double tolerance = std::tan(kStraightenAngle);
-    if (std::abs(dx) > kMinLength && std::abs(dy) <= tolerance * std::abs(dx)) {
-        end.point.y = start.y;
-        return Straight::Horizontal;
-    }
-    if (std::abs(dy) > kMinLength && std::abs(dx) <= tolerance * std::abs(dy)) {
-        end.point.x = start.x;
-        return Straight::Vertical;
-    }
-    return Straight::None;
-}
+using namespace detail;
 
 // --- Línea -------------------------------------------------------------------
 
@@ -401,41 +353,6 @@ private:
 
 // --- Arco por 3 puntos -------------------------------------------------------------
 
-// Arco antihorario de a a b que pasa por through. Si through queda en el otro
-// lado, el arco va de b a a (swapped = true). nullopt si están alineados.
-struct ArcFit {
-    Arc arc;
-    bool swapped = false;
-};
-
-std::optional<ArcFit> fitArc(Vec2 a, Vec2 b, Vec2 through)
-{
-    // Centro del círculo que pasa por los tres puntos.
-    const double d = 2.0 * (a.x * (b.y - through.y) + b.x * (through.y - a.y) + through.x * (a.y - b.y));
-    const double scale = std::max({distance(a, b), distance(a, through), distance(b, through)});
-    if (std::abs(d) < 1e-9 * scale * scale) {
-        return std::nullopt;
-    }
-    const double a2 = a.x * a.x + a.y * a.y;
-    const double b2 = b.x * b.x + b.y * b.y;
-    const double t2 = through.x * through.x + through.y * through.y;
-    const Vec2 center{(a2 * (b.y - through.y) + b2 * (through.y - a.y) + t2 * (a.y - b.y)) / d,
-                      (a2 * (through.x - b.x) + b2 * (a.x - through.x) + t2 * (b.x - a.x)) / d};
-    const double radius = distance(center, a);
-
-    const auto angle = [&](Vec2 p) { return std::atan2(p.y - center.y, p.x - center.x); };
-    const auto ccw = [](double from, double to) {  // recorrido antihorario de from a to, en [0, 2π)
-        double delta = std::fmod(to - from, 2.0 * std::numbers::pi);
-        return delta < 0.0 ? delta + 2.0 * std::numbers::pi : delta;
-    };
-    const double angleA = angle(a);
-    const double angleB = angle(b);
-    const bool throughOnWay = ccw(angleA, angle(through)) < ccw(angleA, angleB);
-    if (throughOnWay) {
-        return ArcFit{Arc{center, radius, angleA, angleA + ccw(angleA, angleB)}, false};
-    }
-    return ArcFit{Arc{center, radius, angleB, angleB + ccw(angleB, angleA)}, true};
-}
 
 class ArcTool final : public SketchTool {
 public:

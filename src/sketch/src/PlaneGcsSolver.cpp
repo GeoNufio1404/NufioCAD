@@ -218,6 +218,18 @@ private:
 
     GCS::Line& lineOf(Ref r) { return lines_[geo(r.entity).index]; }
 
+    GCS::Curve& curveOf(Ref r)
+    {
+        const Geo& g = geo(r.entity);
+        switch (g.kind) {
+        case Geo::Kind::Line: return lines_[g.index];
+        case Geo::Kind::Arc: return arcs_[g.index];
+        case Geo::Kind::Circle: return circles_[g.index];
+        case Geo::Kind::Point: break;
+        }
+        throw std::logic_error("La entidad no es una curva");
+    }
+
     bool isLine(Ref r) const { return geo(r.entity).kind == Geo::Kind::Line; }
     bool isArc(Ref r) const { return geo(r.entity).kind == Geo::Kind::Arc; }
 
@@ -300,6 +312,18 @@ private:
             s.addConstraintPerpendicular(lineOf(c.first), lineOf(c.second), tag);
             break;
         case ConstraintType::Tangent: {
+            if (c.first.part != Part::Whole) {
+                // En un extremo, como FreeCAD: puntos unidos y ángulo entre las
+                // curvas en ese punto de 0 o π (el más cercano al actual).
+                GCS::Point& p = pointOf(c.first);
+                GCS::Curve& a = curveOf(c.first);
+                GCS::Curve& b = curveOf(c.second);
+                double err = std::remainder(s.calculateAngleViaPoint(a, b, p), 2.0 * std::numbers::pi);
+                const double angle = std::abs(err) > std::numbers::pi / 2.0 ? std::numbers::pi : 0.0;
+                s.addConstraintP2PCoincident(p, pointOf(c.second), tag);
+                s.addConstraintAngleViaPoint(a, b, p, param(angle, 0), tag);
+                break;
+            }
             Ref line = isLine(c.first) ? c.first : (isLine(c.second) ? c.second : Ref{});
             if (!line.empty()) {
                 Ref other = line.entity == c.first.entity ? c.second : c.first;

@@ -149,6 +149,9 @@ std::vector<Ref> subjects(const Constraint& c)
     case ConstraintType::PointOnObject:
     case ConstraintType::Midpoint:
         return {c.first};
+    case ConstraintType::Tangent:
+        // En un extremo, un solo icono junto al punto de unión.
+        return c.first.part == Part::Whole ? std::vector<Ref>{c.first, c.second} : std::vector<Ref>{c.first};
     default:
         return {c.first, c.second};
     }
