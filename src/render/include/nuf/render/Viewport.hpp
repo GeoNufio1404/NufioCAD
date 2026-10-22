@@ -74,6 +74,9 @@ public:
     // un doble clic, sketchDoubleClicked. Con una herramienta de dibujo
     // activa, además, el arrastre izquierdo no orbita.
     void setSketchToolActive(bool active);
+    // Llamado al recibir sketchPressed: este arrastre izquierdo mueve
+    // geometría (sketchDragged / sketchDragFinished) en lugar de orbitar.
+    void grabSketchDrag();
     // Tamaño de un píxel en el plano del sketch (mm) y paso de la rejilla.
     double sketchPixelSize() const;
     double sketchGridStep() const;
@@ -88,6 +91,10 @@ signals:
     void sketchCursorMoved(bool hasPoint, double x, double y);
     void sketchClicked(double x, double y, Qt::KeyboardModifiers modifiers);
     void sketchDoubleClicked(double x, double y);
+    // Botón izquierdo pulsado en el sketch sin herramienta activa.
+    void sketchPressed(double x, double y);
+    void sketchDragged(double x, double y);
+    void sketchDragFinished();
 
 protected:
     void initializeGL() override;

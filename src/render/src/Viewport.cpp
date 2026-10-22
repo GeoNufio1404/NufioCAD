@@ -864,6 +864,7 @@ public:
     Handle(AIS_ViewCube) viewCube;
     Mode mode = Mode::Model;
     bool sketchToolActive = false;
+    bool sketchDragging = false;
     std::optional<sketch::Sketch> shownSketch;
     std::vector<sketch::EntityId> shownUnderconstrained;
     SketchHighlight shownHighlight;
@@ -1208,13 +1209,20 @@ void Viewport::setSketchToolActive(bool active)
     setCursor(active ? Qt::CrossCursor : Qt::ArrowCursor);
 }
 
+void Viewport::grabSketchDrag()
+{
+    if (impl_->leftPressed) {
+        impl_->sketchDragging = true;
+    }
+}
+
 double Viewport::sketchPixelSize() const { return impl_->pixelSize(); }
 
 double Viewport::sketchGridStep() const { return impl_->gridStep(); }
 
 Qt::MouseButtons Viewport::navigationButtons(Qt::MouseButtons buttons) const
 {
-    if (impl_->sketchToolActive && isSketching()) {
+    if ((impl_->sketchToolActive || impl_->sketchDragging) && isSketching()) {
         buttons &= ~Qt::MouseButtons(Qt::LeftButton);
     }
     return buttons;
@@ -1300,12 +1308,18 @@ void Viewport::changeEvent(QEvent* event)
 
 void Viewport::mousePressEvent(QMouseEvent* event)
 {
+    const qreal ratio = devicePixelRatioF();
+    const Graphic3d_Vec2i point(int(event->position().x() * ratio), int(event->position().y() * ratio));
     if (event->button() == Qt::LeftButton && isSketching()) {
         impl_->leftPressed = true;
         impl_->pressPosition = event->position();
+        // Quien escucha puede llamar a grabSketchDrag() para arrastrar geometría.
+        if (!impl_->sketchToolActive) {
+            if (const auto p = impl_->sketchPointAt(point)) {
+                emit sketchPressed(p->x, p->y);
+            }
+        }
     }
-    const qreal ratio = devicePixelRatioF();
-    const Graphic3d_Vec2i point(int(event->position().x() * ratio), int(event->position().y() * ratio));
     if (impl_->UpdateMouseButtons(point, toOcctButtons(navigationButtons(event->buttons())),
                                   toOcctModifiers(event->modifiers()), false)) {
         update();
@@ -1316,7 +1330,18 @@ void Viewport::mouseReleaseEvent(QMouseEvent* event)
 {
     const qreal ratio = devicePixelRatioF();
     const Graphic3d_Vec2i point(int(event->position().x() * ratio), int(event->position().y() * ratio));
-    if (event->button() == Qt::LeftButton && impl_->leftPressed) {
+    if (event->button() == Qt::LeftButton && impl_->sketchDragging) {
+        impl_->sketchDragging = false;
+        impl_->leftPressed = false;
+        const bool moved = (event->position() - impl_->pressPosition).manhattanLength() > 5.0;
+        emit sketchDragFinished();
+        // Sin moverse, cuenta como un clic (selección).
+        if (!moved) {
+            if (const auto p = impl_->sketchPointAt(point)) {
+                emit sketchClicked(p->x, p->y, event->modifiers());
+            }
+        }
+    } else if (event->button() == Qt::LeftButton && impl_->leftPressed) {
         impl_->leftPressed = false;
         // Un clic, no un arrastre; tras un doble clic se ignora la suelta.
         const QPointF moved = event->position() - impl_->pressPosition;
@@ -1361,6 +1386,10 @@ void Viewport::mouseMoveEvent(QMouseEvent* event)
     if (isSketching()) {
         const auto p = impl_->sketchPointAt(point);
         emit sketchCursorMoved(p.has_value(), p ? p->x : 0.0, p ? p->y : 0.0);
+        const bool moved = (event->position() - impl_->pressPosition).manhattanLength() > 5.0;
+        if (impl_->sketchDragging && p && moved) {
+            emit sketchDragged(p->x, p->y);
+        }
     }
 }
 

@@ -76,6 +76,10 @@ private:
     void cursorMoved(bool hasPoint, double x, double y);
     void clicked(double x, double y, Qt::KeyboardModifiers modifiers);
     void doubleClicked(double x, double y);
+    // Arrastrar geometría sin herramienta activa.
+    void pressed(double x, double y);
+    void dragged(double x, double y);
+    void dragFinished();
     // Pide un valor nuevo para la cota; false si se canceló.
     bool askDimensionValue(sketch::Constraint& dimension);
     void editDimension(sketch::ConstraintId id);
@@ -105,6 +109,15 @@ private:
     sketch::ConstraintId hoveredConstraint_ = 0;
     std::vector<sketch::Sketch> undo_;
     std::vector<sketch::Sketch> redo_;
+
+    // Arrastre en curso: qué se agarró, dónde y cómo estaba el sketch.
+    struct Drag {
+        sketch::Ref what;
+        sketch::Vec2 grabbedAt;
+        sketch::Sketch before;
+        bool moved = false;
+    };
+    std::optional<Drag> drag_;
 };
 
 } // namespace nuf::app

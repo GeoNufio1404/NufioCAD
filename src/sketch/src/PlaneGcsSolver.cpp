@@ -22,7 +22,7 @@ namespace {
 // que no los mueve al crecer.
 class GcsProblem {
 public:
-    explicit GcsProblem(Sketch& sketch) : sketch_(sketch)
+    GcsProblem(Sketch& sketch, const std::vector<DragTarget>& drag) : sketch_(sketch)
     {
         for (const Entity& e : sketch.entities()) {
             addEntity(e);
@@ -37,6 +37,17 @@ public:
         for (const Constraint& c : sketch.constraints()) {
             if (c.driving && c.type != ConstraintType::Fix) {
                 addConstraint(c);
+            }
+        }
+        // Arrastre: restricciones temporales (etiqueta negativa) que PlaneGCS
+        // resuelve con menos prioridad que las del sketch, como en FreeCAD.
+        for (const DragTarget& d : drag) {
+            GCS::Point target = point(d.target, 0);
+            const bool curve = d.what.part == Part::Whole && geo(d.what.entity).kind != Geo::Kind::Point;
+            if (curve && (geo(d.what.entity).kind == Geo::Kind::Circle || isArc(d.what))) {
+                system_.addConstraintPointOnCircle(target, roundOf(d.what), GCS::DefaultTemporaryConstraint);
+            } else if (!curve) {
+                system_.addConstraintP2PCoincident(pointOf(d.what), target, GCS::DefaultTemporaryConstraint);
             }
         }
         for (const auto& [param, owner] : owner_) {
@@ -447,7 +458,11 @@ private:
 
 class PlaneGcsSolver final : public ISolver {
 public:
-    SolveResult solve(Sketch& sketch) override { return GcsProblem(sketch).solve(); }
+    SolveResult solve(Sketch& sketch) override { return GcsProblem(sketch, {}).solve(); }
+    SolveResult drag(Sketch& sketch, const std::vector<DragTarget>& targets) override
+    {
+        return GcsProblem(sketch, targets).solve();
+    }
 };
 
 } // namespace

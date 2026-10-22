@@ -30,6 +30,9 @@ SketchSession::SketchSession(render::Viewport& viewport, const sketch::Plane& pl
     connect(&viewport_, &render::Viewport::sketchCursorMoved, this, &SketchSession::cursorMoved);
     connect(&viewport_, &render::Viewport::sketchClicked, this, &SketchSession::clicked);
     connect(&viewport_, &render::Viewport::sketchDoubleClicked, this, &SketchSession::doubleClicked);
+    connect(&viewport_, &render::Viewport::sketchPressed, this, &SketchSession::pressed);
+    connect(&viewport_, &render::Viewport::sketchDragged, this, &SketchSession::dragged);
+    connect(&viewport_, &render::Viewport::sketchDragFinished, this, &SketchSession::dragFinished);
     solveAndShow();
 }
 
@@ -275,6 +278,65 @@ void SketchSession::doubleClicked(double x, double y)
         showPreview();
         emit hintChanged(QString::fromStdString(tool_->hint()));
     }
+}
+
+void SketchSession::pressed(double x, double y)
+{
+    if (tool_ || annotationAt({x, y}) != 0) {
+        return;
+    }
+    const sketch::Ref what = sketch::pick(sketch_, {x, y}, kSnapRadiusPx * viewport_.sketchPixelSize());
+    const sketch::Entity* e = sketch_.entity(what.entity);
+    if (!e || e->reference) {
+        return;  // en vacío (o sobre el origen y los ejes) el arrastre orbita
+    }
+    drag_ = Drag{what, {x, y}, sketch_, false};
+    viewport_.grabSketchDrag();
+}
+
+void SketchSession::dragged(double x, double y)
+{
+    if (!drag_) {
+        return;
+    }
+    // Se parte siempre del sketch original: así el arrastre no acumula error.
+    const sketch::Sketch& start = drag_->before;
+    const sketch::Vec2 delta{x - drag_->grabbedAt.x, y - drag_->grabbedAt.y};
+    std::vector<sketch::DragTarget> targets;
+    const sketch::Entity* e = start.entity(drag_->what.entity);
+    if (start.point(drag_->what)) {
+        const sketch::Vec2 p = *start.point(drag_->what);
+        targets.push_back({drag_->what, {p.x + delta.x, p.y + delta.y}});
+    } else if (const auto* line = std::get_if<sketch::Line>(&e->geometry)) {
+        // La línea entera se desplaza.
+        targets.push_back({sketch::Ref::start(e->id), {line->start.x + delta.x, line->start.y + delta.y}});
+        targets.push_back({sketch::Ref::end(e->id), {line->end.x + delta.x, line->end.y + delta.y}});
+    } else {
+        // Contorno de un círculo o arco: cambia el radio.
+        targets.push_back({drag_->what, {x, y}});
+    }
+
+    sketch::Sketch moved = start;
+    const sketch::SolveResult result = solver_->drag(moved, targets);
+    if (result.status != sketch::SolveStatus::Solved) {
+        return;  // se queda en la última posición válida
+    }
+    sketch_ = std::move(moved);
+    drag_->moved = true;
+    underconstrained_ = result.underconstrained;
+    showSketch();
+}
+
+void SketchSession::dragFinished()
+{
+    if (!drag_) {
+        return;
+    }
+    if (drag_->moved) {
+        remember(std::move(drag_->before));
+        solveAndShow();
+    }
+    drag_.reset();
 }
 
 sketch::ConstraintId SketchSession::annotationAt(sketch::Vec2 point) const

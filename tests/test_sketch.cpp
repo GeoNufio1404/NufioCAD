@@ -285,3 +285,30 @@ TEST_CASE("Borrar una entidad borra sus restricciones", "[sketch]")
     // Los ids no se reutilizan.
     REQUIRE(s.addPoint({0, 0}) > b);
 }
+
+TEST_CASE("Arrastrar respeta las restricciones", "[sketch][drag]")
+{
+    Sketch s;
+    EntityId line = s.addLine({0, 0}, {10, 0});
+    s.addConstraint(Constraint::coincident(Ref::start(line), Ref::of(Sketch::kOrigin)));
+    s.addConstraint(Constraint::horizontal(line));
+    auto solver = makePlaneGcsSolver();
+
+    // El extremo libre sigue al cursor solo en X: la línea es horizontal.
+    auto result = solver->drag(s, {{Ref::end(line), {25, 7}}});
+    REQUIRE(result.status == SolveStatus::Solved);
+    requirePoint(s, Ref::end(line), 25.0, 0.0);
+    requirePoint(s, Ref::start(line), 0.0, 0.0);
+    REQUIRE(result.degreesOfFreedom == 1);  // el arrastre no cuenta como restricción
+
+    // Con la longitud acotada ya no se mueve.
+    s.addConstraint(Constraint::length(line, 25.0));
+    solver->drag(s, {{Ref::end(line), {40, 0}}});
+    requirePoint(s, Ref::end(line), 25.0, 0.0);
+
+    // El contorno de un círculo arrastrado cambia el radio.
+    EntityId circle = s.addCircle({50, 50}, 5);
+    s.addConstraint(Constraint::fix(Ref::center(circle)));
+    solver->drag(s, {{Ref::of(circle), {50, 62}}});
+    REQUIRE_THAT(std::get<Circle>(s.entity(circle)->geometry).radius, WithinAbs(12.0, 1e-6));
+}
