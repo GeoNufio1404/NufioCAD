@@ -1,6 +1,7 @@
 #include <nuf/render/Viewport.hpp>
 
 #include <nuf/sketch/Annotations.hpp>
+#include <nuf/sketch/Profiles.hpp>
 
 #include <AIS_AnimationCamera.hxx>
 #include <AIS_InteractiveContext.hxx>
@@ -13,7 +14,13 @@
 #include <BRepAlgoAPI_Cut.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepBndLib.hxx>
+#include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
+#include <BRepBuilderAPI_MakeWire.hxx>
+#include <BRep_Builder.hxx>
+#include <GC_MakeArcOfCircle.hxx>
+#include <TopoDS_Compound.hxx>
+#include <gp_Circ.hxx>
 #include <BRepPrimAPI_MakeBox.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
 #include <Bnd_Box.hxx>
@@ -165,6 +172,67 @@ sketch::Vec3 toVec3(const gp_XYZ& v) { return {v.X(), v.Y(), v.Z()}; }
 gp_Ax3 toAx3(const sketch::Plane& plane)
 {
     return gp_Ax3(toPnt(plane.origin), toDir(plane.normal), toDir(plane.xAxis));
+}
+
+// Caras planas de los perfiles cerrados del sketch (para sombrearlos). En la
+// Fase 3 esto pasa a geometry/, que lo necesitará para extruir.
+TopoDS_Shape profileFaces(const sketch::Sketch& sketch, const gp_Ax3& plane)
+{
+    const auto at = [&](sketch::Vec2 p) {
+        return plane.Location().Translated(gp_Vec(plane.XDirection()) * p.x + gp_Vec(plane.YDirection()) * p.y);
+    };
+    const auto circleOf = [&](sketch::Vec2 center, double radius) {
+        return gp_Circ(gp_Ax2(at(center), plane.Direction(), plane.XDirection()), radius);
+    };
+    const auto wireOf = [&](const sketch::Loop& loop) -> std::optional<TopoDS_Wire> {
+        BRepBuilderAPI_MakeWire wire;
+        for (const sketch::ProfileEdge& pe : loop.edges) {
+            const sketch::Entity* e = sketch.entity(pe.entity);
+            if (!e) {
+                return std::nullopt;
+            }
+            TopoDS_Edge edge;
+            if (const auto* l = std::get_if<sketch::Line>(&e->geometry)) {
+                edge = BRepBuilderAPI_MakeEdge(at(l->start), at(l->end));
+            } else if (const auto* a = std::get_if<sketch::Arc>(&e->geometry)) {
+                GC_MakeArcOfCircle arc(circleOf(a->center, a->radius), a->startAngle, a->endAngle, Standard_True);
+                if (!arc.IsDone()) {
+                    return std::nullopt;
+                }
+                edge = BRepBuilderAPI_MakeEdge(arc.Value());
+            } else if (const auto* c = std::get_if<sketch::Circle>(&e->geometry)) {
+                edge = BRepBuilderAPI_MakeEdge(circleOf(c->center, c->radius));
+            }
+            if (pe.reversed) {
+                edge.Reverse();
+            }
+            wire.Add(edge);
+            if (!wire.IsDone()) {
+                return std::nullopt;
+            }
+        }
+        return wire.Wire();
+    };
+
+    BRep_Builder builder;
+    TopoDS_Compound compound;
+    builder.MakeCompound(compound);
+    for (const sketch::Profile& profile : sketch::findProfiles(sketch)) {
+        const auto outer = wireOf(profile.outer);
+        if (!outer) {
+            continue;
+        }
+        BRepBuilderAPI_MakeFace face(gp_Pln(plane), *outer, Standard_True);
+        for (const sketch::Loop& hole : profile.holes) {
+            if (const auto inner = wireOf(hole)) {
+                face.Add(TopoDS::Wire(inner->Reversed()));
+            }
+        }
+        if (face.IsDone()) {
+            builder.Add(compound, face.Face());
+        }
+    }
+    return compound;
 }
 
 // Durante la elección del plano del sketch solo se aceptan caras planas de la
@@ -476,6 +544,11 @@ public:
         drawing->font = pickLabelFont();
         preview = new SketchDrawing();
         preview->SetZLayer(Graphic3d_ZLayerId_Topmost);
+        profiles = new AIS_Shape(TopoDS_Shape());
+        profiles->SetZLayer(Graphic3d_ZLayerId_Topmost);
+        profiles->SetColor(rgb(0x6C, 0xA6, 0xFF));
+        profiles->SetTransparency(0.82);
+        profiles->Attributes()->SetFaceBoundaryDraw(false);
     }
 
     enum class Mode { Model, PickPlane, Sketch };
@@ -596,6 +669,7 @@ public:
         context->Erase(grid, false);
         context->Erase(drawing, false);
         context->Erase(preview, false);
+        context->Erase(profiles, false);
         shownSketch.reset();
         context->Activate(part, AIS_Shape::SelectionMode(TopAbs_FACE));
         context->Activate(part, AIS_Shape::SelectionMode(TopAbs_EDGE));
@@ -662,6 +736,15 @@ public:
         shownUnderconstrained = underconstrained;
         shownHighlight = highlight;
         rebuildSketch();
+
+        // Regiones cerradas, sombreadas como en Fusion.
+        profiles->SetShape(profileFaces(sketch, toAx3(sketchPlane)));
+        profiles->SetToUpdate();
+        if (context->IsDisplayed(profiles)) {
+            context->Redisplay(profiles, false);
+        } else {
+            context->Display(profiles, AIS_Shaded, -1, false);
+        }
     }
 
     // Vuelve a dibujar el último sketch mostrado (también al cambiar el zoom,
@@ -1009,6 +1092,7 @@ private:
     Handle(SketchGrid) grid;
     Handle(SketchDrawing) drawing;
     Handle(SketchDrawing) preview;
+    Handle(AIS_Shape) profiles;
     sketch::Plane sketchPlane;
     bool darkTheme = true;
 };

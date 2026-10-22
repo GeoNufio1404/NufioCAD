@@ -4,6 +4,7 @@ nuf_add_library(sketch SOURCES
     src/FromSelection.cpp
     src/Pick.cpp
     src/Plane.cpp
+    src/Profiles.cpp
     src/Sketch.cpp
     src/Snap.cpp
     src/Tools.cpp
