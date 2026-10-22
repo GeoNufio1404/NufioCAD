@@ -75,10 +75,51 @@ Un CAD paramétrico de escritorio para **Windows y Linux**, **offline y con arch
 - Selección de caras y aristas con resaltado al pasar el cursor.
 
 ### Fase 2 — Sketcher 2D
-- Sketch sobre un plano o una cara seleccionada.
-- Líneas, rectángulos, círculos, arcos y splines.
-- Restricciones automáticas y manuales.
-- Cotas editables.
+
+Las variantes de creación (rectángulo por centro, círculo tangente, polígono
+circunscrito…) no son figuras nuevas: se descomponen en unas pocas entidades
+(punto, línea, círculo, arco, elipse, spline) más restricciones que resuelve el
+solver. Por eso la fase se divide así:
+
+**2a — Núcleo** (lo mínimo para que la Fase 3 pueda extruir)
+- Solver de restricciones (PlaneGCS) detrás de `ISolver`.
+- Modelo del sketch: entidades, restricciones y cotas, sin Qt.
+- Modo sketch sobre un plano de origen o una cara plana; la cámara se orienta al plano.
+- Rejilla y ajuste (*snap*) a puntos, extremos, puntos medios, centros e intersecciones.
+- Punto, línea (polilínea continua), rectángulo por 2 esquinas, círculo por centro y radio, arco por 3 puntos.
+- Restricciones: coincidente, horizontal, vertical, paralela, perpendicular, tangente, igual, colineal, concéntrica, punto medio, simétrica y fija.
+- Restricciones automáticas al dibujar, con indicador junto al cursor (y tecla para no aplicarlas).
+- Cotas editables: lineal, alineada, horizontal/vertical, angular, radio y diámetro; cotas de referencia (no restringen). Valores introducidos junto al cursor mientras se dibuja.
+- Estado de la restricción: color según esté sin restringir / totalmente restringido, grados de libertad restantes y aviso de restricciones redundantes o en conflicto.
+- Arrastrar geometría no restringida (el solver la mueve respetando las restricciones).
+- Geometría de construcción (alternar con una tecla).
+- Detección de perfiles cerrados y regiones (incluidas islas), sombreadas en pantalla.
+- Deshacer/rehacer dentro del sketch.
+
+**2b — Variantes de creación**
+- Línea con arco tangente al arrastrar desde el extremo (como Fusion).
+- Rectángulo por 3 puntos (girado) y por centro.
+- Círculo por 2 puntos, por 3 puntos, tangente a 2 entidades y tangente a 3 entidades.
+- Arco por centro, arco tangente y arco por 3 puntos.
+- Polígono inscrito, circunscrito y por lado.
+- Ranura (*slot*): centro a centro, total, por punto central y en arco.
+- Elipse y arco de elipse.
+- Spline por puntos de paso y por puntos de control; restricción de curvatura (G2).
+- Curva cónica.
+
+**2c — Edición del sketch**
+- Recortar, extender y partir (*break*).
+- Empalme y chaflán 2D.
+- Desfase (*offset*).
+- Simetría (espejo) respecto a una línea.
+- Patrones rectangular y circular dentro del sketch.
+- Mover, copiar, rotar y escalar selecciones.
+- Proyectar aristas y caras del modelo al sketch (con vínculo al original) e intersección del modelo con el plano del sketch.
+
+**2d — Extras**
+- Texto (con fuentes del sistema), para grabados y relieves.
+- Imagen de referencia (*canvas*) para calcar.
+- Importar DXF a un sketch.
 
 ### Fase 3 — Modelado básico + timeline
 - Extruir (unir, cortar, nuevo cuerpo).
@@ -138,4 +179,5 @@ Un CAD paramétrico de escritorio para **Windows y Linux**, **offline y con arch
 | Hoja de ruta | ✅ Aprobada |
 | Fase 0 | ✅ Completa — mockups, formatos de archivo, arquitectura, entorno (repositorio con CMake, vcpkg, pruebas y CI) y nombre de trabajo NufioCAD |
 | Fase 1 | 🚧 Implementada y probada en Linux (Fedora): visor OCCT en Qt, órbita/pan/zoom estilo Fusion, ViewCube, resaltado y selección de caras y aristas. Falta probarla en Windows |
-| Fases 2–9 | Pendientes |
+| Fase 2 | 🚧 En curso — 2a (núcleo) |
+| Fases 3–9 | Pendientes |
