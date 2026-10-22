@@ -6,9 +6,15 @@
 #include <nuf/sketch/FromSelection.hpp>
 #include <nuf/sketch/Pick.hpp>
 
+#include <nuf/sketch/Dxf.hpp>
+
 #include <QCursor>
+#include <QFileDialog>
 #include <QGuiApplication>
+#include <QImage>
 #include <QInputDialog>
+
+#include <fstream>
 
 #include <algorithm>
 #include <cmath>
@@ -59,6 +65,7 @@ SketchSession::SketchSession(render::Viewport& viewport, const sketch::Plane& pl
     connect(&viewport_, &render::Viewport::sketchToolDragged, this, &SketchSession::toolDragged);
     connect(&viewport_, &render::Viewport::sketchToolDragReleased, this, &SketchSession::toolDragReleased);
     connect(&viewport_, &render::Viewport::sketchEdgeProjected, this, &SketchSession::addFromModel);
+    connect(&viewport_, &render::Viewport::sketchBoxSelected, this, &SketchSession::boxSelected);
     valueInput_ = new ValueInput(&viewport_);
     connect(valueInput_, &ValueInput::accepted, this, &SketchSession::applyTypedValues);
     solveAndShow();
@@ -125,10 +132,13 @@ void SketchSession::setTool(Tool tool)
     case Tool::PatternRectangular: tool_ = sketch::makeRectangularPatternTool(sketch_, selected); break;
     case Tool::PatternCircular: tool_ = sketch::makeCircularPatternTool(sketch_, selected); break;
     case Tool::Project: tool_.reset(); break;  // lo resuelve el viewport (clic en aristas)
+    case Tool::Text:
+    case Tool::Image: tool_.reset(); break;   // un clic y diálogos (ver clicked)
     }
     toolKind_ = tool;
     viewport_.setSketchProjectMode(tool == Tool::Project);
-    viewport_.setSketchToolActive(tool_ != nullptr || tool == Tool::Project);
+    const bool clickTool = tool == Tool::Project || tool == Tool::Text || tool == Tool::Image;
+    viewport_.setSketchToolActive(tool_ != nullptr || clickTool);
     if (tool_ && cursor_) {
         tool_->move(*cursor_);
     }
@@ -141,6 +151,10 @@ void SketchSession::setTool(Tool tool)
     emit toolChanged(tool);
     if (tool == Tool::Project) {
         emit hintChanged(QStringLiteral("Clic en aristas de la pieza para proyectarlas en el sketch · Esc para terminar"));
+    } else if (tool == Tool::Text) {
+        emit hintChanged(QStringLiteral("Clic donde empieza el texto (su línea base)"));
+    } else if (tool == Tool::Image) {
+        emit hintChanged(QStringLiteral("Clic donde va la esquina inferior izquierda de la imagen"));
     } else {
         emit hintChanged(tool_ ? QString::fromStdString(tool_->hint()) : QString());
     }
@@ -148,7 +162,7 @@ void SketchSession::setTool(Tool tool)
 
 bool SketchSession::cancel()
 {
-    if (toolKind_ == Tool::Project) {
+    if (toolKind_ == Tool::Project || toolKind_ == Tool::Text || toolKind_ == Tool::Image) {
         setTool(Tool::None);
         return true;
     }
@@ -216,6 +230,14 @@ void SketchSession::cursorMoved(bool hasPoint, double x, double y)
 
 void SketchSession::clicked(double x, double y, Qt::KeyboardModifiers modifiers)
 {
+    if (toolKind_ == Tool::Text) {
+        placeText({x, y});
+        return;
+    }
+    if (toolKind_ == Tool::Image) {
+        placeImage({x, y});
+        return;
+    }
     if (!tool_) {
         // Clic: selecciona; Shift+clic: agrega o quita; clic en vacío: limpia.
         const bool add = modifiers & Qt::ShiftModifier;
@@ -257,10 +279,112 @@ void SketchSession::addFromModel(const std::vector<sketch::Geometry>& geometry)
     // arista original y se actualizará con ella).
     remember(sketch_);
     for (const sketch::Geometry& g : geometry) {
-        const sketch::EntityId id = sketch_.addGeometry(g);
-        sketch_.addConstraint(sketch::Constraint::fix(sketch::Ref::of(id)));
+        sketch_.entity(sketch_.addGeometry(g))->locked = true;
     }
     solveAndShow();
+}
+
+void SketchSession::importDxf(const QString& path)
+{
+    std::ifstream in(path.toStdString());
+    if (!in) {
+        emit message(QStringLiteral("No se pudo abrir %1").arg(path));
+        return;
+    }
+    const sketch::DxfDrawing drawing = sketch::readDxf(in);
+    if (drawing.geometry.empty()) {
+        emit message(QStringLiteral("El DXF no tiene geometría que se pueda importar"));
+        return;
+    }
+    remember(sketch_);
+    const auto created = sketch::importDrawing(sketch_, drawing);
+    solveAndShow();
+    QString text = QStringLiteral("Importadas %1 entidades").arg(created.size());
+    if (!drawing.skipped.empty()) {
+        QStringList skipped;
+        for (const std::string& type : drawing.skipped) {
+            skipped << QString::fromStdString(type);
+        }
+        text += QStringLiteral(" (se omitieron: %1)").arg(skipped.join(QStringLiteral(", ")));
+    }
+    emit message(text);
+}
+
+void SketchSession::placeText(sketch::Vec2 at)
+{
+    bool ok = false;
+    const QString text = QInputDialog::getText(&viewport_, QStringLiteral("Texto"), QStringLiteral("Texto:"),
+                                               QLineEdit::Normal, QString(), &ok);
+    if (!ok || text.trimmed().isEmpty()) {
+        return;
+    }
+    const double height = QInputDialog::getDouble(&viewport_, QStringLiteral("Texto"), QStringLiteral("Altura (mm):"),
+                                                  textHeight_, 0.1, 1000.0, 2, &ok);
+    if (!ok) {
+        return;
+    }
+    textHeight_ = height;
+    const std::vector<sketch::Geometry> outline = viewport_.textOutline(text, height);
+    if (outline.empty()) {
+        emit message(QStringLiteral("No se encontró una fuente para el texto"));
+        return;
+    }
+    // Las letras quedan como curvas unidas y fijas (se mueven juntas con la
+    // herramienta Mover; se pueden extruir o grabar).
+    remember(sketch_);
+    for (sketch::EntityId id : sketch::importDrawing(sketch_, {outline, {}}, at)) {
+        sketch_.entity(id)->locked = true;
+    }
+    solveAndShow();
+}
+
+void SketchSession::placeImage(sketch::Vec2 at)
+{
+    const QString path = QFileDialog::getOpenFileName(&viewport_, QStringLiteral("Imagen de referencia"), QString(),
+                                                      QStringLiteral("Imágenes (*.png *.jpg *.jpeg *.bmp)"));
+    if (path.isEmpty()) {
+        return;
+    }
+    const QImage image(path);
+    if (image.isNull()) {
+        emit message(QStringLiteral("No se pudo leer la imagen"));
+        return;
+    }
+    bool ok = false;
+    const double width = QInputDialog::getDouble(&viewport_, QStringLiteral("Imagen de referencia"),
+                                                 QStringLiteral("Ancho (mm):"), 100.0, 0.1, 100000.0, 2, &ok);
+    if (!ok) {
+        return;
+    }
+    const double height = width * image.height() / std::max(1, image.width());
+    viewport_.showSketchImage(path, at, width, height);
+    setTool(Tool::None);
+}
+
+void SketchSession::boxSelected(double x0, double y0, double x1, double y1)
+{
+    // Ventana: entra lo que queda dentro del todo.
+    const double minX = std::min(x0, x1), maxX = std::max(x0, x1);
+    const double minY = std::min(y0, y1), maxY = std::max(y0, y1);
+    const auto inside = [&](sketch::Vec2 p) { return p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY; };
+    for (const sketch::Entity& e : sketch_.entities()) {
+        if (e.reference) {
+            continue;
+        }
+        bool all = true;
+        if (const auto* point = std::get_if<sketch::Point>(&e.geometry)) {
+            all = inside(point->position);
+        } else {
+            for (const sketch::Vec2& p : sketch::polyline(e.geometry)) {
+                all = all && inside(p);
+            }
+        }
+        if (all && std::ranges::find(selection_, sketch::Ref::of(e.id)) == selection_.end()) {
+            selection_.push_back(sketch::Ref::of(e.id));
+        }
+    }
+    showSketch();
+    emit selectionChanged();
 }
 
 void SketchSession::intersectModel()
@@ -318,6 +442,20 @@ void SketchSession::deleteSelection()
     selection_.clear();
     selectedConstraints_.clear();
     emit selectionChanged();
+    solveAndShow();
+}
+
+void SketchSession::toggleLock()
+{
+    const std::vector<sketch::EntityId> ids = selectedEntities();
+    if (ids.empty()) {
+        return;
+    }
+    remember(sketch_);
+    for (sketch::EntityId id : ids) {
+        sketch::Entity* e = sketch_.entity(id);
+        e->locked = !e->locked;
+    }
     solveAndShow();
 }
 

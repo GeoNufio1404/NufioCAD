@@ -10,6 +10,7 @@
 #include <QActionGroup>
 #include <QCloseEvent>
 #include <QDockWidget>
+#include <QFileDialog>
 #include <QInputDialog>
 #include <QKeySequence>
 #include <QLabel>
@@ -207,6 +208,9 @@ void MainWindow::createMenus()
          {{Tool::PatternRectangular, QStringLiteral("Patrón rectangular"), {}},
           {Tool::PatternCircular, QStringLiteral("Patrón circular"), {}}}},
         {QStringLiteral("Proyectar"), {{Tool::Project, QStringLiteral("Proyectar aristas"), QKeySequence(Qt::Key_P | Qt::ShiftModifier)}}},
+        {QStringLiteral("Texto"),
+         {{Tool::Text, QStringLiteral("Texto"), {}},
+          {Tool::Image, QStringLiteral("Imagen de referencia"), {}}}},
     };
     // A partir de esta familia van a la barra «Modificar».
     const std::size_t firstModifyFamily = 9;
@@ -239,6 +243,8 @@ void MainWindow::createMenus()
                                           [this] { sketch_->deleteSelection(); });
     constructionAction_ = sketchMenu->addAction(QStringLiteral("Alternar &construcción"), QKeySequence(Qt::Key_X),
                                                 this, [this] { sketch_->toggleConstruction(); });
+    lockAction_ = sketchMenu->addAction(QStringLiteral("Alternar b&loqueo"), QKeySequence(Qt::Key_K), this,
+                                        [this] { sketch_->toggleLock(); });
 
     // Restricciones y cotas: se seleccionan las entidades y se aplica.
     QMenu* constraintMenu = sketchMenu->addMenu(QStringLiteral("Res&tricciones"));
@@ -266,6 +272,13 @@ void MainWindow::createMenus()
                                              [this] { sketch_->addDimension(); });
     intersectAction_ = sketchMenu->addAction(QStringLiteral("&Intersección con la pieza"), this,
                                              [this] { sketch_->intersectModel(); });
+    importDxfAction_ = sketchMenu->addAction(QStringLiteral("Importar &DXF…"), this, [this] {
+        const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("Importar DXF"), QString(),
+                                                          QStringLiteral("Dibujos DXF (*.dxf)"));
+        if (!path.isEmpty()) {
+            sketch_->importDxf(path);
+        }
+    });
     dimensionAction_->setToolTip(QStringLiteral("Acotar la selección (D)"));
 
     QToolBar* toolbar = addToolBar(QStringLiteral("Sketch"));
@@ -455,8 +468,10 @@ void MainWindow::updateSketchActions()
     }
     deleteAction_->setEnabled(sketch_ && sketch_->hasSelection());
     constructionAction_->setEnabled(sketch_ && sketch_->hasSelection());
+    lockAction_->setEnabled(sketch_ && sketch_->hasSelection());
     dimensionAction_->setEnabled(sketch_ != nullptr);
     intersectAction_->setEnabled(sketch_ != nullptr);
+    importDxfAction_->setEnabled(sketch_ != nullptr);
     for (QAction* action : constraintActions_) {
         action->setEnabled(sketch_ != nullptr);
     }

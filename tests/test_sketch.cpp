@@ -312,3 +312,17 @@ TEST_CASE("Arrastrar respeta las restricciones", "[sketch][drag]")
     solver->drag(s, {{Ref::of(circle), {50, 62}}});
     REQUIRE_THAT(std::get<Circle>(s.entity(circle)->geometry).radius, WithinAbs(12.0, 1e-6));
 }
+
+TEST_CASE("Geometría bloqueada: el solver no la mueve", "[sketch]")
+{
+    Sketch s;
+    EntityId locked = s.addLine({0, 0}, {10, 3});
+    s.entity(locked)->locked = true;
+    EntityId free = s.addLine({10.5, 3.5}, {20, 0});
+    s.addConstraint(Constraint::coincident(Ref::end(locked), Ref::start(free)));
+    auto result = makePlaneGcsSolver()->solve(s);
+    REQUIRE(result.status == SolveStatus::Solved);
+    requirePoint(s, Ref::end(locked), 10.0, 3.0);   // no se movió
+    requirePoint(s, Ref::start(free), 10.0, 3.0);   // la libre fue hacia ella
+    REQUIRE(result.degreesOfFreedom == 2);
+}

@@ -222,12 +222,8 @@ std::vector<EntityId> split(Sketch& sketch, EntityId id, const std::vector<doubl
     std::vector<EntityId> ids{id};
     sketch.entity(id)->geometry = pieces.front();
     for (std::size_t i = 1; i < pieces.size(); ++i) {
-        if (const auto* l = std::get_if<Line>(&pieces[i])) {
-            ids.push_back(sketch.addLine(l->start, l->end, original.construction));
-        } else {
-            const auto& arc = std::get<Arc>(pieces[i]);
-            ids.push_back(sketch.addArc(arc.center, arc.radius, arc.startAngle, arc.endAngle, original.construction));
-        }
+        ids.push_back(sketch.addGeometry(pieces[i], original.construction));
+        sketch.entity(ids.back())->locked = original.locked;
     }
 
     // Tramo que contiene un parámetro (para los puntos apoyados en la curva).
@@ -825,7 +821,12 @@ std::vector<EntityId> mirror(Sketch& sketch, const std::vector<EntityId>& entiti
     };
     const auto reflectAngle = [&](double a) { return 2.0 * alpha - a; };
     const Ref axisRef = Ref::of(axisId);
-    const auto symmetric = [&](Ref a, Ref b) { sketch.addConstraint(Constraint::symmetric(a, b, axisRef)); };
+    bool constrain = true;  // lo bloqueado se copia bloqueado, sin restricciones de simetría
+    const auto symmetric = [&](Ref a, Ref b) {
+        if (constrain) {
+            sketch.addConstraint(Constraint::symmetric(a, b, axisRef));
+        }
+    };
 
     std::vector<EntityId> created;
     for (EntityId id : entities) {
@@ -834,6 +835,7 @@ std::vector<EntityId> mirror(Sketch& sketch, const std::vector<EntityId>& entiti
             continue;
         }
         const Entity src = *e;
+        constrain = !src.locked;
         EntityId dst = 0;
         if (const auto* p = std::get_if<Point>(&src.geometry)) {
             dst = sketch.addPoint(reflect(p->position), src.construction);
@@ -845,14 +847,18 @@ std::vector<EntityId> mirror(Sketch& sketch, const std::vector<EntityId>& entiti
         } else if (const auto* c = std::get_if<Circle>(&src.geometry)) {
             dst = sketch.addCircle(reflect(c->center), c->radius, src.construction);
             symmetric(Ref::center(id), Ref::center(dst));
-            sketch.addConstraint(Constraint::equal(id, dst));
+            if (constrain) {
+                sketch.addConstraint(Constraint::equal(id, dst));
+            }
         } else if (const auto* a = std::get_if<Arc>(&src.geometry)) {
             // Al reflejar se invierte el sentido: el inicio nuevo es el final reflejado.
             dst = sketch.addArc(reflect(a->center), a->radius, reflectAngle(a->endAngle), reflectAngle(a->startAngle),
                                 src.construction);
             symmetric(Ref::start(id), Ref::end(dst));
             symmetric(Ref::end(id), Ref::start(dst));
-            sketch.addConstraint(Constraint::equal(id, dst));
+            if (constrain) {
+                sketch.addConstraint(Constraint::equal(id, dst));
+            }
         } else if (const auto* el = std::get_if<Ellipse>(&src.geometry)) {
             dst = sketch.addEllipse({reflect(el->center), el->majorRadius, el->minorRadius, reflectAngle(el->rotation)},
                                     src.construction);
@@ -878,6 +884,7 @@ std::vector<EntityId> mirror(Sketch& sketch, const std::vector<EntityId>& entiti
             }
         }
         if (dst != 0) {
+            sketch.entity(dst)->locked = src.locked;
             created.push_back(dst);
         }
     }
@@ -992,6 +999,7 @@ std::vector<EntityId> transform(Sketch& sketch, const std::vector<EntityId>& ent
         const Entity e = *sketch.entity(id);
         const Geometry g = transformed(e.geometry, t);
         mapping[id] = sketch.addGeometry(g, e.construction);
+        sketch.entity(mapping[id])->locked = e.locked;
     }
     for (const Constraint& c : std::vector<Constraint>(sketch.constraints())) {
         if (!isInternal(c, set)) {

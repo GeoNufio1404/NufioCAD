@@ -344,7 +344,7 @@ private:
             system_.addConstraintP2PCoincident(bsplines_.back().poles.front(), bsplines_.back().start);
             system_.addConstraintP2PCoincident(bsplines_.back().poles.back(), bsplines_.back().end);
         }
-        if (e.reference) {
+        if (e.reference || e.locked) {
             for (std::size_t i = first; i < params_.size(); ++i) {
                 fixed_.insert(&params_[i]);
             }

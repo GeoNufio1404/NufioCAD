@@ -82,6 +82,12 @@ public:
     void setSketchProjectMode(bool on);
     // Intersección de la pieza con el plano del sketch (en coordenadas del sketch).
     std::vector<sketch::Geometry> sketchSection() const;
+    // Contorno de un texto con la fuente de la interfaz, en coordenadas del
+    // sketch con la línea base en el origen. Vacío si no hay fuente.
+    std::vector<sketch::Geometry> textOutline(const QString& text, double height) const;
+    // Imagen de referencia (para calcar) en el plano del sketch, con su
+    // esquina inferior izquierda en «corner»; se quita al terminar el sketch.
+    bool showSketchImage(const QString& path, sketch::Vec2 corner, double width, double height);
 
     // Llamado al recibir sketchPressed: este arrastre izquierdo mueve
     // geometría (sketchDragged / sketchDragFinished) en lugar de orbitar.
@@ -110,6 +116,8 @@ signals:
     // Enter en el sketch (terminar una spline, por ejemplo).
     void sketchEnterPressed();
     void sketchEdgeProjected(const std::vector<nuf::sketch::Geometry>& geometry);
+    // Shift + arrastre sin herramienta: rectángulo de selección (esquinas).
+    void sketchBoxSelected(double x0, double y0, double x1, double y1);
     // Arrastre izquierdo con una herramienta activa: desde (x0, y0), donde
     // se pulsó, hasta (x, y). Al soltar se emite DragReleased en vez de un clic.
     void sketchToolDragged(double x0, double y0, double x, double y);

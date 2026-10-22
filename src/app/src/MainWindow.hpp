@@ -74,8 +74,10 @@ private:
     QAction* lookAtSketchAction_ = nullptr;
     QAction* deleteAction_ = nullptr;
     QAction* constructionAction_ = nullptr;
+    QAction* lockAction_ = nullptr;
     QAction* dimensionAction_ = nullptr;
     QAction* intersectAction_ = nullptr;
+    QAction* importDxfAction_ = nullptr;
     std::vector<QAction*> constraintActions_;
     QLabel* cursorLabel_ = nullptr;
 };

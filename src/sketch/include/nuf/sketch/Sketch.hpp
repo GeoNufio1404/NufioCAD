@@ -104,6 +104,9 @@ struct Entity {
     bool construction = false;
     // Referencia fija (origen y ejes): el solver no la mueve y no se borra.
     bool reference = false;
+    // Bloqueada (lo proyectado del modelo, texto, DXF): el solver no la
+    // mueve, pero cuenta para los perfiles y se puede borrar o desbloquear.
+    bool locked = false;
 };
 
 // ---------------------------------------------------------------------------

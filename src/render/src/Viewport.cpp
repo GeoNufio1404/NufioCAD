@@ -14,6 +14,7 @@
 #include <AIS_InteractiveContext.hxx>
 #include <AIS_MouseGesture.hxx>
 #include <AIS_Shape.hxx>
+#include <AIS_TexturedShape.hxx>
 #include <AIS_ViewController.hxx>
 #include <AIS_ViewCube.hxx>
 #include <Aspect_DisplayConnection.hxx>
@@ -22,7 +23,11 @@
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepAlgoAPI_Section.hxx>
 #include <BRep_Tool.hxx>
+#include <StdPrs_BRepFont.hxx>
+#include <StdPrs_BRepTextBuilder.hxx>
+#include <TopExp.hxx>
 #include <TopExp_Explorer.hxx>
+#include <TopTools_IndexedMapOfShape.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepBndLib.hxx>
@@ -32,7 +37,10 @@
 #include <BRep_Builder.hxx>
 #include <GC_MakeArcOfCircle.hxx>
 #include <GC_MakeArcOfEllipse.hxx>
+#include <GeomConvert.hxx>
+#include <GeomConvert_BSplineCurveToBezierCurve.hxx>
 #include <Geom_BSplineCurve.hxx>
+#include <Geom_BezierCurve.hxx>
 #include <gp_Elips.hxx>
 #include <TopoDS_Compound.hxx>
 #include <gp_Circ.hxx>
@@ -48,6 +56,7 @@
 #include <Graphic3d_AspectText3d.hxx>
 #include <Graphic3d_Text.hxx>
 #include <Graphic3d_Vec2.hxx>
+#include <Image_PixMap.hxx>
 #include <NCollection_Array1.hxx>
 #include <Graphic3d_Camera.hxx>
 #include <OpenGl_Context.hxx>
@@ -67,6 +76,7 @@
 #include <gp_Pln.hxx>
 
 #include <QFontDatabase>
+#include <QImage>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QStringList>
@@ -75,6 +85,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <map>
 #include <numbers>
 #include <optional>
@@ -230,6 +241,39 @@ std::vector<sketch::Geometry> projectEdge(const TopoDS_Edge& edge, const sketch:
             to += 2.0 * std::numbers::pi;
         }
         return {sketch::Arc{center, c.Radius(), from, to}};
+    }
+    case GeomAbs_BezierCurve:
+    case GeomAbs_BSplineCurve: {
+        // Una proyección paralela conserva la B-spline: se proyectan los polos.
+        // Se trocea en segmentos Bézier (nudos uniformes, como los del sketch).
+        Handle(Geom_BSplineCurve) spline = curve.GetType() == GeomAbs_BSplineCurve
+                                               ? Handle(Geom_BSplineCurve)::DownCast(curve.BSpline()->Copy())
+                                               : GeomConvert::CurveToBSplineCurve(curve.Bezier());
+        if (spline.IsNull()) {
+            break;
+        }
+        // (BRepAdaptor_Curve ya la devuelve con la posición de la arista aplicada.)
+        spline->Segment(first, last);
+        GeomConvert_BSplineCurveToBezierCurve pieces(spline);
+        std::vector<sketch::Geometry> result;
+        for (int i = 1; i <= pieces.NbArcs(); ++i) {
+            const Handle(Geom_BezierCurve) bezier = pieces.Arc(i);
+            sketch::BSpline segment;
+            segment.degree = bezier->Degree();
+            for (int k = 1; k <= bezier->NbPoles(); ++k) {
+                segment.poles.push_back(local(bezier->Pole(k)));
+                segment.weights.push_back(bezier->Weight(k));
+            }
+            const sketch::Vec2 s = segment.poles.front();
+            const sketch::Vec2 e = segment.poles.back();
+            if (std::hypot(e.x - s.x, e.y - s.y) > 1e-9) {
+                result.push_back(segment);
+            }
+        }
+        if (edge.Orientation() == TopAbs_REVERSED) {
+            std::ranges::reverse(result);
+        }
+        return result;
     }
     default:
         break;
@@ -762,6 +806,10 @@ public:
         context->Erase(profiles, false);
         shownSketch.reset();
         projectMode = false;
+        for (const Handle(AIS_InteractiveObject)& image : images) {
+            context->Remove(image, false);
+        }
+        images.clear();
         context->Activate(part, AIS_Shape::SelectionMode(TopAbs_FACE));
         context->Activate(part, AIS_Shape::SelectionMode(TopAbs_EDGE));
         mode = Mode::Model;
@@ -884,22 +932,39 @@ public:
             }
             const bool loose = std::ranges::find(underconstrained, e.id) != underconstrained.end();
             SketchStroke stroke = e.construction ? constructionStroke() : (loose ? freeStroke() : fixedStroke());
+            if (e.locked && !e.construction) {
+                stroke.color = rgb(0xB0, 0x7C, 0xFF);  // bloqueada: violeta, como lo proyectado en Fusion
+            }
             if (whole) {
                 stroke.color = *whole;
             }
             drawing->addGeometry(e.geometry, stroke);
             // Extremos y centros como puntos (más grandes si están resaltados).
+            // (En la geometría bloqueada, como el texto, solo si están resaltados:
+            // serían cientos de puntos.)
             const auto mark = [&](sketch::Part which) {
                 if (const auto p = sketch.point({e.id, which})) {
                     const auto own = highlightOf({e.id, which});
-                    drawing->addPoint(*p, own ? *own : stroke.color, own ? 2.2 : 1.6);
+                    if (own || !e.locked) {
+                        drawing->addPoint(*p, own ? *own : stroke.color, own ? 2.2 : 1.6);
+                    }
                 }
             };
             for (sketch::Part which : {sketch::Part::Start, sketch::Part::End, sketch::Part::Center}) {
                 mark(which);
             }
-            // Spline: polígono de control (discontinuo) y polos intermedios.
-            if (const auto* spline = std::get_if<sketch::BSpline>(&e.geometry)) {
+            // Spline seleccionada o bajo el cursor: polígono de control
+            // (discontinuo) y polos intermedios.
+            const auto* spline = std::get_if<sketch::BSpline>(&e.geometry);
+            const bool showPoles = spline && (whole || [&] {
+                for (int i = 0; i < int(spline->poles.size()); ++i) {
+                    if (highlightOf(sketch::Ref::pole(e.id, i))) {
+                        return true;
+                    }
+                }
+                return false;
+            }());
+            if (showPoles) {
                 drawing->addPolyline(spline->poles, {stroke.color, 1.0, Aspect_TOL_DOT});
                 for (int i = 1; i + 1 < int(spline->poles.size()); ++i) {
                     const auto own = highlightOf(sketch::Ref::pole(e.id, i));
@@ -982,6 +1047,56 @@ public:
             }
         }
         return {};
+    }
+
+    std::vector<sketch::Geometry> textOutline(const QString& text, double height) const
+    {
+        StdPrs_BRepFont font;
+        if (!font.FindAndInit(pickLabelFont(), Font_FA_Regular, height)) {
+            return {};
+        }
+        StdPrs_BRepTextBuilder builder;
+        const TopoDS_Shape shape = builder.Perform(font, NCollection_String(text.toUtf8().constData()));
+        // El texto se crea en el plano XY del modelo: sus coordenadas son ya
+        // las del sketch.
+        TopTools_IndexedMapOfShape edges;
+        TopExp::MapShapes(shape, TopAbs_EDGE, edges);
+        std::vector<sketch::Geometry> result;
+        for (int i = 1; i <= edges.Extent(); ++i) {
+            for (const sketch::Geometry& g : projectEdge(TopoDS::Edge(edges(i)), sketch::Plane::xy())) {
+                result.push_back(g);
+            }
+        }
+        return result;
+    }
+
+    bool showImage(const QString& path, sketch::Vec2 corner, double width, double height)
+    {
+        const TopoDS_Face face =
+            BRepBuilderAPI_MakeFace(gp_Pln(toAx3(sketchPlane)), corner.x, corner.x + width, corner.y, corner.y + height);
+        // Se carga con Qt: el OCCT de las distribuciones a menudo no lee PNG/JPG.
+        const QImage picture = QImage(path).convertToFormat(QImage::Format_RGBA8888);
+        if (picture.isNull()) {
+            return false;
+        }
+        Handle(Image_PixMap) pixels = new Image_PixMap();
+        if (!pixels->InitTrash(Image_Format_RGBA, std::size_t(picture.width()), std::size_t(picture.height()))) {
+            return false;
+        }
+        pixels->SetTopDown(true);
+        for (int row = 0; row < picture.height(); ++row) {
+            std::memcpy(pixels->ChangeRow(std::size_t(row)), picture.constScanLine(row), std::size_t(picture.width()) * 4);
+        }
+        Handle(AIS_TexturedShape) image = new AIS_TexturedShape(face);
+        image->SetTexturePixMap(pixels);
+        image->SetTextureMapOn();
+        image->SetTextureRepeat(false, 1.0, 1.0);
+        image->DisableTextureModulate();  // colores de la imagen, sin sombreado
+        image->SetTransparency(0.25);
+        image->Attributes()->SetFaceBoundaryDraw(false);
+        context->Display(image, 3, -1, false);  // 3 = modo con textura
+        images.push_back(image);
+        return true;
     }
 
     std::vector<sketch::Geometry> section() const
@@ -1261,6 +1376,7 @@ private:
     Handle(SketchDrawing) preview;
     Handle(AIS_Shape) profiles;
     std::vector<Handle(AIS_InteractiveObject)> finishedSketches;
+    std::vector<Handle(AIS_InteractiveObject)> images;  // de referencia, del sketch en curso
     sketch::Plane sketchPlane;
     bool darkTheme = true;
 };
@@ -1395,6 +1511,22 @@ void Viewport::setSketchProjectMode(bool on)
 std::vector<sketch::Geometry> Viewport::sketchSection() const
 {
     return isSketching() ? impl_->section() : std::vector<sketch::Geometry>{};
+}
+
+std::vector<sketch::Geometry> Viewport::textOutline(const QString& text, double height) const
+{
+    return impl_->textOutline(text, height);
+}
+
+bool Viewport::showSketchImage(const QString& path, sketch::Vec2 corner, double width, double height)
+{
+    if (!isSketching()) {
+        return false;
+    }
+    const bool shown = impl_->showImage(path, corner, width, height);
+    impl_->view->Invalidate();
+    update();
+    return shown;
 }
 
 void Viewport::grabSketchDrag()
@@ -1548,6 +1680,11 @@ void Viewport::mouseReleaseEvent(QMouseEvent* event)
         } else if (impl_->sketchToolActive && impl_->pressSketchPoint) {
             if (const auto p = impl_->sketchPointAt(point)) {
                 emit sketchToolDragReleased(impl_->pressSketchPoint->x, impl_->pressSketchPoint->y, p->x, p->y);
+            }
+        } else if ((event->modifiers() & Qt::ShiftModifier) && impl_->pressSketchPoint) {
+            // Shift + arrastre: OCCT dibuja el rectángulo; aquí se informa de él.
+            if (const auto p = impl_->sketchPointAt(point)) {
+                emit sketchBoxSelected(impl_->pressSketchPoint->x, impl_->pressSketchPoint->y, p->x, p->y);
             }
         }
     }

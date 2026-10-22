@@ -45,6 +45,8 @@ public:
         Mirror, Move, Copy, Rotate, Scale,
         PatternRectangular, PatternCircular,
         Project,
+        // Extras (Fase 2d)
+        Text, Image,
     };
 
     SketchSession(render::Viewport& viewport, const sketch::Plane& plane, QObject* parent = nullptr);
@@ -65,11 +67,15 @@ public:
     // también se seleccionan los iconos de restricciones y las cotas).
     void deleteSelection();
     void toggleConstruction();
+    // Bloquear/desbloquear: el solver no mueve lo bloqueado.
+    void toggleLock();
     bool hasSelection() const noexcept { return !selection_.empty() || !selectedConstraints_.empty(); }
 
     // Intersección de la pieza con el plano del sketch: la añade como
     // geometría fija.
     void intersectModel();
+    // Importa un DXF al sketch (en sus coordenadas).
+    void importDxf(const QString& path);
 
     // Aplica una restricción geométrica a la selección. Si no encaja con la
     // selección, entra en conflicto o ya se cumple, no cambia nada y lo
@@ -116,6 +122,10 @@ private:
     void afterToolChange();
     // Añade geometría que viene del modelo (proyección, intersección) fija.
     void addFromModel(const std::vector<sketch::Geometry>& geometry);
+    void boxSelected(double x0, double y0, double x1, double y1);
+    // Texto e imagen: piden datos con diálogos al hacer clic.
+    void placeText(sketch::Vec2 at);
+    void placeImage(sketch::Vec2 at);
     void updateValueInput();
     // Pide un valor nuevo para la cota; false si se canceló.
     bool askDimensionValue(sketch::Constraint& dimension);
@@ -156,6 +166,7 @@ private:
     };
     std::optional<Drag> drag_;
     ValueInput* valueInput_ = nullptr;  // hijo del viewport
+    double textHeight_ = 10.0;
 };
 
 } // namespace nuf::app
