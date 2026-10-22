@@ -7,12 +7,21 @@
 #include <nuf/sketch/Pick.hpp>
 
 #include <nuf/sketch/Dxf.hpp>
+#include <nuf/sketch/Edit.hpp>
 
 #include <QCursor>
 #include <QFileDialog>
 #include <QGuiApplication>
 #include <QImage>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QDoubleSpinBox>
+#include <QFontComboBox>
+#include <QFormLayout>
 #include <QInputDialog>
+#include <QLabel>
+#include <QLineEdit>
+#include <QLocale>
 
 #include <fstream>
 
@@ -322,23 +331,73 @@ void SketchSession::importDxf(const QString& path)
 
 void SketchSession::placeText(sketch::Vec2 at)
 {
-    bool ok = false;
-    const QString text = QInputDialog::getText(&viewport_, QStringLiteral("Texto"), QStringLiteral("Texto:"),
-                                               QLineEdit::Normal, QString(), &ok);
-    if (!ok || text.trimmed().isEmpty()) {
+    // Un solo diálogo con el texto, la fuente y la altura; las letras se ven
+    // en el sketch mientras se escribe, para saber cómo quedarán.
+    QDialog dialog(&viewport_);
+    dialog.setWindowTitle(QStringLiteral("Texto"));
+    auto* form = new QFormLayout(&dialog);
+    auto* textEdit = new QLineEdit(&dialog);
+    auto* fontBox = new QFontComboBox(&dialog);
+    fontBox->setFontFilters(QFontComboBox::ScalableFonts);
+    if (!textFamily_.isEmpty()) {
+        fontBox->setCurrentFont(QFont(textFamily_));
+    }
+    auto* heightBox = new QDoubleSpinBox(&dialog);
+    heightBox->setRange(0.1, 1000.0);
+    heightBox->setDecimals(2);
+    heightBox->setSuffix(QStringLiteral(" mm"));
+    heightBox->setValue(textHeight_);
+    auto* size = new QLabel(&dialog);
+    form->addRow(QStringLiteral("Texto"), textEdit);
+    form->addRow(QStringLiteral("Fuente"), fontBox);
+    form->addRow(QStringLiteral("Altura"), heightBox);
+    form->addRow(QStringLiteral("Tamaño"), size);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    form->addRow(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+    std::vector<sketch::Geometry> outline;
+    const auto refresh = [&] {
+        outline = textEdit->text().trimmed().isEmpty()
+                      ? std::vector<sketch::Geometry>{}
+                      : viewport_.textOutline(textEdit->text(), heightBox->value(), fontBox->currentFont().family());
+        // Vista previa en su sitio y su tamaño total, como referencia.
+        std::vector<sketch::Geometry> placed;
+        double minX = 1e300, minY = 1e300, maxX = -1e300, maxY = -1e300;
+        const sketch::Similarity move{{}, 0.0, 1.0, at};
+        for (const sketch::Geometry& g : outline) {
+            placed.push_back(sketch::transformed(g, move));
+            for (const sketch::Vec2& p : sketch::polyline(placed.back())) {
+                minX = std::min(minX, p.x);
+                maxX = std::max(maxX, p.x);
+                minY = std::min(minY, p.y);
+                maxY = std::max(maxY, p.y);
+            }
+        }
+        viewport_.showSketchPreview(placed, at);
+        size->setText(placed.empty() ? QStringLiteral("—")
+                                     : QStringLiteral("%1 × %2 mm")
+                                           .arg(QLocale().toString(maxX - minX, 'f', 1),
+                                                QLocale().toString(maxY - minY, 'f', 1)));
+    };
+    connect(textEdit, &QLineEdit::textChanged, &dialog, refresh);
+    connect(fontBox, &QFontComboBox::currentFontChanged, &dialog, refresh);
+    connect(heightBox, &QDoubleSpinBox::valueChanged, &dialog, refresh);
+    // Junto al cursor, sin tapar el punto donde empieza el texto.
+    dialog.adjustSize();
+    dialog.move(QCursor::pos() + QPoint(40, 40));
+    refresh();
+    const bool accepted = dialog.exec() == QDialog::Accepted;
+    viewport_.showSketchPreview({}, std::nullopt);
+    if (!accepted || outline.empty()) {
+        if (accepted) {
+            emit message(QStringLiteral("No se pudo crear el texto con esa fuente"));
+        }
         return;
     }
-    const double height = QInputDialog::getDouble(&viewport_, QStringLiteral("Texto"), QStringLiteral("Altura (mm):"),
-                                                  textHeight_, 0.1, 1000.0, 2, &ok);
-    if (!ok) {
-        return;
-    }
-    textHeight_ = height;
-    const std::vector<sketch::Geometry> outline = viewport_.textOutline(text, height);
-    if (outline.empty()) {
-        emit message(QStringLiteral("No se encontró una fuente para el texto"));
-        return;
-    }
+    textHeight_ = heightBox->value();
+    textFamily_ = fontBox->currentFont().family();
     // Las letras quedan como curvas unidas y fijas (se mueven juntas con la
     // herramienta Mover; se pueden extruir o grabar).
     remember(sketch_);

@@ -174,6 +174,7 @@ private:
     std::optional<Drag> drag_;
     ValueInput* valueInput_ = nullptr;  // hijo del viewport
     double textHeight_ = 10.0;
+    QString textFamily_;  // fuente elegida la última vez
 };
 
 } // namespace nuf::app

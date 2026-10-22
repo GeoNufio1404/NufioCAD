@@ -196,6 +196,23 @@ std::vector<Profile> findProfiles(const Sketch& sketch, double tolerance)
         std::vector<double> cuts;  // posiciones (en la polilínea) donde se parte
     };
     std::vector<Source> sources;
+    // Extremo de una curva abierta junto a p (a menos del 2 % de su largo).
+    const auto nearEndpoint = [](const Source& src, Vec2 p, double tol) -> std::optional<Vec2> {
+        if (src.closed) {
+            return std::nullopt;
+        }
+        double length = 0.0;
+        for (std::size_t k = 0; k + 1 < src.points.size(); ++k) {
+            length += distance(src.points[k], src.points[k + 1]);
+        }
+        const double near = std::max(tol, 0.02 * length);
+        for (const Vec2& end : {src.points.front(), src.points.back()}) {
+            if (distance(end, p) <= near) {
+                return end;
+            }
+        }
+        return std::nullopt;
+    };
     for (const Entity& e : sketch.entities()) {
         if (e.reference || e.construction || std::holds_alternative<Point>(e.geometry)) {
             continue;
@@ -218,7 +235,17 @@ std::vector<Profile> findProfiles(const Sketch& sketch, double tolerance)
                 crossings = detail::intersections(detail::curveOf(*sources[i].entity),
                                                   detail::curveOf(*sources[j].entity));
             } else {
-                crossings = polylineCrossings(sources[i].points, sources[j].points, tolerance);
+                // Aproximados: junto a una unión de las dos curvas no son
+                // cruces (dos tramos vecinos de una letra se «tocan» ahí), y
+                // junto a un extremo de una se ajustan a él.
+                for (Vec2 p : polylineCrossings(sources[i].points, sources[j].points, tolerance)) {
+                    const auto endA = nearEndpoint(sources[i], p, tolerance);
+                    const auto endB = nearEndpoint(sources[j], p, tolerance);
+                    if (endA && endB) {
+                        continue;
+                    }
+                    crossings.push_back(endA ? *endA : endB ? *endB : p);
+                }
             }
             for (const Vec2& p : crossings) {
                 splits[i].emplace_back(positionOn(sources[i].points, p), p);

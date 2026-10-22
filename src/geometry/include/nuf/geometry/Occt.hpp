@@ -47,6 +47,12 @@ std::optional<TopoDS_Face> profileFace(const sketch::Sketch& sketch, const sketc
 // Una cara por cada perfil cerrado del sketch.
 std::vector<TopoDS_Face> profileFaces(const sketch::Sketch& sketch, const gp_Ax3& plane);
 
+// Contorno limpio de unas regiones del plano XY (como las letras de un
+// texto): los contornos del sentido principal se suman y los del contrario
+// (los huecos) se restan, así que los que se solapan quedan en uno. Devuelve
+// las curvas del resultado como geometría de sketch (en XY).
+std::vector<sketch::Geometry> outlineOf(const TopoDS_Shape& planarShape);
+
 // Arista 3D proyectada sobre el plano del sketch, como geometría del sketch:
 // líneas y circunferencias paralelas al plano, exactas; el resto, como una
 // spline. Vacío si la proyección es un punto.

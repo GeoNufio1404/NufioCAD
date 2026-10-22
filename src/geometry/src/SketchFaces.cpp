@@ -3,6 +3,22 @@
 #include <nuf/sketch/Tools.hpp>
 
 #include <BRepAdaptor_Curve.hxx>
+#include <BOPAlgo_Builder.hxx>
+#include <BOPAlgo_BuilderFace.hxx>
+#include <BRepBndLib.hxx>
+#include <BRepMesh_IncrementalMesh.hxx>
+#include <Bnd_Box.hxx>
+#include <Poly_Triangulation.hxx>
+#include <gp_Pnt2d.hxx>
+#include <BRepAlgoAPI_Fuse.hxx>
+#include <BRepTools_WireExplorer.hxx>
+#include <NCollection_IndexedMap.hxx>
+#include <NCollection_List.hxx>
+#include <ShapeUpgrade_UnifySameDomain.hxx>
+#include <TopExp.hxx>
+#include <TopExp_Explorer.hxx>
+#include <TopTools_ShapeMapHasher.hxx>
+#include <gp.hxx>
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepBuilderAPI_MakeWire.hxx>
@@ -265,6 +281,163 @@ std::vector<TopoDS_Face> profileFaces(const sketch::Sketch& sketch, const gp_Ax3
         }
     }
     return faces;
+}
+
+namespace {
+
+// Contorno muestreado en orden (con el sentido de cada arista en el contorno).
+std::vector<gp_Pnt2d> sampledWire(const TopoDS_Wire& wire)
+{
+    std::vector<gp_Pnt2d> points;
+    for (BRepTools_WireExplorer ex(wire); ex.More(); ex.Next()) {
+        const BRepAdaptor_Curve curve(ex.Current());
+        const bool reversed = ex.Current().Orientation() == TopAbs_REVERSED;
+        constexpr int kSamples = 24;
+        for (int i = 0; i < kSamples; ++i) {
+            const double t = double(i) / kSamples;
+            const double u = reversed ? curve.LastParameter() - t * (curve.LastParameter() - curve.FirstParameter())
+                                      : curve.FirstParameter() + t * (curve.LastParameter() - curve.FirstParameter());
+            const gp_Pnt p = curve.Value(u);
+            points.emplace_back(p.X(), p.Y());
+        }
+    }
+    return points;
+}
+
+// Número de vueltas de los contornos alrededor de p (regla de relleno de
+// las fuentes: distinto de cero = dentro).
+int windingNumber(const std::vector<std::vector<gp_Pnt2d>>& contours, const gp_Pnt2d& p)
+{
+    int winding = 0;
+    for (const auto& c : contours) {
+        for (std::size_t i = 0; i < c.size(); ++i) {
+            const gp_Pnt2d& a = c[i];
+            const gp_Pnt2d& b = c[(i + 1) % c.size()];
+            const double side = (b.X() - a.X()) * (p.Y() - a.Y()) - (p.X() - a.X()) * (b.Y() - a.Y());
+            if (a.Y() <= p.Y()) {
+                if (b.Y() > p.Y() && side > 0.0) {
+                    ++winding;
+                }
+            } else if (b.Y() <= p.Y() && side < 0.0) {
+                --winding;
+            }
+        }
+    }
+    return winding;
+}
+
+// Un punto seguro dentro de la cara (centro de un triángulo de su malla).
+std::optional<gp_Pnt2d> pointInside(const TopoDS_Face& face)
+{
+    BRepMesh_IncrementalMesh mesh(face, 0.01, false, 0.5);
+    TopLoc_Location location;
+    const Handle(Poly_Triangulation) triangles = BRep_Tool::Triangulation(face, location);
+    if (triangles.IsNull() || triangles->NbTriangles() == 0) {
+        return std::nullopt;
+    }
+    // El triángulo más grande: su centro queda lejos de los bordes.
+    double best = -1.0;
+    gp_Pnt2d center;
+    for (int t = 1; t <= triangles->NbTriangles(); ++t) {
+        int i1 = 0, i2 = 0, i3 = 0;
+        triangles->Triangle(t).Get(i1, i2, i3);
+        const gp_Pnt a = triangles->Node(i1).Transformed(location.Transformation());
+        const gp_Pnt b = triangles->Node(i2).Transformed(location.Transformation());
+        const gp_Pnt c = triangles->Node(i3).Transformed(location.Transformation());
+        const double area = std::abs((b.X() - a.X()) * (c.Y() - a.Y()) - (c.X() - a.X()) * (b.Y() - a.Y()));
+        if (area > best) {
+            best = area;
+            center = gp_Pnt2d((a.X() + b.X() + c.X()) / 3.0, (a.Y() + b.Y() + c.Y()) / 3.0);
+        }
+    }
+    return center;
+}
+
+} // namespace
+
+std::vector<sketch::Geometry> outlineOf(const TopoDS_Shape& planarShape)
+{
+    // Contornos originales, con su sentido, para el número de vueltas.
+    std::vector<std::vector<gp_Pnt2d>> contours;
+    NCollection_List<TopoDS_Shape> edges;
+    for (TopExp_Explorer ex(planarShape, TopAbs_WIRE); ex.More(); ex.Next()) {
+        contours.push_back(sampledWire(TopoDS::Wire(ex.Current())));
+    }
+    NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> unique;
+    TopExp::MapShapes(planarShape, TopAbs_EDGE, unique);
+    for (int i = 1; i <= unique.Extent(); ++i) {
+        edges.Append(unique(i));
+    }
+    if (edges.IsEmpty()) {
+        return {};
+    }
+
+    // Las curvas partidas en todos sus cruces (también los de un contorno
+    // consigo mismo) y las regiones que forman.
+    BOPAlgo_Builder split;
+    split.SetArguments(edges);
+    split.Perform();
+    if (split.HasErrors()) {
+        return {};
+    }
+    Bnd_Box box;
+    BRepBndLib::Add(planarShape, box);
+    double x0 = 0, y0 = 0, z0 = 0, x1 = 0, y1 = 0, z1 = 0;
+    box.Get(x0, y0, z0, x1, y1, z1);
+    const double margin = 1.0 + 0.1 * std::max(x1 - x0, y1 - y0);
+    const TopoDS_Face base =
+        BRepBuilderAPI_MakeFace(gp_Pln(gp::XOY()), x0 - margin, x1 + margin, y0 - margin, y1 + margin).Face();
+    NCollection_List<TopoDS_Shape> pieces;
+    for (TopExp_Explorer ex(split.Shape(), TopAbs_EDGE); ex.More(); ex.Next()) {
+        pieces.Append(ex.Current().Oriented(TopAbs_FORWARD));
+        pieces.Append(ex.Current().Oriented(TopAbs_REVERSED));
+    }
+    BOPAlgo_BuilderFace regions;
+    regions.SetFace(base);
+    regions.SetShapes(pieces);
+    regions.Perform();
+    if (regions.HasErrors()) {
+        return {};
+    }
+
+    // Las regiones «pintadas», unidas.
+    NCollection_List<TopoDS_Shape> ink;
+    for (const TopoDS_Shape& area : regions.Areas()) {
+        const TopoDS_Face face = TopoDS::Face(area);
+        const auto inside = pointInside(face);
+        if (inside && windingNumber(contours, *inside) != 0) {
+            ink.Append(face);
+        }
+    }
+    if (ink.IsEmpty()) {
+        return {};
+    }
+    TopoDS_Shape result = ink.First();
+    if (ink.Extent() > 1) {
+        NCollection_List<TopoDS_Shape> first;
+        first.Append(ink.First());
+        ink.RemoveFirst();
+        BRepAlgoAPI_Fuse fuse;
+        fuse.SetArguments(first);
+        fuse.SetTools(ink);
+        fuse.Build();
+        if (!fuse.IsDone()) {
+            return {};
+        }
+        result = fuse.Shape();
+    }
+    ShapeUpgrade_UnifySameDomain unify(result, true, true, false);
+    unify.Build();
+
+    std::vector<sketch::Geometry> geometry;
+    NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> outline;
+    TopExp::MapShapes(unify.Shape(), TopAbs_EDGE, outline);
+    for (int i = 1; i <= outline.Extent(); ++i) {
+        for (const sketch::Geometry& g : projectEdge(TopoDS::Edge(outline(i)), sketch::Plane::xy())) {
+            geometry.push_back(g);
+        }
+    }
+    return geometry;
 }
 
 } // namespace nuf::geometry

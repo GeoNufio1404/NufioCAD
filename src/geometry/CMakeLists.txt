@@ -11,7 +11,7 @@ target_link_libraries(nuf_geometry
     PUBLIC nuf::sketch
     PRIVATE
         TKernel TKMath TKG2d TKG3d TKGeomBase TKGeomAlgo TKBRep TKPrim TKTopAlgo
-        TKBO TKFeat TKOffset TKShHealing)
+        TKBO TKFeat TKOffset TKShHealing TKMesh)
 
 if(WIN32)
     target_compile_definitions(nuf_geometry PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)

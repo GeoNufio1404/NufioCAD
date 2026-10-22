@@ -140,7 +140,8 @@ public:
     std::vector<sketch::Geometry> sketchSection() const;
     // Contorno de un texto con la fuente de la interfaz, en coordenadas del
     // sketch con la línea base en el origen. Vacío si no hay fuente.
-    std::vector<sketch::Geometry> textOutline(const QString& text, double height) const;
+    // family: la fuente (vacía = la de la interfaz).
+    std::vector<sketch::Geometry> textOutline(const QString& text, double height, const QString& family = {}) const;
     // Imagen de referencia (para calcar) en el plano del sketch, con su
     // esquina inferior izquierda en «corner»; se quita al terminar el sketch.
     bool showSketchImage(const QString& path, sketch::Vec2 corner, double width, double height);
