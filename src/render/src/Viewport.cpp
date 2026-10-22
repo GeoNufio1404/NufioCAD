@@ -28,9 +28,6 @@
 #include <GC_MakeArcOfCircle.hxx>
 #include <GC_MakeArcOfEllipse.hxx>
 #include <Geom_BSplineCurve.hxx>
-#include <TColStd_Array1OfInteger.hxx>
-#include <TColStd_Array1OfReal.hxx>
-#include <TColgp_Array1OfPnt.hxx>
 #include <gp_Elips.hxx>
 #include <TopoDS_Compound.hxx>
 #include <gp_Circ.hxx>
@@ -46,6 +43,7 @@
 #include <Graphic3d_AspectText3d.hxx>
 #include <Graphic3d_Text.hxx>
 #include <Graphic3d_Vec2.hxx>
+#include <NCollection_Array1.hxx>
 #include <Graphic3d_Camera.hxx>
 #include <OpenGl_Context.hxx>
 #include <OpenGl_FrameBuffer.hxx>
@@ -232,16 +230,16 @@ TopoDS_Shape profileFaces(const sketch::Sketch& sketch, const gp_Ax3& plane)
                 edge = BRepBuilderAPI_MakeEdge(arc.Value());
             } else if (const auto* b = std::get_if<sketch::BSpline>(&e->geometry)) {
                 const int n = int(b->poles.size());
-                TColgp_Array1OfPnt poles(1, n);
-                TColStd_Array1OfReal weights(1, n);
+                NCollection_Array1<gp_Pnt> poles(1, n);
+                NCollection_Array1<double> weights(1, n);
                 for (int i = 0; i < n; ++i) {
                     poles.SetValue(i + 1, at(b->poles[std::size_t(i)]));
                     weights.SetValue(i + 1, b->weights.empty() ? 1.0 : b->weights[std::size_t(i)]);
                 }
                 const auto knotValues = b->knots();
                 const auto multiplicities = b->multiplicities();
-                TColStd_Array1OfReal knots(1, int(knotValues.size()));
-                TColStd_Array1OfInteger mults(1, int(knotValues.size()));
+                NCollection_Array1<double> knots(1, int(knotValues.size()));
+                NCollection_Array1<int> mults(1, int(knotValues.size()));
                 for (std::size_t i = 0; i < knotValues.size(); ++i) {
                     knots.SetValue(int(i) + 1, knotValues[i]);
                     mults.SetValue(int(i) + 1, multiplicities[i]);
