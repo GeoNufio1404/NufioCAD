@@ -1,0 +1,364 @@
+#include "ModelPanels.hpp"
+
+#include <QContextMenuEvent>
+#include <QHeaderView>
+#include <QHelpEvent>
+#include <QMouseEvent>
+#include <QPainter>
+#include <QPainterPath>
+#include <QToolTip>
+
+#include <algorithm>
+#include <cmath>
+
+namespace nuf::app {
+
+namespace {
+
+constexpr int kMargin = 10;
+constexpr int kChipWidth = 76;
+constexpr int kChipHeight = 54;
+constexpr int kSpacing = 6;
+constexpr int kStep = kChipWidth + kSpacing;
+constexpr int kMarkerGap = 14;  // hueco del marcador entre fichas
+constexpr int kTop = 6;
+
+QString glyph(document::FeatureKind kind)
+{
+    switch (kind) {
+    case document::FeatureKind::Sketch:
+        return QStringLiteral("✎");
+    case document::FeatureKind::Extrude:
+        return QStringLiteral("⬆");
+    case document::FeatureKind::Revolve:
+        return QStringLiteral("⟳");
+    }
+    return QStringLiteral("?");
+}
+
+QString statusText(const document::FeatureStatus& status)
+{
+    switch (status.health) {
+    case document::Health::Ok:
+        return {};
+    case document::Health::Warning:
+        return QStringLiteral("Aviso: %1").arg(QString::fromStdString(status.message));
+    case document::Health::Error:
+        return QStringLiteral("Error: %1").arg(QString::fromStdString(status.message));
+    case document::Health::Suppressed:
+        return QStringLiteral("Suprimida");
+    case document::Health::RolledBack:
+        return QStringLiteral("Después del marcador (no se calcula)");
+    }
+    return {};
+}
+
+enum Role { KindRole = Qt::UserRole, KeyRole };
+enum ItemKind { OriginItem = 1, BodyItem, SketchItem };
+
+} // namespace
+
+// --- Timeline ------------------------------------------------------------------
+
+TimelineWidget::TimelineWidget(const document::Document& document, QWidget* parent)
+    : QWidget(parent)
+    , document_(document)
+{
+    setMouseTracking(true);
+    setMinimumHeight(kChipHeight + 2 * kTop);
+}
+
+QSize TimelineWidget::sizeHint() const
+{
+    const int n = int(document_.featureCount());
+    return {2 * kMargin + n * kStep + kMarkerGap, kChipHeight + 2 * kTop};
+}
+
+QSize TimelineWidget::minimumSizeHint() const
+{
+    return {kMargin * 2 + kMarkerGap, kChipHeight + 2 * kTop};
+}
+
+void TimelineWidget::setEditing(std::optional<document::FeatureId> id)
+{
+    editing_ = id;
+    update();
+}
+
+QRect TimelineWidget::chipRect(std::size_t index) const
+{
+    const int x = kMargin + int(index) * kStep + (index >= document_.marker() ? kMarkerGap : 0);
+    return {x, kTop, kChipWidth, kChipHeight};
+}
+
+int TimelineWidget::markerX(std::size_t marker) const
+{
+    return kMargin + int(marker) * kStep + kMarkerGap / 2 - kSpacing / 2;
+}
+
+std::optional<std::size_t> TimelineWidget::chipAt(const QPoint& pos) const
+{
+    for (std::size_t i = 0; i < document_.featureCount(); ++i) {
+        if (chipRect(i).contains(pos)) {
+            return i;
+        }
+    }
+    return std::nullopt;
+}
+
+int TimelineWidget::boundaryX(std::size_t gap) const
+{
+    const std::size_t n = document_.featureCount();
+    if (gap == document_.marker()) {
+        return markerX(gap);
+    }
+    if (gap < n) {
+        return chipRect(gap).left() - kSpacing / 2;
+    }
+    return chipRect(n - 1).right() + kSpacing / 2 + 1;
+}
+
+std::size_t TimelineWidget::gapAt(int x) const
+{
+    std::size_t best = 0;
+    for (std::size_t g = 0; g <= document_.featureCount(); ++g) {
+        if (std::abs(boundaryX(g) - x) < std::abs(boundaryX(best) - x)) {
+            best = g;
+        }
+    }
+    return best;
+}
+
+void TimelineWidget::paintEvent(QPaintEvent* /*event*/)
+{
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing);
+    const QPalette pal = palette();
+    const QColor accent(0x1F, 0x6F, 0xEB);
+    const QColor marker(0xF2, 0xA3, 0x4B);
+
+    if (document_.featureCount() == 0) {
+        p.setPen(pal.color(QPalette::PlaceholderText));
+        p.drawText(rect().adjusted(kMargin, 0, 0, 0), Qt::AlignVCenter | Qt::AlignLeft,
+                   QStringLiteral("El historial está vacío: crea un sketch para empezar."));
+        return;
+    }
+
+    for (std::size_t i = 0; i < document_.featureCount(); ++i) {
+        const document::Feature& f = document_.feature(i);
+        const document::FeatureStatus& status = document_.status(f.id());
+        const QRect r = chipRect(i);
+        QColor fill = pal.color(QPalette::Button);
+        QColor border = pal.color(QPalette::Mid);
+        if (status.health == document::Health::Error) {
+            fill = QColor(0xE5, 0x48, 0x4D, 70);
+            border = QColor(0xE5, 0x48, 0x4D);
+        } else if (status.health == document::Health::Warning) {
+            fill = QColor(0xF2, 0xA3, 0x4B, 60);
+            border = QColor(0xF2, 0xA3, 0x4B);
+        }
+        if (editing_ == f.id()) {
+            border = accent;
+        }
+        const bool faded = status.health == document::Health::RolledBack
+                           || status.health == document::Health::Suppressed;
+        p.setOpacity(faded ? 0.45 : 1.0);
+        if (draggedChip_ == i && dropGap_) {
+            p.setOpacity(0.3);
+        }
+        p.setPen(QPen(border, editing_ == f.id() ? 2.0 : 1.0));
+        p.setBrush(fill);
+        p.drawRoundedRect(QRectF(r).adjusted(0.5, 0.5, -0.5, -0.5), 5, 5);
+
+        QFont big = font();
+        big.setPointSizeF(big.pointSizeF() * 1.4);
+        p.setFont(big);
+        p.setPen(pal.color(QPalette::ButtonText));
+        p.drawText(QRect(r.x(), r.y() + 2, r.width(), 26), Qt::AlignCenter, glyph(f.kind()));
+
+        QFont small = font();
+        small.setPointSizeF(small.pointSizeF() * 0.85);
+        small.setStrikeOut(status.health == document::Health::Suppressed);
+        p.setFont(small);
+        const QFontMetrics fm(small);
+        const QString name = fm.elidedText(QString::fromStdString(f.name()), Qt::ElideRight, r.width() - 6);
+        p.drawText(QRect(r.x() + 3, r.y() + 28, r.width() - 6, 22), Qt::AlignCenter, name);
+        p.setOpacity(1.0);
+    }
+
+    // Marcador (y, al arrastrar, dónde caería).
+    const auto drawBar = [&](int x, const QColor& color, qreal width) {
+        p.setPen(QPen(color, width, Qt::SolidLine, Qt::RoundCap));
+        p.drawLine(x, kTop - 2, x, kTop + kChipHeight + 2);
+        QPainterPath tab;
+        tab.addRoundedRect(QRectF(x - 5, kTop - 4, 10, 8), 2, 2);
+        p.fillPath(tab, color);
+    };
+    drawBar(markerX(document_.marker()), marker, 3.0);
+    if (dropGap_ && (draggingMarker_ || draggedChip_)) {
+        drawBar(boundaryX(*dropGap_), draggingMarker_ ? marker : accent, 2.0);
+    }
+}
+
+void TimelineWidget::mousePressEvent(QMouseEvent* event)
+{
+    pressPos_ = event->pos();
+    if (event->button() != Qt::LeftButton) {
+        return;
+    }
+    if (std::abs(event->pos().x() - markerX(document_.marker())) <= 6) {
+        draggingMarker_ = true;
+        dropGap_ = document_.marker();
+        update();
+        return;
+    }
+    if (const auto chip = chipAt(event->pos())) {
+        draggedChip_ = *chip;
+    }
+}
+
+void TimelineWidget::mouseMoveEvent(QMouseEvent* event)
+{
+    if (draggingMarker_) {
+        dropGap_ = gapAt(event->pos().x());
+        update();
+        return;
+    }
+    if (draggedChip_ && (event->pos() - pressPos_).manhattanLength() > 8) {
+        dropGap_ = gapAt(event->pos().x());
+        setCursor(Qt::ClosedHandCursor);
+        update();
+        return;
+    }
+    const bool overMarker = std::abs(event->pos().x() - markerX(document_.marker())) <= 6;
+    setCursor(overMarker ? Qt::SizeHorCursor : Qt::ArrowCursor);
+}
+
+void TimelineWidget::mouseReleaseEvent(QMouseEvent* /*event*/)
+{
+    if (draggingMarker_ && dropGap_ && *dropGap_ != document_.marker()) {
+        emit markerMoved(*dropGap_);
+    } else if (draggedChip_ && dropGap_) {
+        // Hueco contado con la ficha → posición sin ella.
+        std::size_t to = *dropGap_;
+        if (to > *draggedChip_) {
+            --to;
+        }
+        if (to != *draggedChip_) {
+            emit featureMoved(document_.feature(*draggedChip_).id(), to);
+        }
+    }
+    draggingMarker_ = false;
+    draggedChip_.reset();
+    dropGap_.reset();
+    unsetCursor();
+    update();
+}
+
+void TimelineWidget::mouseDoubleClickEvent(QMouseEvent* event)
+{
+    if (const auto chip = chipAt(event->pos())) {
+        emit featureActivated(document_.feature(*chip).id());
+    }
+}
+
+void TimelineWidget::contextMenuEvent(QContextMenuEvent* event)
+{
+    if (const auto chip = chipAt(event->pos())) {
+        emit featureMenuRequested(document_.feature(*chip).id(), event->globalPos());
+    }
+}
+
+bool TimelineWidget::event(QEvent* event)
+{
+    if (event->type() == QEvent::ToolTip) {
+        auto* help = static_cast<QHelpEvent*>(event);
+        if (const auto chip = chipAt(help->pos())) {
+            const document::Feature& f = document_.feature(*chip);
+            const QString status = statusText(document_.status(f.id()));
+            QToolTip::showText(help->globalPos(), QString::fromStdString(f.name())
+                                                      + (status.isEmpty() ? QString() : QStringLiteral("\n") + status));
+        } else if (std::abs(help->pos().x() - markerX(document_.marker())) <= 6) {
+            QToolTip::showText(help->globalPos(), QStringLiteral("Marcador: arrástralo para volver atrás en el historial"));
+        } else {
+            QToolTip::hideText();
+        }
+        return true;
+    }
+    return QWidget::event(event);
+}
+
+// --- Navegador -----------------------------------------------------------------
+
+NavigatorWidget::NavigatorWidget(QWidget* parent)
+    : QTreeWidget(parent)
+{
+    setHeaderHidden(true);
+    setColumnCount(1);
+    connect(this, &QTreeWidget::itemChanged, this, [this](QTreeWidgetItem* item) {
+        if (refreshing_) {
+            return;
+        }
+        const bool visible = item->checkState(0) == Qt::Checked;
+        switch (item->data(0, KindRole).toInt()) {
+        case OriginItem:
+            emit originVisibilityChanged(visible);
+            break;
+        case BodyItem:
+            emit bodyVisibilityChanged(item->data(0, KeyRole).toString().toStdString(), visible);
+            break;
+        case SketchItem:
+            emit sketchVisibilityChanged(item->data(0, KeyRole).toULongLong(), visible);
+            break;
+        default:
+            break;
+        }
+    });
+    connect(this, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item) {
+        if (item->data(0, KindRole).toInt() == SketchItem) {
+            emit sketchActivated(item->data(0, KeyRole).toULongLong());
+        }
+    });
+}
+
+void NavigatorWidget::refresh(const document::Document& document, const document::ModelState& state,
+                              std::size_t upTo, const std::set<std::string>& hiddenBodies,
+                              const std::set<document::FeatureId>& visibleSketches, bool originVisible)
+{
+    refreshing_ = true;
+    clear();
+    const auto checkable = [](QTreeWidgetItem* item, bool on, int kind, const QVariant& key) {
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+        item->setCheckState(0, on ? Qt::Checked : Qt::Unchecked);
+        item->setData(0, KindRole, kind);
+        item->setData(0, KeyRole, key);
+    };
+
+    auto* origin = new QTreeWidgetItem(this, {QStringLiteral("Origen")});
+    checkable(origin, originVisible, OriginItem, {});
+
+    auto* bodies = new QTreeWidgetItem(this, {QStringLiteral("Cuerpos")});
+    for (const document::Body& body : state.bodies) {
+        auto* item = new QTreeWidgetItem(bodies, {QString::fromStdString(body.name)});
+        checkable(item, !hiddenBodies.contains(body.key), BodyItem, QString::fromStdString(body.key));
+    }
+
+    auto* sketches = new QTreeWidgetItem(this, {QStringLiteral("Sketches")});
+    for (std::size_t i = 0; i < std::min(upTo, document.featureCount()); ++i) {
+        const document::Feature& f = document.feature(i);
+        if (f.kind() != document::FeatureKind::Sketch) {
+            continue;
+        }
+        auto* item = new QTreeWidgetItem(sketches, {QString::fromStdString(f.name())});
+        checkable(item, visibleSketches.contains(f.id()), SketchItem, QVariant::fromValue<qulonglong>(f.id()));
+        const document::FeatureStatus& status = document.status(f.id());
+        if (status.health == document::Health::Warning || status.health == document::Health::Error) {
+            item->setToolTip(0, QString::fromStdString(status.message));
+            item->setForeground(0, QColor(0xF2, 0xA3, 0x4B));
+        }
+    }
+    expandAll();
+    refreshing_ = false;
+}
+
+} // namespace nuf::app

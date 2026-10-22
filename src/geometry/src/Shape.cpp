@@ -180,6 +180,16 @@ std::optional<sketch::Plane> Shape::facePlane(int index) const
     return sketch::Plane::fromPointAndNormal(toVec3(pln.Location().XYZ()), toVec3(normal.XYZ()));
 }
 
+sketch::Vec3 Shape::faceCenter(int index) const
+{
+    if (index < 0 || index >= faceCount()) {
+        return {};
+    }
+    GProp_GProps props;
+    BRepGProp::SurfaceProperties(faceAt(*this, index), props);
+    return toVec3(props.CentreOfMass().XYZ());
+}
+
 std::optional<std::pair<sketch::Vec3, sketch::Vec3>> Shape::edgeLine(int index) const
 {
     if (index < 0 || index >= edgeCount()) {

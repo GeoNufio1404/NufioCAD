@@ -66,6 +66,8 @@ public:
     // Plano de una cara plana, con la normal hacia fuera del sólido; el
     // origen y los ejes, como Plane::fromPointAndNormal.
     std::optional<sketch::Plane> facePlane(int index) const;
+    // Centro (de masas) de una cara.
+    sketch::Vec3 faceCenter(int index) const;
     // Recta de una arista recta (punto y dirección unitaria).
     std::optional<std::pair<sketch::Vec3, sketch::Vec3>> edgeLine(int index) const;
 

@@ -169,7 +169,7 @@ pieza es solo el resultado. Se divide así:
 - **Navegador** (izquierda): origen (planos y ejes), cuerpos y sketches, con mostrar/ocultar.
 - **Timeline** (abajo): un icono por operación en orden; doble clic para editar, clic derecho para suprimir/borrar.
 - Herramienta **Extruir** (E): elegir perfiles (ya seleccionables en la vista 3D) o una cara plana de un cuerpo; panel de propiedades a la derecha, flecha en pantalla para arrastrar la distancia, valor junto al cursor y vista previa en vivo (naranja para cortar). Aceptar/Cancelar.
-- Herramienta **Revolución**: perfil + eje, con arrastre del ángulo.
+- Herramienta **Revolución**: perfil + eje (de origen, línea del sketch o arista recta), con ángulo, vuelta completa, simétrica o dos lados.
 - Deshacer/rehacer de todo el modelado (Ctrl+Z / Ctrl+Y).
 - La pieza de demostración desaparece: se empieza con el documento vacío.
 
@@ -179,6 +179,18 @@ pieza es solo el resultado. Se divide así:
 - Suprimir/reactivar y borrar (avisando si otras dependen de ella).
 - Lo proyectado en un sketch queda vinculado a la arista original y se actualiza con la pieza.
 - Iconos de error/advertencia en el timeline y el navegador, con el motivo.
+
+**Pruebas manuales pendientes (3a y 3b)**
+
+20. **Extruir**: sketch en XY con un rectángulo → Terminar sketch → clic dentro del rectángulo → **E**. A la derecha aparece el panel; arrastrar la flecha naranja o escribir la distancia; Enter o Aceptar. Aparece «Cuerpo1» en el navegador y «Extrusión1» en el timeline; el sketch se oculta solo.
+21. **Sketch en una cara**: Crear sketch → clic en la cara superior → círculo → Terminar. Clic dentro del círculo → E → distancia negativa: la operación cambia sola a **Cortar** (vista previa del agujero) → Aceptar.
+22. **Editar**: doble clic en «Extrusión1» del timeline → el modelo vuelve a ese punto → cambiar la distancia → Aceptar: el agujero sube o baja con la cara.
+23. **Deshacer/Rehacer** (Ctrl+Z / Ctrl+Y) de cada paso; editar un sketch completo es un solo paso.
+24. **Variantes de extruir**: Simétrica, Dos lados, A través de todo, Hasta una cara (botón «Elegir cara de destino» y clic en la cara), Ángulo y Desfase inicial. Unir dos cuerpos separados con un puente.
+25. **Empujar una cara**: sin sketch, clic en una cara plana de un cuerpo → E → distancia.
+26. **Revolución**: sketch en XZ con un rectángulo a la derecha del eje → clic en él → Sólido › Revolución → Eje Z (o clic en una línea del sketch) → Vuelta completa.
+27. **Timeline**: arrastrar el marcador naranja hacia atrás y adelante; clic derecho en una ficha → Suprimir / Reactivar / Renombrar / Borrar (avisa si otras dependen de ella) / Mover el marcador aquí; arrastrar una ficha a otro sitio (no deja poner una extrusión antes de su sketch).
+28. **Navegador**: casillas para mostrar/ocultar cuerpos, sketches y el origen; doble clic en un sketch para editarlo.
 
 ### Fase 4 — Archivos y exportación
 - Formato nativo `.nuf` (offline y privado), guardando el historial.
@@ -231,5 +243,5 @@ pieza es solo el resultado. Se divide así:
 | Fase 0 | ✅ Completa — mockups, formatos de archivo, arquitectura, entorno (repositorio con CMake, vcpkg, pruebas y CI) y nombre de trabajo NufioCAD |
 | Fase 1 | 🚧 Implementada y probada en Linux (Fedora): visor OCCT en Qt, órbita/pan/zoom estilo Fusion, ViewCube, resaltado y selección de caras y aristas. Falta probarla en Windows |
 | Fase 2 | 🚧 Implementada (2a–2d) — sketch completo: dibujo con variantes, elipse, spline y cónica; restricciones (incluida G2), cotas y valores junto al cursor; selección (también por rectángulo), deshacer, arrastre y perfiles; edición (recortar, extender, partir, empalme, chaflán, desfase, simetría, patrones, mover/copiar/girar/escalar); proyectar aristas, intersección, texto, imagen de referencia e importar DXF; los sketches terminados se guardan, sus perfiles y curvas se seleccionan en la vista 3D y se reabren con doble clic. Pendiente: las pruebas manuales de abajo y probar en Windows. Limitaciones: lo proyectado y el texto quedan bloqueados (no se actualizan con la pieza ni se editan como texto hasta la Fase 3); recortar/extender/partir y desfase trabajan con líneas, arcos y círculos; los patrones son copias independientes; las curvas que se cruzan sin compartir extremo no parten los perfiles |
-| Fase 3 | 🚧 En curso (3a) |
+| Fase 3 | 🚧 En curso — 3a (núcleo: operaciones, recálculo, nombres estables) y 3b (sketches en el historial, Extruir, Revolución, timeline, navegador, deshacer) implementadas; ya se puede editar cualquier operación pasada, mover el marcador, reordenar, suprimir y borrar. Falta la 3c (vínculo de lo proyectado y avisos más visibles) y las pruebas manuales 20–28 |
 | Fases 4–9 | Pendientes |

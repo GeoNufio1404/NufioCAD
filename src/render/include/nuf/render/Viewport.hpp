@@ -1,5 +1,6 @@
 #pragma once
 
+#include <nuf/document/Features.hpp>
 #include <nuf/sketch/Plane.hpp>
 
 #include <QOpenGLWidget>
@@ -8,6 +9,7 @@
 
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace nuf::render {
@@ -18,6 +20,32 @@ struct SketchHighlight {
     sketch::Ref hovered;
     std::vector<sketch::ConstraintId> selectedConstraints;
     sketch::ConstraintId hoveredConstraint = 0;
+};
+
+// Lo seleccionado en el modelo (fuera del sketch), con referencias estables.
+struct ModelSelection {
+    struct Profile {
+        document::FeatureId sketch = 0;
+        int index = 0;  // en el orden de sketch::findProfiles
+    };
+    struct Curve {
+        document::FeatureId sketch = 0;
+        sketch::EntityId entity = 0;
+    };
+    struct Face {
+        std::string body;  // Body::key
+        geometry::ElementRef ref;
+    };
+    struct Edge {
+        std::string body;
+        geometry::ElementRef ref;
+    };
+    std::vector<Profile> profiles;
+    std::vector<Curve> curves;
+    std::vector<Face> faces;
+    std::vector<Edge> edges;
+
+    bool empty() const { return profiles.empty() && curves.empty() && faces.empty() && edges.empty(); }
 };
 
 // Viewport 3D: visor V3d/AIS de OpenCASCADE dentro de un QOpenGLWidget.
@@ -62,8 +90,32 @@ public:
     // Muestra un sketch terminado en su plano: sus regiones (perfiles) y sus
     // curvas se pueden seleccionar en la vista 3D, por encima de la pieza.
     // Con el mismo id, sustituye al anterior.
-    void showFinishedSketch(int id, const QString& name, const sketch::Sketch& sketch, const sketch::Plane& plane);
-    void hideFinishedSketch(int id);
+    void showFinishedSketch(document::FeatureId id, const QString& name, const sketch::Sketch& sketch,
+                            const sketch::Plane& plane);
+    void hideFinishedSketch(document::FeatureId id);
+
+    // Planos de origen siempre a la vista (no solo al elegir el plano).
+    void setOriginVisible(bool visible);
+
+    // Cuerpos del modelo. Solo se rehacen los que cambiaron.
+    void showBodies(const std::vector<document::Body>& bodies);
+    // Sólido de la operación en curso, translúcido (rojo si quita material).
+    void showToolPreview(const geometry::Shape& tool, bool removes);
+    void clearToolPreview();
+
+    ModelSelection modelSelection() const;
+    void clearModelSelection();
+    // Selecciona esas regiones de sketches terminados (al editar una operación).
+    void selectProfiles(const std::vector<ModelSelection::Profile>& profiles);
+    // Con una operación en curso, un clic agrega o quita de la selección
+    // (sin Shift), como en Fusion 360.
+    void setAdditiveSelection(bool on);
+
+    // Flecha para arrastrar la distancia de una extrusión: sale de «origin»
+    // en «direction» y su punta está a «distance». Al arrastrarla se emite
+    // distanceHandleDragged con la nueva distancia.
+    void showDistanceHandle(const sketch::Vec3& origin, const sketch::Vec3& direction, double distance);
+    void hideDistanceHandle();
     bool isSketching() const;
     // Vuelve a poner la cámara de frente al plano del sketch.
     void lookAtSketch();
@@ -101,10 +153,15 @@ public:
 signals:
     // Texto breve para la barra de estado ("Cara seleccionada", "2 aristas"…).
     void selectionChanged(const QString& description);
+    // Cambió la selección del modelo (ver modelSelection()).
+    void modelSelectionChanged();
     // Doble clic sobre un sketch terminado (para volver a editarlo).
-    void finishedSketchActivated(int id);
-    // description: "Plano XY", "Cara plana"…
-    void sketchPlanePicked(const nuf::sketch::Plane& plane, const QString& description);
+    void finishedSketchActivated(nuf::document::FeatureId id);
+    // description: "Plano XY", "Cara plana"…; attachment: dónde queda sujeto.
+    void sketchPlanePicked(const nuf::sketch::Plane& plane, const QString& description,
+                           const nuf::document::SketchAttachment& attachment);
+    void distanceHandleDragged(double distance);
+    void distanceHandleReleased();
     // Posición del cursor en coordenadas del sketch (mm); hasPoint = false
     // si el cursor no corta el plano (vista de canto o fuera del visor).
     void sketchCursorMoved(bool hasPoint, double x, double y);

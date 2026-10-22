@@ -7,6 +7,10 @@ add_executable(nuf_app
     src/main.cpp
     src/MainWindow.cpp
     src/MainWindow.hpp
+    src/FeatureTools.cpp
+    src/FeatureTools.hpp
+    src/ModelPanels.cpp
+    src/ModelPanels.hpp
     src/SelfCheck.cpp
     src/SketchSession.cpp
     src/SketchSession.hpp

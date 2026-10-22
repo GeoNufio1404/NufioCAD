@@ -1,6 +1,9 @@
 #include "MainWindow.hpp"
+#include "FeatureTools.hpp"
+#include "ModelPanels.hpp"
 #include "Theme.hpp"
 
+#include <nuf/commands/FeatureCommands.hpp>
 #include <nuf/commands/RenameDocument.hpp>
 #include <nuf/geometry/Kernel.hpp>
 #include <nuf/io/NufFile.hpp>
@@ -17,6 +20,8 @@
 #include <QLineEdit>
 #include <QLocale>
 #include <QMenuBar>
+#include <QMessageBox>
+#include <QScrollArea>
 #include <QSettings>
 #include <QStatusBar>
 #include <QToolBar>
@@ -32,7 +37,7 @@ namespace nuf::app {
 namespace {
 
 // Versión de la distribución de barras y paneles (ver restoreState).
-constexpr int kLayoutVersion = 2;
+constexpr int kLayoutVersion = 3;
 
 QWidget* placeholder(const QString& text)
 {
@@ -67,18 +72,59 @@ MainWindow::MainWindow(QWidget* parent)
             [this](const QString& description) { statusBar()->showMessage(description); });
     connect(viewport_, &render::Viewport::sketchPlanePicked, this, &MainWindow::startSketch);
     connect(viewport_, &render::Viewport::finishedSketchActivated, this, &MainWindow::editSketch);
+    connect(timeline_, &TimelineWidget::featureActivated, this, &MainWindow::activateFeature);
+    connect(timeline_, &TimelineWidget::featureMenuRequested, this, &MainWindow::showFeatureMenu);
+    connect(timeline_, &TimelineWidget::markerMoved, this, [this](std::size_t marker) {
+        if (!sketch_ && !tool_) {
+            commands_.push(std::make_unique<commands::SetMarker>(marker));
+        }
+    });
+    connect(timeline_, &TimelineWidget::featureMoved, this, [this](document::FeatureId id, std::size_t index) {
+        if (sketch_ || tool_) {
+            return;
+        }
+        if (!document_.canMoveFeature(id, index)) {
+            statusBar()->showMessage(QStringLiteral("No se puede mover ahí: quedaría antes de lo que necesita o "
+                                                    "después de lo que la usa"),
+                                     6000);
+            return;
+        }
+        commands_.push(std::make_unique<commands::MoveFeature>(id, index));
+    });
+    connect(navigator_, &NavigatorWidget::bodyVisibilityChanged, this, [this](const std::string& key, bool visible) {
+        if (visible) {
+            hiddenBodies_.erase(key);
+        } else {
+            hiddenBodies_.insert(key);
+        }
+        refreshModel();
+    });
+    connect(navigator_, &NavigatorWidget::sketchVisibilityChanged, this, [this](document::FeatureId id, bool visible) {
+        sketchVisibility_[id] = visible;
+        refreshModel();
+    });
+    connect(navigator_, &NavigatorWidget::originVisibilityChanged, this, [this](bool visible) {
+        originVisible_ = visible;
+        viewport_->setOriginVisible(visible);
+    });
+    connect(navigator_, &NavigatorWidget::sketchActivated, this, &MainWindow::editSketch);
     connect(viewport_, &render::Viewport::sketchCursorMoved, this, [this](bool hasPoint, double x, double y) {
         cursorLabel_->setText(hasPoint ? QStringLiteral("X %1   Y %2 mm")
                                              .arg(QLocale().toString(x, 'f', 2), QLocale().toString(y, 'f', 2))
                                        : QString());
     });
 
-    document_.changed.connect([this] { updateTitle(); });
+    document_.changed.connect([this] {
+        updateTitle();
+        refreshModel();
+    });
     commands_.changed.connect([this] { updateUndoActions(); });
     updateTitle();
     updateUndoActions();
+    refreshModel();
     resize(1440, 900);
 
+    resizeDocks({navigatorDock_, propertiesDock_}, {240, 300}, Qt::Horizontal);
     // Recuerda tamaño de la ventana y distribución de paneles entre sesiones.
     defaultLayout_ = saveState(kLayoutVersion);
     const QSettings settings;
@@ -87,6 +133,8 @@ MainWindow::MainWindow(QWidget* parent)
     // distribución guardada (que ya no encaja) se descarta.
     restoreState(settings.value(QStringLiteral("ui/layout")).toByteArray(), kLayoutVersion);
 }
+
+MainWindow::~MainWindow() = default;
 
 void MainWindow::closeEvent(QCloseEvent* event)
 {
@@ -150,6 +198,16 @@ void MainWindow::createMenus()
     createSketchAction_->setToolTip(QStringLiteral("Crear un sketch en un plano de origen o en una cara plana"));
     finishSketchAction_ = sketchMenu->addAction(QStringLiteral("&Terminar sketch"), this, &MainWindow::finishSketch);
     sketchMenu->addSeparator();
+
+    QMenu* solidMenu = menuBar()->addMenu(QStringLiteral("S&ólido"));
+    extrudeAction_ = solidMenu->addAction(QStringLiteral("&Extruir"), QKeySequence(Qt::Key_E), this, [this] {
+        startTool(std::make_unique<ExtrudeTool>(document_, *viewport_, std::nullopt));
+    });
+    extrudeAction_->setToolTip(QStringLiteral("Extruir perfiles de un sketch o una cara plana (E)"));
+    revolveAction_ = solidMenu->addAction(QStringLiteral("&Revolución"), this, [this] {
+        startTool(std::make_unique<RevolveTool>(document_, *viewport_, std::nullopt));
+    });
+    revolveAction_->setToolTip(QStringLiteral("Girar perfiles de un sketch alrededor de un eje"));
 
     // Herramientas de dibujo por familias (como en Fusion 360); la primera
     // de cada familia lleva su tecla.
@@ -289,6 +347,9 @@ void MainWindow::createMenus()
     toolbar->addAction(createSketchAction_);
     toolbar->addAction(finishSketchAction_);
     toolbar->addSeparator();
+    toolbar->addAction(extrudeAction_);
+    toolbar->addAction(revolveAction_);
+    toolbar->addSeparator();
     // Un botón por familia; la flecha despliega sus variantes y el botón se
     // queda con la última usada. Las de modificar, en una segunda barra.
     addToolBarBreak();
@@ -355,25 +416,40 @@ void MainWindow::createDocks()
     // objectName: lo usa saveState()/restoreState() para recordar cada panel.
     navigatorDock_ = new QDockWidget(QStringLiteral("Navegador"), this);
     navigatorDock_->setObjectName(QStringLiteral("navigator"));
-    navigatorDock_->setWidget(placeholder(QStringLiteral("Navegador\n(Fase 3)")));
+    navigator_ = new NavigatorWidget();
+    navigatorDock_->setWidget(navigator_);
     navigatorDock_->setMinimumWidth(240);
     addDockWidget(Qt::LeftDockWidgetArea, navigatorDock_);
 
     propertiesDock_ = new QDockWidget(QStringLiteral("Propiedades"), this);
     propertiesDock_->setObjectName(QStringLiteral("properties"));
-    propertiesDock_->setWidget(placeholder(QStringLiteral("Panel de propiedades\n(Fase 3)")));
+    propertiesPlaceholder_ = placeholder(QStringLiteral("Elige una herramienta (Extruir, Revolución…) para ver "
+                                                         "sus propiedades aquí"));
+    propertiesDock_->setWidget(propertiesPlaceholder_);
     propertiesDock_->setMinimumWidth(300);
     addDockWidget(Qt::RightDockWidgetArea, propertiesDock_);
 
     timelineDock_ = new QDockWidget(QStringLiteral("Timeline"), this);
     timelineDock_->setObjectName(QStringLiteral("timeline"));
-    timelineDock_->setWidget(placeholder(QStringLiteral("Timeline (Fase 3)")));
+    timeline_ = new TimelineWidget(document_);
+    auto* scroll = new QScrollArea();
+    scroll->setWidget(timeline_);
+    scroll->setWidgetResizable(true);
+    scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setFixedHeight(timeline_->sizeHint().height() + 16);
+    timelineDock_->setWidget(scroll);
     timelineDock_->setFeatures(QDockWidget::NoDockWidgetFeatures);
     addDockWidget(Qt::BottomDockWidgetArea, timelineDock_);
 }
 
 void MainWindow::updateUndoActions()
 {
+    if (tool_) {
+        undoAction_->setEnabled(false);
+        redoAction_->setEnabled(false);
+        return;
+    }
     if (sketch_) {
         undoAction_->setEnabled(sketch_->canUndo());
         redoAction_->setEnabled(sketch_->canRedo());
@@ -398,7 +474,7 @@ void MainWindow::updateTitle()
 
 void MainWindow::createSketch()
 {
-    if (sketch_ || viewport_->isPickingSketchPlane()) {
+    if (sketch_ || tool_ || viewport_->isPickingSketchPlane()) {
         return;
     }
     viewport_->pickSketchPlane();
@@ -406,29 +482,37 @@ void MainWindow::createSketch()
     updateSketchActions();
 }
 
-void MainWindow::startSketch(const sketch::Plane& plane, const QString& description)
+void MainWindow::startSketch(const sketch::Plane& plane, const QString& description,
+                             const document::SketchAttachment& attachment)
 {
     editingSketch_.reset();
+    newSketchAttachment_ = attachment;
     openSession(plane, description, std::nullopt);
 }
 
-void MainWindow::editSketch(int id)
+void MainWindow::editSketch(document::FeatureId id)
 {
-    if (sketch_ || viewport_->isPickingSketchPlane()) {
+    if (sketch_ || tool_ || viewport_->isPickingSketchPlane()) {
         return;
     }
-    const auto it = std::ranges::find(sketches_, id, &StoredSketch::id);
-    if (it == sketches_.end()) {
+    const auto index = document_.indexOf(id);
+    const auto* feature = dynamic_cast<const document::SketchFeature*>(document_.findFeature(id));
+    if (!index || feature == nullptr) {
         return;
     }
+    // Su plano tal como quedó al calcularlo (sigue a su cara).
+    const auto& after = document_.stateBefore(*index + 1).sketches;
+    const auto placed = after.find(id);
+    const sketch::Plane plane = placed != after.end() ? placed->second.plane : feature->attachment().lastPlane;
     editingSketch_ = id;
-    viewport_->hideFinishedSketch(id);
-    openSession(it->plane, it->name, it->sketch);
+    refreshModel();  // el modelo como estaba antes de este sketch
+    openSession(plane, QString::fromStdString(feature->name()), feature->sketch());
 }
 
 void MainWindow::openSession(const sketch::Plane& plane, const QString& description,
                              std::optional<sketch::Sketch> initial)
 {
+    viewport_->clearModelSelection();
     sketch_ = std::make_unique<SketchSession>(*viewport_, plane, std::move(initial));
     connect(sketch_.get(), &SketchSession::toolChanged, this, [this](SketchSession::Tool tool) {
         for (const auto& [kind, action] : toolActions_) {
@@ -445,6 +529,7 @@ void MainWindow::openSession(const sketch::Plane& plane, const QString& descript
             [this](const QString& text) { statusBar()->showMessage(text, 6000); });
     statusBar()->showMessage(QStringLiteral("Sketch en %1 · L línea, R rectángulo, C círculo, A arco").arg(description));
     sketch_->start();
+    timeline_->setEditing(editingSketch_);
     updateSketchActions();
     updateUndoActions();
 }
@@ -454,37 +539,261 @@ void MainWindow::finishSketch()
     if (!sketch_) {
         return;
     }
-    // Hasta la Fase 3 (historial) se guarda aquí y queda a la vista; doble
-    // clic sobre él para volver a editarlo.
-    const sketch::Sketch finished = sketch_->sketch();
+    sketch::Sketch finished = sketch_->sketch();
     const sketch::Plane plane = sketch_->plane();
     sketch_.reset();
-    const bool empty = std::ranges::none_of(finished.entities(), [](const sketch::Entity& e) { return !e.reference; });
-    auto it = editingSketch_ ? std::ranges::find(sketches_, *editingSketch_, &StoredSketch::id) : sketches_.end();
-    if (empty) {
-        // Un sketch vacío no se guarda (y si se vació al reeditarlo, se quita).
-        if (it != sketches_.end()) {
-            sketches_.erase(it);
-        }
-    } else {
-        if (it == sketches_.end()) {
-            sketches_.push_back({nextSketchId_, QStringLiteral("Sketch %1").arg(nextSketchId_), finished, plane});
-            ++nextSketchId_;
-            it = sketches_.end() - 1;
-        } else {
-            it->sketch = finished;
-        }
-        viewport_->showFinishedSketch(it->id, it->name, it->sketch, it->plane);
-    }
-    editingSketch_.reset();
+    const std::optional<document::FeatureId> editing = std::exchange(editingSketch_, std::nullopt);
+    timeline_->setEditing(std::nullopt);
     sketchStatusLabel_->clear();
     statusBar()->clearMessage();
+    if (editing) {
+        // Un solo paso de deshacer para toda la edición del sketch.
+        if (const auto* feature = dynamic_cast<const document::SketchFeature*>(document_.findFeature(*editing))) {
+            auto edited = std::unique_ptr<document::SketchFeature>(
+                static_cast<document::SketchFeature*>(feature->clone().release()));
+            edited->setSketch(std::move(finished));
+            const std::string label = "Editar " + feature->name();
+            commands_.push(std::make_unique<commands::EditFeature>(*editing, std::move(edited), label));
+        }
+    } else {
+        const bool empty =
+            std::ranges::none_of(finished.entities(), [](const sketch::Entity& e) { return !e.reference; });
+        if (!empty) {
+            document::SketchAttachment attachment = newSketchAttachment_;
+            attachment.lastPlane = plane;
+            commands_.push(std::make_unique<commands::AddFeature>(
+                std::make_unique<document::SketchFeature>(std::move(finished), attachment)));
+        }
+    }
+    refreshModel();
     updateSketchActions();
     updateUndoActions();
 }
 
+// --- Operaciones sólidas ---------------------------------------------------------
+
+void MainWindow::startTool(std::unique_ptr<FeatureTool> tool)
+{
+    if (sketch_ || tool_ || viewport_->isPickingSketchPlane()) {
+        return;
+    }
+    tool_ = std::move(tool);
+    connect(tool_.get(), &FeatureTool::accepted, this, [this] { finishTool(true); });
+    connect(tool_.get(), &FeatureTool::cancelled, this, [this] { finishTool(false); });
+    connect(tool_.get(), &FeatureTool::message, this, [this](const QString& text) { statusBar()->showMessage(text, 6000); });
+    refreshModel();  // al editar: el modelo hasta esa operación
+    tool_->start();
+    propertiesDock_->setWidget(tool_->panel());
+    propertiesDock_->show();
+    timeline_->setEditing(tool_->editing());
+    statusBar()->showMessage(QStringLiteral("Elige las entradas en la vista · Enter acepta · Esc cancela"));
+    updateSketchActions();
+    updateUndoActions();
+}
+
+void MainWindow::finishTool(bool accepted)
+{
+    if (!tool_) {
+        return;
+    }
+    std::unique_ptr<document::Feature> feature = accepted ? tool_->build() : nullptr;
+    const std::optional<document::FeatureId> editing = tool_->editing();
+    const document::FeatureId id = tool_->featureId();
+    // Se destruye después: esta llamada viene de una señal de la herramienta.
+    propertiesDock_->setWidget(propertiesPlaceholder_);
+    tool_.release()->deleteLater();
+    timeline_->setEditing(std::nullopt);
+    statusBar()->clearMessage();
+    viewport_->clearModelSelection();
+    viewport_->clearToolPreview();
+    viewport_->hideDistanceHandle();
+    viewport_->setAdditiveSelection(false);
+    if (feature) {
+        if (editing) {
+            commands_.push(std::make_unique<commands::EditFeature>(*editing, std::move(feature)));
+        } else {
+            feature->setId(id);
+            commands_.push(std::make_unique<commands::AddFeature>(std::move(feature)));
+        }
+    }
+    refreshModel();
+    updateSketchActions();
+    updateUndoActions();
+}
+
+void MainWindow::activateFeature(document::FeatureId id)
+{
+    const document::Feature* feature = document_.findFeature(id);
+    if (feature == nullptr || sketch_ || tool_) {
+        return;
+    }
+    switch (feature->kind()) {
+    case document::FeatureKind::Sketch:
+        editSketch(id);
+        break;
+    case document::FeatureKind::Extrude:
+        startTool(std::make_unique<ExtrudeTool>(document_, *viewport_, id));
+        break;
+    case document::FeatureKind::Revolve:
+        startTool(std::make_unique<RevolveTool>(document_, *viewport_, id));
+        break;
+    }
+}
+
+void MainWindow::showFeatureMenu(document::FeatureId id, const QPoint& globalPos)
+{
+    const document::Feature* feature = document_.findFeature(id);
+    if (feature == nullptr || sketch_ || tool_) {
+        return;
+    }
+    const QString name = QString::fromStdString(feature->name());
+    QMenu menu(this);
+    menu.addAction(QStringLiteral("Editar"), this, [this, id] { activateFeature(id); });
+    menu.addAction(QStringLiteral("Renombrar…"), this, [this, id, name] {
+        bool ok = false;
+        const QString text = QInputDialog::getText(this, QStringLiteral("Renombrar"), QStringLiteral("Nombre:"),
+                                                   QLineEdit::Normal, name, &ok);
+        const document::Feature* f = document_.findFeature(id);
+        if (ok && f && !text.trimmed().isEmpty() && text.trimmed() != name) {
+            auto renamed = f->clone();
+            renamed->setName(text.trimmed().toStdString());
+            commands_.push(std::make_unique<commands::EditFeature>(
+                id, std::move(renamed), "Renombrar " + name.toStdString()));
+        }
+    });
+    const bool suppressed = feature->suppressed();
+    menu.addAction(suppressed ? QStringLiteral("Reactivar") : QStringLiteral("Suprimir"), this, [this, id, suppressed] {
+        commands_.push(std::make_unique<commands::SuppressFeature>(id, !suppressed));
+    });
+    menu.addAction(QStringLiteral("Mover el marcador aquí"), this, [this, id] {
+        if (const auto index = document_.indexOf(id)) {
+            commands_.push(std::make_unique<commands::SetMarker>(*index + 1));
+        }
+    });
+    menu.addSeparator();
+    menu.addAction(QStringLiteral("Borrar"), this, [this, id, name] {
+        const std::vector<document::FeatureId> users = document_.dependents(id);
+        if (!users.empty()) {
+            QStringList names;
+            for (document::FeatureId user : users) {
+                names << QString::fromStdString(document_.findFeature(user)->name());
+            }
+            const auto answer = QMessageBox::question(
+                this, QStringLiteral("Borrar %1").arg(name),
+                QStringLiteral("Estas operaciones dependen de %1 y quedarán con error:\n\n%2\n\n¿Borrarla igualmente?")
+                    .arg(name, names.join(QStringLiteral(", "))));
+            if (answer != QMessageBox::Yes) {
+                return;
+            }
+        }
+        commands_.push(std::make_unique<commands::DeleteFeature>(id));
+    });
+    menu.exec(globalPos);
+}
+
+// --- Vista del modelo ----------------------------------------------------------------
+
+std::size_t MainWindow::shownUpTo() const
+{
+    if (editingSketch_) {
+        return document_.indexOf(*editingSketch_).value_or(document_.marker());
+    }
+    if (tool_) {
+        return tool_->position();
+    }
+    return document_.marker();
+}
+
+bool MainWindow::sketchVisible(document::FeatureId id, std::size_t upTo) const
+{
+    if (const auto chosen = sketchVisibility_.find(id); chosen != sketchVisibility_.end()) {
+        return chosen->second;
+    }
+    // Como en Fusion: un sketch se oculta cuando una operación ya lo usó.
+    for (std::size_t i = 0; i < upTo; ++i) {
+        const document::Feature& f = document_.feature(i);
+        if (f.kind() == document::FeatureKind::Sketch || f.suppressed()) {
+            continue;
+        }
+        const std::vector<document::FeatureId> deps = f.dependencies();
+        if (std::ranges::find(deps, id) != deps.end()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void MainWindow::refreshModel()
+{
+    if (!viewport_ || !timeline_ || !navigator_) {
+        return;
+    }
+    const std::size_t upTo = shownUpTo();
+    const document::ModelState& state = document_.stateBefore(upTo);
+
+    // Con una herramienta activa, ella muestra su vista previa.
+    if (!tool_) {
+        std::vector<document::Body> visible;
+        for (const document::Body& body : state.bodies) {
+            if (!hiddenBodies_.contains(body.key)) {
+                visible.push_back(body);
+            }
+        }
+        viewport_->showBodies(visible);
+    }
+
+    std::map<document::FeatureId, ShownSketch> wanted;
+    std::set<document::FeatureId> visibleIds;
+    for (std::size_t i = 0; i < upTo && i < document_.featureCount(); ++i) {
+        const auto* sk = dynamic_cast<const document::SketchFeature*>(&document_.feature(i));
+        if (sk == nullptr || sk->id() == editingSketch_) {
+            continue;
+        }
+        const auto placed = state.sketches.find(sk->id());
+        if (placed == state.sketches.end()) {
+            continue;  // suprimido
+        }
+        // Al usar una herramienta, se ven todos (para elegir perfiles).
+        if (!tool_ && !sketchVisible(sk->id(), upTo)) {
+            continue;
+        }
+        visibleIds.insert(sk->id());
+        wanted[sk->id()] = {&sk->sketch(), placed->second.plane, sk->name()};
+    }
+    for (auto it = shownSketches_.begin(); it != shownSketches_.end();) {
+        const auto keep = wanted.find(it->first);
+        const auto samePoint = [](const sketch::Vec3& a, const sketch::Vec3& b) {
+            return a.x == b.x && a.y == b.y && a.z == b.z;
+        };
+        const auto samePlane = [&](const sketch::Plane& a, const sketch::Plane& b) {
+            return samePoint(a.origin, b.origin) && samePoint(a.xAxis, b.xAxis) && samePoint(a.yAxis, b.yAxis);
+        };
+        const bool same = keep != wanted.end() && keep->second.sketch == it->second.sketch
+                          && keep->second.name == it->second.name && samePlane(keep->second.plane, it->second.plane);
+        if (!same) {
+            viewport_->hideFinishedSketch(it->first);
+            it = shownSketches_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    for (const auto& [id, shown] : wanted) {
+        if (!shownSketches_.contains(id)) {
+            viewport_->showFinishedSketch(id, QString::fromStdString(shown.name), *shown.sketch, shown.plane);
+            shownSketches_[id] = shown;
+        }
+    }
+    navigator_->refresh(document_, state, upTo, hiddenBodies_, visibleIds, originVisible_);
+    timeline_->updateGeometry();
+    timeline_->update();
+}
+
 void MainWindow::cancel()
 {
+    if (tool_) {
+        finishTool(false);
+        return;
+    }
     if (sketch_ && sketch_->cancel()) {
         return;
     }
@@ -498,7 +807,9 @@ void MainWindow::cancel()
 void MainWindow::updateSketchActions()
 {
     const bool picking = viewport_->isPickingSketchPlane();
-    createSketchAction_->setEnabled(!sketch_ && !picking);
+    createSketchAction_->setEnabled(!sketch_ && !picking && !tool_);
+    extrudeAction_->setEnabled(!sketch_ && !picking && !tool_);
+    revolveAction_->setEnabled(!sketch_ && !picking && !tool_);
     finishSketchAction_->setEnabled(sketch_ != nullptr);
     lookAtSketchAction_->setEnabled(sketch_ != nullptr);
     for (const auto& [tool, action] : toolActions_) {

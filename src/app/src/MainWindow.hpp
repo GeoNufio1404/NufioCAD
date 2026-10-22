@@ -2,6 +2,7 @@
 
 #include <nuf/commands/CommandStack.hpp>
 #include <nuf/document/Document.hpp>
+#include <nuf/document/Features.hpp>
 #include <nuf/sketch/Plane.hpp>
 
 #include "SketchSession.hpp"
@@ -12,6 +13,8 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
+#include <string>
 #include <vector>
 
 class QAction;
@@ -25,6 +28,10 @@ class Viewport;
 
 namespace nuf::app {
 
+class FeatureTool;
+class NavigatorWidget;
+class TimelineWidget;
+
 // Ventana principal: reproduce la distribución del mockup (navegador a la
 // izquierda, propiedades a la derecha, timeline abajo). Cada panel se
 // implementa en su fase.
@@ -33,6 +40,7 @@ class MainWindow final : public QMainWindow {
 
 public:
     explicit MainWindow(QWidget* parent = nullptr);
+    ~MainWindow() override;
 
 protected:
     void closeEvent(QCloseEvent* event) override;
@@ -44,13 +52,27 @@ private:
     void updateTitle();
 
     void createSketch();
-    void startSketch(const sketch::Plane& plane, const QString& description);
-    // Reabre un sketch terminado (doble clic en la vista 3D).
-    void editSketch(int id);
+    void startSketch(const sketch::Plane& plane, const QString& description,
+                     const document::SketchAttachment& attachment);
+    // Reabre un sketch del historial (doble clic en la vista 3D o el timeline).
+    void editSketch(document::FeatureId id);
     void openSession(const sketch::Plane& plane, const QString& description, std::optional<sketch::Sketch> initial);
     void finishSketch();
     void cancel();
     void updateSketchActions();
+
+    // Operaciones sólidas.
+    void startTool(std::unique_ptr<FeatureTool> tool);
+    void finishTool(bool accepted);
+    // Editar una operación (doble clic en el timeline).
+    void activateFeature(document::FeatureId id);
+    void showFeatureMenu(document::FeatureId id, const QPoint& globalPos);
+
+    // Muestra el modelo: cuerpos, sketches visibles, navegador y timeline.
+    void refreshModel();
+    // Hasta dónde se muestra el historial (al editar, lo anterior a esa operación).
+    std::size_t shownUpTo() const;
+    bool sketchVisible(document::FeatureId id, std::size_t upTo) const;
 
     document::Document document_;
     commands::CommandStack commands_{document_};
@@ -63,18 +85,26 @@ private:
     QAction* undoAction_ = nullptr;
     QAction* redoAction_ = nullptr;
 
-    // Sketch en edición. En la Fase 3 pasa a ser una operación del documento.
+    // Sketch en edición (nuevo o una operación del historial).
     std::unique_ptr<SketchSession> sketch_;
-    // Sketches terminados (hasta la Fase 3, que los guardará en el documento).
-    struct StoredSketch {
-        int id = 0;
-        QString name;
-        sketch::Sketch sketch;
+    std::optional<document::FeatureId> editingSketch_;  // el que se está reeditando
+    document::SketchAttachment newSketchAttachment_;   // dónde va el sketch nuevo
+    // Herramienta de operación en curso (Extruir, Revolución).
+    std::unique_ptr<FeatureTool> tool_;
+    TimelineWidget* timeline_ = nullptr;
+    NavigatorWidget* navigator_ = nullptr;
+    QWidget* propertiesPlaceholder_ = nullptr;
+    // Visibilidad (de la interfaz; el .nuf la guardará en la Fase 4).
+    std::set<std::string> hiddenBodies_;
+    std::map<document::FeatureId, bool> sketchVisibility_;  // elegida a mano
+    bool originVisible_ = false;
+    // Sketches a la vista, para rehacer solo los que cambian.
+    struct ShownSketch {
+        const sketch::Sketch* sketch = nullptr;
         sketch::Plane plane;
+        std::string name;
     };
-    std::vector<StoredSketch> sketches_;
-    std::optional<int> editingSketch_;  // el que se está reeditando
-    int nextSketchId_ = 1;
+    std::map<document::FeatureId, ShownSketch> shownSketches_;
     std::map<SketchSession::Tool, QAction*> toolActions_;
     // Familias de herramientas (rectángulo, círculo…) para la barra.
     struct ToolFamily {
@@ -84,6 +114,8 @@ private:
     std::vector<ToolFamily> toolFamilies_;
     QLabel* sketchStatusLabel_ = nullptr;
     QAction* createSketchAction_ = nullptr;
+    QAction* extrudeAction_ = nullptr;
+    QAction* revolveAction_ = nullptr;
     QAction* finishSketchAction_ = nullptr;
     QAction* lookAtSketchAction_ = nullptr;
     QAction* deleteAction_ = nullptr;

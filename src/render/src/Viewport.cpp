@@ -46,7 +46,7 @@
 #include <gp_Elips.hxx>
 #include <TopoDS_Compound.hxx>
 #include <gp_Circ.hxx>
-#include <BRepPrimAPI_MakeBox.hxx>
+#include <BRepPrimAPI_MakeCone.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
 #include <Bnd_Box.hxx>
 #include <Font_FontMgr.hxx>
@@ -457,18 +457,6 @@ private:
     std::vector<Label> texts_;
 };
 
-// Pieza de muestra (como "soporte_sensor" del mockup) para probar la
-// navegación y la selección. En la Fase 3 la reemplaza el resultado del
-// documento.
-TopoDS_Shape makeDemoPart()
-{
-    const TopoDS_Shape base = BRepPrimAPI_MakeBox(gp_Pnt(-30, -20, 0), 60, 40, 8).Shape();
-    const TopoDS_Shape boss = BRepPrimAPI_MakeCylinder(gp_Ax2(gp_Pnt(0, 0, 8), gp::DZ()), 10, 22).Shape();
-    const TopoDS_Shape hole = BRepPrimAPI_MakeCylinder(gp_Ax2(gp_Pnt(0, 0, -1), gp::DZ()), 4, 32).Shape();
-    const TopoDS_Shape body = BRepAlgoAPI_Fuse(base, boss).Shape();
-    return BRepAlgoAPI_Cut(body, hole).Shape();
-}
-
 } // namespace
 
 class Viewport::Impl final : public AIS_ViewController {
@@ -496,7 +484,6 @@ public:
 
         configureNavigation();
         createViewCube();
-        showDemoPart();
 
         planeFilter = new SketchPlaneFilter();
         grid = new SketchGrid();
@@ -606,6 +593,210 @@ public:
         }
         emit widget_.selectionChanged(parts.isEmpty() ? QString()
                                                       : QStringLiteral("Seleccionado: ") + parts.join(QStringLiteral(", ")));
+        emit widget_.modelSelectionChanged();
+    }
+
+    // --- Cuerpos del modelo ------------------------------------------------
+
+    struct ShownBody {
+        std::string key;
+        geometry::Shape shape;
+        Handle(AIS_Shape) ais;
+    };
+
+    void showBodies(const std::vector<document::Body>& list)
+    {
+        std::vector<ShownBody> next;
+        for (const document::Body& body : list) {
+            const auto old = std::ranges::find_if(bodies, [&](const ShownBody& b) {
+                return b.key == body.key && b.shape.impl() == body.shape.impl();
+            });
+            if (old != bodies.end()) {
+                next.push_back(*old);
+                bodies.erase(old);
+                continue;
+            }
+            Handle(AIS_Shape) ais = new AIS_Shape(geometry::occtShape(body.shape));
+            ais->SetMaterial(Graphic3d_MaterialAspect(Graphic3d_NameOfMaterial_Plastified));
+            ais->SetColor(rgb(0xB7, 0xBE, 0xC7));
+            // El modo de selección va en Display: con -1 el cuerpo queda como
+            // no seleccionable y un Activate posterior no lo revierte.
+            context->Display(ais, AIS_Shaded, AIS_Shape::SelectionMode(TopAbs_FACE), false);
+            next.push_back({body.key, body.shape, ais});
+        }
+        for (const ShownBody& gone : bodies) {
+            context->Remove(gone.ais, false);
+        }
+        bodies = std::move(next);
+        for (const ShownBody& b : bodies) {
+            activateBody(b);
+        }
+    }
+
+    // Modos de selección de un cuerpo según lo que se esté haciendo.
+    void activateBody(const ShownBody& b)
+    {
+        context->Deactivate(b.ais);
+        switch (mode) {
+        case Mode::Model:
+            context->Activate(b.ais, AIS_Shape::SelectionMode(TopAbs_FACE));
+            context->Activate(b.ais, AIS_Shape::SelectionMode(TopAbs_EDGE));
+            break;
+        case Mode::PickPlane:
+            context->Activate(b.ais, AIS_Shape::SelectionMode(TopAbs_FACE));
+            break;
+        case Mode::Sketch:
+            if (projectMode) {
+                context->Activate(b.ais, AIS_Shape::SelectionMode(TopAbs_EDGE));
+            }
+            break;
+        }
+    }
+
+    void activateBodies()
+    {
+        for (const ShownBody& b : bodies) {
+            activateBody(b);
+        }
+    }
+
+    const ShownBody* bodyOf(const Handle(AIS_InteractiveObject)& object) const
+    {
+        const auto it = std::ranges::find_if(bodies, [&](const ShownBody& b) { return b.ais == object; });
+        return it == bodies.end() ? nullptr : &*it;
+    }
+
+    // Todos los cuerpos en una forma (para cortar con el plano, medir…).
+    TopoDS_Shape allBodies() const
+    {
+        BRep_Builder builder;
+        TopoDS_Compound all;
+        builder.MakeCompound(all);
+        for (const ShownBody& b : bodies) {
+            builder.Add(all, geometry::occtShape(b.shape));
+        }
+        return all;
+    }
+
+    void showToolPreview(const geometry::Shape& tool, bool removes)
+    {
+        clearToolPreview();
+        if (tool.isNull()) {
+            return;
+        }
+        toolPreview = new AIS_Shape(geometry::occtShape(tool));
+        toolPreview->SetColor(removes ? rgb(0xE5, 0x48, 0x4D) : rgb(0x6C, 0xA6, 0xFF));
+        toolPreview->SetTransparency(0.55);
+        toolPreview->Attributes()->SetFaceBoundaryDraw(false);
+        context->Display(toolPreview, AIS_Shaded, -1, false);
+    }
+
+    void clearToolPreview()
+    {
+        if (!toolPreview.IsNull()) {
+            context->Remove(toolPreview, false);
+            toolPreview.Nullify();
+        }
+    }
+
+    ModelSelection modelSelection() const
+    {
+        ModelSelection result;
+        for (context->InitSelected(); context->MoreSelected(); context->NextSelected()) {
+            const Handle(AIS_InteractiveObject) object = context->SelectedInteractive();
+            for (const auto& [id, shown] : finished) {
+                for (std::size_t r = 0; r < shown.regions.size(); ++r) {
+                    if (shown.regions[r].first == object) {
+                        result.profiles.push_back({id, shown.regions[r].second});
+                    }
+                }
+                if (object == shown.curves && context->HasSelectedShape()) {
+                    for (const auto& [edge, entity] : shown.curveEdges) {
+                        if (edge.IsSame(context->SelectedShape())) {
+                            result.curves.push_back({id, entity});
+                        }
+                    }
+                }
+            }
+            const ShownBody* body = bodyOf(object);
+            if (body == nullptr || !context->HasSelectedShape()) {
+                continue;
+            }
+            const TopoDS_Shape& picked = context->SelectedShape();
+            if (picked.ShapeType() == TopAbs_FACE) {
+                if (const auto index = geometry::faceIndexOf(body->shape, picked)) {
+                    result.faces.push_back({body->key, body->shape.faceRef(*index)});
+                }
+            } else if (picked.ShapeType() == TopAbs_EDGE) {
+                if (const auto index = geometry::edgeIndexOf(body->shape, picked)) {
+                    result.edges.push_back({body->key, body->shape.edgeRef(*index)});
+                }
+            }
+        }
+        return result;
+    }
+
+    void setAdditiveSelection(bool on)
+    {
+        // Clic sin modificadores: alterna (como Shift) o sustituye.
+        ChangeMouseSelectionSchemes().Bind(Aspect_VKeyMouse_LeftButton,
+                                           on ? AIS_SelectionScheme_XOR : defaultClickScheme);
+    }
+
+    // --- Flecha de distancia -------------------------------------------------
+
+    void showDistanceHandle(const sketch::Vec3& origin, const sketch::Vec3& direction, double distance)
+    {
+        hideDistanceHandle();
+        handleOrigin = toPnt(origin);
+        handleDirection = toDir(direction);
+        handleDistance = distance;
+        // Tamaño fijo en pantalla (aprox.): se recalcula al volver a mostrarla.
+        const double size = 70.0 * pixelSize();
+        const gp_Dir pointing = distance >= 0.0 ? handleDirection : handleDirection.Reversed();
+        const gp_Pnt tip = handleOrigin.Translated(gp_Vec(handleDirection) * distance);
+        const gp_Pnt base = tip.Translated(gp_Vec(pointing) * (0.15 * size));
+        BRep_Builder builder;
+        TopoDS_Compound arrow;
+        builder.MakeCompound(arrow);
+        builder.Add(arrow, BRepPrimAPI_MakeCylinder(gp_Ax2(base, pointing), 0.035 * size, 0.6 * size).Shape());
+        builder.Add(arrow, BRepPrimAPI_MakeCone(gp_Ax2(base.Translated(gp_Vec(pointing) * (0.6 * size)), pointing),
+                                                0.12 * size, 0.0, 0.3 * size)
+                               .Shape());
+        handle = new AIS_Shape(arrow);
+        handle->SetColor(rgb(0xF2, 0xA3, 0x4B));
+        handle->Attributes()->SetFaceBoundaryDraw(false);
+        handle->SetZLayer(Graphic3d_ZLayerId_Topmost);
+        context->Display(handle, AIS_Shaded, 0, false);
+    }
+
+    void hideDistanceHandle()
+    {
+        if (!handle.IsNull()) {
+            context->Remove(handle, false);
+            handle.Nullify();
+        }
+        handleDragging = false;
+    }
+
+    // Parámetro sobre el eje de la flecha del punto más cercano al rayo del píxel.
+    std::optional<double> handleParameterAt(const Vec2i& pixel) const
+    {
+        double x = 0, y = 0, z = 0, dx = 0, dy = 0, dz = 0;
+        view->ConvertWithProj(pixel.x(), pixel.y(), x, y, z, dx, dy, dz);
+        const gp_Vec ray(dx, dy, dz);
+        if (ray.Magnitude() < 1e-12) {
+            return std::nullopt;
+        }
+        const gp_Vec v = ray.Normalized();
+        const gp_Vec d(handleDirection);
+        const gp_Vec w(handleOrigin, gp_Pnt(x, y, z));
+        const double b = v.Dot(d);
+        const double denominator = 1.0 - b * b;
+        if (denominator < 1e-6) {
+            return std::nullopt;  // mirando a lo largo del eje
+        }
+        return (w.Dot(d) - b * w.Dot(v)) / denominator;
     }
 
     // --- Modo sketch -------------------------------------------------------
@@ -615,16 +806,15 @@ public:
         if (mode != Mode::Model) {
             return;
         }
-        if (originPlanes.empty()) {
-            createOriginPlanes();
-        }
+        createOriginPlanes();
         context->ClearSelected(false);
         for (const OriginPlane& origin : originPlanes) {
             context->Display(origin.shape, AIS_Shaded, 0, false);
+            context->Activate(origin.shape, 0);
         }
-        context->Deactivate(part, AIS_Shape::SelectionMode(TopAbs_EDGE));
         context->AddFilter(planeFilter);
         mode = Mode::PickPlane;
+        activateBodies();
         emit widget_.selectionChanged(QString());
     }
 
@@ -634,12 +824,10 @@ public:
             return;
         }
         context->ClearSelected(false);
-        for (const OriginPlane& origin : originPlanes) {
-            context->Erase(origin.shape, false);
-        }
+        showOrigin();
         context->RemoveFilter(planeFilter);
-        context->Activate(part, AIS_Shape::SelectionMode(TopAbs_EDGE));
         mode = Mode::Model;
+        activateBodies();
     }
 
     void beginSketch(const sketch::Plane& plane)
@@ -649,7 +837,6 @@ public:
             endSketch();
         }
         context->ClearSelected(false);
-        context->Deactivate(part);
         sketchPlane = plane;
         grid->plane = toAx3(plane);
         updateGrid(true);
@@ -661,6 +848,7 @@ public:
             context->Display(d, 0, -1, false);
         }
         mode = Mode::Sketch;
+        activateBodies();
         lookAtSketch();
         emit widget_.selectionChanged(QString());
     }
@@ -680,9 +868,8 @@ public:
             context->Remove(image, false);
         }
         images.clear();
-        context->Activate(part, AIS_Shape::SelectionMode(TopAbs_FACE));
-        context->Activate(part, AIS_Shape::SelectionMode(TopAbs_EDGE));
         mode = Mode::Model;
+        activateBodies();
         emit widget_.sketchCursorMoved(false, 0.0, 0.0);
     }
 
@@ -891,11 +1078,7 @@ public:
     void setProjectMode(bool on)
     {
         projectMode = on;
-        if (on) {
-            context->Activate(part, AIS_Shape::SelectionMode(TopAbs_EDGE));
-        } else {
-            context->Deactivate(part);
-        }
+        activateBodies();
         context->ClearDetected(false);
     }
 
@@ -972,7 +1155,7 @@ public:
     std::vector<sketch::Geometry> section() const
     {
         std::vector<sketch::Geometry> result;
-        BRepAlgoAPI_Section cut(part->Shape(), gp_Pln(toAx3(sketchPlane)));
+        BRepAlgoAPI_Section cut(allBodies(), gp_Pln(toAx3(sketchPlane)));
         if (!cut.IsDone()) {
             return result;
         }
@@ -990,25 +1173,32 @@ public:
     // debajo de ella, y lo que se dibuja ahí debe poder elegirse.
     struct FinishedSketch {
         QString name;
-        std::vector<Handle(AIS_Shape)> regions;
+        std::vector<std::pair<Handle(AIS_Shape), int>> regions;  // y su índice de perfil
         Handle(AIS_Shape) curves;
+        std::vector<std::pair<TopoDS_Edge, sketch::EntityId>> curveEdges;
     };
 
-    void showFinishedSketch(int id, const QString& name, const sketch::Sketch& sketch, const sketch::Plane& plane)
+    void showFinishedSketch(document::FeatureId id, const QString& name, const sketch::Sketch& sketch,
+                            const sketch::Plane& plane)
     {
         hideFinishedSketch(id);
         FinishedSketch shown;
         shown.name = name;
         const gp_Ax3 ax3 = toAx3(plane);
-        for (const TopoDS_Face& face : profileFaces(sketch, ax3)) {
-            Handle(AIS_Shape) region = new AIS_Shape(face);
+        const std::vector<sketch::Profile> found = sketch::findProfiles(sketch);
+        for (std::size_t i = 0; i < found.size(); ++i) {
+            const auto face = geometry::profileFace(sketch, found[i], ax3);
+            if (!face) {
+                continue;
+            }
+            Handle(AIS_Shape) region = new AIS_Shape(*face);
             region->SetColor(rgb(0x6C, 0xA6, 0xFF));
             region->SetTransparency(0.8);
             region->Attributes()->SetFaceBoundaryDraw(false);
             pullTowardCamera(region);
             region->SetZLayer(regionLayer);
             context->Display(region, AIS_Shaded, 0, false);
-            shown.regions.push_back(region);
+            shown.regions.emplace_back(region, int(i));
         }
         BRep_Builder builder;
         TopoDS_Compound edges;
@@ -1017,6 +1207,7 @@ public:
             if (!e.reference && !e.construction) {
                 if (const auto edge = sketchEdge(e, ax3)) {
                     builder.Add(edges, *edge);
+                    shown.curveEdges.emplace_back(*edge, e.id);
                 }
             }
         }
@@ -1028,13 +1219,13 @@ public:
         finished[id] = shown;
     }
 
-    void hideFinishedSketch(int id)
+    void hideFinishedSketch(document::FeatureId id)
     {
         const auto it = finished.find(id);
         if (it == finished.end()) {
             return;
         }
-        for (const Handle(AIS_Shape)& region : it->second.regions) {
+        for (const auto& [region, index] : it->second.regions) {
             context->Remove(region, false);
         }
         context->Remove(it->second.curves, false);
@@ -1042,13 +1233,13 @@ public:
     }
 
     // Sketch terminado al que pertenece un objeto, y si es una región.
-    std::optional<std::pair<int, bool>> finishedOwner(const Handle(AIS_InteractiveObject)& object) const
+    std::optional<std::pair<document::FeatureId, bool>> finishedOwner(const Handle(AIS_InteractiveObject)& object) const
     {
         for (const auto& [id, shown] : finished) {
             if (object == shown.curves) {
                 return std::pair{id, false};
             }
-            for (const Handle(AIS_Shape)& region : shown.regions) {
+            for (const auto& [region, index] : shown.regions) {
                 if (object == region) {
                     return std::pair{id, true};
                 }
@@ -1070,6 +1261,12 @@ public:
     SketchHighlight shownHighlight;
     double annotationScale = 0.0;
     bool leftPressed = false;
+    std::map<document::FeatureId, FinishedSketch> finished;
+    bool originShown = false;
+    Handle(AIS_Shape) handle;  // flecha de distancia
+    double handleDistance = 0.0;
+    bool handleDragging = false;
+    double handleGrab = 0.0;  // parámetro del eje donde se agarró, menos la distancia
     bool ignoreNextRelease = false;
     QPointF pressPosition;
     std::optional<sketch::Vec2> pressSketchPoint;  // dónde se pulsó, en el plano
@@ -1119,6 +1316,7 @@ private:
         gestures.Bind(key(Aspect_VKeyMouse_RightButton), AIS_MouseGesture_Pan);
         gestures.Bind(key(Aspect_VKeyMouse_MiddleButton), AIS_MouseGesture_Pan);
         gestures.Bind(key(Aspect_VKeyMouse_MiddleButton, Aspect_VKeyFlags_SHIFT), AIS_MouseGesture_RotateOrbit);
+        MouseSelectionSchemes().Find(Aspect_VKeyMouse_LeftButton, defaultClickScheme);
     }
 
     void configureHighlight()
@@ -1185,30 +1383,53 @@ private:
         Handle(AIS_Shape) shape;
         sketch::Plane plane;
         QString name;
+        document::OriginPlane kind;
     };
 
     // Planos XY, XZ e YZ como cuadrados translúcidos en el cuadrante positivo,
     // con un tamaño proporcional a la pieza (como en Fusion 360).
+public:
+    // Fuera de la elección del plano: a la vista (sin seleccionarse) o no.
+    void showOrigin()
+    {
+        if (originShown && originPlanes.empty()) {
+            createOriginPlanes();
+        }
+        for (const OriginPlane& origin : originPlanes) {
+            if (originShown) {
+                context->Display(origin.shape, AIS_Shaded, 0, false);
+                context->Deactivate(origin.shape);
+            } else {
+                context->Erase(origin.shape, false);
+            }
+        }
+    }
+
+private:
     void createOriginPlanes()
     {
+        for (const OriginPlane& origin : originPlanes) {
+            context->Remove(origin.shape, false);
+        }
+        originPlanes.clear();
         Bnd_Box box;
-        BRepBndLib::Add(part->Shape(), box);
+        BRepBndLib::Add(allBodies(), box);
         double size = 20.0;
         if (!box.IsVoid()) {
             size = std::max(size, 0.6 * std::sqrt(box.SquareExtent()) / std::sqrt(3.0));
         }
-        const std::pair<sketch::Plane, QString> planes[] = {
-            {sketch::Plane::xy(), QStringLiteral("Plano XY")},
-            {sketch::Plane::xz(), QStringLiteral("Plano XZ")},
-            {sketch::Plane::yz(), QStringLiteral("Plano YZ")}};
-        for (const auto& [plane, name] : planes) {
+        const std::tuple<sketch::Plane, QString, document::OriginPlane> planes[] = {
+            {sketch::Plane::xy(), QStringLiteral("Plano XY"), document::OriginPlane::XY},
+            {sketch::Plane::xz(), QStringLiteral("Plano XZ"), document::OriginPlane::XZ},
+            {sketch::Plane::yz(), QStringLiteral("Plano YZ"), document::OriginPlane::YZ}};
+        for (const auto& [plane, name, kind] : planes) {
             const TopoDS_Face face = BRepBuilderAPI_MakeFace(gp_Pln(toAx3(plane)), 0.0, size, 0.0, size);
             Handle(AIS_Shape) shape = new AIS_Shape(face);
             shape->SetColor(rgb(0xF2, 0xA3, 0x4B));
             shape->SetTransparency(0.6);
             // Por encima de la pieza: suelen atravesarla y quedarían ocultos.
             shape->SetZLayer(Graphic3d_ZLayerId_Topmost);
-            originPlanes.push_back({shape, plane, name});
+            originPlanes.push_back({shape, plane, name, kind});
         }
     }
 
@@ -1219,10 +1440,12 @@ private:
             return;
         }
         std::optional<std::pair<sketch::Plane, QString>> picked;
+        document::SketchAttachment attachment;
         const Handle(AIS_InteractiveObject) object = context->SelectedInteractive();
         for (const OriginPlane& origin : originPlanes) {
             if (origin.shape == object) {
                 picked.emplace(origin.plane, origin.name);
+                attachment.origin = origin.kind;
             }
         }
         if (!picked && context->HasSelectedShape() && context->SelectedShape().ShapeType() == TopAbs_FACE) {
@@ -1236,17 +1459,24 @@ private:
                 }
                 picked.emplace(sketch::Plane::fromPointAndNormal(toVec3(pln.Location().XYZ()), toVec3(normal.XYZ())),
                                QStringLiteral("Cara plana"));
+                attachment.origin.reset();
+                if (const ShownBody* body = bodyOf(object)) {
+                    if (const auto index = geometry::faceIndexOf(body->shape, face)) {
+                        attachment.face = body->shape.faceRef(*index);
+                    }
+                }
             }
         }
         context->ClearSelected(false);
         if (!picked) {
             return;
         }
+        attachment.lastPlane = picked->first;
         // Se avisa fuera del procesado de eventos de OCCT: quien recibe la
         // señal cambia el contexto (beginSketch).
         QMetaObject::invokeMethod(
-            &widget_, [widget = &widget_, plane = picked->first, name = picked->second] {
-                emit widget->sketchPlanePicked(plane, name);
+            &widget_, [widget = &widget_, plane = picked->first, name = picked->second, attachment] {
+                emit widget->sketchPlanePicked(plane, name, attachment);
             },
             Qt::QueuedConnection);
     }
@@ -1279,19 +1509,12 @@ private:
         }
     }
 
-    void showDemoPart()
-    {
-        part = new AIS_Shape(makeDemoPart());
-        part->SetMaterial(Graphic3d_MaterialAspect(Graphic3d_NameOfMaterial_Plastified));
-        part->SetColor(rgb(0xB7, 0xBE, 0xC7));
-        // El modo de selección va en Display: con -1 la pieza queda como no
-        // seleccionable y un Activate posterior no lo revierte.
-        context->Display(part, AIS_Shaded, AIS_Shape::SelectionMode(TopAbs_FACE), false);
-        context->Activate(part, AIS_Shape::SelectionMode(TopAbs_EDGE));
-    }
-
     Viewport& widget_;
-    Handle(AIS_Shape) part;
+    std::vector<ShownBody> bodies;
+    Handle(AIS_Shape) toolPreview;
+    gp_Pnt handleOrigin;
+    gp_Dir handleDirection;
+    AIS_SelectionScheme defaultClickScheme = AIS_SelectionScheme_Replace;
     std::vector<OriginPlane> originPlanes;
     Handle(SketchPlaneFilter) planeFilter;
     Handle(SketchGrid) grid;
@@ -1299,7 +1522,6 @@ private:
     Handle(SketchDrawing) preview;
     Handle(AIS_Shape) profiles;
     Graphic3d_ZLayerId regionLayer = Graphic3d_ZLayerId_UNKNOWN;
-    std::map<int, FinishedSketch> finished;
     std::vector<Handle(AIS_InteractiveObject)> images;  // de referencia, del sketch en curso
     sketch::Plane sketchPlane;
     bool darkTheme = true;
@@ -1384,16 +1606,91 @@ void Viewport::endSketch()
     update();
 }
 
-void Viewport::hideFinishedSketch(int id)
+void Viewport::hideFinishedSketch(document::FeatureId id)
 {
     impl_->hideFinishedSketch(id);
     impl_->view->Invalidate();
     update();
 }
 
-void Viewport::showFinishedSketch(int id, const QString& name, const sketch::Sketch& sketch, const sketch::Plane& plane)
+void Viewport::showFinishedSketch(document::FeatureId id, const QString& name, const sketch::Sketch& sketch,
+                                  const sketch::Plane& plane)
 {
     impl_->showFinishedSketch(id, name, sketch, plane);
+    impl_->view->Invalidate();
+    update();
+}
+
+void Viewport::setOriginVisible(bool visible)
+{
+    impl_->originShown = visible;
+    if (impl_->mode != Impl::Mode::PickPlane) {
+        impl_->showOrigin();
+    }
+    impl_->view->Invalidate();
+    update();
+}
+
+void Viewport::showBodies(const std::vector<document::Body>& bodies)
+{
+    impl_->showBodies(bodies);
+    impl_->view->Invalidate();
+    update();
+}
+
+void Viewport::showToolPreview(const geometry::Shape& tool, bool removes)
+{
+    impl_->showToolPreview(tool, removes);
+    impl_->view->Invalidate();
+    update();
+}
+
+void Viewport::clearToolPreview()
+{
+    impl_->clearToolPreview();
+    impl_->view->Invalidate();
+    update();
+}
+
+ModelSelection Viewport::modelSelection() const { return impl_->modelSelection(); }
+
+void Viewport::clearModelSelection()
+{
+    impl_->context->ClearSelected(false);
+    impl_->describeSelection();
+    impl_->view->Invalidate();
+    update();
+}
+
+void Viewport::selectProfiles(const std::vector<ModelSelection::Profile>& profiles)
+{
+    for (const ModelSelection::Profile& wanted : profiles) {
+        const auto it = impl_->finished.find(wanted.sketch);
+        if (it == impl_->finished.end()) {
+            continue;
+        }
+        for (const auto& [region, index] : it->second.regions) {
+            if (index == wanted.index && !impl_->context->IsSelected(region)) {
+                impl_->context->AddOrRemoveSelected(region, false);
+            }
+        }
+    }
+    impl_->view->Invalidate();
+    update();
+}
+
+void Viewport::setAdditiveSelection(bool on) { impl_->setAdditiveSelection(on); }
+
+void Viewport::showDistanceHandle(const sketch::Vec3& origin, const sketch::Vec3& direction, double distance)
+{
+    impl_->showDistanceHandle(origin, direction, distance);
+    impl_->view->Invalidate();
+    update();
+}
+
+void Viewport::hideDistanceHandle()
+{
+    impl_->hideDistanceHandle();
     impl_->view->Invalidate();
     update();
 }
@@ -1473,7 +1770,7 @@ double Viewport::sketchGridStep() const { return impl_->gridStep(); }
 
 Qt::MouseButtons Viewport::navigationButtons(Qt::MouseButtons buttons) const
 {
-    if ((impl_->sketchToolActive || impl_->sketchDragging) && isSketching()) {
+    if (((impl_->sketchToolActive || impl_->sketchDragging) && isSketching()) || impl_->handleDragging) {
         buttons &= ~Qt::MouseButtons(Qt::LeftButton);
     }
     return buttons;
@@ -1561,6 +1858,16 @@ void Viewport::mousePressEvent(QMouseEvent* event)
 {
     const qreal ratio = devicePixelRatioF();
     const Vec2i point(int(event->position().x() * ratio), int(event->position().y() * ratio));
+    if (event->button() == Qt::LeftButton && !isSketching() && !impl_->handle.IsNull()) {
+        // ¿Se agarra la flecha de distancia?
+        impl_->context->MoveTo(point.x(), point.y(), impl_->view, false);
+        if (impl_->context->HasDetected() && impl_->context->DetectedInteractive() == impl_->handle) {
+            if (const auto t = impl_->handleParameterAt(point)) {
+                impl_->handleDragging = true;
+                impl_->handleGrab = *t - impl_->handleDistance;
+            }
+        }
+    }
     if (event->button() == Qt::LeftButton && isSketching()) {
         impl_->leftPressed = true;
         impl_->pressPosition = event->position();
@@ -1582,7 +1889,10 @@ void Viewport::mouseReleaseEvent(QMouseEvent* event)
 {
     const qreal ratio = devicePixelRatioF();
     const Vec2i point(int(event->position().x() * ratio), int(event->position().y() * ratio));
-    if (event->button() == Qt::LeftButton && impl_->sketchDragging) {
+    if (event->button() == Qt::LeftButton && impl_->handleDragging) {
+        impl_->handleDragging = false;
+        emit distanceHandleReleased();
+    } else if (event->button() == Qt::LeftButton && impl_->sketchDragging) {
         impl_->sketchDragging = false;
         impl_->leftPressed = false;
         const bool moved = (event->position() - impl_->pressPosition).manhattanLength() > 5.0;
@@ -1657,6 +1967,12 @@ void Viewport::mouseMoveEvent(QMouseEvent* event)
 {
     const qreal ratio = devicePixelRatioF();
     const Vec2i point(int(event->position().x() * ratio), int(event->position().y() * ratio));
+    if (impl_->handleDragging) {
+        if (const auto t = impl_->handleParameterAt(point)) {
+            emit distanceHandleDragged(*t - impl_->handleGrab);
+        }
+        return;
+    }
     if (impl_->UpdateMousePosition(point, toOcctButtons(navigationButtons(event->buttons())),
                                    toOcctModifiers(event->modifiers()), false)) {
         update();
