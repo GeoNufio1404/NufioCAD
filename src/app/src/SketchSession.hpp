@@ -38,6 +38,12 @@ public:
         Ellipse, EllipseArc,
         SplineFit, SplineControl,
         Conic,
+        // Modificar (Fase 2c)
+        Trim, Extend, Break,
+        Fillet, Chamfer,
+        Offset,
+        Mirror, Move, Copy, Rotate, Scale,
+        PatternRectangular, PatternCircular,
     };
 
     SketchSession(render::Viewport& viewport, const sketch::Plane& plane, QObject* parent = nullptr);
@@ -100,6 +106,9 @@ private:
     void toolDragged(double x0, double y0, double x, double y);
     void toolDragReleased(double x0, double y0, double x, double y);
     void applyTypedValues();
+    // Tras un cambio hecho por la herramienta: vista previa, indicación y,
+    // si ya terminó, salir de ella.
+    void afterToolChange();
     void updateValueInput();
     // Pide un valor nuevo para la cota; false si se canceló.
     bool askDimensionValue(sketch::Constraint& dimension);

@@ -41,6 +41,10 @@ public:
     virtual bool dragMove(const Snap& /*from*/, const Snap& /*cursor*/) { return false; }
     virtual bool dragRelease(Sketch& /*sketch*/, const Snap& /*from*/, const Snap& /*cursor*/) { return false; }
 
+    // true cuando la herramienta ya hizo su trabajo y la UI debe salir de
+    // ella (las que actúan una vez sobre la selección).
+    virtual bool done() const { return false; }
+
     virtual Preview preview() const = 0;
     // Indicación para la barra de estado ("Clic para el segundo extremo").
     virtual std::string hint() const = 0;
@@ -117,6 +121,30 @@ std::unique_ptr<SketchTool> makeSplineTool(SplineMode mode);
 // Curva cónica: inicio, fin y el vértice del triángulo de control; rho
 // (0 < rho < 1) da la forma: < 0.5 elipse, 0.5 parábola, > 0.5 hipérbola.
 std::unique_ptr<SketchTool> makeConicTool();
+
+// --- Edición (Fase 2c) --------------------------------------------------------
+
+// Clic en una curva: recortar, extender o partir.
+enum class CurveEdit { Trim, Extend, Break };
+std::unique_ptr<SketchTool> makeCurveEditTool(CurveEdit edit);
+
+// Clic en la esquina entre dos líneas: empalme (radio) o chaflán
+// (distancia); el valor se escribe junto al cursor y se recuerda.
+std::unique_ptr<SketchTool> makeFilletTool(bool chamfer);
+
+// Clic en una curva (se desfasa toda su cadena) y otro clic, o un valor
+// escrito, para la distancia; el lado lo da el cursor.
+std::unique_ptr<SketchTool> makeOffsetTool();
+
+// Herramientas sobre la selección (las entidades se toman al activarlas):
+// simetría (clic en el eje), mover/copiar (punto base y destino), girar
+// (centro y ángulo), escalar (punto base y factor) y patrones.
+std::unique_ptr<SketchTool> makeMirrorTool(const Sketch& sketch, std::vector<EntityId> selection);
+std::unique_ptr<SketchTool> makeMoveTool(const Sketch& sketch, std::vector<EntityId> selection, bool copy);
+std::unique_ptr<SketchTool> makeRotateTool(const Sketch& sketch, std::vector<EntityId> selection);
+std::unique_ptr<SketchTool> makeScaleTool(const Sketch& sketch, std::vector<EntityId> selection);
+std::unique_ptr<SketchTool> makeRectangularPatternTool(const Sketch& sketch, std::vector<EntityId> selection);
+std::unique_ptr<SketchTool> makeCircularPatternTool(const Sketch& sketch, std::vector<EntityId> selection);
 
 // Interpolación: B-spline sujeta (grado ≤ 3, nudos uniformes) que pasa por
 // los puntos dados (al menos 2).

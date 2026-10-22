@@ -29,6 +29,9 @@ namespace nuf::app {
 
 namespace {
 
+// Versión de la distribución de barras y paneles (ver restoreState).
+constexpr int kLayoutVersion = 2;
+
 QWidget* placeholder(const QString& text)
 {
     auto* label = new QLabel(text);
@@ -74,17 +77,19 @@ MainWindow::MainWindow(QWidget* parent)
     resize(1440, 900);
 
     // Recuerda tamaño de la ventana y distribución de paneles entre sesiones.
-    defaultLayout_ = saveState();
+    defaultLayout_ = saveState(kLayoutVersion);
     const QSettings settings;
     restoreGeometry(settings.value(QStringLiteral("ui/geometry")).toByteArray());
-    restoreState(settings.value(QStringLiteral("ui/layout")).toByteArray());
+    // Si cambian las barras o los paneles, kLayoutVersion sube y la
+    // distribución guardada (que ya no encaja) se descarta.
+    restoreState(settings.value(QStringLiteral("ui/layout")).toByteArray(), kLayoutVersion);
 }
 
 void MainWindow::closeEvent(QCloseEvent* event)
 {
     QSettings settings;
     settings.setValue(QStringLiteral("ui/geometry"), saveGeometry());
-    settings.setValue(QStringLiteral("ui/layout"), saveState());
+    settings.setValue(QStringLiteral("ui/layout"), saveState(kLayoutVersion));
     QMainWindow::closeEvent(event);
 }
 
@@ -183,7 +188,27 @@ void MainWindow::createMenus()
          {{Tool::SplineFit, QStringLiteral("Spline por puntos de paso"), {}},
           {Tool::SplineControl, QStringLiteral("Spline por polos"), {}}}},
         {QStringLiteral("Cónica"), {{Tool::Conic, QStringLiteral("Curva cónica"), {}}}},
+        // Modificar
+        {QStringLiteral("Recortar"),
+         {{Tool::Trim, QStringLiteral("Recortar"), QKeySequence(Qt::Key_T)},
+          {Tool::Extend, QStringLiteral("Extender"), {}},
+          {Tool::Break, QStringLiteral("Partir"), {}}}},
+        {QStringLiteral("Empalme"),
+         {{Tool::Fillet, QStringLiteral("Empalme"), {}},
+          {Tool::Chamfer, QStringLiteral("Chaflán"), {}}}},
+        {QStringLiteral("Desfase"), {{Tool::Offset, QStringLiteral("Desfase"), QKeySequence(Qt::Key_O)}}},
+        {QStringLiteral("Simetría"), {{Tool::Mirror, QStringLiteral("Simetría"), {}}}},
+        {QStringLiteral("Mover"),
+         {{Tool::Move, QStringLiteral("Mover"), QKeySequence(Qt::Key_M)},
+          {Tool::Copy, QStringLiteral("Copiar"), {}},
+          {Tool::Rotate, QStringLiteral("Girar"), {}},
+          {Tool::Scale, QStringLiteral("Escalar"), {}}}},
+        {QStringLiteral("Patrón"),
+         {{Tool::PatternRectangular, QStringLiteral("Patrón rectangular"), {}},
+          {Tool::PatternCircular, QStringLiteral("Patrón circular"), {}}}},
     };
+    // A partir de esta familia van a la barra «Modificar».
+    const std::size_t firstModifyFamily = 9;
     auto* toolGroup = new QActionGroup(this);
     toolGroup->setExclusionPolicy(QActionGroup::ExclusionPolicy::ExclusiveOptional);
     for (const auto& [family, entries] : families) {
@@ -203,6 +228,9 @@ void MainWindow::createMenus()
             actions.push_back(action);
         }
         toolFamilies_.push_back({entries.size() > 1 ? menu : nullptr, actions});
+        if (toolFamilies_.size() == firstModifyFamily) {
+            sketchMenu->addSeparator();
+        }
     }
 
     sketchMenu->addSeparator();
@@ -244,10 +272,16 @@ void MainWindow::createMenus()
     toolbar->addAction(finishSketchAction_);
     toolbar->addSeparator();
     // Un botón por familia; la flecha despliega sus variantes y el botón se
-    // queda con la última usada.
-    for (const ToolFamily& family : toolFamilies_) {
+    // queda con la última usada. Las de modificar, en una segunda barra.
+    addToolBarBreak();
+    QToolBar* modifyBar = addToolBar(QStringLiteral("Modificar"));
+    modifyBar->setObjectName(QStringLiteral("modifyToolbar"));
+    modifyBar->setMovable(false);
+    for (std::size_t i = 0; i < toolFamilies_.size(); ++i) {
+        const ToolFamily& family = toolFamilies_[i];
+        QToolBar* bar = i < firstModifyFamily ? toolbar : modifyBar;
         if (!family.menu) {
-            toolbar->addAction(family.actions.front());
+            bar->addAction(family.actions.front());
             continue;
         }
         auto* button = new QToolButton(toolbar);
@@ -257,12 +291,12 @@ void MainWindow::createMenus()
         for (QAction* action : family.actions) {
             connect(action, &QAction::triggered, button, [button, action] { button->setDefaultAction(action); });
         }
-        toolbar->addWidget(button);
+        bar->addWidget(button);
     }
-    toolbar->addSeparator();
-    toolbar->addAction(dimensionAction_);
+    modifyBar->addSeparator();
+    modifyBar->addAction(dimensionAction_);
     for (QAction* action : constraintActions_) {
-        toolbar->addAction(action);
+        modifyBar->addAction(action);
     }
 
     QMenu* view = menuBar()->addMenu(QStringLiteral("&Ver"));
@@ -278,7 +312,7 @@ void MainWindow::createMenus()
     panels->addAction(navigatorDock_->toggleViewAction());
     panels->addAction(propertiesDock_->toggleViewAction());
     view->addAction(QStringLiteral("&Restablecer paneles"), this, [this] {
-        restoreState(defaultLayout_);
+        restoreState(defaultLayout_, kLayoutVersion);
         for (QDockWidget* dock : {navigatorDock_, propertiesDock_, timelineDock_}) {
             dock->setFloating(false);
             dock->show();

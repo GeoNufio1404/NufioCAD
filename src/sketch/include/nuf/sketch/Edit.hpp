@@ -54,6 +54,9 @@ struct Similarity {
     Vec2 apply(Vec2 p) const;
 };
 
+// La geometría transformada.
+Geometry transformed(const Geometry& geometry, const Similarity& t);
+
 // Mueve (copy = false) o copia las entidades. Las copias conservan las
 // restricciones entre ellas; al escalar se escalan sus cotas y al girar se
 // quitan las horizontales/verticales que dejarían de cumplirse.

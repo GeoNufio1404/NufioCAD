@@ -14,6 +14,7 @@ nuf_add_library(sketch SOURCES
     src/ShapeTools.cpp
     src/CircleTools.cpp
     src/CurveTools.cpp
+    src/EditTools.cpp
     src/PlaneGcsSolver.cpp)
 
 target_link_libraries(nuf_sketch PRIVATE planegcs::planegcs)

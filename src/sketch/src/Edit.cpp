@@ -894,8 +894,6 @@ Vec2 Similarity::apply(Vec2 p) const
     return add(add(pivot, mul(scale, Vec2{d.x * c - d.y * s, d.x * s + d.y * c})), translation);
 }
 
-namespace {
-
 Geometry transformed(const Geometry& g, const Similarity& t)
 {
     Geometry out = g;
@@ -919,6 +917,8 @@ Geometry transformed(const Geometry& g, const Similarity& t)
     }
     return out;
 }
+
+namespace {
 
 bool isLengthDimension(ConstraintType type)
 {

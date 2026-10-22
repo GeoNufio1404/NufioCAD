@@ -75,6 +75,15 @@ SketchSession::~SketchSession()
 
 void SketchSession::setTool(Tool tool)
 {
+    // Las herramientas que actúan sobre la selección la necesitan ya.
+    const bool needsSelection = tool == Tool::Mirror || tool == Tool::Move || tool == Tool::Copy
+                                || tool == Tool::Rotate || tool == Tool::Scale || tool == Tool::PatternRectangular
+                                || tool == Tool::PatternCircular;
+    const std::vector<sketch::EntityId> selected = selectedEntities();
+    if (needsSelection && selected.empty()) {
+        emit message(QStringLiteral("Selecciona primero lo que quieras transformar"));
+        tool = Tool::None;
+    }
     switch (tool) {
     case Tool::None: tool_.reset(); break;
     case Tool::Line: tool_ = sketch::makeLineTool(); break;
@@ -101,6 +110,19 @@ void SketchSession::setTool(Tool tool)
     case Tool::SplineFit: tool_ = sketch::makeSplineTool(sketch::SplineMode::FitPoints); break;
     case Tool::SplineControl: tool_ = sketch::makeSplineTool(sketch::SplineMode::ControlPoints); break;
     case Tool::Conic: tool_ = sketch::makeConicTool(); break;
+    case Tool::Trim: tool_ = sketch::makeCurveEditTool(sketch::CurveEdit::Trim); break;
+    case Tool::Extend: tool_ = sketch::makeCurveEditTool(sketch::CurveEdit::Extend); break;
+    case Tool::Break: tool_ = sketch::makeCurveEditTool(sketch::CurveEdit::Break); break;
+    case Tool::Fillet: tool_ = sketch::makeFilletTool(false); break;
+    case Tool::Chamfer: tool_ = sketch::makeFilletTool(true); break;
+    case Tool::Offset: tool_ = sketch::makeOffsetTool(); break;
+    case Tool::Mirror: tool_ = sketch::makeMirrorTool(sketch_, selected); break;
+    case Tool::Move: tool_ = sketch::makeMoveTool(sketch_, selected, false); break;
+    case Tool::Copy: tool_ = sketch::makeMoveTool(sketch_, selected, true); break;
+    case Tool::Rotate: tool_ = sketch::makeRotateTool(sketch_, selected); break;
+    case Tool::Scale: tool_ = sketch::makeScaleTool(sketch_, selected); break;
+    case Tool::PatternRectangular: tool_ = sketch::makeRectangularPatternTool(sketch_, selected); break;
+    case Tool::PatternCircular: tool_ = sketch::makeCircularPatternTool(sketch_, selected); break;
     }
     toolKind_ = tool;
     viewport_.setSketchToolActive(tool_ != nullptr);
@@ -212,8 +234,23 @@ void SketchSession::clicked(double x, double y, Qt::KeyboardModifiers modifiers)
         remember(std::move(before));
         solveAndShow();
     }
+    afterToolChange();
+}
+
+void SketchSession::afterToolChange()
+{
+    // Las herramientas de una sola vez (sobre la selección) se cierran solas.
+    if (tool_ && tool_->done()) {
+        selection_.clear();
+        emit selectionChanged();
+        setTool(Tool::None);
+        showSketch();
+        return;
+    }
     showPreview();
-    emit hintChanged(QString::fromStdString(tool_->hint()));
+    if (tool_) {
+        emit hintChanged(QString::fromStdString(tool_->hint()));
+    }
 }
 
 std::vector<sketch::EntityId> SketchSession::selectedEntities() const
@@ -623,8 +660,7 @@ void SketchSession::applyTypedValues()
     }
     valueInput_->clear();
     viewport_.setFocus();
-    showPreview();
-    emit hintChanged(QString::fromStdString(tool_->hint()));
+    afterToolChange();
 }
 
 // Muestra el recuadro de valores junto al cursor si la herramienta admite
