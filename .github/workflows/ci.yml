@@ -67,13 +67,20 @@ jobs:
 
       # La caché se restaura aquí y se guarda justo después de configurar
       # (cuando vcpkg ya compiló OCCT), aunque fallen los pasos siguientes.
+      # Cada ejecución guarda la caché con una clave nueva (el número de
+      # ejecución) y restaura la más reciente: si vcpkg tuvo que recompilar
+      # algo (por ejemplo, porque cambió el compilador del runner), lo nuevo
+      # se guarda. Con una clave fija, una restauración exacta impediría
+      # guardar y se recompilaría OCCT (≈2 h) en cada ejecución.
       - name: Restaurar caché de vcpkg (OCCT tarda en compilar la primera vez)
         id: vcpkg-cache
         uses: actions/cache/restore@v6
         with:
           path: ${{ github.workspace }}\vcpkg-cache
-          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'CMakePresets.json') }}
-          restore-keys: vcpkg-${{ runner.os }}-
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'CMakePresets.json') }}-${{ github.run_id }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'CMakePresets.json') }}-
+            vcpkg-${{ runner.os }}-
 
       - uses: ilammy/msvc-dev-cmd@v1
 
@@ -81,7 +88,7 @@ jobs:
         run: cmake --preset windows-release
 
       - name: Guardar caché de vcpkg
-        if: always() && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        if: always()
         uses: actions/cache/save@v6
         with:
           path: ${{ github.workspace }}\vcpkg-cache
