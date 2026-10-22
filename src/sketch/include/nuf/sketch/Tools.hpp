@@ -32,6 +32,14 @@ public:
     // Esc o doble clic: abandona lo que está a medias. Devuelve false si no
     // había nada a medias (la UI entonces sale de la herramienta).
     virtual bool cancel() = 0;
+    // Doble clic o Enter en herramientas de varios puntos (splines): termina
+    // la figura con lo marcado. Devuelve true si cambió el sketch.
+    virtual bool finish(Sketch& /*sketch*/) { return false; }
+
+    // Arrastre con el botón pulsado, desde «from» (donde se pulsó) hasta el
+    // cursor. dragMove devuelve true si la herramienta lo usa (vista previa).
+    virtual bool dragMove(const Snap& /*from*/, const Snap& /*cursor*/) { return false; }
+    virtual bool dragRelease(Sketch& /*sketch*/, const Snap& /*from*/, const Snap& /*cursor*/) { return false; }
 
     virtual Preview preview() const = 0;
     // Indicación para la barra de estado ("Clic para el segundo extremo").
@@ -93,5 +101,25 @@ std::unique_ptr<SketchTool> makePolygonTool(PolygonMode mode);
 // el tercer clic da el ancho.
 enum class SlotMode { CenterToCenter, Overall, CenterPoint };
 std::unique_ptr<SketchTool> makeSlotTool(SlotMode mode);
+// Ranura en arco: arco central por 3 puntos y el ancho.
+std::unique_ptr<SketchTool> makeArcSlotTool();
+
+// Elipse por centro, extremo del eje mayor y un punto del menor; el arco de
+// elipse añade dos clics para el inicio y el fin.
+std::unique_ptr<SketchTool> makeEllipseTool();
+std::unique_ptr<SketchTool> makeEllipseArcTool();
+
+// Spline por puntos de paso (la curva pasa por ellos) o por polos (puntos de
+// control). Se termina con doble clic o Enter.
+enum class SplineMode { FitPoints, ControlPoints };
+std::unique_ptr<SketchTool> makeSplineTool(SplineMode mode);
+
+// Curva cónica: inicio, fin y el vértice del triángulo de control; rho
+// (0 < rho < 1) da la forma: < 0.5 elipse, 0.5 parábola, > 0.5 hipérbola.
+std::unique_ptr<SketchTool> makeConicTool();
+
+// Interpolación: B-spline sujeta (grado ≤ 3, nudos uniformes) que pasa por
+// los puntos dados (al menos 2).
+BSpline interpolatingSpline(const std::vector<Vec2>& points);
 
 } // namespace nuf::sketch

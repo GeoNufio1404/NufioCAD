@@ -42,6 +42,10 @@ struct ArcFit {
 };
 std::optional<ArcFit> fitArc(Vec2 a, Vec2 b, Vec2 through);
 
+// Arco que sale de «start» en la dirección «direction» (tangente) y llega a
+// «end». nullopt si end está sobre esa tangente (sería una recta).
+std::optional<ArcFit> tangentArc(Vec2 start, Vec2 direction, Vec2 end);
+
 // Dirección (unitaria) con la que se sale de una curva por uno de sus
 // extremos al continuarla: para el final de una línea, de inicio a fin; para
 // su inicio, al revés; en un arco, su tangente. nullopt si ref no es el

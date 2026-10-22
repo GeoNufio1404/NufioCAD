@@ -21,6 +21,24 @@ namespace {
 // Distancia, en píxeles, a la que el cursor se ajusta a un punto.
 constexpr double kSnapRadiusPx = 8.0;
 
+sketch::Geometry translated(sketch::Geometry geometry, sketch::Vec2 d)
+{
+    const auto move = [&](sketch::Vec2& p) {
+        p.x += d.x;
+        p.y += d.y;
+    };
+    if (auto* el = std::get_if<sketch::Ellipse>(&geometry)) {
+        move(el->center);
+    } else if (auto* ea = std::get_if<sketch::EllipseArc>(&geometry)) {
+        move(ea->ellipse.center);
+    } else if (auto* b = std::get_if<sketch::BSpline>(&geometry)) {
+        for (sketch::Vec2& pole : b->poles) {
+            move(pole);
+        }
+    }
+    return geometry;
+}
+
 } // namespace
 
 SketchSession::SketchSession(render::Viewport& viewport, const sketch::Plane& plane, QObject* parent)
@@ -342,6 +360,19 @@ void SketchSession::dragged(double x, double y)
         // La línea entera se desplaza.
         targets.push_back({sketch::Ref::start(e->id), {line->start.x + delta.x, line->start.y + delta.y}});
         targets.push_back({sketch::Ref::end(e->id), {line->end.x + delta.x, line->end.y + delta.y}});
+    } else if (!std::holds_alternative<sketch::Circle>(e->geometry) && !std::holds_alternative<sketch::Arc>(e->geometry)) {
+        // Elipses y splines: se desplazan enteras y después se ajustan a sus
+        // restricciones (si no hay solución, se quedan donde estaban).
+        sketch::Sketch moved = start;
+        moved.entity(e->id)->geometry = translated(e->geometry, delta);
+        const sketch::SolveResult result = solver_->solve(moved);
+        if (result.status == sketch::SolveStatus::Solved) {
+            sketch_ = std::move(moved);
+            drag_->moved = true;
+            underconstrained_ = result.underconstrained;
+            showSketch();
+        }
+        return;
     } else {
         // Contorno de un círculo o arco: cambia el radio.
         targets.push_back({drag_->what, {x, y}});

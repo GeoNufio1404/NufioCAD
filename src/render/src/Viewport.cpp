@@ -26,6 +26,12 @@
 #include <BRepBuilderAPI_MakeWire.hxx>
 #include <BRep_Builder.hxx>
 #include <GC_MakeArcOfCircle.hxx>
+#include <GC_MakeArcOfEllipse.hxx>
+#include <Geom_BSplineCurve.hxx>
+#include <TColStd_Array1OfInteger.hxx>
+#include <TColStd_Array1OfReal.hxx>
+#include <TColgp_Array1OfPnt.hxx>
+#include <gp_Elips.hxx>
 #include <TopoDS_Compound.hxx>
 #include <gp_Circ.hxx>
 #include <BRepPrimAPI_MakeBox.hxx>
@@ -76,6 +82,9 @@
 namespace nuf::render {
 
 namespace {
+
+// Píxeles (OCCT 8 retira el alias Graphic3d_Vec2i).
+using Vec2i = NCollection_Vec2<int>;
 
 // OpenGL core (sin pipeline fijo), como recomienda OCCT para Qt.
 constexpr bool kCoreProfile = true;
@@ -189,6 +198,12 @@ TopoDS_Shape profileFaces(const sketch::Sketch& sketch, const gp_Ax3& plane)
     const auto circleOf = [&](sketch::Vec2 center, double radius) {
         return gp_Circ(gp_Ax2(at(center), plane.Direction(), plane.XDirection()), radius);
     };
+    const auto ellipseOf = [&](const sketch::Ellipse& e) {
+        // Eje mayor girado «rotation» dentro del plano del sketch.
+        const gp_Dir major(gp_Vec(plane.XDirection()) * std::cos(e.rotation)
+                           + gp_Vec(plane.YDirection()) * std::sin(e.rotation));
+        return gp_Elips(gp_Ax2(at(e.center), plane.Direction(), major), e.majorRadius, e.minorRadius);
+    };
     const auto wireOf = [&](const sketch::Loop& loop) -> std::optional<TopoDS_Wire> {
         BRepBuilderAPI_MakeWire wire;
         for (const sketch::ProfileEdge& pe : loop.edges) {
@@ -200,13 +215,40 @@ TopoDS_Shape profileFaces(const sketch::Sketch& sketch, const gp_Ax3& plane)
             if (const auto* l = std::get_if<sketch::Line>(&e->geometry)) {
                 edge = BRepBuilderAPI_MakeEdge(at(l->start), at(l->end));
             } else if (const auto* a = std::get_if<sketch::Arc>(&e->geometry)) {
-                GC_MakeArcOfCircle arc(circleOf(a->center, a->radius), a->startAngle, a->endAngle, Standard_True);
+                GC_MakeArcOfCircle arc(circleOf(a->center, a->radius), a->startAngle, a->endAngle, true);
                 if (!arc.IsDone()) {
                     return std::nullopt;
                 }
                 edge = BRepBuilderAPI_MakeEdge(arc.Value());
             } else if (const auto* c = std::get_if<sketch::Circle>(&e->geometry)) {
                 edge = BRepBuilderAPI_MakeEdge(circleOf(c->center, c->radius));
+            } else if (const auto* el = std::get_if<sketch::Ellipse>(&e->geometry)) {
+                edge = BRepBuilderAPI_MakeEdge(ellipseOf(*el));
+            } else if (const auto* ea = std::get_if<sketch::EllipseArc>(&e->geometry)) {
+                GC_MakeArcOfEllipse arc(ellipseOf(ea->ellipse), ea->startParam, ea->endParam, true);
+                if (!arc.IsDone()) {
+                    return std::nullopt;
+                }
+                edge = BRepBuilderAPI_MakeEdge(arc.Value());
+            } else if (const auto* b = std::get_if<sketch::BSpline>(&e->geometry)) {
+                const int n = int(b->poles.size());
+                TColgp_Array1OfPnt poles(1, n);
+                TColStd_Array1OfReal weights(1, n);
+                for (int i = 0; i < n; ++i) {
+                    poles.SetValue(i + 1, at(b->poles[std::size_t(i)]));
+                    weights.SetValue(i + 1, b->weights.empty() ? 1.0 : b->weights[std::size_t(i)]);
+                }
+                const auto knotValues = b->knots();
+                const auto multiplicities = b->multiplicities();
+                TColStd_Array1OfReal knots(1, int(knotValues.size()));
+                TColStd_Array1OfInteger mults(1, int(knotValues.size()));
+                for (std::size_t i = 0; i < knotValues.size(); ++i) {
+                    knots.SetValue(int(i) + 1, knotValues[i]);
+                    mults.SetValue(int(i) + 1, multiplicities[i]);
+                }
+                Handle(Geom_BSplineCurve) curve =
+                    new Geom_BSplineCurve(poles, weights, knots, mults, b->effectiveDegree());
+                edge = BRepBuilderAPI_MakeEdge(curve);
             }
             if (pe.reversed) {
                 edge.Reverse();
@@ -227,7 +269,7 @@ TopoDS_Shape profileFaces(const sketch::Sketch& sketch, const gp_Ax3& plane)
         if (!outer) {
             continue;
         }
-        BRepBuilderAPI_MakeFace face(gp_Pln(plane), *outer, Standard_True);
+        BRepBuilderAPI_MakeFace face(gp_Pln(plane), *outer, true);
         for (const sketch::Loop& hole : profile.holes) {
             if (const auto inner = wireOf(hole)) {
                 face.Add(TopoDS::Wire(inner->Reversed()));
@@ -246,11 +288,11 @@ class SketchPlaneFilter final : public SelectMgr_Filter {
     DEFINE_STANDARD_RTTI_INLINE(SketchPlaneFilter, SelectMgr_Filter)
 
 public:
-    Standard_Boolean IsOk(const Handle(SelectMgr_EntityOwner)& owner) const override
+    bool IsOk(const Handle(SelectMgr_EntityOwner)& owner) const override
     {
         Handle(StdSelect_BRepOwner) brep = Handle(StdSelect_BRepOwner)::DownCast(owner);
         if (brep.IsNull() || !brep->HasShape()) {
-            return Standard_True;
+            return true;
         }
         const TopoDS_Shape& shape = brep->Shape();
         return shape.ShapeType() == TopAbs_FACE
@@ -274,7 +316,7 @@ public:
     Quantity_Color majorColor;
 
     void Compute(const Handle(PrsMgr_PresentationManager)& /*manager*/,
-                 const Handle(Prs3d_Presentation)& prs, const Standard_Integer mode) override
+                 const Handle(Prs3d_Presentation)& prs, const int mode) override
     {
         if (mode != 0) {
             return;
@@ -327,7 +369,7 @@ public:
     }
 
     void ComputeSelection(const Handle(SelectMgr_Selection)& /*selection*/,
-                          const Standard_Integer /*mode*/) override
+                          const int /*mode*/) override
     {
         // La rejilla no se selecciona.
     }
@@ -381,22 +423,17 @@ public:
 
     void addGeometry(const sketch::Geometry& geometry, const SketchStroke& stroke)
     {
-        std::vector<sketch::Vec2> polyline;
-        if (const auto* line = std::get_if<sketch::Line>(&geometry)) {
-            polyline = {line->start, line->end};
-        } else if (const auto* circle = std::get_if<sketch::Circle>(&geometry)) {
-            polyline = arcPoints(circle->center, circle->radius, 0.0, 2.0 * std::numbers::pi);
-        } else if (const auto* arc = std::get_if<sketch::Arc>(&geometry)) {
-            double end = arc->endAngle;
-            while (end <= arc->startAngle) {
-                end += 2.0 * std::numbers::pi;
-            }
-            polyline = arcPoints(arc->center, arc->radius, arc->startAngle, end);
-        } else if (const auto* point = std::get_if<sketch::Point>(&geometry)) {
+        if (const auto* point = std::get_if<sketch::Point>(&geometry)) {
             addPoint(point->position, stroke.color, 1.0);
+            return;
         }
-        if (!polyline.empty()) {
-            curves_.push_back({std::move(polyline), stroke});
+        addPolyline(sketch::polyline(geometry), stroke);
+    }
+
+    void addPolyline(std::vector<sketch::Vec2> points, const SketchStroke& stroke)
+    {
+        if (points.size() >= 2) {
+            curves_.push_back({std::move(points), stroke});
         }
     }
 
@@ -406,7 +443,7 @@ public:
     }
 
     void Compute(const Handle(PrsMgr_PresentationManager)& /*manager*/,
-                 const Handle(Prs3d_Presentation)& prs, const Standard_Integer mode) override
+                 const Handle(Prs3d_Presentation)& prs, const int mode) override
     {
         if (mode != 0) {
             return;
@@ -456,7 +493,7 @@ public:
     }
 
     void ComputeSelection(const Handle(SelectMgr_Selection)& /*selection*/,
-                          const Standard_Integer /*mode*/) override
+                          const int /*mode*/) override
     {}
 
 private:
@@ -479,19 +516,6 @@ private:
     gp_Pnt at(sketch::Vec2 p) const
     {
         return plane.Location().Translated(gp_Vec(plane.XDirection()) * p.x + gp_Vec(plane.YDirection()) * p.y);
-    }
-
-    // Un vértice cada 4° como máximo (y al menos 8 tramos).
-    static std::vector<sketch::Vec2> arcPoints(sketch::Vec2 c, double r, double from, double to)
-    {
-        const int segments = std::max(8, int(std::ceil((to - from) / (4.0 * std::numbers::pi / 180.0))));
-        std::vector<sketch::Vec2> points;
-        points.reserve(segments + 1);
-        for (int i = 0; i <= segments; ++i) {
-            const double t = from + (to - from) * i / segments;
-            points.push_back({c.x + r * std::cos(t), c.y + r * std::sin(t)});
-        }
-        return points;
     }
 
     std::vector<Curve> curves_;
@@ -711,9 +735,9 @@ public:
     }
 
     // Punto del plano del sketch bajo el píxel, si el rayo lo corta.
-    std::optional<sketch::Vec2> sketchPointAt(const Graphic3d_Vec2i& pixel) const
+    std::optional<sketch::Vec2> sketchPointAt(const Vec2i& pixel) const
     {
-        Standard_Real x = 0, y = 0, z = 0, dx = 0, dy = 0, dz = 0;
+        double x = 0, y = 0, z = 0, dx = 0, dy = 0, dz = 0;
         view->ConvertWithProj(pixel.x(), pixel.y(), x, y, z, dx, dy, dz);
         const gp_XYZ from(x, y, z);
         const gp_XYZ dir(dx, dy, dz);
@@ -809,12 +833,16 @@ public:
                     drawing->addPoint(*p, own ? *own : stroke.color, own ? 2.2 : 1.6);
                 }
             };
-            if (std::holds_alternative<sketch::Line>(e.geometry) || std::holds_alternative<sketch::Arc>(e.geometry)) {
-                mark(sketch::Part::Start);
-                mark(sketch::Part::End);
+            for (sketch::Part which : {sketch::Part::Start, sketch::Part::End, sketch::Part::Center}) {
+                mark(which);
             }
-            if (std::holds_alternative<sketch::Circle>(e.geometry) || std::holds_alternative<sketch::Arc>(e.geometry)) {
-                mark(sketch::Part::Center);
+            // Spline: polígono de control (discontinuo) y polos intermedios.
+            if (const auto* spline = std::get_if<sketch::BSpline>(&e.geometry)) {
+                drawing->addPolyline(spline->poles, {stroke.color, 1.0, Aspect_TOL_DOT});
+                for (int i = 1; i + 1 < int(spline->poles.size()); ++i) {
+                    const auto own = highlightOf(sketch::Ref::pole(e.id, i));
+                    drawing->addPoint(spline->poles[std::size_t(i)], own ? *own : stroke.color, own ? 2.0 : 1.3);
+                }
             }
         }
 
@@ -854,9 +882,9 @@ public:
 
     double pixelSize() const
     {
-        Standard_Real width = 0, height = 0;
+        double width = 0, height = 0;
         view->Size(width, height);
-        Standard_Integer pixelsWide = 0, pixelsHigh = 0;
+        int pixelsWide = 0, pixelsHigh = 0;
         view->Window()->Size(pixelsWide, pixelsHigh);
         return width / std::max(pixelsWide, 1);
     }
@@ -939,7 +967,7 @@ private:
         // Botón central: también desplaza; Shift + central orbita (Fusion 360).
         // Botón + modificadores, como clave del mapa (enums distintos en OCCT).
         const auto key = [](unsigned int button, unsigned int modifiers = 0) { return button | modifiers; };
-        AIS_MouseGestureMap& gestures = ChangeMouseGestureMap();
+        auto& gestures = ChangeMouseGestureMap();
         gestures.Clear();
         gestures.Bind(key(Aspect_VKeyMouse_LeftButton), AIS_MouseGesture_RotateOrbit);
         gestures.Bind(key(Aspect_VKeyMouse_LeftButton, Aspect_VKeyFlags_SHIFT), AIS_MouseGesture_SelectRectangle);
@@ -995,7 +1023,7 @@ private:
             datum->TextAspect(datumPart)->SetColor(color);
         }
         viewCube->SetTransformPersistence(
-            new Graphic3d_TransformPers(Graphic3d_TMF_TriedronPers, Aspect_TOTP_RIGHT_UPPER, Graphic3d_Vec2i(85, 85)));
+            new Graphic3d_TransformPers(Graphic3d_TMF_TriedronPers, Aspect_TOTP_RIGHT_UPPER, Vec2i(85, 85)));
         // Eje Z hacia arriba, como en los slicers de impresión 3D.
         viewCube->SetBoxSideLabel(V3d_Xpos, "DERECHA");
         viewCube->SetBoxSideLabel(V3d_Xneg, "IZQUIERDA");
@@ -1079,7 +1107,7 @@ private:
     // queden a 7 px o más. Región centrada en lo que se mira.
     void updateGrid(bool force)
     {
-        Standard_Real width = 0, height = 0;
+        double width = 0, height = 0;
         view->Size(width, height);
         const double size = std::max({width, height, 1e-3});
         constexpr double kMinSpacingPx = 7.0;
@@ -1267,7 +1295,7 @@ Qt::MouseButtons Viewport::navigationButtons(Qt::MouseButtons buttons) const
 void Viewport::initializeGL()
 {
     const qreal ratio = devicePixelRatioF();
-    const Graphic3d_Vec2i viewSize(int(width() * ratio), int(height() * ratio));
+    const Vec2i viewSize(int(width() * ratio), int(height() * ratio));
 
     const Aspect_Drawable nativeWindow = nativeDrawable(*this);
 
@@ -1319,8 +1347,8 @@ void Viewport::paintGL()
     }
 
     // Ajusta la vista si cambió el tamaño del widget.
-    Graphic3d_Vec2i oldSize;
-    const Graphic3d_Vec2i newSize = frameBuffer->GetVPSize();
+    Vec2i oldSize;
+    const Vec2i newSize = frameBuffer->GetVPSize();
     Handle(Aspect_NeutralWindow) neutralWindow = Handle(Aspect_NeutralWindow)::DownCast(impl_->view->Window());
     neutralWindow->Size(oldSize.x(), oldSize.y());
     if (newSize != oldSize) {
@@ -1345,7 +1373,7 @@ void Viewport::changeEvent(QEvent* event)
 void Viewport::mousePressEvent(QMouseEvent* event)
 {
     const qreal ratio = devicePixelRatioF();
-    const Graphic3d_Vec2i point(int(event->position().x() * ratio), int(event->position().y() * ratio));
+    const Vec2i point(int(event->position().x() * ratio), int(event->position().y() * ratio));
     if (event->button() == Qt::LeftButton && isSketching()) {
         impl_->leftPressed = true;
         impl_->pressPosition = event->position();
@@ -1365,7 +1393,7 @@ void Viewport::mousePressEvent(QMouseEvent* event)
 void Viewport::mouseReleaseEvent(QMouseEvent* event)
 {
     const qreal ratio = devicePixelRatioF();
-    const Graphic3d_Vec2i point(int(event->position().x() * ratio), int(event->position().y() * ratio));
+    const Vec2i point(int(event->position().x() * ratio), int(event->position().y() * ratio));
     if (event->button() == Qt::LeftButton && impl_->sketchDragging) {
         impl_->sketchDragging = false;
         impl_->leftPressed = false;
@@ -1403,7 +1431,7 @@ void Viewport::mouseDoubleClickEvent(QMouseEvent* event)
         impl_->ignoreNextRelease = true;
         const qreal ratio = devicePixelRatioF();
         if (const auto p = impl_->sketchPointAt(
-                Graphic3d_Vec2i(int(event->position().x() * ratio), int(event->position().y() * ratio)))) {
+                Vec2i(int(event->position().x() * ratio), int(event->position().y() * ratio)))) {
             emit sketchDoubleClicked(p->x, p->y);
         }
         return;
@@ -1414,7 +1442,7 @@ void Viewport::mouseDoubleClickEvent(QMouseEvent* event)
 void Viewport::mouseMoveEvent(QMouseEvent* event)
 {
     const qreal ratio = devicePixelRatioF();
-    const Graphic3d_Vec2i point(int(event->position().x() * ratio), int(event->position().y() * ratio));
+    const Vec2i point(int(event->position().x() * ratio), int(event->position().y() * ratio));
     if (impl_->UpdateMousePosition(point, toOcctButtons(navigationButtons(event->buttons())),
                                    toOcctModifiers(event->modifiers()), false)) {
         update();
@@ -1452,7 +1480,7 @@ void Viewport::leaveEvent(QEvent* event)
 void Viewport::wheelEvent(QWheelEvent* event)
 {
     const qreal ratio = devicePixelRatioF();
-    const Graphic3d_Vec2i point(int(event->position().x() * ratio), int(event->position().y() * ratio));
+    const Vec2i point(int(event->position().x() * ratio), int(event->position().y() * ratio));
     // angleDelta viene en octavos de grado (120 por paso de rueda).
     if (impl_->UpdateZoom(Aspect_ScrollDelta(point, event->angleDelta().y() / 8.0))) {
         update();

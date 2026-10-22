@@ -108,6 +108,30 @@ std::optional<Vec2> circumcenter(Vec2 a, Vec2 b, Vec2 c)
                 (a2 * (c.x - b.x) + b2 * (a.x - c.x) + c2 * (b.x - a.x)) / d};
 }
 
+std::optional<ArcFit> tangentArc(Vec2 s, Vec2 direction, Vec2 end)
+{
+    const Vec2 n{-direction.y, direction.x};  // a la izquierda de la dirección
+    const Vec2 v{end.x - s.x, end.y - s.y};
+    const double k = v.x * n.x + v.y * n.y;
+    const double len2 = v.x * v.x + v.y * v.y;
+    if (len2 < kMinLength * kMinLength || std::abs(k) < 1e-9 * std::sqrt(len2)) {
+        return std::nullopt;
+    }
+    const double r = len2 / (2.0 * k);  // con signo: positivo = centro a la izquierda
+    const Vec2 center{s.x + r * n.x, s.y + r * n.y};
+    const double radius = std::abs(r);
+    const double angleS = std::atan2(s.y - center.y, s.x - center.x);
+    const double angleE = std::atan2(end.y - center.y, end.x - center.x);
+    const auto ccw = [](double from, double to) {
+        const double delta = std::fmod(to - from, 2.0 * std::numbers::pi);
+        return delta < 0.0 ? delta + 2.0 * std::numbers::pi : delta;
+    };
+    if (r > 0.0) {
+        return ArcFit{Arc{center, radius, angleS, angleS + ccw(angleS, angleE)}, false};
+    }
+    return ArcFit{Arc{center, radius, angleE, angleE + ccw(angleE, angleS)}, true};
+}
+
 std::optional<Vec2> exitDirection(const Sketch& sketch, Ref endpoint)
 {
     const Entity* e = sketch.entity(endpoint.entity);

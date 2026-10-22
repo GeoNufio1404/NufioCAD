@@ -19,13 +19,6 @@ using namespace detail;
 
 constexpr double kTwoPi = 2.0 * std::numbers::pi;
 
-// Recorrido antihorario de «from» a «to», en [0, 2π).
-double ccwSweep(double from, double to)
-{
-    const double delta = std::fmod(to - from, kTwoPi);
-    return delta < 0.0 ? delta + kTwoPi : delta;
-}
-
 // --- Círculo por 2 puntos -----------------------------------------------------------
 
 class TwoPointCircleTool final : public SketchTool {
@@ -398,27 +391,7 @@ public:
     }
 
 private:
-    // Arco que sale de start_ en la dirección direction_ y llega a end.
-    std::optional<ArcFit> currentArc(Vec2 end) const
-    {
-        const Vec2 s = start_->point;
-        const Vec2 n{-direction_.y, direction_.x};  // a la izquierda de la dirección
-        const Vec2 v{end.x - s.x, end.y - s.y};
-        const double k = v.x * n.x + v.y * n.y;
-        const double len2 = v.x * v.x + v.y * v.y;
-        if (std::abs(k) < 1e-9 * std::sqrt(len2) || len2 < kMinLength * kMinLength) {
-            return std::nullopt;  // alineado con la tangente: sería una recta
-        }
-        const double r = len2 / (2.0 * k);  // con signo: positivo = centro a la izquierda
-        const Vec2 center{s.x + r * n.x, s.y + r * n.y};
-        const double radius = std::abs(r);
-        const double angleS = std::atan2(s.y - center.y, s.x - center.x);
-        const double angleE = std::atan2(end.y - center.y, end.x - center.x);
-        if (r > 0.0) {
-            return ArcFit{Arc{center, radius, angleS, angleS + ccwSweep(angleS, angleE)}, false};
-        }
-        return ArcFit{Arc{center, radius, angleE, angleE + ccwSweep(angleE, angleS)}, true};
-    }
+    std::optional<ArcFit> currentArc(Vec2 end) const { return tangentArc(start_->point, direction_, end); }
 
     Snap cursor_;
     std::optional<Snap> start_;

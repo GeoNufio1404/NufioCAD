@@ -24,11 +24,44 @@ public:
         if (!start_) {
             start_ = cursor;
             first_ = cursor;
+            // Si empieza en el extremo de una curva, se puede seguir con un arco tangente.
+            direction_ = cursor.kind == SnapKind::Point ? exitDirection(sketch, cursor.ref) : std::nullopt;
             return false;
         }
         Snap end = cursor;
         const Straight straight = straighten(start_->point, end);
         return commit(sketch, end, straight, std::nullopt, std::nullopt);
+    }
+
+    // Arrastrar desde el punto actual de la cadena dibuja un arco tangente
+    // (como en Fusion); al soltar, la cadena sigue desde su final.
+    bool dragMove(const Snap& from, const Snap& cursor) override
+    {
+        dragArc_.reset();
+        if (!start_ || !direction_ || distance(from.point, start_->point) > kMinLength) {
+            return false;
+        }
+        dragArc_ = tangentArc(start_->point, *direction_, cursor.point);
+        return true;
+    }
+
+    bool dragRelease(Sketch& sketch, const Snap& from, const Snap& cursor) override
+    {
+        if (!dragMove(from, cursor) || !dragArc_ || start_->kind != SnapKind::Point) {
+            dragArc_.reset();
+            return false;
+        }
+        const ArcFit fit = *dragArc_;
+        dragArc_.reset();
+        const Arc& a = fit.arc;
+        const EntityId arc = sketch.addArc(a.center, a.radius, a.startAngle, a.endAngle);
+        const Ref arcStart = fit.swapped ? Ref::end(arc) : Ref::start(arc);
+        const Ref arcEnd = fit.swapped ? Ref::start(arc) : Ref::end(arc);
+        sketch.addConstraint(Constraint::tangentAt(arcStart, start_->ref));
+        attach(sketch, arcEnd, cursor);
+        start_ = Snap{*sketch.point(arcEnd), SnapKind::Point, arcEnd};
+        direction_ = exitDirection(sketch, arcEnd);
+        return true;
     }
 
     std::vector<std::string> valueFields() const override
@@ -115,6 +148,8 @@ private:
             start_.reset();
             first_.reset();
         } else {
+            direction_ = Vec2{(end.point.x - start_->point.x) / distance(start_->point, end.point),
+                              (end.point.y - start_->point.y) / distance(start_->point, end.point)};
             start_ = Snap{end.point, SnapKind::Point, Ref::end(line)};
             if (first_->kind != SnapKind::Point) {
                 // El primer punto de la cadena es ahora el inicio de esta línea.
@@ -130,6 +165,8 @@ public:
         const bool active = start_.has_value();
         start_.reset();
         first_.reset();
+        direction_.reset();
+        dragArc_.reset();
         return active;
     }
 
@@ -138,6 +175,9 @@ public:
         if (!start_) {
             return {};
         }
+        if (dragArc_) {
+            return {{dragArc_->arc}};
+        }
         Snap end = cursor_;
         straighten(start_->point, end);
         return {{Line{start_->point, end.point}}};
@@ -145,7 +185,7 @@ public:
 
     std::string hint() const override
     {
-        return start_ ? "Clic para el siguiente punto (o escribe la longitud) · Esc o doble clic para terminar · Ctrl: sin ajustes"
+        return start_ ? "Clic para el siguiente punto (o escribe la longitud; arrastra para un arco tangente) · Esc o doble clic para terminar · Ctrl: sin ajustes"
                       : "Clic para el primer punto de la línea · Ctrl: sin ajustes";
     }
 
@@ -153,6 +193,8 @@ private:
     Snap cursor_;
     std::optional<Snap> start_;
     std::optional<Snap> first_;
+    std::optional<Vec2> direction_;  // con la que llega la cadena a start_
+    std::optional<ArcFit> dragArc_;  // arco tangente mientras se arrastra
 };
 
 // --- Rectángulo ----------------------------------------------------------------
