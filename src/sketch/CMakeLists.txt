@@ -2,6 +2,8 @@
 nuf_add_library(sketch SOURCES
     src/Annotations.cpp
     src/FromSelection.cpp
+    src/Curves2d.cpp
+    src/Edit.cpp
     src/Pick.cpp
     src/Plane.cpp
     src/Profiles.cpp
