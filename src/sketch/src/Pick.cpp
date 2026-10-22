@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <numbers>
 
 namespace nuf::sketch {
@@ -48,6 +49,20 @@ double distanceToArc(Vec2 p, const Arc& arc)
 
 } // namespace
 
+double distanceToCurve(const Entity& e, Vec2 p)
+{
+    if (const auto* l = std::get_if<Line>(&e.geometry)) {
+        return e.reference ? distanceToInfiniteLine(p, l->start, l->end) : distanceToSegment(p, l->start, l->end);
+    }
+    if (const auto* c = std::get_if<Circle>(&e.geometry)) {
+        return std::abs(distance(p, c->center) - c->radius);
+    }
+    if (const auto* a = std::get_if<Arc>(&e.geometry)) {
+        return distanceToArc(p, *a);
+    }
+    return std::numeric_limits<double>::infinity();
+}
+
 Ref pick(const Sketch& sketch, Vec2 cursor, double tolerance)
 {
     Ref best;
@@ -76,23 +91,16 @@ Ref pick(const Sketch& sketch, Vec2 cursor, double tolerance)
 
     // Después las curvas propias y, solo si no hay ninguna cerca, los ejes.
     for (const Entity& e : sketch.entities()) {
-        if (e.reference) {
-            continue;
-        }
-        if (const auto* l = std::get_if<Line>(&e.geometry)) {
-            consider(distanceToSegment(cursor, l->start, l->end), Ref::of(e.id));
-        } else if (const auto* c = std::get_if<Circle>(&e.geometry)) {
-            consider(std::abs(distance(cursor, c->center) - c->radius), Ref::of(e.id));
-        } else if (const auto* a = std::get_if<Arc>(&e.geometry)) {
-            consider(distanceToArc(cursor, *a), Ref::of(e.id));
+        if (!e.reference) {
+            consider(distanceToCurve(e, cursor), Ref::of(e.id));
         }
     }
     if (!best.empty()) {
         return best;
     }
     for (const Entity& e : sketch.entities()) {
-        if (const auto* l = std::get_if<Line>(&e.geometry); l && e.reference) {
-            consider(distanceToInfiniteLine(cursor, l->start, l->end), Ref::of(e.id));
+        if (e.reference && std::holds_alternative<Line>(e.geometry)) {
+            consider(distanceToCurve(e, cursor), Ref::of(e.id));
         }
     }
     return best;

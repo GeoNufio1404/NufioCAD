@@ -71,11 +71,18 @@ TEST_CASE("Snap: puntos antes que la rejilla", "[sketch][snap]")
     REQUIRE(mid.ref.entity == line);
     REQUIRE_THAT(mid.point.x, WithinAbs(6.15, kTol));
 
-    // El extremo (1, 0) del eje X no es un punto real: se ajusta a la rejilla.
-    Snap grid = snap(s, {1.1, 0.2}, options);
+    // El extremo (1, 0) del eje X no es un punto real: el cursor se apoya
+    // sobre el eje (como recta), no en ese extremo.
+    Snap onAxis = snap(s, {1.1, 0.2}, options);
+    REQUIRE(onAxis.kind == SnapKind::OnCurve);
+    REQUIRE(onAxis.ref.entity == Sketch::kAxisX);
+    REQUIRE_THAT(onAxis.point.x, WithinAbs(1.1, kTol));
+    REQUIRE_THAT(onAxis.point.y, WithinAbs(0.0, kTol));
+
+    Snap grid = snap(s, {7.2, -2.9}, options);
     REQUIRE(grid.kind == SnapKind::Grid);
-    REQUIRE_THAT(grid.point.x, WithinAbs(1.0, kTol));
-    REQUIRE_THAT(grid.point.y, WithinAbs(0.0, kTol));
+    REQUIRE_THAT(grid.point.x, WithinAbs(7.0, kTol));
+    REQUIRE_THAT(grid.point.y, WithinAbs(-3.0, kTol));
 
     Snap free = snap(s, {7.3, -2.6}, SnapOptions{0.5, 0.0});
     REQUIRE(free.kind == SnapKind::None);
@@ -213,4 +220,69 @@ TEST_CASE("Un rectángulo sin cotas queda entero como no restringido", "[sketch]
 
     auto result = makePlaneGcsSolver()->solve(ui.sketch);
     REQUIRE(result.underconstrained == created(ui.sketch));
+}
+
+TEST_CASE("Snap: intersecciones y sobre curva", "[sketch][snap]")
+{
+    Sketch s;
+    EntityId line = s.addLine({-20, 3}, {20, 3});
+    EntityId circle = s.addCircle({0, 0}, 5);
+    SnapOptions options{0.5, 1.0};
+
+    // La línea y = 3 corta al círculo en (±4, 3).
+    Snap cross = snap(s, {4.2, 3.1}, options);
+    REQUIRE(cross.kind == SnapKind::Intersection);
+    REQUIRE_THAT(cross.point.x, WithinAbs(4.0, kTol));
+    REQUIRE_THAT(cross.point.y, WithinAbs(3.0, kTol));
+    REQUIRE(((cross.ref.entity == line && cross.ref2.entity == circle)
+             || (cross.ref.entity == circle && cross.ref2.entity == line)));
+
+    // El círculo corta al eje X en (5, 0).
+    Snap axis = snap(s, {5.2, -0.2}, options);
+    REQUIRE(axis.kind == SnapKind::Intersection);
+    REQUIRE_THAT(axis.point.x, WithinAbs(5.0, kTol));
+
+    Snap on = snap(s, {12.3, 3.3}, options);
+    REQUIRE(on.kind == SnapKind::OnCurve);
+    REQUIRE(on.ref.entity == line);
+    REQUIRE_THAT(on.point.y, WithinAbs(3.0, kTol));
+
+    // Ctrl: sin snap ni inferencias.
+    Snap free = snap(s, {4.2, 3.1}, SnapOptions{0.5, 1.0, false});
+    REQUIRE(free.kind == SnapKind::None);
+    REQUIRE(free.free);
+    REQUIRE_THAT(free.point.x, WithinAbs(4.2, kTol));
+}
+
+TEST_CASE("Línea apoyada en una intersección y sobre una curva", "[sketch][tools]")
+{
+    Session ui;
+    EntityId line = ui.sketch.addLine({-20, 3}, {20, 3});
+    EntityId circle = ui.sketch.addCircle({0, 0}, 5);
+    auto tool = makeLineTool();
+    ui.click(*tool, 4.1, 3.1);    // intersección
+    ui.click(*tool, 4.6, 30.0);   // libre (casi vertical: se endereza)
+    REQUIRE(count(ui.sketch, ConstraintType::PointOnObject) == 2);
+    tool->cancel();
+
+    ui.click(*tool, -15.0, 3.2);  // sobre la línea
+    ui.click(*tool, -15.0, 20.0);
+    REQUIRE(count(ui.sketch, ConstraintType::PointOnObject) == 3);
+
+    auto result = makePlaneGcsSolver()->solve(ui.sketch);
+    REQUIRE(result.status == SolveStatus::Solved);
+    REQUIRE(result.conflicting.empty());
+    (void)line;
+    (void)circle;
+}
+
+TEST_CASE("Ctrl: la línea no se endereza", "[sketch][tools]")
+{
+    Sketch s;
+    auto tool = makeLineTool();
+    const SnapOptions off{0.5, 1.0, false};
+    tool->click(s, snap(s, {0.0, 0.0}, off));
+    tool->click(s, snap(s, {20.0, 0.5}, off));
+    REQUIRE(count(s, ConstraintType::Horizontal) == 0);
+    REQUIRE(count(s, ConstraintType::Coincident) == 0);
 }

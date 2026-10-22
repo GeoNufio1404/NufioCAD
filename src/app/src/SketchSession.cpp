@@ -5,6 +5,7 @@
 #include <nuf/sketch/FromSelection.hpp>
 #include <nuf/sketch/Pick.hpp>
 
+#include <QGuiApplication>
 #include <QInputDialog>
 
 #include <algorithm>
@@ -92,6 +93,8 @@ sketch::Snap SketchSession::snapAt(sketch::Vec2 point) const
     sketch::SnapOptions options;
     options.tolerance = kSnapRadiusPx * viewport_.sketchPixelSize();
     options.gridStep = viewport_.sketchGridStep();
+    // Con Ctrl se dibuja libre: sin snap ni restricciones automáticas.
+    options.enabled = !(QGuiApplication::keyboardModifiers() & Qt::ControlModifier);
     return sketch::snap(sketch_, point, options);
 }
 

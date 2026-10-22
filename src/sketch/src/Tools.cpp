@@ -24,6 +24,13 @@ void attach(Sketch& sketch, Ref created, const Snap& snapped)
     case SnapKind::Midpoint:
         sketch.addConstraint(Constraint::midpoint(created, snapped.ref.entity));
         break;
+    case SnapKind::OnCurve:
+        sketch.addConstraint(Constraint::pointOnObject(created, snapped.ref.entity));
+        break;
+    case SnapKind::Intersection:
+        sketch.addConstraint(Constraint::pointOnObject(created, snapped.ref.entity));
+        sketch.addConstraint(Constraint::pointOnObject(created, snapped.ref2.entity));
+        break;
     case SnapKind::None:
     case SnapKind::Grid:
         break;
@@ -31,13 +38,13 @@ void attach(Sketch& sketch, Ref created, const Snap& snapped)
 }
 
 // Si el segmento start→end está a menos de kStraightenAngle de la horizontal
-// o la vertical, lo endereza. Solo si el extremo no se apoya en un punto:
-// moverlo rompería esa coincidencia.
+// o la vertical, lo endereza. No si el extremo se apoya en algo (moverlo
+// rompería esa restricción) ni con Ctrl (snap.free).
 enum class Straight { None, Horizontal, Vertical };
 
 Straight straighten(Vec2 start, Snap& end)
 {
-    if (end.kind == SnapKind::Point || end.kind == SnapKind::Center || end.kind == SnapKind::Midpoint) {
+    if (end.free || (end.kind != SnapKind::None && end.kind != SnapKind::Grid)) {
         return Straight::None;
     }
     const double dx = end.point.x - start.x;
@@ -116,8 +123,8 @@ public:
 
     std::string hint() const override
     {
-        return start_ ? "Clic para el siguiente punto · Esc o doble clic para terminar"
-                      : "Clic para el primer punto de la línea";
+        return start_ ? "Clic para el siguiente punto · Esc o doble clic para terminar · Ctrl: sin ajustes"
+                      : "Clic para el primer punto de la línea · Ctrl: sin ajustes";
     }
 
 private:
