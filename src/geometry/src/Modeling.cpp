@@ -20,6 +20,7 @@
 #include <BRep_Builder.hxx>
 #include <ShapeUpgrade_UnifySameDomain.hxx>
 #include <Standard_Failure.hxx>
+#include <Standard_Version.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Compound.hxx>
@@ -36,6 +37,16 @@ namespace nuf::geometry {
 namespace {
 
 constexpr double kTiny = 1e-9;
+
+// OCCT 8 hereda de std::exception (what()); OCCT 7 solo tiene GetMessageString().
+std::string kernelMessage(const Standard_Failure& e)
+{
+#if OCC_VERSION_HEX >= 0x080000
+    return e.what();
+#else
+    return e.GetMessageString();
+#endif
+}
 
 // Une las caras coplanares (y aristas colineales) que dejan las booleanas.
 Shape unify(const Shape& input, const std::string& tag)
@@ -311,7 +322,7 @@ Shape extrude(std::string_view tag, const SketchRegion& region, const ExtrudeSpe
     try {
         return extrudeFaces(std::string(tag), regionFaces(region), toDir(region.plane.normal), spec, context);
     } catch (const Standard_Failure& e) {
-        throw GeometryError(std::string("Error del kernel al extruir: ") + e.GetMessageString());
+        throw GeometryError(std::string("Error del kernel al extruir: ") + kernelMessage(e));
     }
 }
 
@@ -322,7 +333,7 @@ Shape extrudeFace(std::string_view tag, const Shape& body, int faceIndex, const 
         const sketch::Plane plane = body.facePlane(faceIndex).value_or(sketch::Plane{});
         return extrudeFaces(std::string(tag), {bodyFace(body, faceIndex)}, toDir(plane.normal), spec, context);
     } catch (const Standard_Failure& e) {
-        throw GeometryError(std::string("Error del kernel al extruir: ") + e.GetMessageString());
+        throw GeometryError(std::string("Error del kernel al extruir: ") + kernelMessage(e));
     }
 }
 
@@ -391,7 +402,7 @@ Shape revolve(std::string_view tagView, const SketchRegion& region, const Axis& 
         }
         throw GeometryError("Revolución no válida");
     } catch (const Standard_Failure& e) {
-        throw GeometryError(std::string("Error del kernel al revolucionar: ") + e.GetMessageString());
+        throw GeometryError(std::string("Error del kernel al revolucionar: ") + kernelMessage(e));
     }
 }
 
@@ -424,7 +435,7 @@ Shape boolean(BooleanOp op, const Shape& target, const Shape& tool)
         }
         return unify(result, "bool");
     } catch (const Standard_Failure& e) {
-        throw GeometryError(std::string("Error del kernel en la booleana: ") + e.GetMessageString());
+        throw GeometryError(std::string("Error del kernel en la booleana: ") + kernelMessage(e));
     }
 }
 
