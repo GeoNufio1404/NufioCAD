@@ -26,6 +26,12 @@ target_link_libraries(nuf_tests PRIVATE
     Catch2::Catch2WithMain)
 
 include(Catch)
-# PRE_TEST: descubre las pruebas al correr ctest (en Windows las DLL de
-# las dependencias ya están copiadas para entonces).
-catch_discover_tests(nuf_tests DISCOVERY_MODE PRE_TEST)
+if(WIN32)
+    # En Windows ctest pasa el nombre de cada prueba con la página de códigos
+    # del sistema, no en UTF-8, y Catch2 no encuentra las que llevan tildes:
+    # se ejecuta el binario entero como una sola prueba.
+    add_test(NAME nuf_tests COMMAND nuf_tests)
+else()
+    # PRE_TEST: descubre las pruebas al correr ctest.
+    catch_discover_tests(nuf_tests DISCOVERY_MODE PRE_TEST)
+endif()
