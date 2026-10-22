@@ -208,6 +208,16 @@ ConstraintId Sketch::addConstraint(Constraint constraint)
     return constraint.id;
 }
 
+bool Sketch::canAdd(const Constraint& constraint) const
+{
+    try {
+        validate(constraint);
+        return true;
+    } catch (const std::invalid_argument&) {
+        return false;
+    }
+}
+
 void Sketch::removeConstraint(ConstraintId id)
 {
     std::erase_if(constraints_, [id](const Constraint& c) { return c.id == id; });

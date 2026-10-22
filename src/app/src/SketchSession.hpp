@@ -41,10 +41,19 @@ public:
     // false si no había nada que cancelar.
     bool cancel();
 
-    // Edición de la selección (clic y Shift+clic sin herramienta activa).
+    // Edición de la selección (clic y Shift+clic sin herramienta activa;
+    // también se seleccionan los iconos de restricciones y las cotas).
     void deleteSelection();
     void toggleConstruction();
-    bool hasSelection() const noexcept { return !selection_.empty(); }
+    bool hasSelection() const noexcept { return !selection_.empty() || !selectedConstraints_.empty(); }
+
+    // Aplica una restricción geométrica a la selección. Si no encaja con la
+    // selección, entra en conflicto o ya se cumple, no cambia nada y lo
+    // explica con message().
+    void applyConstraint(sketch::ConstraintType type);
+    // Acota la selección: pide el valor (propone el actual). Si la medida ya
+    // está determinada por otras restricciones, la deja como cota de referencia.
+    void addDimension();
 
     // Deshacer/rehacer dentro del sketch.
     bool canUndo() const noexcept { return !undo_.empty(); }
@@ -60,11 +69,17 @@ signals:
     void statusChanged(const QString& status);
     void historyChanged();
     void selectionChanged();
+    // Aviso breve para la barra de estado.
+    void message(const QString& text);
 
 private:
     void cursorMoved(bool hasPoint, double x, double y);
     void clicked(double x, double y, Qt::KeyboardModifiers modifiers);
-    void doubleClicked();
+    void doubleClicked(double x, double y);
+    // Pide un valor nuevo para la cota; false si se canceló.
+    bool askDimensionValue(sketch::Constraint& dimension);
+    void editDimension(sketch::ConstraintId id);
+    sketch::ConstraintId annotationAt(sketch::Vec2 point) const;
 
     sketch::Snap snapAt(sketch::Vec2 point) const;
     void solveAndShow();
@@ -86,6 +101,8 @@ private:
     std::vector<sketch::EntityId> underconstrained_;
     std::vector<sketch::Ref> selection_;
     sketch::Ref hovered_;
+    std::vector<sketch::ConstraintId> selectedConstraints_;
+    sketch::ConstraintId hoveredConstraint_ = 0;
     std::vector<sketch::Sketch> undo_;
     std::vector<sketch::Sketch> redo_;
 };

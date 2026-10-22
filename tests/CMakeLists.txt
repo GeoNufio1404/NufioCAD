@@ -7,6 +7,7 @@ add_executable(nuf_tests
     test_sketch.cpp
     test_sketch_pick.cpp
     test_sketch_plane.cpp
+    test_sketch_selection.cpp
     test_sketch_tools.cpp)
 
 nuf_set_warnings(nuf_tests)

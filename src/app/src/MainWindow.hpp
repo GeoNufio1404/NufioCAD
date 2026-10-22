@@ -11,6 +11,7 @@
 
 #include <map>
 #include <memory>
+#include <vector>
 
 class QAction;
 class QDockWidget;
@@ -66,6 +67,8 @@ private:
     QAction* lookAtSketchAction_ = nullptr;
     QAction* deleteAction_ = nullptr;
     QAction* constructionAction_ = nullptr;
+    QAction* dimensionAction_ = nullptr;
+    std::vector<QAction*> constraintActions_;
     QLabel* cursorLabel_ = nullptr;
 };
 

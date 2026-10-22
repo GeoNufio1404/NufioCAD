@@ -168,6 +168,31 @@ void MainWindow::createMenus()
     constructionAction_ = sketchMenu->addAction(QStringLiteral("Alternar &construcción"), QKeySequence(Qt::Key_X),
                                                 this, [this] { sketch_->toggleConstruction(); });
 
+    // Restricciones y cotas: se seleccionan las entidades y se aplica.
+    QMenu* constraintMenu = sketchMenu->addMenu(QStringLiteral("Res&tricciones"));
+    using T = sketch::ConstraintType;
+    for (const auto& [type, text, icon] :
+         {std::tuple{T::Coincident, QStringLiteral("Coincidente"), QStringLiteral("⊙")},
+          std::tuple{T::Horizontal, QStringLiteral("Horizontal"), QStringLiteral("H")},
+          std::tuple{T::Vertical, QStringLiteral("Vertical"), QStringLiteral("V")},
+          std::tuple{T::Parallel, QStringLiteral("Paralela"), QStringLiteral("∥")},
+          std::tuple{T::Perpendicular, QStringLiteral("Perpendicular"), QStringLiteral("⊥")},
+          std::tuple{T::Tangent, QStringLiteral("Tangente"), QStringLiteral("T")},
+          std::tuple{T::Equal, QStringLiteral("Igual"), QStringLiteral("=")},
+          std::tuple{T::Collinear, QStringLiteral("Colineal"), QStringLiteral("≡")},
+          std::tuple{T::Concentric, QStringLiteral("Concéntrica"), QStringLiteral("◎")},
+          std::tuple{T::Midpoint, QStringLiteral("Punto medio"), QStringLiteral("M")},
+          std::tuple{T::Symmetric, QStringLiteral("Simetría"), QStringLiteral("S")},
+          std::tuple{T::Fix, QStringLiteral("Fijar"), QStringLiteral("F")}}) {
+        QAction* action = constraintMenu->addAction(text, this, [this, type = type] { sketch_->applyConstraint(type); });
+        action->setIconText(icon);
+        action->setToolTip(QStringLiteral("%1 (selecciona y aplica)").arg(text));
+        constraintActions_.push_back(action);
+    }
+    dimensionAction_ = sketchMenu->addAction(QStringLiteral("C&ota"), QKeySequence(Qt::Key_D), this,
+                                             [this] { sketch_->addDimension(); });
+    dimensionAction_->setToolTip(QStringLiteral("Acotar la selección (D)"));
+
     QToolBar* toolbar = addToolBar(QStringLiteral("Sketch"));
     toolbar->setObjectName(QStringLiteral("sketchToolbar"));
     toolbar->setMovable(false);
@@ -175,6 +200,11 @@ void MainWindow::createMenus()
     toolbar->addAction(finishSketchAction_);
     toolbar->addSeparator();
     for (const auto& [tool, action] : toolActions_) {
+        toolbar->addAction(action);
+    }
+    toolbar->addSeparator();
+    toolbar->addAction(dimensionAction_);
+    for (QAction* action : constraintActions_) {
         toolbar->addAction(action);
     }
 
@@ -280,6 +310,8 @@ void MainWindow::startSketch(const sketch::Plane& plane, const QString& descript
     connect(sketch_.get(), &SketchSession::statusChanged, sketchStatusLabel_, &QLabel::setText);
     connect(sketch_.get(), &SketchSession::historyChanged, this, &MainWindow::updateUndoActions);
     connect(sketch_.get(), &SketchSession::selectionChanged, this, &MainWindow::updateSketchActions);
+    connect(sketch_.get(), &SketchSession::message, this,
+            [this](const QString& text) { statusBar()->showMessage(text, 6000); });
     statusBar()->showMessage(QStringLiteral("Sketch en %1 · L línea, R rectángulo, C círculo, A arco").arg(description));
     sketchStatusLabel_->setText(QStringLiteral("Sin geometría"));
     updateSketchActions();
@@ -324,6 +356,10 @@ void MainWindow::updateSketchActions()
     }
     deleteAction_->setEnabled(sketch_ && sketch_->hasSelection());
     constructionAction_->setEnabled(sketch_ && sketch_->hasSelection());
+    dimensionAction_->setEnabled(sketch_ != nullptr);
+    for (QAction* action : constraintActions_) {
+        action->setEnabled(sketch_ != nullptr);
+    }
 }
 
 } // namespace nuf::app

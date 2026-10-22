@@ -174,6 +174,8 @@ public:
     // Valida los argumentos según el tipo (lanza std::invalid_argument)
     // y asigna un id nuevo.
     ConstraintId addConstraint(Constraint constraint);
+    // true si addConstraint aceptaría esos argumentos.
+    bool canAdd(const Constraint& constraint) const;
     void removeConstraint(ConstraintId id);
 
     const std::vector<Entity>& entities() const noexcept { return entities_; }

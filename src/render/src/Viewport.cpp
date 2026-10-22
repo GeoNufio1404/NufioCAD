@@ -1,5 +1,7 @@
 #include <nuf/render/Viewport.hpp>
 
+#include <nuf/sketch/Annotations.hpp>
+
 #include <AIS_AnimationCamera.hxx>
 #include <AIS_InteractiveContext.hxx>
 #include <AIS_Shape.hxx>
@@ -21,6 +23,8 @@
 #include <Graphic3d_ArrayOfSegments.hxx>
 #include <Graphic3d_AspectLine3d.hxx>
 #include <Graphic3d_AspectMarker3d.hxx>
+#include <Graphic3d_AspectText3d.hxx>
+#include <Graphic3d_Text.hxx>
 #include <Graphic3d_Camera.hxx>
 #include <OpenGl_Context.hxx>
 #include <OpenGl_FrameBuffer.hxx>
@@ -287,11 +291,19 @@ class SketchDrawing final : public AIS_InteractiveObject {
 
 public:
     gp_Ax3 plane;
+    TCollection_AsciiString font;
 
     void clear()
     {
         curves_.clear();
         points_.clear();
+        texts_.clear();
+    }
+
+    // Texto centrado en p, sobre un recuadro del color «box».
+    void addText(sketch::Vec2 p, const std::string& utf8, const Quantity_Color& color, const Quantity_Color& box)
+    {
+        texts_.push_back({p, utf8, color, box});
     }
 
     void addGeometry(const sketch::Geometry& geometry, const SketchStroke& stroke)
@@ -348,6 +360,19 @@ public:
             group->SetGroupPrimitivesAspect(new Graphic3d_AspectLine3d(stroke.color, stroke.type, stroke.width));
             group->AddPrimitiveArray(array);
         }
+        for (const Label& label : texts_) {
+            Handle(Graphic3d_Group) group = prs->NewGroup();
+            Handle(Graphic3d_AspectText3d) aspect = new Graphic3d_AspectText3d(
+                label.color, font.ToCString(), 1.0, 0.0, Aspect_TOST_NORMAL, Aspect_TODT_SUBTITLE);
+            aspect->SetColorSubTitle(label.box);
+            group->SetGroupPrimitivesAspect(aspect);
+            Handle(Graphic3d_Text) text = new Graphic3d_Text(13.0f);
+            text->SetText(label.text.c_str());
+            text->SetPosition(at(label.position));
+            text->SetHorizontalAlignment(Graphic3d_HTA_CENTER);
+            text->SetVerticalAlignment(Graphic3d_VTA_CENTER);
+            group->AddText(text);
+        }
         for (const Marker& marker : points_) {
             Handle(Graphic3d_ArrayOfPoints) array = new Graphic3d_ArrayOfPoints(1);
             array->AddVertex(at(marker.position));
@@ -371,6 +396,12 @@ private:
         Quantity_Color color;
         double scale;
     };
+    struct Label {
+        sketch::Vec2 position;
+        std::string text;
+        Quantity_Color color;
+        Quantity_Color box;
+    };
 
     gp_Pnt at(sketch::Vec2 p) const
     {
@@ -392,6 +423,7 @@ private:
 
     std::vector<Curve> curves_;
     std::vector<Marker> points_;
+    std::vector<Label> texts_;
 };
 
 // Pieza de muestra (como "soporte_sensor" del mockup) para probar la
@@ -441,6 +473,7 @@ public:
         // un sketch en el plano XY bajo la pieza).
         drawing = new SketchDrawing();
         drawing->SetZLayer(Graphic3d_ZLayerId_Topmost);
+        drawing->font = pickLabelFont();
         preview = new SketchDrawing();
         preview->SetZLayer(Graphic3d_ZLayerId_Topmost);
     }
@@ -563,6 +596,7 @@ public:
         context->Erase(grid, false);
         context->Erase(drawing, false);
         context->Erase(preview, false);
+        shownSketch.reset();
         context->Activate(part, AIS_Shape::SelectionMode(TopAbs_FACE));
         context->Activate(part, AIS_Shape::SelectionMode(TopAbs_EDGE));
         mode = Mode::Model;
@@ -624,6 +658,22 @@ public:
     void showSketch(const sketch::Sketch& sketch, const std::vector<sketch::EntityId>& underconstrained,
                     const SketchHighlight& highlight)
     {
+        shownSketch = sketch;
+        shownUnderconstrained = underconstrained;
+        shownHighlight = highlight;
+        rebuildSketch();
+    }
+
+    // Vuelve a dibujar el último sketch mostrado (también al cambiar el zoom,
+    // porque las anotaciones se colocan en píxeles).
+    void rebuildSketch()
+    {
+        if (!shownSketch) {
+            return;
+        }
+        const sketch::Sketch& sketch = *shownSketch;
+        const std::vector<sketch::EntityId>& underconstrained = shownUnderconstrained;
+        const SketchHighlight& highlight = shownHighlight;
         const auto same = [](sketch::Ref a, sketch::Ref b) { return a.entity == b.entity && a.part == b.part; };
         const auto isSelected = [&](sketch::Ref r) {
             return std::ranges::any_of(highlight.selected, [&](sketch::Ref s) { return same(s, r); });
@@ -679,6 +729,24 @@ public:
                 mark(sketch::Part::Center);
             }
         }
+
+        // Restricciones y cotas.
+        annotationScale = pixelSize();
+        const Quantity_Color text = darkTheme ? rgb(0xE6, 0xE9, 0xED) : rgb(0x1F, 0x23, 0x29);
+        const Quantity_Color dimmed = darkTheme ? rgb(0x9A, 0xA3, 0xAE) : rgb(0x6B, 0x74, 0x80);
+        const Quantity_Color box = darkTheme ? rgb(0x2B, 0x30, 0x37) : rgb(0xF4, 0xF5, 0xF7);
+        for (const sketch::Annotation& note : sketch::layoutAnnotations(sketch, annotationScale)) {
+            Quantity_Color color = note.reference ? dimmed : text;
+            if (std::ranges::find(highlight.selectedConstraints, note.constraint) != highlight.selectedConstraints.end()) {
+                color = selectedColor();
+            } else if (note.constraint == highlight.hoveredConstraint) {
+                color = hoveredColor();
+            }
+            for (const sketch::Geometry& line : note.lines) {
+                drawing->addGeometry(line, {color, 1.0});
+            }
+            drawing->addText(note.anchor, note.text, color, box);
+        }
         context->Redisplay(drawing, false);
     }
 
@@ -713,6 +781,10 @@ public:
     Handle(AIS_ViewCube) viewCube;
     Mode mode = Mode::Model;
     bool sketchToolActive = false;
+    std::optional<sketch::Sketch> shownSketch;
+    std::vector<sketch::EntityId> shownUnderconstrained;
+    SketchHighlight shownHighlight;
+    double annotationScale = 0.0;
     bool leftPressed = false;
     bool ignoreNextRelease = false;
     QPointF pressPosition;
@@ -726,6 +798,9 @@ protected:
         // antes de dibujar.
         if (mode == Mode::Sketch) {
             updateGrid(false);
+            if (shownSketch && std::abs(pixelSize() - annotationScale) > 0.01 * annotationScale) {
+                rebuildSketch();
+            }
         }
         AIS_ViewController::handleViewRedraw(ctx, v);
         if (toAskNextFrame()) {
@@ -1177,11 +1252,15 @@ void Viewport::mouseReleaseEvent(QMouseEvent* event)
 
 void Viewport::mouseDoubleClickEvent(QMouseEvent* event)
 {
-    if (event->button() == Qt::LeftButton && navigationButtons(Qt::LeftButton) == Qt::NoButton) {
+    if (event->button() == Qt::LeftButton && isSketching()) {
         impl_->leftPressed = true;
         impl_->pressPosition = event->position();
         impl_->ignoreNextRelease = true;
-        emit sketchDoubleClicked();
+        const qreal ratio = devicePixelRatioF();
+        if (const auto p = impl_->sketchPointAt(
+                Graphic3d_Vec2i(int(event->position().x() * ratio), int(event->position().y() * ratio)))) {
+            emit sketchDoubleClicked(p->x, p->y);
+        }
         return;
     }
     QOpenGLWidget::mouseDoubleClickEvent(event);

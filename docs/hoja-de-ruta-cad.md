@@ -179,5 +179,5 @@ solver. Por eso la fase se divide así:
 | Hoja de ruta | ✅ Aprobada |
 | Fase 0 | ✅ Completa — mockups, formatos de archivo, arquitectura, entorno (repositorio con CMake, vcpkg, pruebas y CI) y nombre de trabajo NufioCAD |
 | Fase 1 | 🚧 Implementada y probada en Linux (Fedora): visor OCCT en Qt, órbita/pan/zoom estilo Fusion, ViewCube, resaltado y selección de caras y aristas. Falta probarla en Windows |
-| Fase 2 | 🚧 En curso — 2a (núcleo) |
+| Fase 2 | 🚧 En curso — 2a: hechos el solver, el modo sketch, las herramientas básicas con snap y restricciones automáticas, la selección, borrar, deshacer y las restricciones y cotas. Faltan: valores junto al cursor al dibujar, arrastrar geometría, snap a intersecciones y detección de perfiles |
 | Fases 3–9 | Pendientes |

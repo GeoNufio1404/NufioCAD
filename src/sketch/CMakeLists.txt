@@ -1,5 +1,7 @@
 # sketch: geometría 2D, restricciones y solver (PlaneGCS detrás de ISolver).
 nuf_add_library(sketch SOURCES
+    src/Annotations.cpp
+    src/FromSelection.cpp
     src/Pick.cpp
     src/Plane.cpp
     src/Sketch.cpp

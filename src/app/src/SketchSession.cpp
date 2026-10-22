@@ -1,9 +1,15 @@
 #include "SketchSession.hpp"
 
 #include <nuf/render/Viewport.hpp>
+#include <nuf/sketch/Annotations.hpp>
+#include <nuf/sketch/FromSelection.hpp>
 #include <nuf/sketch/Pick.hpp>
 
+#include <QInputDialog>
+
 #include <algorithm>
+#include <cmath>
+#include <numbers>
 
 namespace nuf::app {
 
@@ -47,8 +53,9 @@ void SketchSession::setTool(Tool tool)
     if (tool_ && cursor_) {
         tool_->move(*cursor_);
     }
-    if (tool_ && !hovered_.empty()) {
+    if (tool_ && (!hovered_.empty() || hoveredConstraint_ != 0)) {
         hovered_ = {};
+        hoveredConstraint_ = 0;
         showSketch();
     }
     showPreview();
@@ -59,10 +66,11 @@ void SketchSession::setTool(Tool tool)
 bool SketchSession::cancel()
 {
     if (!tool_) {
-        if (selection_.empty()) {
+        if (!hasSelection()) {
             return false;
         }
         selection_.clear();
+        selectedConstraints_.clear();
         showSketch();
         emit selectionChanged();
         return true;
@@ -94,12 +102,19 @@ void SketchSession::cursorMoved(bool hasPoint, double x, double y)
             tool_->move(*cursor_);
         }
     }
-    // Sin herramienta, se resalta lo que se seleccionaría con un clic.
-    const sketch::Ref hovered =
-        (!tool_ && hasPoint) ? sketch::pick(sketch_, {x, y}, kSnapRadiusPx * viewport_.sketchPixelSize())
-                             : sketch::Ref{};
-    if (hovered.entity != hovered_.entity || hovered.part != hovered_.part) {
+    // Sin herramienta, se resalta lo que se seleccionaría con un clic (los
+    // iconos y cotas antes que la geometría que tienen debajo).
+    sketch::ConstraintId hoveredConstraint = 0;
+    sketch::Ref hovered;
+    if (!tool_ && hasPoint) {
+        hoveredConstraint = annotationAt({x, y});
+        if (hoveredConstraint == 0) {
+            hovered = sketch::pick(sketch_, {x, y}, kSnapRadiusPx * viewport_.sketchPixelSize());
+        }
+    }
+    if (hovered.entity != hovered_.entity || hovered.part != hovered_.part || hoveredConstraint != hoveredConstraint_) {
         hovered_ = hovered;
+        hoveredConstraint_ = hoveredConstraint;
         showSketch();
     }
     showPreview();
@@ -109,15 +124,19 @@ void SketchSession::clicked(double x, double y, Qt::KeyboardModifiers modifiers)
 {
     if (!tool_) {
         // Clic: selecciona; Shift+clic: agrega o quita; clic en vacío: limpia.
-        const sketch::Ref picked = sketch::pick(sketch_, {x, y}, kSnapRadiusPx * viewport_.sketchPixelSize());
-        const auto same = [&](sketch::Ref r) { return r.entity == picked.entity && r.part == picked.part; };
-        if (modifiers & Qt::ShiftModifier) {
-            if (!picked.empty() && std::erase_if(selection_, same) == 0) {
-                selection_.push_back(picked);
+        const bool add = modifiers & Qt::ShiftModifier;
+        if (!add) {
+            selection_.clear();
+            selectedConstraints_.clear();
+        }
+        if (const sketch::ConstraintId constraint = annotationAt({x, y})) {
+            if (std::erase(selectedConstraints_, constraint) == 0) {
+                selectedConstraints_.push_back(constraint);
             }
         } else {
-            selection_.clear();
-            if (!picked.empty()) {
+            const sketch::Ref picked = sketch::pick(sketch_, {x, y}, kSnapRadiusPx * viewport_.sketchPixelSize());
+            const auto same = [&](sketch::Ref r) { return r.entity == picked.entity && r.part == picked.part; };
+            if (!picked.empty() && std::erase_if(selection_, same) == 0) {
                 selection_.push_back(picked);
             }
         }
@@ -152,14 +171,18 @@ void SketchSession::deleteSelection()
 {
     // Un extremo seleccionado borra su entidad. El origen y los ejes no se borran.
     const std::vector<sketch::EntityId> ids = selectedEntities();
-    if (ids.empty()) {
+    if (ids.empty() && selectedConstraints_.empty()) {
         return;
     }
     remember(sketch_);
+    for (sketch::ConstraintId id : selectedConstraints_) {
+        sketch_.removeConstraint(id);
+    }
     for (sketch::EntityId id : ids) {
         sketch_.removeEntity(id);
     }
     selection_.clear();
+    selectedConstraints_.clear();
     emit selectionChanged();
     solveAndShow();
 }
@@ -223,26 +246,168 @@ void SketchSession::redo()
 void SketchSession::pruneSelection()
 {
     const auto gone = [this](const sketch::Ref& r) { return sketch_.entity(r.entity) == nullptr; };
-    if (std::erase_if(selection_, gone) > 0) {
+    const auto goneConstraint = [this](sketch::ConstraintId id) { return sketch_.constraint(id) == nullptr; };
+    if (std::erase_if(selection_, gone) + std::erase_if(selectedConstraints_, goneConstraint) > 0) {
         emit selectionChanged();
+    }
+    if (goneConstraint(hoveredConstraint_)) {
+        hoveredConstraint_ = 0;
     }
     if (gone(hovered_)) {
         hovered_ = {};
     }
 }
 
-void SketchSession::doubleClicked()
+void SketchSession::doubleClicked(double x, double y)
 {
+    if (!tool_) {
+        // Doble clic sobre una cota: editar su valor.
+        if (const sketch::ConstraintId id = annotationAt({x, y})) {
+            const sketch::Constraint* c = sketch_.constraint(id);
+            if (c && sketch::isDimensional(c->type)) {
+                editDimension(id);
+            }
+        }
+        return;
+    }
     // El primer clic ya colocó el punto; el doble clic termina la cadena.
-    if (tool_ && tool_->cancel()) {
+    if (tool_->cancel()) {
         showPreview();
         emit hintChanged(QString::fromStdString(tool_->hint()));
     }
 }
 
+sketch::ConstraintId SketchSession::annotationAt(sketch::Vec2 point) const
+{
+    const double px = viewport_.sketchPixelSize();
+    return sketch::pickAnnotation(sketch::layoutAnnotations(sketch_, px), point, px);
+}
+
+namespace {
+
+bool contains(const std::vector<sketch::ConstraintId>& ids, sketch::ConstraintId id)
+{
+    return std::ranges::find(ids, id) != ids.end();
+}
+
+QString constraintName(sketch::ConstraintType type)
+{
+    using T = sketch::ConstraintType;
+    switch (type) {
+    case T::Coincident: return QStringLiteral("Coincidente");
+    case T::Horizontal: return QStringLiteral("Horizontal");
+    case T::Vertical: return QStringLiteral("Vertical");
+    case T::Parallel: return QStringLiteral("Paralela");
+    case T::Perpendicular: return QStringLiteral("Perpendicular");
+    case T::Tangent: return QStringLiteral("Tangente");
+    case T::Equal: return QStringLiteral("Igual");
+    case T::Collinear: return QStringLiteral("Colineal");
+    case T::Concentric: return QStringLiteral("Concéntrica");
+    case T::Midpoint: return QStringLiteral("Punto medio");
+    case T::Symmetric: return QStringLiteral("Simetría");
+    case T::Fix: return QStringLiteral("Fijar");
+    default: return QStringLiteral("Restricción");
+    }
+}
+
+} // namespace
+
+void SketchSession::applyConstraint(sketch::ConstraintType type)
+{
+    const std::vector<sketch::Constraint> constraints = sketch::constraintsFromSelection(type, sketch_, selection_);
+    if (constraints.empty()) {
+        emit message(QStringLiteral("%1: la selección no sirve para esta restricción").arg(constraintName(type)));
+        return;
+    }
+    sketch::Sketch before = sketch_;
+    std::vector<sketch::ConstraintId> added;
+    for (const sketch::Constraint& c : constraints) {
+        added.push_back(sketch_.addConstraint(c));
+    }
+    const sketch::SolveResult result = solver_->solve(sketch_);
+    const bool redundant = std::ranges::any_of(added, [&](auto id) { return contains(result.redundant, id); });
+    if (result.status != sketch::SolveStatus::Solved || redundant) {
+        sketch_ = std::move(before);
+        emit message(redundant ? QStringLiteral("%1: ya se cumple por otras restricciones").arg(constraintName(type))
+                               : QStringLiteral("%1: entra en conflicto con otras restricciones").arg(constraintName(type)));
+        solveAndShow();
+        return;
+    }
+    remember(std::move(before));
+    selection_.clear();
+    emit selectionChanged();
+    solveAndShow();
+}
+
+bool SketchSession::askDimensionValue(sketch::Constraint& dimension)
+{
+    const bool angle = dimension.type == sketch::ConstraintType::Angle;
+    const double shown = angle ? std::abs(dimension.value) * 180.0 / std::numbers::pi : std::abs(dimension.value);
+    bool ok = false;
+    const double value = QInputDialog::getDouble(&viewport_, QStringLiteral("Cota"),
+                                                 angle ? QStringLiteral("Ángulo (°):") : QStringLiteral("Valor (mm):"),
+                                                 shown, angle ? 0.0 : 1e-6, angle ? 360.0 : 1e6, 3, &ok);
+    if (!ok) {
+        return false;
+    }
+    // Se conserva el signo (sentido) de la medida actual.
+    const double sign = dimension.value < 0.0 ? -1.0 : 1.0;
+    dimension.value = sign * (angle ? value * std::numbers::pi / 180.0 : value);
+    return true;
+}
+
+void SketchSession::addDimension()
+{
+    std::optional<sketch::Constraint> dimension = sketch::dimensionFromSelection(sketch_, selection_);
+    if (!dimension) {
+        emit message(QStringLiteral("Cota: selecciona una línea, un círculo, un arco, dos puntos, "
+                                    "un punto y una línea, o dos líneas"));
+        return;
+    }
+    if (!askDimensionValue(*dimension)) {
+        return;
+    }
+    sketch::Sketch before = sketch_;
+    const sketch::ConstraintId id = sketch_.addConstraint(*dimension);
+    sketch::SolveResult result = solver_->solve(sketch_);
+    if (result.status != sketch::SolveStatus::Solved || contains(result.redundant, id)) {
+        // La medida ya la fijan otras restricciones: cota de referencia.
+        sketch_ = before;
+        dimension->driving = false;
+        sketch_.addConstraint(*dimension);
+        emit message(QStringLiteral("La medida ya está determinada: se añadió como cota de referencia"));
+    }
+    remember(std::move(before));
+    selection_.clear();
+    emit selectionChanged();
+    solveAndShow();
+}
+
+void SketchSession::editDimension(sketch::ConstraintId id)
+{
+    sketch::Constraint edited = *sketch_.constraint(id);
+    if (!edited.driving) {
+        emit message(QStringLiteral("Es una cota de referencia: muestra la medida, no se edita"));
+        return;
+    }
+    if (!askDimensionValue(edited)) {
+        return;
+    }
+    sketch::Sketch before = sketch_;
+    sketch_.constraint(id)->value = edited.value;
+    if (solver_->solve(sketch_).status != sketch::SolveStatus::Solved) {
+        sketch_ = std::move(before);
+        emit message(QStringLiteral("No se puede: con ese valor el sketch no tiene solución"));
+        solveAndShow();
+        return;
+    }
+    remember(std::move(before));
+    solveAndShow();
+}
+
 void SketchSession::showSketch()
 {
-    viewport_.showSketch(sketch_, underconstrained_, {selection_, hovered_});
+    viewport_.showSketch(sketch_, underconstrained_, {selection_, hovered_, selectedConstraints_, hoveredConstraint_});
 }
 
 void SketchSession::solveAndShow()
