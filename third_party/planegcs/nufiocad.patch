@@ -1,0 +1,145 @@
+diff -ru a/Constraints.cpp b/Constraints.cpp
+--- a/Constraints.cpp
++++ b/Constraints.cpp
+@@ -35,8 +35,6 @@
+ # include <cassert>
+ #endif
+ 
+-#include <boost/graph/graph_concepts.hpp>
+-
+ #include "Constraints.h"
+ 
+ 
+diff -ru a/Constraints.h b/Constraints.h
+--- a/Constraints.h
++++ b/Constraints.h
+@@ -24,7 +24,7 @@
+ 
+ #pragma once
+ 
+-#include "../../SketcherGlobal.h"
++#include "SketcherGlobal.h"
+ #include "Geo.h"
+ #include <optional>
+ 
+diff -ru a/GCS.cpp b/GCS.cpp
+--- a/GCS.cpp
++++ b/GCS.cpp
+@@ -103,8 +103,6 @@
+ #include <Base/Console.h>
+ #include <FCConfig.h>
+ 
+-#include <boost/graph/connected_components.hpp>
+-#include <boost_graph_adjacency_list.hpp>
+ 
+ using MatrixIndexType = Eigen::FullPivHouseholderQR<Eigen::MatrixXd>::IntDiagSizeVectorType;
+ 
+@@ -460,7 +458,53 @@
+ #endif
+ 
+ 
+-using Graph = boost::adjacency_list<boost::vecS, boost::vecS, boost::undirectedS>;
++// NufioCAD: sustituye boost::adjacency_list + boost::connected_components por
++// un union-find, para no depender de Boost.
++namespace
++{
++class Graph
++{
++public:
++    void addVertex()
++    {
++        parent.push_back(int(parent.size()));
++    }
++    void addEdge(int a, int b)
++    {
++        parent[find(a)] = find(b);
++    }
++    int numVertices() const
++    {
++        return int(parent.size());
++    }
++    // Igual que boost::connected_components: numera las componentes desde 0
++    // en orden de aparición y devuelve cuántas hay.
++    int connectedComponents(int* component)
++    {
++        std::vector<int> label(parent.size(), -1);
++        int count = 0;
++        for (int v = 0; v < numVertices(); ++v) {
++            int root = find(v);
++            if (label[root] < 0) {
++                label[root] = count++;
++            }
++            component[v] = label[root];
++        }
++        return count;
++    }
++
++private:
++    int find(int v)
++    {
++        while (parent[v] != v) {
++            parent[v] = parent[parent[v]];
++            v = parent[v];
++        }
++        return v;
++    }
++    std::vector<int> parent;
++};
++}  // namespace
+ 
+ ///////////////////////////////////////
+ // Solver
+@@ -1783,7 +1827,7 @@
+     // partitioning into decoupled components
+     Graph g;
+     for (int i = 0; i < int(plist.size() + clistR.size()); i++) {
+-        boost::add_vertex(g);
++        g.addVertex();
+     }
+ 
+     int cvtid = int(plist.size());
+@@ -1792,16 +1836,16 @@
+         for (const auto param : cparams) {
+             MAP_pD_I::const_iterator it = pIndex.find(param);
+             if (it != pIndex.end()) {
+-                boost::add_edge(cvtid, it->second, g);
++                g.addEdge(cvtid, it->second);
+             }
+         }
+         ++cvtid;
+     }
+ 
+-    VEC_I components(boost::num_vertices(g));
++    VEC_I components(g.numVertices());
+     int componentsSize = 0;
+     if (!components.empty()) {
+-        componentsSize = boost::connected_components(g, &components[0]);
++        componentsSize = g.connectedComponents(&components[0]);
+     }
+ 
+     // identification of equality constraints and parameter reduction
+diff -ru a/GCS.h b/GCS.h
+--- a/GCS.h
++++ b/GCS.h
+@@ -26,7 +26,7 @@
+ 
+ #include <Eigen/QR>
+ 
+-#include "../../SketcherGlobal.h"
++#include "SketcherGlobal.h"
+ #include "SubSystem.h"
+ 
+ 
+diff -ru a/Geo.h b/Geo.h
+--- a/Geo.h
++++ b/Geo.h
+@@ -25,8 +25,7 @@
+ #pragma once
+ 
+ #include "Util.h"
+-#include <boost/math/constants/constants.hpp>
+-#include "../../SketcherGlobal.h"
++#include "SketcherGlobal.h"
+ 
+ #ifdef _MSC_VER
+ # pragma warning(disable : 4251)

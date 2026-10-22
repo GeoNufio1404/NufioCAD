@@ -1,5 +1,8 @@
 # sketch/
 
-Geometría 2D y restricciones del sketcher. Se implementa en la **Fase 2**,
-junto con la elección del solver (`libslvs` o PlaneGCS) detrás de una
-interfaz `ISolver`. Ver `docs/arquitectura-cad.md`, sección 2.
+Geometría 2D y restricciones del sketcher (Fase 2). Ver
+`docs/arquitectura-cad.md`, sección 2.
+
+- `Sketch.hpp`: modelo del sketch (entidades, restricciones y cotas), sin Qt ni OCCT.
+- `Solver.hpp`: interfaz `ISolver`; `makePlaneGcsSolver()` la implementa con
+  PlaneGCS (`third_party/planegcs`), que solo se incluye en `PlaneGcsSolver.cpp`.

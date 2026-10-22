@@ -20,7 +20,7 @@ jobs:
             libocct-data-exchange-dev libocct-ocaf-dev libocct-draw-dev \
             occt-misc libtbb-dev \
             qt6-base-dev libgl-dev libglu1-mesa-dev \
-            libsqlite3-dev catch2
+            libsqlite3-dev libeigen3-dev catch2
 
       - name: Configurar
         run: cmake --preset linux-release

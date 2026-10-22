@@ -39,16 +39,17 @@ las distribuciones solo trae GLX.
 NufioCAD/
 ├── CMakeLists.txt         proyecto raíz
 ├── CMakePresets.json      un preset por sistema (Linux / Windows)
-├── vcpkg.json             dependencias con versión fijada (OCCT, SQLite, Catch2)
+├── vcpkg.json             dependencias con versión fijada (OCCT, Eigen, SQLite, Catch2)
 ├── cmake/                 funciones comunes (advertencias, bibliotecas)
 ├── src/
 │   ├── geometry/          adaptador de OpenCASCADE (único que lo incluye)
-│   ├── sketch/            sketcher 2D (Fase 2)
+│   ├── sketch/            sketcher 2D y solver de restricciones (Fase 2)
 │   ├── document/          documento, señales, timeline (Fase 3)
 │   ├── commands/          deshacer/rehacer
 │   ├── io/                archivo .nuf (SQLite) y exportación
 │   ├── render/            viewport (Qt + OCCT, Fase 1)
 │   └── app/               ventana principal y ejecutable
+├── third_party/planegcs/  solver de restricciones 2D (copia de FreeCAD)
 ├── tests/                 pruebas del núcleo (Catch2, sin Qt)
 ├── docs/                  hoja de ruta y arquitectura
 └── .github/workflows/     CI en Windows y Linux
@@ -56,7 +57,7 @@ NufioCAD/
 
 Cada módulo expone sus cabeceras en `src/<módulo>/include/nuf/<módulo>/` y se
 usa como `nuf::<módulo>` en CMake. El núcleo (`geometry`, `document`,
-`commands`, `io`) **no depende de Qt**.
+`commands`, `io`, `sketch`) **no depende de Qt**.
 
 ---
 
@@ -66,7 +67,7 @@ usa como `nuf::<módulo>` en CMake. El núcleo (`geometry`, `document`,
 
 ```bash
 sudo dnf install gcc-c++ cmake ninja-build git \
-    opencascade-devel qt6-qtbase-devel sqlite-devel catch-devel
+    opencascade-devel qt6-qtbase-devel sqlite-devel eigen3-devel catch-devel
 ```
 
 Si CMake reporta que falta TBB al configurar, instala también `tbb-devel`.

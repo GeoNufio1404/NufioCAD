@@ -3,7 +3,8 @@ add_executable(nuf_tests
     test_signal.cpp
     test_command_stack.cpp
     test_geometry.cpp
-    test_nuf_file.cpp)
+    test_nuf_file.cpp
+    test_sketch.cpp)
 
 nuf_set_warnings(nuf_tests)
 target_link_libraries(nuf_tests PRIVATE
@@ -11,6 +12,7 @@ target_link_libraries(nuf_tests PRIVATE
     nuf::commands
     nuf::geometry
     nuf::io
+    nuf::sketch
     Catch2::Catch2WithMain)
 
 include(Catch)

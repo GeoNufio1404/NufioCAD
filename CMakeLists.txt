@@ -31,7 +31,10 @@ find_package(SQLite3 REQUIRED)
 message(STATUS "OpenCASCADE ${OpenCASCADE_VERSION}")
 message(STATUS "SQLite ${SQLite3_VERSION}")
 
+add_subdirectory(third_party/planegcs)
+
 add_subdirectory(src/geometry)
+add_subdirectory(src/sketch)
 add_subdirectory(src/document)
 add_subdirectory(src/commands)
 add_subdirectory(src/io)

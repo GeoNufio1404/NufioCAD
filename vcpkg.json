@@ -6,6 +6,7 @@
   "description": "CAD paramétrico de escritorio. Qt 6 se instala aparte (instalador oficial en Windows, paquetes del sistema en Linux).",
   "dependencies": [
     "opencascade",
+    "eigen3",
     "sqlite3",
     "catch2"
   ]

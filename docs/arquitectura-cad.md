@@ -35,7 +35,7 @@ Las dependencias solo apuntan hacia abajo.
 │  geometry/ Adaptador del kernel (OCCT): extruir,         │
 │            booleanas, fillet, mallado, historial topo.   │
 └──────────────────────────────────────────────────────────┘
-   OpenCASCADE · SQLite · libslvs / PlaneGCS · Qt (solo arriba)
+   OpenCASCADE · SQLite · PlaneGCS (+ Eigen) · Qt (solo arriba)
 ```
 
 | Módulo | Responsabilidad | Depende de |
@@ -198,6 +198,11 @@ CREATE TABLE blobs      (key TEXT PRIMARY KEY, kind TEXT, data BLOB); -- importa
 6. `Document` emite `recomputed` → `render/` actualiza el viewport y `app/` el navegador y el timeline.
 7. **Ctrl+Z** → `AddFeature::undo` la quita y se recalcula.
 
+**Decidido (Fase 2): solver 2D = PlaneGCS**, el del sketcher de FreeCAD, copiado en
+`third_party/planegcs` (LGPL-2.1+, enlazado estáticamente). Frente a `libslvs`
+(GPLv3) no obliga a distribuir NufioCAD como GPL, y detecta restricciones
+redundantes y en conflicto y los grados de libertad restantes.
+
 ---
 
 ## 9. Decisiones abiertas
@@ -205,7 +210,6 @@ CREATE TABLE blobs      (key TEXT PRIMARY KEY, kind TEXT, data BLOB); -- importa
 | Tema | Opciones | Cuándo |
 |---|---|---|
 | Nombrado topológico | TNaming de OCCT vs. resolvedor propio (detrás de `TopoResolver`) | Fase 3 |
-| Solver 2D | `libslvs` vs. PlaneGCS | Fase 2 |
 | Recálculo en segundo plano | Hilo de trabajo para no congelar la UI | Cuando los modelos lo pidan (Fase 5+) |
 | Biblioteca JSON | Ej. nlohmann/json | Fase 4 |
 
