@@ -62,7 +62,11 @@
       "name": "windows-release",
       "displayName": "Windows · Release (MSVC + vcpkg)",
       "inherits": "windows",
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-release",
+        "VCPKG_HOST_TRIPLET": "x64-windows-release"
+      }
     }
   ],
   "buildPresets": [
