@@ -57,6 +57,7 @@
 #include <Graphic3d_AspectText3d.hxx>
 #include <Graphic3d_Text.hxx>
 #include <Graphic3d_Vec2.hxx>
+#include <Graphic3d_ZLayerSettings.hxx>
 #include <Image_PixMap.hxx>
 #include <NCollection_Array1.hxx>
 #include <Graphic3d_Camera.hxx>
@@ -686,6 +687,17 @@ public:
 
         planeFilter = new SketchPlaneFilter();
         grid = new SketchGrid();
+        // Capa propia para las regiones (perfiles) de los sketches: respeta la
+        // profundidad de la pieza (lo que está delante la tapa) y, por ser una
+        // capa superior, al seleccionar gana a la pieza. Para que sobre una
+        // cara en el mismo plano no se peleen, cada región se acerca a la
+        // cámara con su propio desplazamiento (pullTowardCamera).
+        Graphic3d_ZLayerSettings regionSettings;
+        regionSettings.SetName("Regiones de sketch");
+        regionSettings.SetClearDepth(false);
+        regionSettings.SetEnableDepthTest(true);
+        regionSettings.SetEnableDepthWrite(true);
+        viewer->InsertLayerBefore(regionLayer, regionSettings, Graphic3d_ZLayerId_Topmost);
         // La geometría del sketch se ve aunque la pieza la tape (por ejemplo,
         // un sketch en el plano XY bajo la pieza).
         drawing = new SketchDrawing();
@@ -693,13 +705,19 @@ public:
         drawing->font = pickLabelFont();
         preview = new SketchDrawing();
         preview->SetZLayer(Graphic3d_ZLayerId_Topmost);
-        // Capa Top (por debajo de las líneas, en Topmost): si estuvieran en la
-        // misma capa, línea y sombreado coplanarios se pelearían (z-fighting).
         profiles = new AIS_Shape(TopoDS_Shape());
-        profiles->SetZLayer(Graphic3d_ZLayerId_Top);
+        profiles->SetZLayer(regionLayer);
         profiles->SetColor(rgb(0x6C, 0xA6, 0xFF));
         profiles->SetTransparency(0.82);
         profiles->Attributes()->SetFaceBoundaryDraw(false);
+        pullTowardCamera(profiles);
+    }
+
+    // Las caras de la pieza ya se alejan un poco (factor 1); esto acerca la
+    // región aunque esté inclinada respecto a la vista.
+    static void pullTowardCamera(const Handle(AIS_Shape)& shape)
+    {
+        shape->Attributes()->ShadingAspect()->Aspect()->SetPolygonOffsets(Aspect_POM_Fill, -2.0f, -4.0f);
     }
 
     enum class Mode { Model, PickPlane, Sketch };
@@ -1174,9 +1192,8 @@ public:
             region->SetColor(rgb(0x6C, 0xA6, 0xFF));
             region->SetTransparency(0.8);
             region->Attributes()->SetFaceBoundaryDraw(false);
-            // Top: por debajo de las curvas (Topmost) para que no se peleen al
-            // dibujarse; al seleccionar, la capa sigue ganando a la pieza.
-            region->SetZLayer(Graphic3d_ZLayerId_Top);
+            pullTowardCamera(region);
+            region->SetZLayer(regionLayer);
             context->Display(region, AIS_Shaded, 0, false);
             shown.regions.push_back(region);
         }
@@ -1302,6 +1319,9 @@ private:
         for (auto type : {Prs3d_TypeOfHighlight_Dynamic, Prs3d_TypeOfHighlight_LocalDynamic}) {
             context->HighlightStyle(type)->SetColor(rgb(0x6C, 0xA6, 0xFF));
             context->HighlightStyle(type)->SetDisplayMode(AIS_Shaded);
+            // En la capa del propio objeto (OCCT lo pone en Top, encima de
+            // todo): así lo que está delante, como un cilindro, lo tapa.
+            context->HighlightStyle(type)->SetZLayer(Graphic3d_ZLayerId_UNKNOWN);
         }
         for (auto type : {Prs3d_TypeOfHighlight_Selected, Prs3d_TypeOfHighlight_LocalSelected}) {
             context->HighlightStyle(type)->SetColor(rgb(0x1F, 0x6F, 0xEB));
@@ -1465,6 +1485,7 @@ private:
     Handle(SketchDrawing) drawing;
     Handle(SketchDrawing) preview;
     Handle(AIS_Shape) profiles;
+    Graphic3d_ZLayerId regionLayer = Graphic3d_ZLayerId_UNKNOWN;
     std::map<int, FinishedSketch> finished;
     std::vector<Handle(AIS_InteractiveObject)> images;  // de referencia, del sketch en curso
     sketch::Plane sketchPlane;
