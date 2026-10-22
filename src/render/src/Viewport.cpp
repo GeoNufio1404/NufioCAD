@@ -16,8 +16,6 @@
 #include <AIS_MouseGesture.hxx>
 #include <AIS_Shape.hxx>
 #include <AIS_TexturedShape.hxx>
-#include <AIS_Trihedron.hxx>
-#include <Geom_Axis2Placement.hxx>
 #include <AIS_ViewController.hxx>
 #include <AIS_ViewCube.hxx>
 #include <Aspect_DisplayConnection.hxx>
@@ -1270,7 +1268,6 @@ public:
     Handle(V3d_View) view;
     Handle(AIS_InteractiveContext) context;
     Handle(AIS_ViewCube) viewCube;
-    Handle(AIS_Trihedron) axes;  // ejes de la esquina
     Mode mode = Mode::Model;
     bool sketchToolActive = false;
     bool projectMode = false;
@@ -1369,13 +1366,6 @@ private:
         }
     }
 
-    static std::vector<std::pair<Prs3d_DatumParts, Quantity_Color>> axes_colors()
-    {
-        return {{Prs3d_DatumParts_XAxis, rgb(0xE5, 0x48, 0x4D)},
-                {Prs3d_DatumParts_YAxis, rgb(0x2F, 0x9E, 0x44)},
-                {Prs3d_DatumParts_ZAxis, rgb(0x3B, 0x82, 0xF6)}};
-    }
-
     void createViewCube()
     {
         viewCube = new AIS_ViewCube();
@@ -1389,8 +1379,6 @@ private:
             cubeHover->ShadingAspect()->SetColor(rgb(0x6C, 0xA6, 0xFF));
         }
         viewCube->SetSize(55);
-        // Sin ejes propios: van aparte, abajo a la izquierda (como en el mockup).
-        viewCube->SetDrawAxes(false);
         const TCollection_AsciiString font = pickLabelFont();
         viewCube->SetFont(font);
         viewCube->SetFontHeight(10);
@@ -1398,7 +1386,11 @@ private:
         // El ViewCube las toma del dibujante por defecto del contexto.
         context->DefaultDrawer()->TextAspect()->Aspect()->SetFont(font);
         const Handle(Prs3d_DatumAspect)& datum = context->DefaultDrawer()->DatumAspect();
-        for (const auto& [datumPart, color] : axes_colors()) {
+        const std::pair<Prs3d_DatumParts, Quantity_Color> axes[] = {
+            {Prs3d_DatumParts_XAxis, rgb(0xE5, 0x48, 0x4D)},
+            {Prs3d_DatumParts_YAxis, rgb(0x2F, 0x9E, 0x44)},
+            {Prs3d_DatumParts_ZAxis, rgb(0x3B, 0x82, 0xF6)}};
+        for (const auto& [datumPart, color] : axes) {
             datum->TextAspect(datumPart)->Aspect()->SetFont(font);
             datum->TextAspect(datumPart)->SetColor(color);
         }
@@ -1411,20 +1403,6 @@ private:
         viewCube->SetBoxSideLabel(V3d_Yneg, "FRENTE");
         viewCube->SetBoxSideLabel(V3d_Zpos, "ARRIBA");
         viewCube->SetBoxSideLabel(V3d_Zneg, "ABAJO");
-
-        // Ejes X/Y/Z en la esquina inferior izquierda, con las letras en la
-        // fuente de la interfaz (las toma del dibujante por defecto).
-        axes = new AIS_Trihedron(new Geom_Axis2Placement(gp::XOY()));
-        axes->SetDatumDisplayMode(Prs3d_DM_Shaded);
-        axes->SetSize(70);
-        for (const auto& [datumPart, color] : axes_colors()) {
-            axes->SetDatumPartColor(datumPart, color);
-            axes->SetTextColor(datumPart, color);
-        }
-        axes->SetTransformPersistence(
-            new Graphic3d_TransformPers(Graphic3d_TMF_TriedronPers, Aspect_TOTP_LEFT_LOWER, Vec2i(60, 60)));
-        axes->SetInfiniteState(true);
-        axes->SetZLayer(Graphic3d_ZLayerId_Topmost);
     }
 
     struct OriginPlane {
@@ -1937,7 +1915,6 @@ void Viewport::initializeGL()
     if (firstTime) {
         // El ViewCube se muestra cuando la vista ya tiene ventana.
         impl_->context->Display(impl_->viewCube, 0, 0, false);
-        impl_->context->Display(impl_->axes, 0, -1, false);
         impl_->applyTheme(palette().color(QPalette::Window).lightness() < 128);
         resetView();
     }
