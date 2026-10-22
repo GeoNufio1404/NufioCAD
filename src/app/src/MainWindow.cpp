@@ -323,7 +323,11 @@ void MainWindow::finishSketch()
     if (!sketch_) {
         return;
     }
+    // Hasta la Fase 3 (historial) el sketch no se guarda, pero queda a la vista.
+    const sketch::Sketch finished = sketch_->sketch();
+    const sketch::Plane plane = sketch_->plane();
     sketch_.reset();
+    viewport_->showFinishedSketch(finished, plane);
     sketchStatusLabel_->clear();
     statusBar()->clearMessage();
     updateSketchActions();

@@ -59,6 +59,9 @@ public:
     // Entra al sketch: cámara de frente al plano, rejilla y coordenadas.
     void beginSketch(const sketch::Plane& plane);
     void endSketch();
+    // Deja a la vista un sketch ya terminado (curvas y regiones), en su
+    // plano. Hasta la Fase 3 no se puede volver a editar.
+    void showFinishedSketch(const sketch::Sketch& sketch, const sketch::Plane& plane);
     bool isSketching() const;
     // Vuelve a poner la cámara de frente al plano del sketch.
     void lookAtSketch();

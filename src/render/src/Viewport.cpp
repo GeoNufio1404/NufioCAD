@@ -859,6 +859,29 @@ public:
 
     double gridStep() const { return grid->step; }
 
+    void showFinishedSketch(const sketch::Sketch& sketch, const sketch::Plane& plane)
+    {
+        Handle(SketchDrawing) curves = new SketchDrawing();
+        curves->plane = toAx3(plane);
+        // Las curvas por encima de la pieza: un sketch suele quedar dentro o
+        // debajo de ella (por ejemplo, en el plano XY bajo la base).
+        curves->SetZLayer(Graphic3d_ZLayerId_Topmost);
+        const SketchStroke stroke{rgb(0x8F, 0xB3, 0xE8), 1.5};
+        for (const sketch::Entity& e : sketch.entities()) {
+            if (!e.reference && !e.construction) {
+                curves->addGeometry(e.geometry, stroke);
+            }
+        }
+        Handle(AIS_Shape) regions = new AIS_Shape(profileFaces(sketch, toAx3(plane)));
+        regions->SetColor(rgb(0x6C, 0xA6, 0xFF));
+        regions->SetTransparency(0.8);
+        regions->Attributes()->SetFaceBoundaryDraw(false);
+        context->Display(regions, AIS_Shaded, -1, false);
+        context->Display(curves, 0, -1, false);
+        finishedSketches.push_back(curves);
+        finishedSketches.push_back(regions);
+    }
+
     Handle(V3d_Viewer) viewer;
     Handle(V3d_View) view;
     Handle(AIS_InteractiveContext) context;
@@ -1095,6 +1118,7 @@ private:
     Handle(SketchDrawing) drawing;
     Handle(SketchDrawing) preview;
     Handle(AIS_Shape) profiles;
+    std::vector<Handle(AIS_InteractiveObject)> finishedSketches;
     sketch::Plane sketchPlane;
     bool darkTheme = true;
 };
@@ -1174,6 +1198,13 @@ void Viewport::beginSketch(const sketch::Plane& plane)
 void Viewport::endSketch()
 {
     impl_->endSketch();
+    impl_->view->Invalidate();
+    update();
+}
+
+void Viewport::showFinishedSketch(const sketch::Sketch& sketch, const sketch::Plane& plane)
+{
+    impl_->showFinishedSketch(sketch, plane);
     impl_->view->Invalidate();
     update();
 }
