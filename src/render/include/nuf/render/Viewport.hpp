@@ -96,6 +96,8 @@ public:
 
     // Planos de origen siempre a la vista (no solo al elegir el plano).
     void setOriginVisible(bool visible);
+    // Rejilla del suelo (plano XY) fuera del sketch.
+    void setGroundVisible(bool visible);
 
     // Cuerpos del modelo. Solo se rehacen los que cambiaron.
     void showBodies(const std::vector<document::Body>& bodies);

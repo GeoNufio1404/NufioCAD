@@ -87,6 +87,7 @@
 #include <QWheelEvent>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <map>
@@ -1283,6 +1284,9 @@ public:
     std::map<document::FeatureId, FinishedSketch> finished;
     std::vector<ShownBody> bodies;
     bool originShown = false;
+    bool groundShown = true;
+    double originSize = 0.0;
+    std::array<double, 3> originSigns{1.0, 1.0, 1.0};
     Handle(AIS_Shape) handle;  // flecha de distancia
     double handleDistance = 0.0;
     bool handleDragging = false;
@@ -1300,6 +1304,9 @@ protected:
         // antes de dibujar.
         if (mode != Mode::Sketch) {
             updateGround(false);
+        }
+        if (mode == Mode::PickPlane || (originShown && mode == Mode::Model)) {
+            fitOriginPlanes(false);
         }
         if (mode == Mode::Sketch) {
             updateGrid(false);
@@ -1435,24 +1442,59 @@ private:
             context->Remove(origin.shape, false);
         }
         originPlanes.clear();
-        Bnd_Box box;
-        BRepBndLib::Add(allBodies(), box);
-        double size = 10.0;
-        if (!box.IsVoid()) {
-            size = std::max(size, 0.3 * std::sqrt(box.SquareExtent()) / std::sqrt(3.0));
-        }
         const std::tuple<sketch::Plane, QString, document::OriginPlane> planes[] = {
             {sketch::Plane::xy(), QStringLiteral("Plano XY"), document::OriginPlane::XY},
             {sketch::Plane::xz(), QStringLiteral("Plano XZ"), document::OriginPlane::XZ},
             {sketch::Plane::yz(), QStringLiteral("Plano YZ"), document::OriginPlane::YZ}};
         for (const auto& [plane, name, kind] : planes) {
-            const TopoDS_Face face = BRepBuilderAPI_MakeFace(gp_Pln(toAx3(plane)), 0.0, size, 0.0, size);
-            Handle(AIS_Shape) shape = new AIS_Shape(face);
+            Handle(AIS_Shape) shape = new AIS_Shape(TopoDS_Shape());
             shape->SetColor(rgb(0xF2, 0xA3, 0x4B));
             shape->SetTransparency(0.6);
             // Por encima de la pieza: suelen atravesarla y quedarían ocultos.
             shape->SetZLayer(Graphic3d_ZLayerId_Topmost);
             originPlanes.push_back({shape, plane, name, kind});
+        }
+        originSize = 0.0;
+        fitOriginPlanes(true);
+    }
+
+    // Los planos de origen se dibujan en el cuadrante que mira a la cámara
+    // (así siempre se alcanzan) y con un tamaño proporcional al zoom: una
+    // cuarta parte de lo que se ve. Se rehacen solo si cambia el cuadrante o
+    // el tamaño en más de un 15 %.
+    void fitOriginPlanes(bool force)
+    {
+        if (originPlanes.empty()) {
+            return;
+        }
+        double width = 0, height = 0;
+        view->Size(width, height);
+        const double size = 0.25 * std::max(1e-3, std::min(width, height));
+        // Hacia la cámara: contrario a la dirección de la vista.
+        const gp_Dir toEye = view->Camera()->Direction().Reversed();
+        const std::array<double, 3> signs{toEye.X() >= 0.0 ? 1.0 : -1.0, toEye.Y() >= 0.0 ? 1.0 : -1.0,
+                                          toEye.Z() >= 0.0 ? 1.0 : -1.0};
+        if (!force && signs == originSigns && originSize > 0.0 && std::abs(size - originSize) < 0.15 * originSize) {
+            return;
+        }
+        originSigns = signs;
+        originSize = size;
+        for (const OriginPlane& origin : originPlanes) {
+            // Signo de cada eje del plano (sus ejes son ejes del modelo).
+            const auto sign = [&](const sketch::Vec3& axis) {
+                return axis.x != 0.0 ? signs[0] : axis.y != 0.0 ? signs[1] : signs[2];
+            };
+            const double su = sign(origin.plane.xAxis) * size;
+            const double sv = sign(origin.plane.yAxis) * size;
+            const TopoDS_Face face = BRepBuilderAPI_MakeFace(gp_Pln(toAx3(origin.plane)), std::min(0.0, su),
+                                                             std::max(0.0, su), std::min(0.0, sv), std::max(0.0, sv));
+            origin.shape->SetShape(face);
+            if (context->IsDisplayed(origin.shape)) {
+                context->Redisplay(origin.shape, false, true);
+                context->RecomputeSelectionOnly(origin.shape);
+            } else {
+                origin.shape->SetToUpdate();
+            }
         }
     }
 
@@ -1504,10 +1546,15 @@ private:
             Qt::QueuedConnection);
     }
 
+public:
     // Rejilla del suelo (fuera del sketch).
     void updateGround(bool force)
     {
         if (mode == Mode::Sketch || view->Window().IsNull()) {
+            return;
+        }
+        if (!groundShown) {
+            context->Erase(ground, false);
             return;
         }
         const bool changed = fitGrid(*ground, sketch::Plane::xy(), force);
@@ -1519,6 +1566,7 @@ private:
         }
     }
 
+private:
     // Paso y región de una rejilla según el zoom: la menor potencia de 10
     // cuyas líneas queden a 7 px o más, centrada en lo que se mira. true si
     // cambió.
@@ -1679,6 +1727,14 @@ void Viewport::showFinishedSketch(document::FeatureId id, const QString& name, c
                                   const sketch::Plane& plane)
 {
     impl_->showFinishedSketch(id, name, sketch, plane);
+    impl_->view->Invalidate();
+    update();
+}
+
+void Viewport::setGroundVisible(bool visible)
+{
+    impl_->groundShown = visible;
+    impl_->updateGround(true);
     impl_->view->Invalidate();
     update();
 }

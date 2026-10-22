@@ -98,6 +98,7 @@ private:
     std::set<std::string> hiddenBodies_;
     std::map<document::FeatureId, bool> sketchVisibility_;  // elegida a mano
     bool originVisible_ = false;
+    bool groundVisible_ = true;
     // Sketches a la vista, para rehacer solo los que cambian.
     struct ShownSketch {
         const sketch::Sketch* sketch = nullptr;

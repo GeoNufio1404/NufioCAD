@@ -110,6 +110,10 @@ MainWindow::MainWindow(QWidget* parent)
         viewport_->setOriginVisible(visible);
     });
     connect(navigator_, &NavigatorWidget::sketchActivated, this, &MainWindow::editSketch);
+    connect(navigator_, &NavigatorWidget::groundVisibilityChanged, this, [this](bool visible) {
+        groundVisible_ = visible;
+        viewport_->setGroundVisible(visible);
+    });
     connect(viewport_, &render::Viewport::sketchCursorMoved, this, [this](bool hasPoint, double x, double y) {
         cursorLabel_->setText(hasPoint ? QStringLiteral("X %1   Y %2 mm")
                                              .arg(QLocale().toString(x, 'f', 2), QLocale().toString(y, 'f', 2))
@@ -788,7 +792,7 @@ void MainWindow::refreshModel()
             shownSketches_[id] = shown;
         }
     }
-    navigator_->refresh(document_, state, upTo, hiddenBodies_, visibleIds, originVisible_);
+    navigator_->refresh(document_, state, upTo, hiddenBodies_, visibleIds, originVisible_, groundVisible_);
 
     // La primera operación con problemas, en la barra de estado.
     QString problem;

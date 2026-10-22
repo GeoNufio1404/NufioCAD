@@ -54,7 +54,7 @@ QString statusText(const document::FeatureStatus& status)
 }
 
 enum Role { KindRole = Qt::UserRole, KeyRole };
-enum ItemKind { OriginItem = 1, BodyItem, SketchItem };
+enum ItemKind { OriginItem = 1, BodyItem, SketchItem, GroundItem };
 
 } // namespace
 
@@ -317,6 +317,9 @@ NavigatorWidget::NavigatorWidget(QWidget* parent)
         case OriginItem:
             emit originVisibilityChanged(visible);
             break;
+        case GroundItem:
+            emit groundVisibilityChanged(visible);
+            break;
         case BodyItem:
             emit bodyVisibilityChanged(item->data(0, KeyRole).toString().toStdString(), visible);
             break;
@@ -336,7 +339,8 @@ NavigatorWidget::NavigatorWidget(QWidget* parent)
 
 void NavigatorWidget::refresh(const document::Document& document, const document::ModelState& state,
                               std::size_t upTo, const std::set<std::string>& hiddenBodies,
-                              const std::set<document::FeatureId>& visibleSketches, bool originVisible)
+                              const std::set<document::FeatureId>& visibleSketches, bool originVisible,
+                              bool groundVisible)
 {
     refreshing_ = true;
     clear();
@@ -349,6 +353,8 @@ void NavigatorWidget::refresh(const document::Document& document, const document
 
     auto* origin = new QTreeWidgetItem(this, {QStringLiteral("Origen")});
     checkable(origin, originVisible, OriginItem, {});
+    auto* ground = new QTreeWidgetItem(this, {QStringLiteral("Rejilla del suelo")});
+    checkable(ground, groundVisible, GroundItem, {});
 
     auto* bodies = new QTreeWidgetItem(this, {QStringLiteral("Cuerpos")});
     for (const document::Body& body : state.bodies) {
