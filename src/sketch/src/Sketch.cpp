@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 #include <stdexcept>
 #include <utility>
 
@@ -28,6 +29,128 @@ Vec2 operator-(Vec2 a, Vec2 b) { return {a.x - b.x, a.y - b.y}; }
 Vec2 Arc::startPoint() const { return polar(center, radius, startAngle); }
 Vec2 Arc::endPoint() const { return polar(center, radius, endAngle); }
 
+Vec2 Ellipse::pointAt(double t) const
+{
+    const double x = majorRadius * std::cos(t);
+    const double y = minorRadius * std::sin(t);
+    const double c = std::cos(rotation);
+    const double s = std::sin(rotation);
+    return {center.x + x * c - y * s, center.y + x * s + y * c};
+}
+
+int BSpline::effectiveDegree() const
+{
+    return std::clamp(degree, 1, std::max(1, int(poles.size()) - 1));
+}
+
+std::vector<double> BSpline::knots() const
+{
+    const int spans = int(poles.size()) - effectiveDegree();
+    std::vector<double> result;
+    for (int i = 0; i <= spans; ++i) {
+        result.push_back(double(i));
+    }
+    return result;
+}
+
+std::vector<int> BSpline::multiplicities() const
+{
+    const int p = effectiveDegree();
+    std::vector<int> result(knots().size(), 1);
+    result.front() = p + 1;
+    result.back() = p + 1;
+    return result;
+}
+
+Vec2 BSpline::pointAt(double u) const
+{
+    const int n = int(poles.size());
+    const int p = effectiveDegree();
+    // Vector de nudos completo (con repeticiones).
+    std::vector<double> flat;
+    const auto distinct = knots();
+    const auto mult = multiplicities();
+    for (std::size_t i = 0; i < distinct.size(); ++i) {
+        flat.insert(flat.end(), std::size_t(mult[i]), distinct[i]);
+    }
+    const double t = std::clamp(u, 0.0, 1.0) * distinct.back();
+    int k = p;
+    while (k < n - 1 && t >= flat[std::size_t(k) + 1]) {
+        ++k;
+    }
+    // De Boor en coordenadas homogéneas (x·w, y·w, w).
+    struct H { double x, y, w; };
+    std::vector<H> d(std::size_t(p) + 1);
+    for (int j = 0; j <= p; ++j) {
+        const Vec2 pole = poles[std::size_t(j + k - p)];
+        const double w = weights.empty() ? 1.0 : weights[std::size_t(j + k - p)];
+        d[std::size_t(j)] = {pole.x * w, pole.y * w, w};
+    }
+    for (int r = 1; r <= p; ++r) {
+        for (int j = p; j >= r; --j) {
+            const double left = flat[std::size_t(j + k - p)];
+            const double right = flat[std::size_t(j + 1 + k - r)];
+            const double alpha = right > left ? (t - left) / (right - left) : 0.0;
+            H& a = d[std::size_t(j)];
+            const H& b = d[std::size_t(j - 1)];
+            a = {(1 - alpha) * b.x + alpha * a.x, (1 - alpha) * b.y + alpha * a.y, (1 - alpha) * b.w + alpha * a.w};
+        }
+    }
+    const H& h = d[std::size_t(p)];
+    return {h.x / h.w, h.y / h.w};
+}
+
+std::vector<Vec2> polyline(const Geometry& geometry)
+{
+    const auto sampled = [](auto&& at, double from, double to, int segments) {
+        std::vector<Vec2> points;
+        points.reserve(std::size_t(segments) + 1);
+        for (int i = 0; i <= segments; ++i) {
+            points.push_back(at(from + (to - from) * i / segments));
+        }
+        return points;
+    };
+    constexpr double kTwoPi = 2.0 * std::numbers::pi;
+    // Un tramo cada 4° como máximo, al menos 8.
+    const auto arcSegments = [](double sweep) { return std::max(8, int(std::ceil(sweep / (4.0 * std::numbers::pi / 180.0)))); };
+
+    if (const auto* l = std::get_if<Line>(&geometry)) {
+        return {l->start, l->end};
+    }
+    if (const auto* c = std::get_if<Circle>(&geometry)) {
+        return sampled([&](double t) { return polar(c->center, c->radius, t); }, 0.0, kTwoPi, 90);
+    }
+    if (const auto* a = std::get_if<Arc>(&geometry)) {
+        double end = a->endAngle;
+        while (end <= a->startAngle) {
+            end += kTwoPi;
+        }
+        return sampled([&](double t) { return polar(a->center, a->radius, t); }, a->startAngle, end,
+                       arcSegments(end - a->startAngle));
+    }
+    if (const auto* e = std::get_if<Ellipse>(&geometry)) {
+        return sampled([&](double t) { return e->pointAt(t); }, 0.0, kTwoPi, 120);
+    }
+    if (const auto* ea = std::get_if<EllipseArc>(&geometry)) {
+        double end = ea->endParam;
+        while (end <= ea->startParam) {
+            end += kTwoPi;
+        }
+        return sampled([&](double t) { return ea->ellipse.pointAt(t); }, ea->startParam, end,
+                       arcSegments(end - ea->startParam));
+    }
+    if (const auto* b = std::get_if<BSpline>(&geometry)) {
+        const int segments = std::max(32, 16 * int(b->poles.size()));
+        return sampled([&](double u) { return b->pointAt(u); }, 0.0, 1.0, segments);
+    }
+    return {};
+}
+
+bool isClosedCurve(const Geometry& geometry)
+{
+    return std::holds_alternative<Circle>(geometry) || std::holds_alternative<Ellipse>(geometry);
+}
+
 bool isDimensional(ConstraintType type) noexcept
 {
     switch (type) {
@@ -37,6 +160,8 @@ bool isDimensional(ConstraintType type) noexcept
     case ConstraintType::Angle:
     case ConstraintType::Radius:
     case ConstraintType::Diameter:
+    case ConstraintType::MajorRadius:
+    case ConstraintType::MinorRadius:
         return true;
     default:
         return false;
@@ -84,6 +209,7 @@ Constraint Constraint::tangent(EntityId a, EntityId b)
     return make(ConstraintType::Tangent, Ref::of(a), Ref::of(b));
 }
 Constraint Constraint::tangentAt(Ref a, Ref b) { return make(ConstraintType::Tangent, a, b); }
+Constraint Constraint::curvatureAt(Ref a, Ref b) { return make(ConstraintType::Curvature, a, b); }
 Constraint Constraint::equal(EntityId a, EntityId b)
 {
     return make(ConstraintType::Equal, Ref::of(a), Ref::of(b));
@@ -133,6 +259,14 @@ Constraint Constraint::radius(EntityId curve, double value)
 Constraint Constraint::diameter(EntityId curve, double value)
 {
     return make(ConstraintType::Diameter, Ref::of(curve), {}, {}, value);
+}
+Constraint Constraint::majorRadius(EntityId ellipse, double value)
+{
+    return make(ConstraintType::MajorRadius, Ref::of(ellipse), {}, {}, value);
+}
+Constraint Constraint::minorRadius(EntityId ellipse, double value)
+{
+    return make(ConstraintType::MinorRadius, Ref::of(ellipse), {}, {}, value);
 }
 
 // ---------------------------------------------------------------------------
@@ -184,6 +318,39 @@ EntityId Sketch::addArc(Vec2 center, double radius, double startAngle, double en
         invalid("El radio del arco debe ser positivo");
     }
     return addEntity(Arc{center, radius, startAngle, endAngle}, construction, false);
+}
+
+EntityId Sketch::addEllipse(const Ellipse& ellipse, bool construction)
+{
+    if (!(ellipse.minorRadius > 0.0) || ellipse.majorRadius < ellipse.minorRadius) {
+        invalid("La elipse necesita semiejes positivos (mayor ≥ menor)");
+    }
+    return addEntity(ellipse, construction, false);
+}
+
+EntityId Sketch::addEllipseArc(const EllipseArc& arc, bool construction)
+{
+    if (!(arc.ellipse.minorRadius > 0.0) || arc.ellipse.majorRadius < arc.ellipse.minorRadius) {
+        invalid("El arco de elipse necesita semiejes positivos (mayor ≥ menor)");
+    }
+    return addEntity(arc, construction, false);
+}
+
+EntityId Sketch::addBSpline(const BSpline& spline, bool construction)
+{
+    BSpline s = spline;
+    if (s.poles.size() < 2) {
+        invalid("La spline necesita al menos 2 polos");
+    }
+    if (s.weights.empty()) {
+        s.weights.assign(s.poles.size(), 1.0);
+    }
+    if (s.weights.size() != s.poles.size()
+        || std::ranges::any_of(s.weights, [](double w) { return !(w > 0.0); })) {
+        invalid("La spline necesita un peso positivo por polo");
+    }
+    s.degree = s.effectiveDegree();
+    return addEntity(s, construction, false);
 }
 
 void Sketch::removeEntity(EntityId id)
@@ -268,6 +435,21 @@ std::optional<Vec2> Sketch::point(Ref ref) const
         if (ref.part == Part::End) return a->endPoint();
         if (ref.part == Part::Center) return a->center;
     }
+    if (const auto* el = std::get_if<Ellipse>(&g); el && ref.part == Part::Center) {
+        return el->center;
+    }
+    if (const auto* ea = std::get_if<EllipseArc>(&g)) {
+        if (ref.part == Part::Start) return ea->startPoint();
+        if (ref.part == Part::End) return ea->endPoint();
+        if (ref.part == Part::Center) return ea->ellipse.center;
+    }
+    if (const auto* b = std::get_if<BSpline>(&g)) {
+        if (ref.part == Part::Start) return b->poles.front();
+        if (ref.part == Part::End) return b->poles.back();
+        if (ref.part == Part::Pole && ref.index >= 0 && ref.index < int(b->poles.size())) {
+            return b->poles[std::size_t(ref.index)];
+        }
+    }
     return std::nullopt;
 }
 
@@ -293,8 +475,15 @@ void Sketch::validate(const Constraint& c) const
         const Geometry* g = geometry(r);
         return g && (std::holds_alternative<Circle>(*g) || std::holds_alternative<Arc>(*g));
     };
-    const auto isCurve = [&](Ref r) { return isLine(r) || isRound(r); };
-    const auto distinct = [](Ref a, Ref b) { return a.entity != b.entity || a.part != b.part; };
+    const auto isEllipse = [&](Ref r) {
+        const Geometry* g = geometry(r);
+        return g && (std::holds_alternative<Ellipse>(*g) || std::holds_alternative<EllipseArc>(*g));
+    };
+    const auto isCurve = [&](Ref r) {
+        const Geometry* g = geometry(r);
+        return g && !std::holds_alternative<Point>(*g);
+    };
+    const auto distinct = [](Ref a, Ref b) { return a != b; };
     const auto twoLines = [&] {
         return isLine(c.first) && isLine(c.second) && c.first.entity != c.second.entity;
     };
@@ -318,17 +507,27 @@ void Sketch::validate(const Constraint& c) const
     case ConstraintType::Angle:
         ok = twoLines();
         break;
-    case ConstraintType::Tangent: {
-        // Extremo de una línea o un arco.
+    case ConstraintType::Tangent:
+    case ConstraintType::Curvature: {
+        // Extremo de una curva abierta.
         const auto isEndpoint = [&](Ref r) {
             const Entity* e = entity(r.entity);
-            return e && (r.part == Part::Start || r.part == Part::End)
-                   && (std::holds_alternative<Line>(e->geometry) || std::holds_alternative<Arc>(e->geometry));
+            return e && (r.part == Part::Start || r.part == Part::End) && point(r).has_value()
+                   && !std::holds_alternative<Point>(e->geometry);
         };
         const auto lineEntity = [&](Ref r) { return isLine(Ref::of(r.entity)); };
-        if (c.first.part == Part::Whole) {
-            ok = isCurve(c.first) && isCurve(c.second) && c.first.entity != c.second.entity
-                 && !(isLine(c.first) && isLine(c.second));
+        const auto isFullEllipse = [&](Ref r) {
+            const Geometry* g = geometry(r);
+            return g && std::holds_alternative<Ellipse>(*g);
+        };
+        if (c.first.part == Part::Whole && c.type == ConstraintType::Tangent) {
+            // Tangencia de curva completa: línea o arco con círculo/arco, o
+            // línea con elipse (lo que resuelve PlaneGCS).
+            ok = c.first.entity != c.second.entity
+                 && ((isRound(c.first) && (isRound(c.second) || isLine(c.second)))
+                     || (isLine(c.first) && isRound(c.second))
+                     || (isLine(c.first) && isFullEllipse(c.second))
+                     || (isFullEllipse(c.first) && isLine(c.second)));
         } else {
             ok = isEndpoint(c.first) && isEndpoint(c.second) && c.first.entity != c.second.entity
                  && !(lineEntity(c.first) && lineEntity(c.second));
@@ -340,7 +539,8 @@ void Sketch::validate(const Constraint& c) const
              || (isRound(c.first) && isRound(c.second) && c.first.entity != c.second.entity);
         break;
     case ConstraintType::Concentric:
-        ok = isRound(c.first) && isRound(c.second) && c.first.entity != c.second.entity;
+        ok = (isRound(c.first) || isEllipse(c.first)) && (isRound(c.second) || isEllipse(c.second))
+             && c.first.entity != c.second.entity;
         break;
     case ConstraintType::Midpoint:
         ok = isPoint(c.first) && isLine(c.second) && c.first.entity != c.second.entity;
@@ -366,6 +566,10 @@ void Sketch::validate(const Constraint& c) const
     case ConstraintType::Radius:
     case ConstraintType::Diameter:
         ok = isRound(c.first) && c.value > 0.0;
+        break;
+    case ConstraintType::MajorRadius:
+    case ConstraintType::MinorRadius:
+        ok = isEllipse(c.first) && c.value > 0.0;
         break;
     }
     if (!ok) {
@@ -442,6 +646,19 @@ double Sketch::measure(const Constraint& c) const
         return radiusOf(c.first);
     case ConstraintType::Diameter:
         return 2.0 * radiusOf(c.first);
+    case ConstraintType::MajorRadius:
+    case ConstraintType::MinorRadius: {
+        const Entity* e = entity(c.first.entity);
+        const Ellipse* ellipse = nullptr;
+        if (e) {
+            if (const auto* full = std::get_if<Ellipse>(&e->geometry)) ellipse = full;
+            if (const auto* arc = std::get_if<EllipseArc>(&e->geometry)) ellipse = &arc->ellipse;
+        }
+        if (!ellipse) {
+            invalid("Se esperaba una elipse");
+        }
+        return c.type == ConstraintType::MajorRadius ? ellipse->majorRadius : ellipse->minorRadius;
+    }
     default:
         invalid("La restricción no es una cota");
     }

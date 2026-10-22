@@ -115,6 +115,17 @@ std::optional<Subject> subjectOf(const Sketch& sketch, Ref ref, double px)
         const Vec2 radial{std::cos(mid), std::sin(mid)};
         return Subject{a->center + a->radius * radial, radial, normalOf(radial)};
     }
+    // Elipses y splines: en el punto central de su polilínea.
+    const std::vector<Vec2> points = polyline(e->geometry);
+    if (points.size() >= 2) {
+        const std::size_t i = points.size() / 2;
+        const Vec2 u = unit(points[i] - points[i - 1]);
+        Vec2 n = normalOf(u);
+        if (n.y < 0.0) {
+            n = -1.0 * n;
+        }
+        return Subject{points[i], n, u};
+    }
     return std::nullopt;
 }
 
@@ -132,6 +143,7 @@ const char* glyph(ConstraintType type)
     case ConstraintType::Midpoint: return "M";
     case ConstraintType::Symmetric: return "S";
     case ConstraintType::Fix: return "F";
+    case ConstraintType::Curvature: return "G2";
     case ConstraintType::PointOnObject: return "•";
     default: return "";
     }
@@ -153,6 +165,8 @@ std::vector<Ref> subjects(const Constraint& c)
         // La primera entidad suele ser la misma en una cadena (polígono): el
         // icono va en la otra, así cada lado lleva uno.
         return {c.second};
+    case ConstraintType::Curvature:
+        return {c.first};
     case ConstraintType::Tangent:
         // En un extremo, un solo icono junto al punto de unión.
         return c.first.part == Part::Whole ? std::vector<Ref>{c.first, c.second} : std::vector<Ref>{c.first};
@@ -246,6 +260,25 @@ std::optional<Annotation> dimensionAnnotation(const Sketch& sketch, const Constr
         note->anchor = vertex + (radius + kTextGapPx * px) * Vec2{std::cos(mid), std::sin(mid)};
         break;
     }
+    case ConstraintType::MajorRadius:
+    case ConstraintType::MinorRadius: {
+        const Entity* e = sketch.entity(c.first.entity);
+        const Ellipse* el = nullptr;
+        if (e) {
+            if (const auto* full = std::get_if<Ellipse>(&e->geometry)) el = full;
+            if (const auto* arc = std::get_if<EllipseArc>(&e->geometry)) el = &arc->ellipse;
+        }
+        if (!el) return std::nullopt;
+        // Del centro al vértice del eje (mayor o menor).
+        const bool major = c.type == ConstraintType::MajorRadius;
+        const Vec2 tip = el->pointAt(major ? 0.0 : std::numbers::pi / 2.0);
+        const Vec2 u = unit(tip - el->center);
+        note = Annotation{};
+        note->lines.push_back(Line{el->center, tip});
+        addArrow(note->lines, tip, u, kArrowPx * px);
+        note->anchor = tip + 2.0 * kTextGapPx * px * u;
+        break;
+    }
     case ConstraintType::Radius:
     case ConstraintType::Diameter: {
         const Entity* e = sketch.entity(c.first.entity);
@@ -301,6 +334,8 @@ std::string formatDimension(const Constraint& c)
         text = trimmed(std::abs(c.value) * 180.0 / std::numbers::pi, 2) + "°";
         break;
     case ConstraintType::Radius:
+    case ConstraintType::MajorRadius:
+    case ConstraintType::MinorRadius:
         text = "R" + trimmed(c.value, 3);
         break;
     case ConstraintType::Diameter:

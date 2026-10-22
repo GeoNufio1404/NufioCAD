@@ -38,17 +38,6 @@ bool inside(const std::vector<Vec2>& polygon, Vec2 p)
     return in;
 }
 
-std::vector<Vec2> arcPoints(Vec2 c, double r, double from, double to)
-{
-    const int segments = std::max(4, int(std::ceil((to - from) / (5.0 * std::numbers::pi / 180.0))));
-    std::vector<Vec2> points;
-    for (int i = 0; i <= segments; ++i) {
-        const double t = from + (to - from) * i / segments;
-        points.push_back({c.x + r * std::cos(t), c.y + r * std::sin(t)});
-    }
-    return points;
-}
-
 // Línea o arco del grafo.
 struct Edge {
     EntityId entity = 0;
@@ -113,43 +102,37 @@ std::vector<Profile> findProfiles(const Sketch& sketch, double tolerance)
     };
 
     std::vector<Edge> edges;
-    std::vector<const Entity*> circles;
+    std::vector<const Entity*> closed;  // círculos y elipses: contornos por sí solos
     for (const Entity& e : sketch.entities()) {
-        if (e.reference || e.construction) {
+        if (e.reference || e.construction || std::holds_alternative<Point>(e.geometry)) {
             continue;
         }
-        if (const auto* l = std::get_if<Line>(&e.geometry)) {
-            if (distance(l->start, l->end) <= tolerance) {
-                continue;
-            }
-            Edge edge;
-            edge.entity = e.id;
-            edge.from = vertexAt(l->start);
-            edge.to = vertexAt(l->end);
-            edge.angleAtStart = std::atan2(l->end.y - l->start.y, l->end.x - l->start.x);
-            edge.angleAtEnd = std::atan2(l->start.y - l->end.y, l->start.x - l->end.x);
-            edge.points = {l->start, l->end};
-            edges.push_back(edge);
-        } else if (const auto* a = std::get_if<Arc>(&e.geometry)) {
-            double end = a->endAngle;
-            while (end <= a->startAngle) {
-                end += 2.0 * std::numbers::pi;
-            }
-            Edge edge;
-            edge.entity = e.id;
-            edge.from = vertexAt(a->startPoint());
-            edge.to = vertexAt(a->endPoint());
-            // Tangentes: al recorrer en sentido antihorario y al volver.
+        if (isClosedCurve(e.geometry)) {
+            closed.push_back(&e);
+            continue;
+        }
+        // Curva abierta (línea, arco, arco de elipse, spline): su polilínea
+        // da los extremos y la dirección con que sale de cada uno.
+        std::vector<Vec2> points = polyline(e.geometry);
+        if (points.size() < 2 || distance(points.front(), points.back()) <= tolerance) {
+            continue;  // degenerada o cerrada sobre sí misma
+        }
+        Edge edge;
+        edge.entity = e.id;
+        edge.from = vertexAt(points.front());
+        edge.to = vertexAt(points.back());
+        if (const auto* a = std::get_if<Arc>(&e.geometry)) {
+            // En arcos, la tangente exacta (los primeros tramos son cortos).
             edge.angleAtStart = a->startAngle + std::numbers::pi / 2.0;
             edge.angleAtEnd = a->endAngle - std::numbers::pi / 2.0;
-            edge.points = arcPoints(a->center, a->radius, a->startAngle, end);
-            if (edge.from == edge.to) {
-                continue;  // arco degenerado
-            }
-            edges.push_back(edge);
-        } else if (std::holds_alternative<Circle>(e.geometry)) {
-            circles.push_back(&e);
+        } else {
+            const Vec2 s1 = points[1];
+            const Vec2 e1 = points[points.size() - 2];
+            edge.angleAtStart = std::atan2(s1.y - points.front().y, s1.x - points.front().x);
+            edge.angleAtEnd = std::atan2(e1.y - points.back().y, e1.x - points.back().x);
         }
+        edge.points = std::move(points);
+        edges.push_back(std::move(edge));
     }
 
     // Quita las aristas sueltas (con un extremo que no se une a nada): no
@@ -258,15 +241,19 @@ std::vector<Profile> findProfiles(const Sketch& sketch, double tolerance)
             boundaries[cycle.component] = toLoop(cycle, halfEdges, edges, true);
         }
     }
-    // Cada círculo es una componente propia: cara y contorno a la vez.
+    // Cada círculo o elipse es una componente propia: cara y contorno a la vez.
     int nextComponent = int(vertices.size());
-    for (const Entity* e : circles) {
-        const auto& c = std::get<Circle>(e->geometry);
+    for (const Entity* e : closed) {
         Loop loop;
         loop.edges = {{e->id, false}};
-        loop.polygon = arcPoints(c.center, c.radius, 0.0, 2.0 * std::numbers::pi);
+        loop.polygon = polyline(e->geometry);
         loop.polygon.pop_back();
-        loop.area = std::numbers::pi * c.radius * c.radius;
+        loop.area = std::abs(signedArea(loop.polygon));
+        if (const auto* c = std::get_if<Circle>(&e->geometry)) {
+            loop.area = std::numbers::pi * c->radius * c->radius;
+        } else if (const auto* el = std::get_if<Ellipse>(&e->geometry)) {
+            loop.area = std::numbers::pi * el->majorRadius * el->minorRadius;
+        }
         boundaries[nextComponent] = loop;
         faces.push_back({std::move(loop), nextComponent});
         ++nextComponent;

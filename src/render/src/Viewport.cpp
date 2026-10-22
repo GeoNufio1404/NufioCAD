@@ -1,10 +1,17 @@
 #include <nuf/render/Viewport.hpp>
 
+// En Windows, antes que OCCT: OCCT 8 incluye <windows.h> con su propia
+// configuración y después ya no estarían wglGetCurrentDC ni WindowFromDC.
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 #include <nuf/sketch/Annotations.hpp>
 #include <nuf/sketch/Profiles.hpp>
 
 #include <AIS_AnimationCamera.hxx>
 #include <AIS_InteractiveContext.hxx>
+#include <AIS_MouseGesture.hxx>
 #include <AIS_Shape.hxx>
 #include <AIS_ViewController.hxx>
 #include <AIS_ViewCube.hxx>
@@ -32,6 +39,7 @@
 #include <Graphic3d_AspectMarker3d.hxx>
 #include <Graphic3d_AspectText3d.hxx>
 #include <Graphic3d_Text.hxx>
+#include <Graphic3d_Vec2.hxx>
 #include <Graphic3d_Camera.hxx>
 #include <OpenGl_Context.hxx>
 #include <OpenGl_FrameBuffer.hxx>
@@ -64,10 +72,6 @@
 #include <tuple>
 #include <utility>
 #include <vector>
-
-#ifdef _WIN32
-#include <windows.h>
-#endif
 
 namespace nuf::render {
 
@@ -758,7 +762,7 @@ public:
         const sketch::Sketch& sketch = *shownSketch;
         const std::vector<sketch::EntityId>& underconstrained = shownUnderconstrained;
         const SketchHighlight& highlight = shownHighlight;
-        const auto same = [](sketch::Ref a, sketch::Ref b) { return a.entity == b.entity && a.part == b.part; };
+        const auto same = [](sketch::Ref a, sketch::Ref b) { return a == b; };
         const auto isSelected = [&](sketch::Ref r) {
             return std::ranges::any_of(highlight.selected, [&](sketch::Ref s) { return same(s, r); });
         };

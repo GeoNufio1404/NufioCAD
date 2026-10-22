@@ -12,8 +12,10 @@ namespace nuf::sketch {
 // infinitas. Ref vacío si no hay nada.
 Ref pick(const Sketch& sketch, Vec2 cursor, double tolerance);
 
-// Distancia de p a la curva de una entidad (línea, círculo o arco; los ejes
-// como rectas infinitas). Infinito si la entidad no es una curva.
+// Distancia de p a la curva de una entidad (los ejes como rectas
+// infinitas). Infinito si la entidad no es una curva.
 double distanceToCurve(const Entity& entity, Vec2 p);
+// Distancia de p a una polilínea.
+double distanceToPolyline(Vec2 p, const std::vector<Vec2>& points);
 
 } // namespace nuf::sketch

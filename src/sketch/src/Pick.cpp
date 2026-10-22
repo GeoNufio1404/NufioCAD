@@ -49,6 +49,15 @@ double distanceToArc(Vec2 p, const Arc& arc)
 
 } // namespace
 
+double distanceToPolyline(Vec2 p, const std::vector<Vec2>& points)
+{
+    double best = std::numeric_limits<double>::infinity();
+    for (std::size_t i = 1; i < points.size(); ++i) {
+        best = std::min(best, distanceToSegment(p, points[i - 1], points[i]));
+    }
+    return best;
+}
+
 double distanceToCurve(const Entity& e, Vec2 p)
 {
     if (const auto* l = std::get_if<Line>(&e.geometry)) {
@@ -60,7 +69,11 @@ double distanceToCurve(const Entity& e, Vec2 p)
     if (const auto* a = std::get_if<Arc>(&e.geometry)) {
         return distanceToArc(p, *a);
     }
-    return std::numeric_limits<double>::infinity();
+    if (std::holds_alternative<Point>(e.geometry)) {
+        return std::numeric_limits<double>::infinity();
+    }
+    // Elipses y splines: sobre su polilínea.
+    return distanceToPolyline(p, polyline(e.geometry));
 }
 
 Ref pick(const Sketch& sketch, Vec2 cursor, double tolerance)
@@ -82,6 +95,12 @@ Ref pick(const Sketch& sketch, Vec2 cursor, double tolerance)
         for (Part part : {Part::Whole, Part::Start, Part::End, Part::Center}) {
             if (const auto p = sketch.point({e.id, part})) {
                 consider(distance(cursor, *p), {e.id, part});
+            }
+        }
+        if (const auto* b = std::get_if<BSpline>(&e.geometry)) {
+            // Polos intermedios (el primero y el último son los extremos).
+            for (int i = 1; i + 1 < int(b->poles.size()); ++i) {
+                consider(distance(cursor, b->poles[std::size_t(i)]), Ref::pole(e.id, i));
             }
         }
     }

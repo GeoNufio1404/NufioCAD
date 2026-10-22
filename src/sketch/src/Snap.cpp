@@ -2,8 +2,9 @@
 
 #include <nuf/sketch/Pick.hpp>
 
-#include <cmath>
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <numbers>
 #include <optional>
 #include <vector>
@@ -13,6 +14,13 @@ namespace nuf::sketch {
 namespace {
 
 double distance(Vec2 a, Vec2 b) { return std::hypot(b.x - a.x, b.y - a.y); }
+
+// Las intersecciones exactas solo se calculan entre rectas y circunferencias.
+bool isSimpleCurve(const Entity& e)
+{
+    return std::holds_alternative<Line>(e.geometry) || std::holds_alternative<Circle>(e.geometry)
+           || std::holds_alternative<Arc>(e.geometry);
+}
 
 // Curva como recta (con o sin límites) o circunferencia (con o sin arco).
 struct Curve {
@@ -139,6 +147,27 @@ std::optional<Vec2> nearestOn(const Curve& c, Vec2 p)
     return contains(c, q) ? std::optional<Vec2>(q) : std::nullopt;
 }
 
+std::optional<Vec2> nearestOnPolyline(const std::vector<Vec2>& points, Vec2 p)
+{
+    std::optional<Vec2> best;
+    double bestDistance = std::numeric_limits<double>::infinity();
+    for (std::size_t i = 1; i < points.size(); ++i) {
+        const Vec2 a = points[i - 1];
+        const Vec2 b = points[i];
+        const double dx = b.x - a.x;
+        const double dy = b.y - a.y;
+        const double len2 = dx * dx + dy * dy;
+        const double t = len2 > 0.0 ? std::clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / len2, 0.0, 1.0) : 0.0;
+        const Vec2 q{a.x + t * dx, a.y + t * dy};
+        const double d = distance(p, q);
+        if (d < bestDistance) {
+            bestDistance = d;
+            best = q;
+        }
+    }
+    return best;
+}
+
 } // namespace
 
 Snap snap(const Sketch& sketch, Vec2 cursor, const SnapOptions& options)
@@ -178,6 +207,18 @@ Snap snap(const Sketch& sketch, Vec2 cursor, const SnapOptions& options)
             consider(a->startPoint(), SnapKind::Point, Ref::start(e.id));
             consider(a->endPoint(), SnapKind::Point, Ref::end(e.id));
             consider(a->center, SnapKind::Center, Ref::center(e.id));
+        } else if (const auto* el = std::get_if<Ellipse>(&e.geometry)) {
+            consider(el->center, SnapKind::Center, Ref::center(e.id));
+        } else if (const auto* ea = std::get_if<EllipseArc>(&e.geometry)) {
+            consider(ea->startPoint(), SnapKind::Point, Ref::start(e.id));
+            consider(ea->endPoint(), SnapKind::Point, Ref::end(e.id));
+            consider(ea->ellipse.center, SnapKind::Center, Ref::center(e.id));
+        } else if (const auto* b = std::get_if<BSpline>(&e.geometry)) {
+            consider(b->poles.front(), SnapKind::Point, Ref::start(e.id));
+            consider(b->poles.back(), SnapKind::Point, Ref::end(e.id));
+            for (int i = 1; i + 1 < int(b->poles.size()); ++i) {
+                consider(b->poles[std::size_t(i)], SnapKind::Point, Ref::pole(e.id, i));
+            }
         }
     }
     if (best.kind != SnapKind::None) {
@@ -194,6 +235,9 @@ Snap snap(const Sketch& sketch, Vec2 cursor, const SnapOptions& options)
 
     for (std::size_t i = 0; i < near.size(); ++i) {
         for (std::size_t j = i + 1; j < near.size(); ++j) {
+            if (!isSimpleCurve(*near[i]) || !isSimpleCurve(*near[j])) {
+                continue;
+            }
             for (const Vec2& p : intersections(curveOf(*near[i]), curveOf(*near[j]))) {
                 const Snap before = best;
                 consider(p, SnapKind::Intersection, Ref::of(near[i]->id));
@@ -227,7 +271,13 @@ Snap snap(const Sketch& sketch, Vec2 cursor, const SnapOptions& options)
         }
     }
     if (closest) {
-        if (const auto p = nearestOn(curveOf(*closest), cursor)) {
+        std::optional<Vec2> p;
+        if (isSimpleCurve(*closest)) {
+            p = nearestOn(curveOf(*closest), cursor);
+        } else {
+            p = nearestOnPolyline(polyline(closest->geometry), cursor);
+        }
+        if (p) {
             return {*p, SnapKind::OnCurve, Ref::of(closest->id)};
         }
     }

@@ -50,7 +50,52 @@ struct Arc {
     Vec2 endPoint() const;
 };
 
-using Geometry = std::variant<Point, Line, Circle, Arc>;
+// Elipse: semiejes (mayor ≥ menor) y giro del eje mayor respecto al eje X.
+struct Ellipse {
+    Vec2 center;
+    double majorRadius = 0.0;
+    double minorRadius = 0.0;
+    double rotation = 0.0;
+
+    // Punto en el ángulo paramétrico (excéntrico) t.
+    Vec2 pointAt(double t) const;
+};
+
+// Arco de elipse, antihorario entre los ángulos paramétricos start y end.
+struct EllipseArc {
+    Ellipse ellipse;
+    double startParam = 0.0;
+    double endParam = 0.0;
+
+    Vec2 startPoint() const { return ellipse.pointAt(startParam); }
+    Vec2 endPoint() const { return ellipse.pointAt(endParam); }
+};
+
+// B-spline sujeta en los extremos (pasa por el primer y el último polo),
+// con nudos uniformes. Con pesos distintos de 1 es racional (así se
+// representa la curva cónica: grado 2, tres polos y peso central).
+struct BSpline {
+    std::vector<Vec2> poles;
+    std::vector<double> weights;  // uno por polo
+    int degree = 3;
+
+    // Grado efectivo: no puede superar polos − 1.
+    int effectiveDegree() const;
+    // Nudos distintos (0, 1, …, m) y su multiplicidad.
+    std::vector<double> knots() const;
+    std::vector<int> multiplicities() const;
+    // Punto en u ∈ [0, 1].
+    Vec2 pointAt(double u) const;
+};
+
+using Geometry = std::variant<Point, Line, Circle, Arc, Ellipse, EllipseArc, BSpline>;
+
+// Polilínea que aproxima una curva (para dibujarla, seleccionarla y buscar
+// perfiles); cerrada (último = primero) en círculos y elipses. Vacía para
+// un punto.
+std::vector<Vec2> polyline(const Geometry& geometry);
+// true si la curva es cerrada por sí sola (círculo, elipse).
+bool isClosedCurve(const Geometry& geometry);
 
 struct Entity {
     EntityId id = 0;
@@ -66,18 +111,29 @@ struct Entity {
 // ---------------------------------------------------------------------------
 
 // Whole es la entidad completa (la curva, o el propio punto si es un Point).
-enum class Part : std::uint8_t { Whole, Start, End, Center };
+// Pole es un polo de una spline (con su índice).
+enum class Part : std::uint8_t { Whole, Start, End, Center, Pole };
 
 struct Ref {
     EntityId entity = 0;
     Part part = Part::Whole;
+    int index = 0;  // solo para Pole
+
+    Ref() = default;
+    Ref(EntityId e, Part p = Part::Whole, int i = 0)
+        : entity(e)
+        , part(p)
+        , index(i)
+    {}
 
     static Ref of(EntityId id) { return {id, Part::Whole}; }
     static Ref start(EntityId id) { return {id, Part::Start}; }
     static Ref end(EntityId id) { return {id, Part::End}; }
     static Ref center(EntityId id) { return {id, Part::Center}; }
+    static Ref pole(EntityId id, int i) { return {id, Part::Pole, i}; }
 
     bool empty() const noexcept { return entity == 0; }
+    bool operator==(const Ref&) const = default;
 };
 
 // ---------------------------------------------------------------------------
@@ -103,12 +159,16 @@ enum class ConstraintType : std::uint8_t {
     Symmetric,      // punto, punto, línea | punto, punto, punto
     Fix,            // punto | entidad completa
     // Dimensionales (usan value)
+    Curvature,      // extremo, extremo: como Tangent en un extremo y además
+                    // con la misma curvatura (continuidad G2)
     Distance,       // punto, punto | punto, línea | línea (longitud)
     DistanceX,      // punto, punto | línea  (b.x − a.x)
     DistanceY,      // punto, punto | línea  (b.y − a.y)
     Angle,          // línea, línea (de la primera a la segunda, antihorario)
     Radius,         // círculo/arco
     Diameter,       // círculo/arco
+    MajorRadius,    // elipse / arco de elipse
+    MinorRadius,    // elipse / arco de elipse
 };
 
 bool isDimensional(ConstraintType type) noexcept;
@@ -135,6 +195,8 @@ struct Constraint {
     static Constraint tangent(EntityId a, EntityId b);
     // Tangencia en el punto de unión de dos curvas (Ref::start/end de cada una).
     static Constraint tangentAt(Ref a, Ref b);
+    // Continuidad de curvatura (G2) en el punto de unión de dos curvas.
+    static Constraint curvatureAt(Ref a, Ref b);
     static Constraint equal(EntityId a, EntityId b);
     static Constraint collinear(EntityId a, EntityId b);
     static Constraint concentric(EntityId a, EntityId b);
@@ -149,6 +211,8 @@ struct Constraint {
     static Constraint angle(EntityId a, EntityId b, double radians);
     static Constraint radius(EntityId curve, double value);
     static Constraint diameter(EntityId curve, double value);
+    static Constraint majorRadius(EntityId ellipse, double value);
+    static Constraint minorRadius(EntityId ellipse, double value);
 };
 
 // ---------------------------------------------------------------------------
@@ -169,6 +233,10 @@ public:
     EntityId addCircle(Vec2 center, double radius, bool construction = false);
     EntityId addArc(Vec2 center, double radius, double startAngle, double endAngle,
                     bool construction = false);
+    EntityId addEllipse(const Ellipse& ellipse, bool construction = false);
+    EntityId addEllipseArc(const EllipseArc& arc, bool construction = false);
+    // Lanza std::invalid_argument con menos de 2 polos o pesos no positivos.
+    EntityId addBSpline(const BSpline& spline, bool construction = false);
 
     // Borra la entidad y las restricciones que la usan. Las referencias
     // (origen y ejes) no se pueden borrar: lanza std::invalid_argument.

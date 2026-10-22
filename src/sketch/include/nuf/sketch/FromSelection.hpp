@@ -15,6 +15,7 @@ namespace nuf::sketch {
 //   Horizontal…    1 o más líneas (una por línea) | 2 puntos
 //   Parallel, Perpendicular, Collinear, Tangent, Concentric   2 curvas
 //   Tangent        también 2 extremos de curvas (tangentes en la unión)
+//   Curvature      2 extremos de curvas (continuidad G2)
 //   Parallel, Collinear, Equal   también más de 2 (la primera con cada otra)
 //   Midpoint       punto + línea
 //   Symmetric      2 puntos + línea (o + un tercer punto como centro)
@@ -25,6 +26,7 @@ std::vector<Constraint> constraintsFromSelection(ConstraintType type, const Sket
 
 // Cota para la selección, con el valor actual de la geometría:
 //   línea → longitud; círculo → diámetro; arco → radio;
+//   elipse → semieje mayor (y, si ya lo tiene, el menor);
 //   2 puntos → distancia; punto + línea → distancia a la recta;
 //   2 líneas → ángulo (o distancia si son paralelas).
 std::optional<Constraint> dimensionFromSelection(const Sketch& sketch, const std::vector<Ref>& selection);

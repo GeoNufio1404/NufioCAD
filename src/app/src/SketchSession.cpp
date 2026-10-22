@@ -146,7 +146,7 @@ void SketchSession::cursorMoved(bool hasPoint, double x, double y)
             hovered = sketch::pick(sketch_, {x, y}, kSnapRadiusPx * viewport_.sketchPixelSize());
         }
     }
-    if (hovered.entity != hovered_.entity || hovered.part != hovered_.part || hoveredConstraint != hoveredConstraint_) {
+    if (hovered != hovered_ || hoveredConstraint != hoveredConstraint_) {
         hovered_ = hovered;
         hoveredConstraint_ = hoveredConstraint;
         showSketch();
@@ -169,7 +169,7 @@ void SketchSession::clicked(double x, double y, Qt::KeyboardModifiers modifiers)
             }
         } else {
             const sketch::Ref picked = sketch::pick(sketch_, {x, y}, kSnapRadiusPx * viewport_.sketchPixelSize());
-            const auto same = [&](sketch::Ref r) { return r.entity == picked.entity && r.part == picked.part; };
+            const auto same = [&](sketch::Ref r) { return r == picked; };
             if (!picked.empty() && std::erase_if(selection_, same) == 0) {
                 selection_.push_back(picked);
             }

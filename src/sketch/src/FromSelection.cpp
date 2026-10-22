@@ -1,5 +1,6 @@
 #include <nuf/sketch/FromSelection.hpp>
 
+#include <algorithm>
 #include <cmath>
 
 namespace nuf::sketch {
@@ -11,7 +12,8 @@ struct Classified {
     std::vector<Ref> points;
     std::vector<Ref> curves;
     std::vector<Ref> lines;
-    std::vector<Ref> rounds;  // círculos y arcos
+    std::vector<Ref> rounds;    // círculos y arcos
+    std::vector<Ref> ellipses;  // elipses y arcos de elipse
 };
 
 Classified classify(const Sketch& sketch, const std::vector<Ref>& selection)
@@ -32,6 +34,11 @@ Classified classify(const Sketch& sketch, const std::vector<Ref>& selection)
         } else if (std::holds_alternative<Circle>(e->geometry) || std::holds_alternative<Arc>(e->geometry)) {
             c.curves.push_back(r);
             c.rounds.push_back(r);
+        } else if (std::holds_alternative<Ellipse>(e->geometry) || std::holds_alternative<EllipseArc>(e->geometry)) {
+            c.curves.push_back(r);
+            c.ellipses.push_back(r);
+        } else if (!std::holds_alternative<Point>(e->geometry)) {
+            c.curves.push_back(r);
         }
     }
     return c;
@@ -106,8 +113,13 @@ std::vector<Constraint> constraintsFromSelection(ConstraintType type, const Sket
         }
         break;
     case ConstraintType::Concentric:
-        if (total == 2 && c.rounds.size() == 2) {
-            result.push_back(Constraint::concentric(c.rounds[0].entity, c.rounds[1].entity));
+        if (total == 2 && c.rounds.size() + c.ellipses.size() == 2) {
+            result.push_back(Constraint::concentric(selection[0].entity, selection[1].entity));
+        }
+        break;
+    case ConstraintType::Curvature:
+        if (total == 2 && c.points.size() == 2) {
+            result.push_back(Constraint::curvatureAt(c.points[0], c.points[1]));
         }
         break;
     case ConstraintType::Midpoint:
@@ -150,6 +162,13 @@ std::optional<Constraint> dimensionFromSelection(const Sketch& sketch, const std
     } else if (total == 1 && c.rounds.size() == 1) {
         const bool isArc = std::holds_alternative<Arc>(sketch.entity(c.rounds[0].entity)->geometry);
         result = isArc ? Constraint::radius(c.rounds[0].entity, 1.0) : Constraint::diameter(c.rounds[0].entity, 1.0);
+    } else if (total == 1 && c.ellipses.size() == 1) {
+        // Primero el semieje mayor; si ya está acotado, el menor.
+        const EntityId id = c.ellipses[0].entity;
+        const bool majorDone = std::ranges::any_of(sketch.constraints(), [&](const Constraint& k) {
+            return k.type == ConstraintType::MajorRadius && k.first.entity == id;
+        });
+        result = majorDone ? Constraint::minorRadius(id, 1.0) : Constraint::majorRadius(id, 1.0);
     } else if (total == 2 && c.points.size() == 2) {
         result = Constraint::distance(c.points[0], c.points[1], 0.0);
     } else if (total == 2 && c.points.size() == 1 && c.lines.size() == 1) {
