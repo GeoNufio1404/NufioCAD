@@ -3,6 +3,8 @@ add_executable(nuf_tests
     test_signal.cpp
     test_command_stack.cpp
     test_geometry.cpp
+    test_modeling.cpp
+    test_document_model.cpp
     test_nuf_file.cpp
     test_sketch.cpp
     test_sketch_pick.cpp

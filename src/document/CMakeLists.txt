@@ -1,3 +1,3 @@
-# document: modelo del documento (timeline, operaciones, parámetros).
-# En la Fase 0 solo contiene la base; Feature y Timeline llegan en la Fase 3.
-nuf_add_library(document SOURCES src/Document.cpp)
+# document: modelo del documento (historial de operaciones, recálculo).
+nuf_add_library(document SOURCES src/Document.cpp src/Features.cpp)
+target_link_libraries(nuf_document PUBLIC nuf::geometry nuf::sketch)

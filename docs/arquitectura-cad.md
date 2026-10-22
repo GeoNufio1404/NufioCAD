@@ -160,7 +160,7 @@ public:
 ```
 
 - Se apoya en el historial que entregan las operaciones de OCCT (`Generated()` / `Modified()` de `BRepBuilderAPI_MakeShape`).
-- **Decisión para la Fase 3:** implementar `TopoResolver` con TNaming de OCCT (usado solo dentro de `geometry/`) o con un resolvedor propio. La interfaz permite cambiar sin tocar el resto.
+- **Decidido (Fase 3): resolvedor propio.** TNaming exige el árbol de etiquetas de OCAF, que descartamos en 10.1, y su persistencia. En su lugar, cada cuerpo lleva un **mapa de nombres**: cada operación nombra las caras que crea por su origen (`Extruir1` + línea 3 del sketch + «lateral»; «tapa inicial», «tapa final») y las booleanas los propagan con `Modified()`/`Generated()`; las aristas se nombran por las dos caras que separan. Si un nombre corresponde a varias caras (una cara partida por un corte) se desempata por su posición. Es el mismo enfoque que FreeCAD 1.0 y Onshape.
 
 ---
 
@@ -210,7 +210,6 @@ redundantes y en conflicto y los grados de libertad restantes.
 
 | Tema | Opciones | Cuándo |
 |---|---|---|
-| Nombrado topológico | TNaming de OCCT vs. resolvedor propio (detrás de `TopoResolver`) | Fase 3 |
 | Recálculo en segundo plano | Hilo de trabajo para no congelar la UI | Cuando los modelos lo pidan (Fase 5+) |
 | Biblioteca JSON | Ej. nlohmann/json | Fase 4 |
 

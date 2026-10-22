@@ -149,13 +149,36 @@ Abrir con `./build/linux-debug/src/app/NufioCAD` y comprobar:
 - Importar DXF a un sketch.
 
 ### Fase 3 — Modelado básico + timeline
-- Los sketches pasan a ser operaciones del documento (hoy se guardan en la ventana).
-- Extruir (unir, cortar, nuevo cuerpo) eligiendo perfiles de un sketch (ya seleccionables en la vista 3D).
-- Revolución.
-- Timeline editable.
-- Deshacer/rehacer.
-- Reconstrucción paramétrica.
-- Solución al problema de nombrado topológico.
+
+El modelo pasa a ser un historial de operaciones que se recalcula: el
+documento guarda los parámetros (sketch, distancia, perfiles elegidos…) y la
+pieza es solo el resultado. Se divide así:
+
+**3a — Núcleo paramétrico** (sin interfaz, con pruebas)
+- `Feature`, `Timeline` con marcador (lo que queda después no se calcula) y recálculo desde la operación editada, reutilizando el resultado en caché de la anterior.
+- Cuerpos del modelo envueltos en `geometry/` (el resto del código no ve OCCT).
+- Operación **Sketch**: plano de origen o cara de un cuerpo (sigue a la cara si la pieza cambia).
+- Operación **Extruir**: uno o varios perfiles; extensión por distancia, simétrica, dos lados, hasta una cara y «a través de todo»; ángulo de inclinación (*taper*); desfase de inicio; resultado unir, cortar, intersecar o cuerpo nuevo (con elección automática como en Fusion).
+- Operación **Revolución**: eje = línea del sketch, eje de origen o arista recta; ángulo, completa, simétrica o dos lados; mismos resultados que extruir.
+- **Nombrado topológico** con un resolvedor propio (decisión de la sección 6 de la arquitectura): cada cara y arista recibe un nombre que describe su origen (operación + curva del sketch + papel: lateral, tapa inicial, tapa final) y se propaga por las booleanas con el historial de OCCT. Las referencias se guardan como nombres, nunca como «cara 7».
+- Errores sin perder datos: si una operación falla queda marcada y las siguientes en advertencia.
+- Comandos con memento (copia de la operación antes/después): agregar, editar, borrar, suprimir, reordenar y mover el marcador.
+
+**3b — Interfaz del modelado**
+- Los sketches pasan a ser operaciones del documento (hoy se guardan en la ventana); editar un sketch es un solo paso de deshacer.
+- **Navegador** (izquierda): origen (planos y ejes), cuerpos y sketches, con mostrar/ocultar.
+- **Timeline** (abajo): un icono por operación en orden; doble clic para editar, clic derecho para suprimir/borrar.
+- Herramienta **Extruir** (E): elegir perfiles (ya seleccionables en la vista 3D) o una cara plana de un cuerpo; panel de propiedades a la derecha, flecha en pantalla para arrastrar la distancia, valor junto al cursor y vista previa en vivo (naranja para cortar). Aceptar/Cancelar.
+- Herramienta **Revolución**: perfil + eje, con arrastre del ángulo.
+- Deshacer/rehacer de todo el modelado (Ctrl+Z / Ctrl+Y).
+- La pieza de demostración desaparece: se empieza con el documento vacío.
+
+**3c — Timeline editable y reconstrucción**
+- Editar cualquier operación pasada: se recalcula lo que sigue y las referencias (caras de sketches, «hasta cara») se resuelven por nombre.
+- Arrastrar operaciones para reordenarlas (si las dependencias lo permiten) y arrastrar el marcador para volver atrás en el historial (*rollback*).
+- Suprimir/reactivar y borrar (avisando si otras dependen de ella).
+- Lo proyectado en un sketch queda vinculado a la arista original y se actualiza con la pieza.
+- Iconos de error/advertencia en el timeline y el navegador, con el motivo.
 
 ### Fase 4 — Archivos y exportación
 - Formato nativo `.nuf` (offline y privado), guardando el historial.
@@ -208,4 +231,5 @@ Abrir con `./build/linux-debug/src/app/NufioCAD` y comprobar:
 | Fase 0 | ✅ Completa — mockups, formatos de archivo, arquitectura, entorno (repositorio con CMake, vcpkg, pruebas y CI) y nombre de trabajo NufioCAD |
 | Fase 1 | 🚧 Implementada y probada en Linux (Fedora): visor OCCT en Qt, órbita/pan/zoom estilo Fusion, ViewCube, resaltado y selección de caras y aristas. Falta probarla en Windows |
 | Fase 2 | 🚧 Implementada (2a–2d) — sketch completo: dibujo con variantes, elipse, spline y cónica; restricciones (incluida G2), cotas y valores junto al cursor; selección (también por rectángulo), deshacer, arrastre y perfiles; edición (recortar, extender, partir, empalme, chaflán, desfase, simetría, patrones, mover/copiar/girar/escalar); proyectar aristas, intersección, texto, imagen de referencia e importar DXF; los sketches terminados se guardan, sus perfiles y curvas se seleccionan en la vista 3D y se reabren con doble clic. Pendiente: las pruebas manuales de abajo y probar en Windows. Limitaciones: lo proyectado y el texto quedan bloqueados (no se actualizan con la pieza ni se editan como texto hasta la Fase 3); recortar/extender/partir y desfase trabajan con líneas, arcos y círculos; los patrones son copias independientes; las curvas que se cruzan sin compartir extremo no parten los perfiles |
-| Fases 3–9 | Pendientes |
+| Fase 3 | 🚧 En curso (3a) |
+| Fases 4–9 | Pendientes |
