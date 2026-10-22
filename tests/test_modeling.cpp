@@ -339,3 +339,20 @@ TEST_CASE("Un ángulo que cierra el perfil antes de la distancia se rechaza", "[
     spec.side1.taper = 0.5;
     REQUIRE(extrude("f1", allProfiles(c), spec).isValid());
 }
+
+TEST_CASE("Las 5 regiones de un círculo inscrito en un cuadrado se extruyen", "[geometry][modeling]")
+{
+    sketch::Sketch s;
+    rectangle(s, 0, 0, 20, 20);
+    s.addCircle({10, 10}, 10);
+    const auto profiles = sketch::findProfiles(s);
+    REQUIRE(profiles.size() == 5);
+    double total = 0.0;
+    for (const sketch::Profile& p : profiles) {
+        const Shape solid = extrude("f1", {&s, sketch::Plane::xy(), {p}}, distance(1));
+        REQUIRE(solid.isValid());
+        total += solid.volume();
+    }
+    REQUIRE_THAT(total, WithinRel(400.0, 1e-6));
+    REQUIRE_THAT(extrude("f1", allProfiles(s), distance(1)).volume(), WithinRel(400.0, 1e-6));
+}

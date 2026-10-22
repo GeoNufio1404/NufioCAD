@@ -163,3 +163,17 @@ TEST_CASE("Perfiles: polígono partido por una diagonal y círculo partido por u
         REQUIRE_THAT(p.area, WithinAbs(std::numbers::pi * 50.0, 0.5));  // polilínea del círculo
     }
 }
+
+TEST_CASE("Perfiles: círculo tangente a los cuatro lados de un cuadrado da 5 regiones", "[sketch][profiles]")
+{
+    Sketch s;
+    rectangle(s, 0, 0, 20, 20);
+    s.addCircle({10, 10}, 10);
+    auto profiles = findProfiles(s);
+    REQUIRE(profiles.size() == 5);
+    double total = 0.0;
+    for (const Profile& p : profiles) {
+        total += p.area;
+    }
+    REQUIRE_THAT(total, WithinAbs(400.0, 0.5));
+}

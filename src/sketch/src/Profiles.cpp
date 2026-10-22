@@ -125,8 +125,25 @@ struct HalfEdge {
     bool reversed = false;
     int from = 0;
     int to = 0;
-    double angle = 0.0;  // dirección de salida desde «from»
+    double angle = 0.0;  // dirección de salida desde «from», en [0, 2π)
+    // Dirección hacia un punto más adentro de la curva: desempata curvas
+    // tangentes en el vértice (un círculo tangente a una recta).
+    double farAngle = 0.0;
 };
+
+double normalized(double angle)
+{
+    constexpr double kTwoPi = 2.0 * std::numbers::pi;
+    angle = std::fmod(angle, kTwoPi);
+    return angle < 0.0 ? angle + kTwoPi : angle;
+}
+
+// Diferencia a - b en (-π, π].
+double angleDifference(double a, double b)
+{
+    const double d = normalized(a - b);
+    return d > std::numbers::pi ? d - 2.0 * std::numbers::pi : d;
+}
 
 struct Cycle {
     std::vector<int> halfEdges;
@@ -317,15 +334,28 @@ std::vector<Profile> findProfiles(const Sketch& sketch, double tolerance)
         if (!e.alive) {
             continue;
         }
-        halfEdges.push_back({int(i), false, e.from, e.to, e.angleAtStart});
-        halfEdges.push_back({int(i), true, e.to, e.from, e.angleAtEnd});
+        const auto towards = [](Vec2 from, Vec2 to) { return std::atan2(to.y - from.y, to.x - from.x); };
+        // Un punto a un cuarto del recorrido desde cada extremo.
+        const Vec2 nearStart = e.points[std::max<std::size_t>(1, e.points.size() / 4)];
+        const Vec2 nearEnd = e.points[std::min(e.points.size() - 2, e.points.size() - 1 - e.points.size() / 4)];
+        halfEdges.push_back({int(i), false, e.from, e.to, normalized(e.angleAtStart),
+                             towards(e.points.front(), nearStart)});
+        halfEdges.push_back({int(i), true, e.to, e.from, normalized(e.angleAtEnd), towards(e.points.back(), nearEnd)});
     }
     std::map<int, std::vector<int>> outgoing;  // vértice → medias aristas, antihorario
     for (std::size_t h = 0; h < halfEdges.size(); ++h) {
         outgoing[halfEdges[h].from].push_back(int(h));
     }
     for (auto& [vertex, list] : outgoing) {
-        std::ranges::sort(list, [&](int a, int b) { return halfEdges[a].angle < halfEdges[b].angle; });
+        std::ranges::sort(list, [&](int a, int b) {
+            const HalfEdge& p = halfEdges[a];
+            const HalfEdge& q = halfEdges[b];
+            if (std::abs(angleDifference(p.angle, q.angle)) > 1e-6) {
+                return p.angle < q.angle;
+            }
+            // Tangentes: primero la que gira hacia la derecha (horario).
+            return angleDifference(p.farAngle, q.farAngle) < 0.0;
+        });
     }
     // La gemela de h es la otra media arista de la misma curva (índice par/impar).
     const auto twin = [](int h) { return h ^ 1; };
