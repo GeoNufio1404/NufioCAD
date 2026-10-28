@@ -59,6 +59,11 @@ add_executable(nuf_app
     src/Icons.hpp
     resources/resources.qrc)
 
+if(WIN32)
+    # Icono del .exe (el de la ventana lo asigna main.cpp desde los recursos Qt).
+    target_sources(nuf_app PRIVATE resources/nufiocad.rc)
+endif()
+
 set_target_properties(nuf_app PROPERTIES
     OUTPUT_NAME NufioCAD
     WIN32_EXECUTABLE ON)   # sin consola en Windows
@@ -75,4 +80,19 @@ target_link_libraries(nuf_app PRIVATE
     nuf::sketch)
 if(WIN32)
     target_link_libraries(nuf_app PRIVATE dbghelp)
+endif()
+
+# Instalación (Linux): ejecutable, entrada de menú, iconos y tipo MIME de .nuf.
+if(UNIX AND NOT APPLE)
+    include(GNUInstallDirs)
+    install(TARGETS nuf_app RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(FILES "${PROJECT_SOURCE_DIR}/packaging/linux/nufiocad.desktop"
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+    install(FILES "${PROJECT_SOURCE_DIR}/packaging/linux/nufiocad-mime.xml"
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/mime/packages RENAME nufiocad.xml)
+    foreach(size 16 24 32 48 64 128 256)
+        install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/app/nufiocad-${size}.png"
+                DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/${size}x${size}/apps
+                RENAME nufiocad.png)
+    endforeach()
 endif()

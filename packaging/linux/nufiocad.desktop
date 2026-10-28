@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=NufioCAD
+GenericName=CAD paramétrico
+Comment=CAD paramétrico de escritorio para diseñar piezas e imprimirlas en 3D
+Exec=NufioCAD %f
+Icon=nufiocad
+Terminal=false
+Categories=Graphics;3DGraphics;Engineering;
+MimeType=application/x-nufiocad;
+# Debe coincidir con la clase de ventana que Qt declara en X11.
+StartupWMClass=NufioCAD

@@ -94,6 +94,8 @@ int main(int argc, char* argv[])
     QApplication::setApplicationName(QStringLiteral("NufioCAD"));
     QApplication::setApplicationDisplayName(QStringLiteral("NufioCAD"));
     QApplication::setApplicationVersion(QStringLiteral("0.1.0"));
+    // Une la ventana con nufiocad.desktop (icono del dock y del menú).
+    QGuiApplication::setDesktopFileName(QStringLiteral("nufiocad"));
     // Varios tamaños: X11 descarta los iconos demasiado grandes (1024 px).
     QIcon icon;
     for (int size : {16, 24, 32, 48, 64, 128, 256}) {
