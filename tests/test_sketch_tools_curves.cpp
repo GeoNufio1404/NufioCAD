@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cmath>
 #include <numbers>
+#include <stdexcept>
 
 using namespace nuf::sketch;
 using Catch::Matchers::WithinAbs;
@@ -42,8 +43,7 @@ const T& only(const Sketch& s)
             return *g;
         }
     }
-    FAIL("No hay ninguna entidad de ese tipo");
-    throw;
+    throw std::runtime_error("No hay ninguna entidad de ese tipo");
 }
 
 double distanceToCurve(const BSpline& b, Vec2 p)
