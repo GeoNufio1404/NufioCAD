@@ -27,6 +27,10 @@ visor de OpenCASCADE:
 | Selección por rectángulo | Shift + arrastre izquierdo |
 | Vista inicial / ajustar a la ventana | Inicio / F6 |
 
+Las barras de herramientas usan iconos SVG (`src/app/resources/icons/ui/`, propios más
+algunos de [Lucide](https://lucide.dev), licencia ISC) con el nombre debajo y un
+tooltip con nombre, tecla y ayuda; se pintan con los colores del tema.
+
 Además: ViewCube (clic en una cara para orientar la vista), tema claro/oscuro
 (Ver › Tema) y, en Linux con Wayland, la app usa XWayland porque el OCCT de
 las distribuciones solo trae GLX.
@@ -67,7 +71,7 @@ usa como `nuf::<módulo>` en CMake. El núcleo (`geometry`, `document`,
 
 ```bash
 sudo dnf install gcc-c++ cmake ninja-build git \
-    opencascade-devel qt6-qtbase-devel sqlite-devel eigen3-devel catch-devel
+    opencascade-devel qt6-qtbase-devel qt6-qtsvg-devel sqlite-devel eigen3-devel catch-devel
 ```
 
 Si CMake reporta que falta TBB al configurar, instala también `tbb-devel`.

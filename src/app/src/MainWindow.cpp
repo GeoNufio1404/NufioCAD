@@ -1,5 +1,7 @@
 #include "MainWindow.hpp"
+
 #include "FeatureTools.hpp"
+#include "Icons.hpp"
 #include "ModelPanels.hpp"
 #include "Theme.hpp"
 
@@ -37,7 +39,26 @@ namespace nuf::app {
 namespace {
 
 // Versión de la distribución de barras y paneles (ver restoreState).
-constexpr int kLayoutVersion = 3;
+constexpr int kLayoutVersion = 4;
+
+// Ícono y descripción de una acción. El tooltip lleva el nombre completo, la
+// tecla y, si se da, una línea de ayuda; el botón de la barra muestra el nombre
+// corto (`shortName`, si no el mismo texto de la acción).
+void decorate(QAction* action, const QString& icon, const QString& hint = {}, const QString& shortName = {})
+{
+    action->setIcon(uiIcon(icon));
+    QString name = action->text();
+    name.remove(QLatin1Char('&'));
+    action->setIconText(shortName.isEmpty() ? name : shortName);
+    QString tip = QStringLiteral("<b>%1</b>").arg(name.toHtmlEscaped());
+    if (!action->shortcut().isEmpty()) {
+        tip += QStringLiteral(" (%1)").arg(action->shortcut().toString(QKeySequence::NativeText));
+    }
+    if (!hint.isEmpty()) {
+        tip += QStringLiteral("<br>") + hint.toHtmlEscaped();
+    }
+    action->setToolTip(tip);
+}
 
 QWidget* placeholder(const QString& text)
 {
@@ -152,16 +173,20 @@ void MainWindow::closeEvent(QCloseEvent* event)
 
 void MainWindow::createMenus()
 {
+    // Barras con icono y el nombre debajo; el tooltip da el detalle.
+    setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+    setIconSize(QSize(24, 24));
     QMenu* file = menuBar()->addMenu(QStringLiteral("&Archivo"));
     // Fase 4: estas acciones se conectan al formato .nuf y a la exportación.
-    for (const auto& [text, shortcut] : {
-             std::pair{QStringLiteral("&Nuevo diseño"), QKeySequence(QKeySequence::New)},
-             std::pair{QStringLiteral("&Abrir…"), QKeySequence(QKeySequence::Open)},
-             std::pair{QStringLiteral("&Guardar"), QKeySequence(QKeySequence::Save)},
-             std::pair{QStringLiteral("&Exportar…"), QKeySequence()}}) {
+    for (const auto& [text, shortcut, icon] : {
+             std::tuple{QStringLiteral("&Nuevo diseño"), QKeySequence(QKeySequence::New), QStringLiteral("file-new")},
+             std::tuple{QStringLiteral("&Abrir…"), QKeySequence(QKeySequence::Open), QStringLiteral("file-open")},
+             std::tuple{QStringLiteral("&Guardar"), QKeySequence(QKeySequence::Save), QStringLiteral("file-save")},
+             std::tuple{QStringLiteral("&Exportar…"), QKeySequence(), QStringLiteral("file-export")}}) {
         QAction* action = file->addAction(text);
         action->setShortcut(shortcut);
         action->setEnabled(false);
+        decorate(action, icon);
     }
     file->addSeparator();
     file->addAction(QStringLiteral("&Salir"), QKeySequence(QKeySequence::Quit), this, &QWidget::close);
@@ -175,6 +200,7 @@ void MainWindow::createMenus()
             commands_.undo();
         }
     });
+    decorate(undoAction_, QStringLiteral("undo"));
     redoAction_ = edit->addAction(QStringLiteral("Rehacer"), QKeySequence(QKeySequence::Redo), this, [this] {
         if (sketch_) {
             sketch_->redo();
@@ -182,8 +208,9 @@ void MainWindow::createMenus()
             commands_.redo();
         }
     });
+    decorate(redoAction_, QStringLiteral("redo"));
     edit->addSeparator();
-    edit->addAction(QStringLiteral("Renombrar diseño…"), this, [this] {
+    QAction* renameAction = edit->addAction(QStringLiteral("Renombrar diseño…"), this, [this] {
         bool ok = false;
         const QString name = QInputDialog::getText(
             this, QStringLiteral("Renombrar diseño"), QStringLiteral("Nombre:"), QLineEdit::Normal,
@@ -192,6 +219,7 @@ void MainWindow::createMenus()
             commands_.push(std::make_unique<commands::RenameDocument>(name.trimmed().toStdString()));
         }
     });
+    decorate(renameAction, QStringLiteral("rename"));
 
     // Esc cancela lo que esté en curso (por ahora, elegir el plano del sketch).
     QAction* cancelAction = new QAction(QStringLiteral("Cancelar"), this);
@@ -201,19 +229,23 @@ void MainWindow::createMenus()
 
     QMenu* sketchMenu = menuBar()->addMenu(QStringLiteral("&Sketch"));
     createSketchAction_ = sketchMenu->addAction(QStringLiteral("&Crear sketch"), this, &MainWindow::createSketch);
-    createSketchAction_->setToolTip(QStringLiteral("Crear un sketch en un plano de origen o en una cara plana"));
+    decorate(createSketchAction_, QStringLiteral("create-sketch"),
+             QStringLiteral("Crear un sketch en un plano de origen o en una cara plana"));
     finishSketchAction_ = sketchMenu->addAction(QStringLiteral("&Terminar sketch"), this, &MainWindow::finishSketch);
+    decorate(finishSketchAction_, QStringLiteral("finish-sketch"), QStringLiteral("Salir del sketch y guardarlo"));
     sketchMenu->addSeparator();
 
     QMenu* solidMenu = menuBar()->addMenu(QStringLiteral("S&ólido"));
     extrudeAction_ = solidMenu->addAction(QStringLiteral("&Extruir"), QKeySequence(Qt::Key_E), this, [this] {
         startTool(std::make_unique<ExtrudeTool>(document_, *viewport_, std::nullopt));
     });
-    extrudeAction_->setToolTip(QStringLiteral("Extruir perfiles de un sketch o una cara plana (E)"));
+    decorate(extrudeAction_, QStringLiteral("extrude"),
+             QStringLiteral("Extruir perfiles de un sketch o una cara plana"));
     revolveAction_ = solidMenu->addAction(QStringLiteral("&Revolución"), this, [this] {
         startTool(std::make_unique<RevolveTool>(document_, *viewport_, std::nullopt));
     });
-    revolveAction_->setToolTip(QStringLiteral("Girar perfiles de un sketch alrededor de un eje"));
+    decorate(revolveAction_, QStringLiteral("revolve"),
+             QStringLiteral("Girar perfiles de un sketch alrededor de un eje"));
 
     // Herramientas de dibujo por familias (como en Fusion 360); la primera
     // de cada familia lleva su tecla.
@@ -222,61 +254,62 @@ void MainWindow::createMenus()
         Tool tool;
         QString text;
         QKeySequence key;
+        QString icon;
     };
     const std::vector<std::pair<QString, std::vector<ToolEntry>>> families{
-        {QStringLiteral("Línea"), {{Tool::Line, QStringLiteral("Línea"), QKeySequence(Qt::Key_L)}}},
+        {QStringLiteral("Línea"), {{Tool::Line, QStringLiteral("Línea"), QKeySequence(Qt::Key_L), QStringLiteral("line")}}},
         {QStringLiteral("Rectángulo"),
-         {{Tool::Rectangle, QStringLiteral("Rectángulo por 2 esquinas"), QKeySequence(Qt::Key_R)},
-          {Tool::Rectangle3Point, QStringLiteral("Rectángulo por 3 puntos"), {}},
-          {Tool::RectangleCenter, QStringLiteral("Rectángulo por centro"), {}}}},
+         {{Tool::Rectangle, QStringLiteral("Rectángulo por 2 esquinas"), QKeySequence(Qt::Key_R), QStringLiteral("rectangle")},
+          {Tool::Rectangle3Point, QStringLiteral("Rectángulo por 3 puntos"), {}, QStringLiteral("rectangle-3point")},
+          {Tool::RectangleCenter, QStringLiteral("Rectángulo por centro"), {}, QStringLiteral("rectangle-center")}}},
         {QStringLiteral("Círculo"),
-         {{Tool::Circle, QStringLiteral("Círculo por centro y diámetro"), QKeySequence(Qt::Key_C)},
-          {Tool::Circle2Point, QStringLiteral("Círculo por 2 puntos"), {}},
-          {Tool::Circle3Point, QStringLiteral("Círculo por 3 puntos"), {}},
-          {Tool::CircleTangent2, QStringLiteral("Círculo tangente a 2 curvas"), {}},
-          {Tool::CircleTangent3, QStringLiteral("Círculo tangente a 3 curvas"), {}}}},
+         {{Tool::Circle, QStringLiteral("Círculo por centro y diámetro"), QKeySequence(Qt::Key_C), QStringLiteral("circle")},
+          {Tool::Circle2Point, QStringLiteral("Círculo por 2 puntos"), {}, QStringLiteral("circle-2point")},
+          {Tool::Circle3Point, QStringLiteral("Círculo por 3 puntos"), {}, QStringLiteral("circle-3point")},
+          {Tool::CircleTangent2, QStringLiteral("Círculo tangente a 2 curvas"), {}, QStringLiteral("circle-tangent2")},
+          {Tool::CircleTangent3, QStringLiteral("Círculo tangente a 3 curvas"), {}, QStringLiteral("circle-tangent3")}}},
         {QStringLiteral("Arco"),
-         {{Tool::Arc, QStringLiteral("Arco por 3 puntos"), QKeySequence(Qt::Key_A)},
-          {Tool::ArcCenter, QStringLiteral("Arco por centro"), {}},
-          {Tool::ArcTangent, QStringLiteral("Arco tangente"), {}}}},
+         {{Tool::Arc, QStringLiteral("Arco por 3 puntos"), QKeySequence(Qt::Key_A), QStringLiteral("arc")},
+          {Tool::ArcCenter, QStringLiteral("Arco por centro"), {}, QStringLiteral("arc-center")},
+          {Tool::ArcTangent, QStringLiteral("Arco tangente"), {}, QStringLiteral("arc-tangent")}}},
         {QStringLiteral("Polígono"),
-         {{Tool::PolygonCircumscribed, QStringLiteral("Polígono circunscrito"), QKeySequence(Qt::Key_P)},
-          {Tool::PolygonInscribed, QStringLiteral("Polígono inscrito"), {}},
-          {Tool::PolygonEdge, QStringLiteral("Polígono por lado"), {}}}},
+         {{Tool::PolygonCircumscribed, QStringLiteral("Polígono circunscrito"), QKeySequence(Qt::Key_P), QStringLiteral("polygon-circumscribed")},
+          {Tool::PolygonInscribed, QStringLiteral("Polígono inscrito"), {}, QStringLiteral("polygon-inscribed")},
+          {Tool::PolygonEdge, QStringLiteral("Polígono por lado"), {}, QStringLiteral("polygon-edge")}}},
         {QStringLiteral("Ranura"),
-         {{Tool::SlotCenterToCenter, QStringLiteral("Ranura centro a centro"), {}},
-          {Tool::SlotOverall, QStringLiteral("Ranura total"), {}},
-          {Tool::SlotCenterPoint, QStringLiteral("Ranura por punto central"), {}},
-          {Tool::SlotArc, QStringLiteral("Ranura en arco"), {}}}},
+         {{Tool::SlotCenterToCenter, QStringLiteral("Ranura centro a centro"), {}, QStringLiteral("slot-center-to-center")},
+          {Tool::SlotOverall, QStringLiteral("Ranura total"), {}, QStringLiteral("slot-overall")},
+          {Tool::SlotCenterPoint, QStringLiteral("Ranura por punto central"), {}, QStringLiteral("slot-center-point")},
+          {Tool::SlotArc, QStringLiteral("Ranura en arco"), {}, QStringLiteral("slot-arc")}}},
         {QStringLiteral("Elipse"),
-         {{Tool::Ellipse, QStringLiteral("Elipse"), {}},
-          {Tool::EllipseArc, QStringLiteral("Arco de elipse"), {}}}},
+         {{Tool::Ellipse, QStringLiteral("Elipse"), {}, QStringLiteral("ellipse")},
+          {Tool::EllipseArc, QStringLiteral("Arco de elipse"), {}, QStringLiteral("ellipse-arc")}}},
         {QStringLiteral("Spline"),
-         {{Tool::SplineFit, QStringLiteral("Spline por puntos de paso"), {}},
-          {Tool::SplineControl, QStringLiteral("Spline por polos"), {}}}},
-        {QStringLiteral("Cónica"), {{Tool::Conic, QStringLiteral("Curva cónica"), {}}}},
+         {{Tool::SplineFit, QStringLiteral("Spline por puntos de paso"), {}, QStringLiteral("spline-fit")},
+          {Tool::SplineControl, QStringLiteral("Spline por polos"), {}, QStringLiteral("spline-control")}}},
+        {QStringLiteral("Cónica"), {{Tool::Conic, QStringLiteral("Curva cónica"), {}, QStringLiteral("conic")}}},
         // Modificar
         {QStringLiteral("Recortar"),
-         {{Tool::Trim, QStringLiteral("Recortar"), QKeySequence(Qt::Key_T)},
-          {Tool::Extend, QStringLiteral("Extender"), {}},
-          {Tool::Break, QStringLiteral("Partir"), {}}}},
+         {{Tool::Trim, QStringLiteral("Recortar"), QKeySequence(Qt::Key_T), QStringLiteral("trim")},
+          {Tool::Extend, QStringLiteral("Extender"), {}, QStringLiteral("extend")},
+          {Tool::Break, QStringLiteral("Partir"), {}, QStringLiteral("break")}}},
         {QStringLiteral("Empalme"),
-         {{Tool::Fillet, QStringLiteral("Empalme"), {}},
-          {Tool::Chamfer, QStringLiteral("Chaflán"), {}}}},
-        {QStringLiteral("Desfase"), {{Tool::Offset, QStringLiteral("Desfase"), QKeySequence(Qt::Key_O)}}},
-        {QStringLiteral("Simetría"), {{Tool::Mirror, QStringLiteral("Simetría"), {}}}},
+         {{Tool::Fillet, QStringLiteral("Empalme"), {}, QStringLiteral("fillet")},
+          {Tool::Chamfer, QStringLiteral("Chaflán"), {}, QStringLiteral("chamfer")}}},
+        {QStringLiteral("Desfase"), {{Tool::Offset, QStringLiteral("Desfase"), QKeySequence(Qt::Key_O), QStringLiteral("offset")}}},
+        {QStringLiteral("Simetría"), {{Tool::Mirror, QStringLiteral("Simetría"), {}, QStringLiteral("mirror")}}},
         {QStringLiteral("Mover"),
-         {{Tool::Move, QStringLiteral("Mover"), QKeySequence(Qt::Key_M)},
-          {Tool::Copy, QStringLiteral("Copiar"), {}},
-          {Tool::Rotate, QStringLiteral("Girar"), {}},
-          {Tool::Scale, QStringLiteral("Escalar"), {}}}},
+         {{Tool::Move, QStringLiteral("Mover"), QKeySequence(Qt::Key_M), QStringLiteral("move")},
+          {Tool::Copy, QStringLiteral("Copiar"), {}, QStringLiteral("copy")},
+          {Tool::Rotate, QStringLiteral("Girar"), {}, QStringLiteral("rotate")},
+          {Tool::Scale, QStringLiteral("Escalar"), {}, QStringLiteral("scale")}}},
         {QStringLiteral("Patrón"),
-         {{Tool::PatternRectangular, QStringLiteral("Patrón rectangular"), {}},
-          {Tool::PatternCircular, QStringLiteral("Patrón circular"), {}}}},
-        {QStringLiteral("Proyectar"), {{Tool::Project, QStringLiteral("Proyectar aristas"), QKeySequence(Qt::Key_P | Qt::ShiftModifier)}}},
+         {{Tool::PatternRectangular, QStringLiteral("Patrón rectangular"), {}, QStringLiteral("pattern-rectangular")},
+          {Tool::PatternCircular, QStringLiteral("Patrón circular"), {}, QStringLiteral("pattern-circular")}}},
+        {QStringLiteral("Proyectar"), {{Tool::Project, QStringLiteral("Proyectar aristas"), QKeySequence(Qt::Key_P | Qt::ShiftModifier), QStringLiteral("project")}}},
         {QStringLiteral("Texto"),
-         {{Tool::Text, QStringLiteral("Texto"), {}},
-          {Tool::Image, QStringLiteral("Imagen de referencia"), {}}}},
+         {{Tool::Text, QStringLiteral("Texto"), {}, QStringLiteral("text")},
+          {Tool::Image, QStringLiteral("Imagen de referencia"), {}, QStringLiteral("image")}}},
     };
     // A partir de esta familia van a la barra «Modificar».
     const std::size_t firstModifyFamily = 9;
@@ -289,6 +322,7 @@ void MainWindow::createMenus()
             QAction* action = menu->addAction(entry.text);
             action->setShortcut(entry.key);
             action->setCheckable(true);
+            decorate(action, entry.icon, {}, family);
             toolGroup->addAction(action);
             connect(action, &QAction::triggered, this, [this, tool = entry.tool](bool checked) {
                 if (sketch_) {
@@ -307,37 +341,45 @@ void MainWindow::createMenus()
     sketchMenu->addSeparator();
     deleteAction_ = sketchMenu->addAction(QStringLiteral("&Borrar"), QKeySequence(QKeySequence::Delete), this,
                                           [this] { sketch_->deleteSelection(); });
+    decorate(deleteAction_, QStringLiteral("delete"));
     constructionAction_ = sketchMenu->addAction(QStringLiteral("Alternar &construcción"), QKeySequence(Qt::Key_X),
                                                 this, [this] { sketch_->toggleConstruction(); });
+    decorate(constructionAction_, QStringLiteral("construction"),
+             QStringLiteral("Convierte la geometría en auxiliar (no forma perfiles)"),
+             QStringLiteral("Construcción"));
     lockAction_ = sketchMenu->addAction(QStringLiteral("Alternar b&loqueo"), QKeySequence(Qt::Key_K), this,
                                         [this] { sketch_->toggleLock(); });
+    decorate(lockAction_, QStringLiteral("lock"), QStringLiteral("Impide mover la geometría seleccionada"),
+             QStringLiteral("Bloqueo"));
 
     // Restricciones y cotas: se seleccionan las entidades y se aplica.
     QMenu* constraintMenu = sketchMenu->addMenu(QStringLiteral("Res&tricciones"));
     using T = sketch::ConstraintType;
     for (const auto& [type, text, icon] :
-         {std::tuple{T::Coincident, QStringLiteral("Coincidente"), QStringLiteral("⊙")},
-          std::tuple{T::Horizontal, QStringLiteral("Horizontal"), QStringLiteral("H")},
-          std::tuple{T::Vertical, QStringLiteral("Vertical"), QStringLiteral("V")},
-          std::tuple{T::Parallel, QStringLiteral("Paralela"), QStringLiteral("∥")},
-          std::tuple{T::Perpendicular, QStringLiteral("Perpendicular"), QStringLiteral("⊥")},
-          std::tuple{T::Tangent, QStringLiteral("Tangente"), QStringLiteral("T")},
-          std::tuple{T::Equal, QStringLiteral("Igual"), QStringLiteral("=")},
-          std::tuple{T::Collinear, QStringLiteral("Colineal"), QStringLiteral("≡")},
-          std::tuple{T::Concentric, QStringLiteral("Concéntrica"), QStringLiteral("◎")},
-          std::tuple{T::Midpoint, QStringLiteral("Punto medio"), QStringLiteral("M")},
-          std::tuple{T::Symmetric, QStringLiteral("Simetría"), QStringLiteral("S")},
-          std::tuple{T::Fix, QStringLiteral("Fijar"), QStringLiteral("F")},
-          std::tuple{T::Curvature, QStringLiteral("Curvatura (G2)"), QStringLiteral("G2")}}) {
+         {std::tuple{T::Coincident, QStringLiteral("Coincidente"), QStringLiteral("c-coincident")},
+          std::tuple{T::Horizontal, QStringLiteral("Horizontal"), QStringLiteral("c-horizontal")},
+          std::tuple{T::Vertical, QStringLiteral("Vertical"), QStringLiteral("c-vertical")},
+          std::tuple{T::Parallel, QStringLiteral("Paralela"), QStringLiteral("c-parallel")},
+          std::tuple{T::Perpendicular, QStringLiteral("Perpendicular"), QStringLiteral("c-perpendicular")},
+          std::tuple{T::Tangent, QStringLiteral("Tangente"), QStringLiteral("c-tangent")},
+          std::tuple{T::Equal, QStringLiteral("Igual"), QStringLiteral("c-equal")},
+          std::tuple{T::Collinear, QStringLiteral("Colineal"), QStringLiteral("c-collinear")},
+          std::tuple{T::Concentric, QStringLiteral("Concéntrica"), QStringLiteral("c-concentric")},
+          std::tuple{T::Midpoint, QStringLiteral("Punto medio"), QStringLiteral("c-midpoint")},
+          std::tuple{T::Symmetric, QStringLiteral("Simetría"), QStringLiteral("c-symmetric")},
+          std::tuple{T::Fix, QStringLiteral("Fijar"), QStringLiteral("c-fix")},
+          std::tuple{T::Curvature, QStringLiteral("Curvatura (G2)"), QStringLiteral("c-curvature")}}) {
         QAction* action = constraintMenu->addAction(text, this, [this, type = type] { sketch_->applyConstraint(type); });
-        action->setIconText(icon);
-        action->setToolTip(QStringLiteral("%1 (selecciona y aplica)").arg(text));
+        decorate(action, icon, QStringLiteral("Selecciona las entidades y aplica"));
         constraintActions_.push_back(action);
     }
     dimensionAction_ = sketchMenu->addAction(QStringLiteral("C&ota"), QKeySequence(Qt::Key_D), this,
                                              [this] { sketch_->addDimension(); });
+    decorate(dimensionAction_, QStringLiteral("dimension"), QStringLiteral("Acotar la selección"));
     intersectAction_ = sketchMenu->addAction(QStringLiteral("&Intersección con la pieza"), this,
                                              [this] { sketch_->intersectModel(); });
+    decorate(intersectAction_, QStringLiteral("intersect"), QStringLiteral("Traza la intersección de la pieza con el plano del sketch"),
+             QStringLiteral("Intersección"));
     importDxfAction_ = sketchMenu->addAction(QStringLiteral("Importar &DXF…"), this, [this] {
         const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("Importar DXF"), QString(),
                                                           QStringLiteral("Dibujos DXF (*.dxf)"));
@@ -345,7 +387,7 @@ void MainWindow::createMenus()
             sketch_->importDxf(path);
         }
     });
-    dimensionAction_->setToolTip(QStringLiteral("Acotar la selección (D)"));
+    decorate(importDxfAction_, QStringLiteral("import-dxf"));
 
     QToolBar* toolbar = addToolBar(QStringLiteral("Sketch"));
     toolbar->setObjectName(QStringLiteral("sketchToolbar"));
@@ -369,7 +411,9 @@ void MainWindow::createMenus()
             bar->addAction(family.actions.front());
             continue;
         }
-        auto* button = new QToolButton(toolbar);
+        auto* button = new QToolButton(bar);
+        button->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+        button->setIconSize(bar->iconSize());
         button->setPopupMode(QToolButton::MenuButtonPopup);
         button->setMenu(family.menu);
         button->setDefaultAction(family.actions.front());
@@ -380,18 +424,29 @@ void MainWindow::createMenus()
     }
     modifyBar->addAction(intersectAction_);
     modifyBar->addSeparator();
+    modifyBar->addAction(deleteAction_);
+    modifyBar->addAction(constructionAction_);
+    modifyBar->addAction(lockAction_);
+    modifyBar->addSeparator();
     modifyBar->addAction(dimensionAction_);
+    addToolBarBreak();
+    QToolBar* constraintBar = addToolBar(QStringLiteral("Restricciones"));
+    constraintBar->setObjectName(QStringLiteral("constraintToolbar"));
+    constraintBar->setMovable(false);
     for (QAction* action : constraintActions_) {
-        modifyBar->addAction(action);
+        constraintBar->addAction(action);
     }
 
     QMenu* view = menuBar()->addMenu(QStringLiteral("&Ver"));
-    view->addAction(QStringLiteral("Vista &inicial"), QKeySequence(Qt::Key_Home), this,
-                    [this] { viewport_->resetView(); });
-    view->addAction(QStringLiteral("&Ajustar a la ventana"), QKeySequence(Qt::Key_F6), this,
-                    [this] { viewport_->fitAll(); });
+    decorate(view->addAction(QStringLiteral("Vista &inicial"), QKeySequence(Qt::Key_Home), this,
+                             [this] { viewport_->resetView(); }),
+             QStringLiteral("view-home"));
+    decorate(view->addAction(QStringLiteral("&Ajustar a la ventana"), QKeySequence(Qt::Key_F6), this,
+                             [this] { viewport_->fitAll(); }),
+             QStringLiteral("view-fit"));
     lookAtSketchAction_ = view->addAction(QStringLiteral("&Mirar al sketch"), this,
                                           [this] { viewport_->lookAtSketch(); });
+    decorate(lookAtSketchAction_, QStringLiteral("look-at-sketch"));
     updateSketchActions();
     view->addSeparator();
     QMenu* panels = view->addMenu(QStringLiteral("&Paneles"));

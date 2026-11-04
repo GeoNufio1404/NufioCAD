@@ -19,6 +19,8 @@ add_executable(nuf_app
     src/SelfCheck.hpp
     src/Theme.cpp
     src/Theme.hpp
+    src/Icons.cpp
+    src/Icons.hpp
     resources/resources.qrc)
 
 set_target_properties(nuf_app PROPERTIES
@@ -28,6 +30,7 @@ set_target_properties(nuf_app PROPERTIES
 nuf_set_warnings(nuf_app)
 target_link_libraries(nuf_app PRIVATE
     Qt6::Widgets
+    Qt6::Svg
     nuf::render
     nuf::commands
     nuf::document
