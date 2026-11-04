@@ -9,6 +9,7 @@
 #include <QSvgRenderer>
 
 #include <memory>
+#include <utility>
 
 namespace nuf::app {
 
@@ -39,37 +40,36 @@ public:
     QString key() const override { return QStringLiteral("nufsvg"); }
 
 private:
-    // Se rehace si cambió la paleta (cambio de tema).
+    // Se rehace si cambiaron los colores (cambio de tema). Se comparan los
+    // colores y no QPalette::cacheKey(): la paleta clara y la oscura pueden
+    // tener la misma clave.
     QSvgRenderer& renderer(QIcon::Mode mode)
     {
         const QPalette palette = QApplication::palette();
-        if (palette.cacheKey() != paletteKey_) {
-            paletteKey_ = palette.cacheKey();
-            for (auto& r : renderers_) {
-                r.reset();
-            }
+        QPalette::ColorGroup group = QPalette::Active;
+        QPalette::ColorRole textRole = QPalette::WindowText;
+        QPalette::ColorRole accentRole = QPalette::Highlight;
+        if (mode == QIcon::Disabled) {
+            group = QPalette::Disabled;
+            accentRole = QPalette::WindowText;
+        } else if (mode == QIcon::Selected) {
+            textRole = accentRole = QPalette::HighlightedText;
         }
+        const QColor text = palette.color(group, textRole);
+        const QColor accent = palette.color(group, accentRole);
         const int index = static_cast<int>(mode);
-        if (!renderers_[index]) {
-            QPalette::ColorGroup group = QPalette::Active;
-            QPalette::ColorRole text = QPalette::WindowText;
-            QPalette::ColorRole accent = QPalette::Highlight;
-            if (mode == QIcon::Disabled) {
-                group = QPalette::Disabled;
-                accent = QPalette::WindowText;
-            } else if (mode == QIcon::Selected) {
-                text = accent = QPalette::HighlightedText;
-            }
+        if (!renderers_[index] || colors_[index] != std::pair{text.rgba(), accent.rgba()}) {
             QByteArray data = svg_;
-            data.replace(kAccent, palette.color(group, accent).name().toLatin1());
-            data.replace("currentColor", palette.color(group, text).name().toLatin1());
+            data.replace(kAccent, accent.name().toLatin1());
+            data.replace("currentColor", text.name().toLatin1());
             renderers_[index] = std::make_unique<QSvgRenderer>(data);
+            colors_[index] = {text.rgba(), accent.rgba()};
         }
         return *renderers_[index];
     }
 
     QByteArray svg_;
-    qint64 paletteKey_ = 0;
+    std::pair<QRgb, QRgb> colors_[4];
     std::unique_ptr<QSvgRenderer> renderers_[4];  // Normal, Disabled, Active, Selected
 };
 

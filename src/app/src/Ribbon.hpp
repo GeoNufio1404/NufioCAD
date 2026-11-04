@@ -40,6 +40,9 @@ public:
     void setTabVisible(int tab, bool visible);
     void setCurrentTab(int tab);
 
+protected:
+    void paintEvent(QPaintEvent* event) override;
+
 private:
     struct Page {
         QWidget* widget = nullptr;

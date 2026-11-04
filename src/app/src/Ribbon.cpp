@@ -5,6 +5,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMenu>
+#include <QPainter>
 #include <QScrollArea>
 #include <QTabBar>
 #include <QToolButton>
@@ -19,21 +20,52 @@ namespace {
 constexpr int kIconSize = 28;
 constexpr int kButtonWidth = 50;
 
+// Pestañas pintadas con la paleta actual (una hoja de estilos conservaba los
+// colores del tema anterior al cambiar de tema).
+class RibbonTabBar final : public QTabBar {
+public:
+    using QTabBar::QTabBar;
+
+protected:
+    QSize tabSizeHint(int index) const override
+    {
+        const QSize base = QTabBar::tabSizeHint(index);
+        return QSize(fontMetrics().horizontalAdvance(tabText(index)) + 32, base.height() + 4);
+    }
+
+    void paintEvent(QPaintEvent*) override
+    {
+        QPainter painter(this);
+        QFont bold = font();
+        bold.setWeight(QFont::DemiBold);
+        painter.setFont(bold);
+        for (int i = 0; i < count(); ++i) {
+            if (!isTabVisible(i)) {
+                continue;
+            }
+            const QRect rect = tabRect(i);
+            const bool selected = i == currentIndex();
+            painter.setPen(palette().color(QPalette::WindowText));
+            painter.drawText(rect, Qt::AlignCenter, tabText(i));
+            if (selected) {
+                painter.fillRect(QRect(rect.left() + 6, rect.bottom() - 1, rect.width() - 12, 2),
+                                 palette().color(QPalette::Highlight));
+            }
+        }
+    }
+};
+
 } // namespace
 
 Ribbon::Ribbon(QWidget* parent) : QWidget(parent)
 {
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
-    tabs_ = new QTabBar(this);
+    tabs_ = new RibbonTabBar(this);
     tabs_->setDrawBase(false);
     tabs_->setExpanding(false);
     tabs_->setUsesScrollButtons(false);
     tabs_->setFocusPolicy(Qt::NoFocus);
-    tabs_->setStyleSheet(QStringLiteral(
-        "QTabBar::tab { padding: 5px 16px; border: 0; border-bottom: 2px solid transparent; font-weight: 600; }"
-        "QTabBar::tab:selected { border-bottom-color: palette(highlight); }"
-        "QTabBar::tab:!selected { color: palette(window-text); }"));
 
     host_ = new QWidget(this);
     new QVBoxLayout(host_);
@@ -45,6 +77,9 @@ Ribbon::Ribbon(QWidget* parent) : QWidget(parent)
     scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     scroll->setWidget(host_);
+    // El fondo lo pinta la propia cinta con la paleta actual.
+    host_->setAutoFillBackground(false);
+    scroll->viewport()->setAutoFillBackground(false);
     scroll->setFixedHeight(96);
 
     auto* line = new QFrame(this);
@@ -74,6 +109,12 @@ Ribbon::Ribbon(QWidget* parent) : QWidget(parent)
             }
         }
     });
+}
+
+void Ribbon::paintEvent(QPaintEvent*)
+{
+    QPainter painter(this);
+    painter.fillRect(rect(), palette().color(QPalette::Button));
 }
 
 int Ribbon::addTab(const QString& title)
