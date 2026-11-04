@@ -28,6 +28,8 @@ class Viewport;
 struct ModelSelection;
 }
 
+class QTimer;
+
 namespace nuf::app {
 
 class FeatureTool : public QObject {
@@ -118,6 +120,8 @@ private:
     std::vector<geometry::ElementRef> selectedFaces_;  // para saber cuál es nueva
     bool operationTouched_ = false;
     int lastSign_ = 1;  // signo de la distancia al elegir la operación
+    QTimer* dragTimer_ = nullptr;  // agrupa los movimientos de la flecha de distancia
+    double pendingDistance_ = 0.0;
 
     QComboBox* direction_ = nullptr;
     QComboBox* extent1_ = nullptr;

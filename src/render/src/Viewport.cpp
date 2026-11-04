@@ -14,6 +14,8 @@
 #include <AIS_AnimationCamera.hxx>
 #include <AIS_InteractiveContext.hxx>
 #include <AIS_MouseGesture.hxx>
+#include <TopLoc_Location.hxx>
+#include <gp_Trsf.hxx>
 #include <AIS_Shape.hxx>
 #include <AIS_TexturedShape.hxx>
 #include <AIS_ViewController.hxx>
@@ -618,6 +620,7 @@ public:
     void showBodies(const std::vector<document::Body>& list)
     {
         std::vector<ShownBody> next;
+        std::vector<Handle(AIS_Shape)> created;
         for (const document::Body& body : list) {
             const auto old = std::ranges::find_if(bodies, [&](const ShownBody& b) {
                 return b.key == body.key && b.shape.impl() == body.shape.impl();
@@ -634,13 +637,19 @@ public:
             // no seleccionable y un Activate posterior no lo revierte.
             context->Display(ais, AIS_Shaded, AIS_Shape::SelectionMode(TopAbs_FACE), false);
             next.push_back({body.key, body.shape, ais});
+            created.push_back(ais);
         }
         for (const ShownBody& gone : bodies) {
             context->Remove(gone.ais, false);
         }
         bodies = std::move(next);
+        // Los cuerpos que ya se mostraban conservan su selección (al cambiar
+        // de modo se reactivan todos con activateBodies()); solo se activan
+        // los nuevos. En un arrastre con vista previa hay uno nuevo por paso.
         for (const ShownBody& b : bodies) {
-            activateBody(b);
+            if (std::ranges::find(created, b.ais) != created.end()) {
+                activateBody(b);
+            }
         }
     }
 
@@ -760,15 +769,35 @@ public:
     {
         // Se redibuja en cada paso de un arrastre (la vista previa lo pide al
         // cambiar la distancia): no se debe cortar el arrastre en curso.
-        removeHandle();
         handleOrigin = toPnt(origin);
         handleDirection = toDir(direction);
         handleDistance = distance;
         // Tamaño fijo en pantalla (aprox.): se recalcula al volver a mostrarla.
         const double size = 70.0 * pixelSize();
-        const gp_Dir pointing = distance >= 0.0 ? handleDirection : handleDirection.Reversed();
+        const bool positive = distance >= 0.0;
         const gp_Pnt tip = handleOrigin.Translated(gp_Vec(handleDirection) * distance);
-        const gp_Pnt base = tip.Translated(gp_Vec(pointing) * (0.15 * size));
+        TopLoc_Location place;
+        {
+            gp_Trsf move;
+            move.SetTranslation(gp_Vec(gp_Pnt(0.0, 0.0, 0.0), tip));
+            place = TopLoc_Location(move);
+        }
+        // En un arrastre la flecha solo cambia de lugar: se reutiliza el sólido
+        // (crearlo y mostrarlo de nuevo en cada movimiento del ratón era lo más
+        // caro del arrastre) y se reconstruye únicamente si cambia su forma.
+        if (!handle.IsNull() && positive == handlePositive && handleBuiltDirection.IsEqual(handleDirection, 1e-9) &&
+            std::abs(size - handleBuiltSize) < 0.02 * handleBuiltSize) {
+            context->SetLocation(handle, place);
+            return;
+        }
+        removeHandle();
+        handlePositive = positive;
+        handleBuiltDirection = handleDirection;
+        handleBuiltSize = size;
+        // La flecha se construye con la punta en el origen y se coloca con
+        // la ubicación local.
+        const gp_Dir pointing = positive ? handleDirection : handleDirection.Reversed();
+        const gp_Pnt base = gp_Pnt(0.0, 0.0, 0.0).Translated(gp_Vec(pointing) * (0.15 * size));
         BRep_Builder builder;
         TopoDS_Compound arrow;
         builder.MakeCompound(arrow);
@@ -780,6 +809,7 @@ public:
         handle->SetColor(rgb(0xF2, 0xA3, 0x4B));
         handle->Attributes()->SetFaceBoundaryDraw(false);
         handle->SetZLayer(Graphic3d_ZLayerId_Topmost);
+        handle->SetLocalTransformation(place.Transformation());
         context->Display(handle, AIS_Shaded, 0, false);
     }
 
@@ -1628,6 +1658,9 @@ private:
     Handle(AIS_Shape) toolPreview;
     gp_Pnt handleOrigin;
     gp_Dir handleDirection;
+    gp_Dir handleBuiltDirection;  // con la que se construyó la flecha mostrada
+    double handleBuiltSize = 1.0;
+    bool handlePositive = true;
     AIS_SelectionScheme defaultClickScheme = AIS_SelectionScheme_Replace;
     std::vector<OriginPlane> originPlanes;
     Handle(SketchPlaneFilter) planeFilter;

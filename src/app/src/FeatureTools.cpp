@@ -9,6 +9,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -353,8 +354,26 @@ void ExtrudeTool::createFields(QFormLayout* form)
         });
     }
     // Se escribe la distancia directamente (como el valor junto al cursor).
+    // Los movimientos del ratón llegan más rápido de lo que se rehace la vista
+    // previa: se aplica solo el último valor por cuadro, no uno por evento.
+    dragTimer_ = new QTimer(this);
+    dragTimer_->setSingleShot(true);
+    dragTimer_->setInterval(12);
+    connect(dragTimer_, &QTimer::timeout, this, [this] {
+        distance1_->setValue(pendingDistance_);
+    });
     connect(&viewport_, &render::Viewport::distanceHandleDragged, this, [this](double d) {
-        distance1_->setValue(std::round(d * 10.0) / 10.0);
+        pendingDistance_ = std::round(d * 10.0) / 10.0;
+        if (!dragTimer_->isActive()) {
+            dragTimer_->start();
+        }
+    });
+    connect(&viewport_, &render::Viewport::distanceHandleReleased, this, [this] {
+        // Lo que quedó pendiente al soltar se aplica de inmediato.
+        if (dragTimer_->isActive()) {
+            dragTimer_->stop();
+            distance1_->setValue(pendingDistance_);
+        }
     });
     lastSign_ = distance1_->value() < 0.0 ? -1 : 1;
     updateVisibility();
