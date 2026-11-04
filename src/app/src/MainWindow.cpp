@@ -332,6 +332,7 @@ void MainWindow::createMenus()
                 }
             });
             toolActions_[entry.tool] = action;
+            connect(action, &QAction::triggered, this, [this] { clearNavigation(); });
             actions.push_back(action);
         }
         toolFamilies_.push_back({entries.size() > 1 ? menu : nullptr, actions});
@@ -449,7 +450,42 @@ void MainWindow::createMenus()
     decorate(lookAtSketchAction_, QStringLiteral("look-at-sketch"),
              QStringLiteral("Orientar la cámara de frente al plano del sketch"));
     // Barra flotante sobre el visor, como la de navegación de Fusion 360.
-    new NavBar(viewport_, {homeAction, fitAction, lookAtSketchAction_});
+    // Orbitar / desplazar / zoom como herramientas: activas, el arrastre
+    // izquierdo hace eso. Esc o volver a pulsar las desactiva.
+    navGroup_ = new QActionGroup(this);
+    navGroup_->setExclusionPolicy(QActionGroup::ExclusionPolicy::ExclusiveOptional);
+    std::vector<QAction*> navActions;
+    using Mode = render::Viewport::NavigationMode;
+    for (const auto& [text, icon, hint, mode] :
+         {std::tuple{QStringLiteral("Orbitar"), QStringLiteral("nav-orbit"),
+                     QStringLiteral("Arrastra con el botón izquierdo para girar la vista (Shift + botón central también)"),
+                     Mode::Orbit},
+          std::tuple{QStringLiteral("Desplazar"), QStringLiteral("nav-pan"),
+                     QStringLiteral("Arrastra para mover la vista (botón derecho o central también)"), Mode::Pan},
+          std::tuple{QStringLiteral("Zoom"), QStringLiteral("nav-zoom"),
+                     QStringLiteral("Arrastra arriba o abajo para acercar o alejar (la rueda también)"), Mode::Zoom}}) {
+        QAction* action = new QAction(text, this);
+        action->setCheckable(true);
+        decorate(action, icon, hint);
+        navGroup_->addAction(action);
+        connect(action, &QAction::toggled, this, [this, mode = mode](bool on) {
+            viewport_->setNavigationMode(on ? mode : Mode::Default);
+            if (on) {
+                // Una herramienta de navegación reemplaza a la de dibujo.
+                if (sketch_) {
+                    sketch_->setTool(SketchSession::Tool::None);
+                }
+                for (const auto& [tool, toolAction] : toolActions_) {
+                    toolAction->setChecked(false);
+                }
+            }
+        });
+        navActions.push_back(action);
+    }
+    navActions.push_back(homeAction);
+    navActions.push_back(fitAction);
+    navActions.push_back(lookAtSketchAction_);
+    new NavBar(viewport_, navActions);
     updateSketchActions();
     view->addSeparator();
     QMenu* panels = view->addMenu(QStringLiteral("&Paneles"));
@@ -876,8 +912,19 @@ void MainWindow::refreshModel()
     timeline_->update();
 }
 
+void MainWindow::clearNavigation()
+{
+    if (QAction* active = navGroup_ ? navGroup_->checkedAction() : nullptr) {
+        active->setChecked(false);
+    }
+}
+
 void MainWindow::cancel()
 {
+    if (navGroup_ && navGroup_->checkedAction()) {
+        clearNavigation();
+        return;
+    }
     if (tool_) {
         finishTool(false);
         return;

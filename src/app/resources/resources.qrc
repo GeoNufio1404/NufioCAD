@@ -82,5 +82,8 @@
         <file alias="ui/undo.svg">icons/ui/undo.svg</file>
         <file alias="ui/view-fit.svg">icons/ui/view-fit.svg</file>
         <file alias="ui/view-home.svg">icons/ui/view-home.svg</file>
+        <file alias="ui/nav-orbit.svg">icons/ui/nav-orbit.svg</file>
+        <file alias="ui/nav-pan.svg">icons/ui/nav-pan.svg</file>
+        <file alias="ui/nav-zoom.svg">icons/ui/nav-zoom.svg</file>
     </qresource>
 </RCC>

@@ -58,6 +58,8 @@ struct ModelSelection {
 //                                libre para el menú rápido
 //   botón central                desplazar (alternativa)
 //   Shift + botón central        orbitar (como en Fusion 360)
+// Las herramientas Orbitar / Desplazar / Zoom (setNavigationMode) hacen que el
+// arrastre izquierdo haga solo eso.
 //   rueda                        zoom hacia el cursor
 // Modo sketch: pickSketchPlane() muestra los planos de origen y deja elegir
 // uno o una cara plana; beginSketch() orienta la cámara y muestra la rejilla.
@@ -119,6 +121,11 @@ public:
     void showDistanceHandle(const sketch::Vec3& origin, const sketch::Vec3& direction, double distance);
     void hideDistanceHandle();
     bool isSketching() const;
+
+    // Herramienta de navegación (barra inferior): mientras está activa, el
+    // arrastre izquierdo orbita, desplaza o hace zoom, sin seleccionar ni dibujar.
+    enum class NavigationMode { Default, Orbit, Pan, Zoom };
+    void setNavigationMode(NavigationMode mode);
     // Vuelve a poner la cámara de frente al plano del sketch.
     void lookAtSketch();
 

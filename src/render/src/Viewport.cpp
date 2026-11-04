@@ -1277,6 +1277,7 @@ public:
     SketchHighlight shownHighlight;
     double annotationScale = 0.0;
     bool leftPressed = false;
+    Viewport::NavigationMode navMode = Viewport::NavigationMode::Default;
     std::map<document::FeatureId, FinishedSketch> finished;
     std::vector<ShownBody> bodies;
     bool originShown = false;
@@ -1326,6 +1327,13 @@ protected:
         }
     }
 
+public:
+    void setNavigationMode(Viewport::NavigationMode newMode)
+    {
+        navMode = newMode;
+        configureNavigation();
+    }
+
 private:
     void configureNavigation()
     {
@@ -1337,7 +1345,15 @@ private:
         const auto key = [](unsigned int button, unsigned int modifiers = 0) { return button | modifiers; };
         auto& gestures = ChangeMouseGestureMap();
         gestures.Clear();
-        gestures.Bind(key(Aspect_VKeyMouse_LeftButton), AIS_MouseGesture_RotateOrbit);
+        // Con una herramienta de la barra de navegación, el arrastre izquierdo
+        // hace solo eso (orbitar, desplazar o zoom).
+        AIS_MouseGesture leftDrag = AIS_MouseGesture_RotateOrbit;
+        if (navMode == Viewport::NavigationMode::Pan) {
+            leftDrag = AIS_MouseGesture_Pan;
+        } else if (navMode == Viewport::NavigationMode::Zoom) {
+            leftDrag = AIS_MouseGesture_ZoomVertical;
+        }
+        gestures.Bind(key(Aspect_VKeyMouse_LeftButton), leftDrag);
         gestures.Bind(key(Aspect_VKeyMouse_LeftButton, Aspect_VKeyFlags_SHIFT), AIS_MouseGesture_SelectRectangle);
         gestures.Bind(key(Aspect_VKeyMouse_RightButton), AIS_MouseGesture_Pan);
         gestures.Bind(key(Aspect_VKeyMouse_MiddleButton), AIS_MouseGesture_Pan);
@@ -1811,6 +1827,17 @@ void Viewport::hideDistanceHandle()
 
 bool Viewport::isSketching() const { return impl_->mode == Impl::Mode::Sketch; }
 
+void Viewport::setNavigationMode(NavigationMode mode)
+{
+    impl_->setNavigationMode(mode);
+    switch (mode) {
+    case NavigationMode::Orbit: setCursor(Qt::SizeAllCursor); break;
+    case NavigationMode::Pan: setCursor(Qt::OpenHandCursor); break;
+    case NavigationMode::Zoom: setCursor(Qt::SizeVerCursor); break;
+    case NavigationMode::Default: unsetCursor(); break;
+    }
+}
+
 void Viewport::lookAtSketch()
 {
     impl_->lookAtSketch();
@@ -1884,6 +1911,9 @@ double Viewport::sketchGridStep() const { return impl_->gridStep(); }
 
 Qt::MouseButtons Viewport::navigationButtons(Qt::MouseButtons buttons) const
 {
+    if (impl_->navMode != NavigationMode::Default) {
+        return buttons;
+    }
     if (((impl_->sketchToolActive || impl_->sketchDragging) && isSketching()) || impl_->handleDragging) {
         buttons &= ~Qt::MouseButtons(Qt::LeftButton);
     }
@@ -1972,7 +2002,8 @@ void Viewport::mousePressEvent(QMouseEvent* event)
 {
     const qreal ratio = devicePixelRatioF();
     const Vec2i point(int(event->position().x() * ratio), int(event->position().y() * ratio));
-    if (event->button() == Qt::LeftButton && !isSketching() && !impl_->handle.IsNull()) {
+    const bool navigating = impl_->navMode != NavigationMode::Default;
+    if (event->button() == Qt::LeftButton && !navigating && !isSketching() && !impl_->handle.IsNull()) {
         // ¿Se agarra la flecha de distancia?
         impl_->context->MoveTo(point.x(), point.y(), impl_->view, false);
         if (impl_->context->HasDetected() && impl_->context->DetectedInteractive() == impl_->handle) {
@@ -1982,7 +2013,7 @@ void Viewport::mousePressEvent(QMouseEvent* event)
             }
         }
     }
-    if (event->button() == Qt::LeftButton && isSketching()) {
+    if (event->button() == Qt::LeftButton && !navigating && isSketching()) {
         impl_->leftPressed = true;
         impl_->pressPosition = event->position();
         impl_->pressSketchPoint = impl_->sketchPointAt(point);

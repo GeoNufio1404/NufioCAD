@@ -18,6 +18,7 @@
 #include <vector>
 
 class QAction;
+class QActionGroup;
 class QDockWidget;
 class QLabel;
 class QMenu;
@@ -60,6 +61,7 @@ private:
     void openSession(const sketch::Plane& plane, const QString& description, std::optional<sketch::Sketch> initial);
     void finishSketch();
     void cancel();
+    void clearNavigation();
     void updateSketchActions();
 
     // Operaciones sólidas.
@@ -116,6 +118,7 @@ private:
     std::vector<ToolFamily> toolFamilies_;
     QLabel* sketchStatusLabel_ = nullptr;
     Ribbon* ribbon_ = nullptr;
+    QActionGroup* navGroup_ = nullptr;
     int solidTab_ = 0;
     int sketchTab_ = 0;
     bool ribbonSketching_ = false;
