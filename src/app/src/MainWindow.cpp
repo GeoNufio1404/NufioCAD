@@ -3,6 +3,7 @@
 #include "FeatureTools.hpp"
 #include "Icons.hpp"
 #include "ModelPanels.hpp"
+#include "Ribbon.hpp"
 #include "Theme.hpp"
 
 #include <nuf/commands/FeatureCommands.hpp>
@@ -27,7 +28,6 @@
 #include <QSettings>
 #include <QStatusBar>
 #include <QToolBar>
-#include <QToolButton>
 
 #include <algorithm>
 #include <memory>
@@ -39,7 +39,7 @@ namespace nuf::app {
 namespace {
 
 // Versión de la distribución de barras y paneles (ver restoreState).
-constexpr int kLayoutVersion = 4;
+constexpr int kLayoutVersion = 5;
 
 // Ícono y descripción de una acción. El tooltip lleva el nombre completo, la
 // tecla y, si se da, una línea de ayuda; el botón de la barra muestra el nombre
@@ -232,7 +232,8 @@ void MainWindow::createMenus()
     decorate(createSketchAction_, QStringLiteral("create-sketch"),
              QStringLiteral("Crear un sketch en un plano de origen o en una cara plana"));
     finishSketchAction_ = sketchMenu->addAction(QStringLiteral("&Terminar sketch"), this, &MainWindow::finishSketch);
-    decorate(finishSketchAction_, QStringLiteral("finish-sketch"), QStringLiteral("Salir del sketch y guardarlo"));
+    decorate(finishSketchAction_, QStringLiteral("finish-sketch"), QStringLiteral("Salir del sketch y guardarlo"),
+             QStringLiteral("Terminar sketch"));
     sketchMenu->addSeparator();
 
     QMenu* solidMenu = menuBar()->addMenu(QStringLiteral("S&ólido"));
@@ -389,53 +390,51 @@ void MainWindow::createMenus()
     });
     decorate(importDxfAction_, QStringLiteral("import-dxf"));
 
-    QToolBar* toolbar = addToolBar(QStringLiteral("Sketch"));
-    toolbar->setObjectName(QStringLiteral("sketchToolbar"));
-    toolbar->setMovable(false);
-    toolbar->addAction(createSketchAction_);
-    toolbar->addAction(finishSketchAction_);
-    toolbar->addSeparator();
-    toolbar->addAction(extrudeAction_);
-    toolbar->addAction(revolveAction_);
-    toolbar->addSeparator();
-    // Un botón por familia; la flecha despliega sus variantes y el botón se
-    // queda con la última usada. Las de modificar, en una segunda barra.
-    addToolBarBreak();
-    QToolBar* modifyBar = addToolBar(QStringLiteral("Modificar"));
-    modifyBar->setObjectName(QStringLiteral("modifyToolbar"));
-    modifyBar->setMovable(false);
-    for (std::size_t i = 0; i < toolFamilies_.size(); ++i) {
-        const ToolFamily& family = toolFamilies_[i];
-        QToolBar* bar = i < firstModifyFamily ? toolbar : modifyBar;
-        if (!family.menu) {
-            bar->addAction(family.actions.front());
-            continue;
-        }
-        auto* button = new QToolButton(bar);
-        button->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
-        button->setIconSize(bar->iconSize());
-        button->setPopupMode(QToolButton::MenuButtonPopup);
-        button->setMenu(family.menu);
-        button->setDefaultAction(family.actions.front());
-        for (QAction* action : family.actions) {
-            connect(action, &QAction::triggered, button, [button, action] { button->setDefaultAction(action); });
-        }
-        bar->addWidget(button);
+    // Cinta al estilo de Fusion 360: pestaña Sólido y, mientras se edita un
+    // sketch, la pestaña Sketch con «Terminar sketch» al final.
+    ribbon_ = new Ribbon(this);
+    solidTab_ = ribbon_->addTab(QStringLiteral("SÓLIDO"));
+    sketchTab_ = ribbon_->addTab(QStringLiteral("SKETCH"));
+    ribbon_->addGroup(solidTab_, QStringLiteral("CREAR"));
+    ribbon_->addAction(solidTab_, createSketchAction_);
+    ribbon_->addAction(solidTab_, extrudeAction_);
+    ribbon_->addAction(solidTab_, revolveAction_);
+
+    auto family = [this, &families](const QString& name) {
+        const std::size_t i = static_cast<std::size_t>(
+            std::find_if(families.begin(), families.end(), [&](const auto& f) { return f.first == name; }) -
+            families.begin());
+        ribbon_->addFamily(sketchTab_, toolFamilies_[i].menu, toolFamilies_[i].actions);
+    };
+    ribbon_->addGroup(sketchTab_, QStringLiteral("CREAR"));
+    for (const char* name : {"Línea", "Rectángulo", "Círculo", "Arco", "Polígono", "Elipse", "Ranura", "Spline",
+                             "Cónica", "Simetría", "Patrón", "Proyectar"}) {
+        family(QString::fromUtf8(name));
     }
-    modifyBar->addAction(intersectAction_);
-    modifyBar->addSeparator();
-    modifyBar->addAction(deleteAction_);
-    modifyBar->addAction(constructionAction_);
-    modifyBar->addAction(lockAction_);
-    modifyBar->addSeparator();
-    modifyBar->addAction(dimensionAction_);
-    addToolBarBreak();
-    QToolBar* constraintBar = addToolBar(QStringLiteral("Restricciones"));
-    constraintBar->setObjectName(QStringLiteral("constraintToolbar"));
-    constraintBar->setMovable(false);
-    for (QAction* action : constraintActions_) {
-        constraintBar->addAction(action);
+    ribbon_->addAction(sketchTab_, intersectAction_);
+    ribbon_->addAction(sketchTab_, dimensionAction_);
+    ribbon_->addGroup(sketchTab_, QStringLiteral("MODIFICAR"));
+    for (const char* name : {"Recortar", "Empalme", "Desfase", "Mover"}) {
+        family(QString::fromUtf8(name));
     }
+    ribbon_->addGroup(sketchTab_, QStringLiteral("RESTRICCIONES"));
+    ribbon_->addMenu(sketchTab_, QStringLiteral("Restricciones"), uiIcon(QStringLiteral("c-perpendicular")),
+                     constraintMenu);
+    ribbon_->addGroup(sketchTab_, QStringLiteral("INSERTAR"));
+    family(QStringLiteral("Texto"));
+    ribbon_->addAction(sketchTab_, importDxfAction_);
+    ribbon_->addGroup(sketchTab_, QStringLiteral("OPCIONES"));
+    ribbon_->addAction(sketchTab_, constructionAction_);
+    ribbon_->addAction(sketchTab_, lockAction_);
+    ribbon_->addTrailing(sketchTab_, finishSketchAction_);
+    ribbon_->setTabVisible(sketchTab_, false);
+
+    QToolBar* ribbonBar = addToolBar(QStringLiteral("Cinta"));
+    ribbonBar->setObjectName(QStringLiteral("ribbonToolbar"));
+    ribbonBar->setMovable(false);
+    ribbonBar->setContentsMargins(0, 0, 0, 0);
+    ribbonBar->addWidget(ribbon_);
+
 
     QMenu* view = menuBar()->addMenu(QStringLiteral("&Ver"));
     decorate(view->addAction(QStringLiteral("Vista &inicial"), QKeySequence(Qt::Key_Home), this,
@@ -896,6 +895,11 @@ void MainWindow::updateSketchActions()
     extrudeAction_->setEnabled(!sketch_ && !picking && !tool_);
     revolveAction_->setEnabled(!sketch_ && !picking && !tool_);
     finishSketchAction_->setEnabled(sketch_ != nullptr);
+    if (ribbon_ && (sketch_ != nullptr) != ribbonSketching_) {
+        ribbonSketching_ = sketch_ != nullptr;
+        ribbon_->setTabVisible(sketchTab_, ribbonSketching_);
+        ribbon_->setCurrentTab(ribbonSketching_ ? sketchTab_ : solidTab_);
+    }
     lookAtSketchAction_->setEnabled(sketch_ != nullptr);
     for (const auto& [tool, action] : toolActions_) {
         action->setEnabled(sketch_ != nullptr);

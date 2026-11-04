@@ -29,6 +29,7 @@ class Viewport;
 namespace nuf::app {
 
 class FeatureTool;
+class Ribbon;
 class NavigatorWidget;
 class TimelineWidget;
 
@@ -114,6 +115,10 @@ private:
     };
     std::vector<ToolFamily> toolFamilies_;
     QLabel* sketchStatusLabel_ = nullptr;
+    Ribbon* ribbon_ = nullptr;
+    int solidTab_ = 0;
+    int sketchTab_ = 0;
+    bool ribbonSketching_ = false;
     QAction* createSketchAction_ = nullptr;
     QAction* extrudeAction_ = nullptr;
     QAction* revolveAction_ = nullptr;
