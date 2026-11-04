@@ -63,6 +63,8 @@ private:
     void cancel();
     void clearNavigation();
     void updateSketchActions();
+    void updateExportAction();
+    void exportBodies();
 
     // Operaciones sólidas.
     void startTool(std::unique_ptr<FeatureTool> tool);
@@ -87,6 +89,7 @@ private:
     QByteArray defaultLayout_; // distribución original, para "Restablecer paneles"
     QAction* undoAction_ = nullptr;
     QAction* redoAction_ = nullptr;
+    QAction* exportAction_ = nullptr;
 
     // Sketch en edición (nuevo o una operación del historial).
     std::unique_ptr<SketchSession> sketch_;

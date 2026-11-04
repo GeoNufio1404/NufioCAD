@@ -19,6 +19,8 @@ add_executable(nuf_app
     src/SelfCheck.hpp
     src/Theme.cpp
     src/Theme.hpp
+    src/ExportDialog.cpp
+    src/ExportDialog.hpp
     src/Icons.cpp
     src/NavBar.cpp
     src/NavBar.hpp

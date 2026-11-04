@@ -73,6 +73,18 @@ Un CAD paramétrico de escritorio para **Windows y Linux**, **offline y con arch
 - Órbita, pan y zoom estilo Fusion.
 - ViewCube.
 - Selección de caras y aristas con resaltado al pasar el cursor.
+- Barra de navegación flotante sobre el visor (inicio, ajustar, mirar al sketch, y herramientas Orbitar, Desplazar y Zoom).
+
+### Interfaz estilo Fusion 360 (transversal)
+
+Hecho (probado en Windows; en Linux falta compilar con `qt6-qtsvg`):
+- [x] Iconos SVG (Lucide, ISC) con nombre y tooltip en todas las acciones; se recolorean con el tema claro/oscuro en caliente.
+- [x] Cinta (*ribbon*) con pestañas **Sólido** y **Sketch** (contextual, aparece al editar un sketch), grupos con título, desplegables por familia que recuerdan la última variante y botón verde «Terminar sketch».
+- [x] Barra de navegación inferior flotante.
+- [x] Flecha de extrusión: ya no se suelta tras el primer paso y el arrastre va fluido (un valor por cuadro, la flecha se reutiliza).
+- [ ] Menú radial con clic derecho y atajos de una tecla para todo (hoy hay atajos de sketch, E y Mayús+P).
+- [ ] Valores editables junto al cursor también en Extruir/Revolución (hoy solo en el sketch y en el panel).
+- [ ] Rendimiento de la vista previa medido en Release (en Debug quedan ~25 ms por paso; Smart App Control de esta PC bloquea las DLL de OCCT en Release).
 
 ### Fase 2 — Sketcher 2D
 
@@ -198,12 +210,92 @@ pieza es solo el resultado. Se divide así:
 30. **Avisos**: suprimir la extrusión de la que salen un sketch en cara o una proyección → las fichas afectadas muestran «!» (motivo en el tooltip) y la barra de estado indica la primera con problemas.
 
 ### Fase 4 — Archivos y exportación
-- Formato nativo `.nuf` (offline y privado), guardando el historial.
-- Pantalla de inicio con diseños recientes.
-- Exportación a STL, OBJ y STEP (con control de calidad de malla).
-- Importación de STEP.
 
-> Hito: desde aquí ya es posible diseñar una pieza simple, exportarla e imprimirla.
+Parece mucho, pero son seis bloques que se pueden hacer y probar por separado. La parte realmente difícil es una sola: **4b, convertir el historial a JSON y volver a reconstruirlo igual**. El resto es sobre todo conectar piezas que OCCT, SQLite y Qt ya traen.
+
+| Bloque | Qué se obtiene | Tamaño | Necesita |
+|---|---|---|---|
+| **4a** Exportar | STL, OBJ y STEP desde Archivo › Exportar | Pequeño | Nada |
+| **4b** Serialización | Documento ↔ `.nuf` con pruebas, sin interfaz | **Grande** | Nada |
+| **4c** Guardar y abrir | Nuevo, Abrir, Guardar, Guardar como, avisos de cambios | Mediano | 4b |
+| **4d** Importar STEP | Sólidos de otros programas en el timeline | Mediano | 4b |
+| **4e** Pantalla de inicio | Recientes con miniatura | Mediano | 4c |
+| **4f** Recuperación | Autoguardado y restaurar tras un cierre inesperado | Pequeño | 4c |
+
+> Hitos: con **4a** ya se puede diseñar una pieza simple, exportarla e imprimirla (pero se pierde al cerrar). Con **4c** el flujo ya es de uso real. **4d–4f** son mejoras y pueden esperar a otras fases si hace falta.
+
+**Decisiones**
+
+| Tema | Decisión | Por qué |
+|---|---|---|
+| Biblioteca JSON | nlohmann/json (vcpkg `nlohmann-json`, Fedora `json-devel`, Ubuntu `nlohmann-json3-dev`) | Solo cabeceras, disponible en todos los entornos. Cierra la decisión abierta de la arquitectura (sección 9) |
+| Dónde vive la serialización | En `io/`, con funciones por tipo de operación; no como `save()`/`load()` en `Feature` | `document/` sigue sin depender de JSON. Cambia lo que esbozaba la sección 3 de la arquitectura |
+| Enumeraciones en el JSON | Como texto (`"Cut"`), nunca como número | Reordenar un `enum` en el código no debe cambiar el significado de archivos viejos |
+| Cuándo se escribe en el archivo | Solo al guardar, en una transacción. El archivo se abre para leer o guardar y se cierra enseguida | «No guardar» tiene que seguir funcionando. Además, un archivo abierto todo el rato choca con los bloqueos de Windows y OneDrive. Cambia el «cada cambio se escribe» de la sección 7: ese papel pasa a la copia de recuperación (4f) |
+| Geometría en el archivo | No se guarda: al abrir se recalcula el historial. Sin caché BREP en esta fase | Los parámetros son la fuente de verdad. La caché se agrega solo si abrir resulta lento |
+| Documentos abiertos | Uno por ventana: Nuevo y Abrir reemplazan el actual tras avisar | Las pestañas de varios diseños serían un trabajo aparte |
+
+**4a — Exportar** ✅ implementado (falta probarlo a mano y en Fedora/CI; ver notas al final del bloque)
+- Módulo `geometry/Exchange` (es el único que puede hablar con OCCT): `writeStl`, `writeObj`, `writeStep`, con enlace condicional a las bibliotecas de intercambio, porque se llaman distinto según la versión de OCCT (`TKDESTEP`/`TKDESTL` desde 7.8, `TKSTEP`/`TKSTL` antes). Hay que comprobarlo con el OCCT de Fedora y del CI de Ubuntu.
+- **Cuidado:** `BRepMesh` guarda la malla dentro de la forma, y esa forma la comparte con el visor. Se malla sobre una copia para que exportar no altere lo que se ve.
+- STL binario por defecto. OBJ con un escritor propio a partir de la triangulación (el de OCCT exige un documento XCAF, no vale la pena). STEP en mm con todos los cuerpos elegidos.
+- Diálogo **Exportar**: formato, cuerpos (por defecto los visibles), calidad de malla Baja/Media/Alta/Personalizada, número de triángulos antes de guardar y opción de un archivo por cuerpo. Se exporta el modelo en el punto donde está el marcador.
+- Desactivado mientras se edita un sketch o si no hay cuerpos.
+- Pruebas: el volumen de la malla coincide con el del sólido (dentro de la tolerancia); la malla es cerrada; STEP exportado y releído mantiene el volumen; rutas con acentos; el visor no cambia tras exportar.
+- **Hecho:** `geometry/Exchange` (`writeStl` binario y `writeObj` propios sobre la malla, `writeStep` con `STEPControl_Writer::WriteStream`, `countTriangles`, `meshVolume`), diálogo `ExportDialog` (formato, cuerpos, calidad Baja/Media/Alta, triángulos estimados, un archivo por cuerpo) y Archivo › Exportar activado cuando hay cuerpos y no se edita un sketch o herramienta. 7 pruebas nuevas (`tests/test_exchange.cpp`) pasan en Windows; el STEP solo se comprueba por su texto (no se relee).
+- **Pendiente de 4a:** calidad «Personalizada»; releer el STEP y comparar volumen (llega con la importación, 4d); compilar en Fedora y en el CI de Ubuntu (el enlace de STEP elige `TKDESTEP` o `TKSTEP` según la versión de OCCT, sin probar con la antigua); probar el diálogo a mano (pruebas 31–32).
+
+**4b — Serialización** (el corazón de la fase)
+
+Antes hay que preparar el modelo, porque hoy no se puede reconstruir desde fuera:
+- `Sketch::restore(...)`: hoy los ids y sus contadores son privados y `addConstraint` siempre asigna un id nuevo. Los ids deben conservarse tal cual y los contadores guardarse, porque no se reutilizan y los perfiles, ejes y vínculos apuntan a ellos.
+- `Document::restore(...)`: carga operaciones, marcador y `nextId_` de una vez, con un solo recálculo. Mantiene el mismo objeto, porque `MainWindow`, `CommandStack` y los paneles están conectados a él (además, insertar de una en una recalcularía de más).
+- Imagen de referencia: hoy solo vive en el visor y no llega al modelo, así que se perdería. Pasa a `SketchFeature` con posición y tamaño, y sus bytes van en `blobs`, para que el `.nuf` no dependa de que el archivo original siga ahí.
+
+Después, el formato:
+- `io/DocumentFile`: `saveDocument(Document, ruta)` y `loadDocument(ruta, Document)`, sobre `features`, `meta` y `blobs`, que ya existen en el esquema.
+- JSON por tipo: `Sketch` (las 7 geometrías, indicadores, `ModelLink`, restricciones), `SketchAttachment`, `ProfileRef`, `ExtrudeSpec`, `RevolveSpec`, `AxisRef`, `ElementRef`.
+- `meta`: nombre, marcador, `nextId`, unidades, versión de la app y estado de vista (cuerpos y sketches ocultos, origen, rejilla, cámara).
+- `Guardar` reescribe todas las filas en una transacción (atómica por SQLite). `Guardar como` sobre un archivo existente escribe en temporal y reemplaza, con reintentos si OneDrive lo tiene bloqueado, sin borrar nunca el original antes.
+- Comando `nuf-dump` para ver un `.nuf` como JSON, previsto en la arquitectura.
+- Pruebas:
+  - **Ida y vuelta:** guardar, abrir y comprobar mismas operaciones, mismos volúmenes y **mismos nombres de caras y aristas**, con cada variante de extruir, revolución, sketch en cara y lo proyectado vinculado.
+  - **Seguir editando tras abrir:** editar una operación pasada de un archivo reabierto y que las referencias se resuelvan; los ids nuevos no chocan con los viejos.
+  - **Archivos dañados:** JSON roto, tipo desconocido, referencia a un id inexistente → mensaje claro, nunca un cierre de la app.
+  - **Archivo de referencia** `tests/data/v1.nuf` en el repositorio: si un cambio futuro rompe el formato, la prueba falla. A partir de ahí, cambiar el esquema exige subir `user_version` y escribir una migración.
+
+**4c — Guardar y abrir**
+- Activar Nuevo, Abrir, Guardar y Guardar como (Ctrl+N, Ctrl+O, Ctrl+S, Ctrl+Mayús+S), que hoy existen desactivados.
+- Cambios sin guardar: `*` en el título; aviso Guardar / No guardar / Cancelar al cerrar, abrir o crear otro. `CommandStack` recuerda el punto guardado, para que deshacer hasta ahí vuelva a «sin cambios». Ocultar o mostrar cuerpos también cuenta como cambio.
+- Si hay un sketch o herramienta abiertos al guardar: ofrecer terminar y guardar, o cancelar. Lo que se está editando sin confirmar no se guarda a medias.
+- Al abrir: limpiar la pila de deshacer, reiniciar el estado de vista, recalcular con cursor de espera y mostrar la lista de operaciones con error. Un archivo con errores **se abre igual** (como en Fusion) y las operaciones quedan marcadas en el timeline.
+- `NufioCAD archivo.nuf` desde la línea de comandos y arrastrar un `.nuf` a la ventana.
+
+**4d — Importar STEP**
+- `geometry::readStep` con reparación (`ShapeFix`). Las caras se nombran `f<id>:?<n>` con el `Namer` que ya existe.
+- Nueva operación `ImportFeature`: una ficha más en el timeline, sin historial propio. Cada sólido es un cuerpo, así que la clave de cuerpo pasa de «f<id>» a admitir varios por operación.
+- La forma se guarda en `blobs` como BREP binario (`BinTools`), no como STEP: el archivo se analiza una sola vez y abrir es rápido.
+- Un cuerpo importado se usa como cualquier otro: sketches sobre sus caras, extruir, cortar y unir.
+
+**4e — Pantalla de inicio**
+- Panel superpuesto al visor vacío al arrancar (mismo mecanismo que la barra de navegación, para no recrear el contexto OpenGL), que desaparece con la primera acción.
+- Recientes con miniatura, nombre y fecha; también en Archivo › Recientes. Lista en `QSettings`; los archivos que ya no existen aparecen marcados y se pueden quitar.
+- Miniatura: `Viewport` renderiza una imagen al guardar y va en `blobs`. Se lee sin recalcular el modelo, así que la lista carga al instante.
+
+**4f — Recuperación**
+- Cada minuto, si hay cambios, una copia en `QStandardPaths::AppDataLocation/recuperacion/`. Nunca se toca el archivo del usuario.
+- Se borra al guardar o cerrar bien. Si al arrancar queda alguna: ofrecer Restaurar / Descartar.
+
+**Fuera de esta fase:** caché de geometría, pestañas con varios documentos, nombres de cuerpos en el STEP (requiere XDE), importar STL/OBJ, y asociar `.nuf` al sistema (va con el instalador).
+
+**Pruebas manuales al terminar (Fase 4)**
+
+31. **Exportar STL**: pieza con un agujero → Archivo › Exportar → calidad Alta → abrir en el slicer: cerrada y en mm.
+32. **Exportar STEP y reimportar**: el mismo volumen, y aparece una ficha «Importación» en el timeline.
+33. **Guardar y reabrir**: pieza con sketch en cara, corte y proyección → Ctrl+S → cerrar → abrir: mismo modelo, mismo timeline, y doble clic en una operación pasada sigue editándola.
+34. **Cambios sin guardar**: editar → aparece `*` y avisa al cerrar; Ctrl+Z hasta el punto guardado → desaparece.
+35. **Archivo entre sistemas**: un `.nuf` guardado en Windows abre igual en Fedora, y al revés.
+36. **Recuperación**: editar, esperar más de un minuto, matar el proceso, abrir → ofrece restaurar.
 
 ### Fase 5 — Operaciones de acabado
 - Chaflán y fillet.
@@ -246,7 +338,10 @@ pieza es solo el resultado. Se divide así:
 |---|---|
 | Hoja de ruta | ✅ Aprobada |
 | Fase 0 | ✅ Completa — mockups, formatos de archivo, arquitectura, entorno (repositorio con CMake, vcpkg, pruebas y CI) y nombre de trabajo NufioCAD |
-| Fase 1 | 🚧 Implementada y probada en Linux (Fedora): visor OCCT en Qt, órbita/pan/zoom estilo Fusion, ViewCube, resaltado y selección de caras y aristas. Falta probarla en Windows |
+| Fase 1 | ✅ Implementada y probada en Linux (Fedora) y Windows (MSVC + vcpkg + Qt 6.8.3, build Debug): visor OCCT en Qt, órbita/pan/zoom estilo Fusion, ViewCube, resaltado y selección de caras y aristas, barra de navegación con Orbitar/Desplazar/Zoom |
+| Interfaz Fusion | 🚧 Iconos, cinta con pestañas Sólido/Sketch, barra de navegación y tema en caliente hechos (ver sección «Interfaz estilo Fusion 360»). Pendiente: menú radial, valores junto al cursor en Extruir, y verificar en Fedora |
+| Windows | 🚧 Compila (MSVC), las pruebas pasan y la app abre y funciona en Debug. Pendiente: pasar las pruebas manuales 1–30 en Windows y el build Release (Smart App Control bloquea las DLL sin firmar de OCCT en esta PC) |
 | Fase 2 | 🚧 Implementada (2a–2d) — sketch completo: dibujo con variantes, elipse, spline y cónica; restricciones (incluida G2), cotas y valores junto al cursor; selección (también por rectángulo), deshacer, arrastre y perfiles; edición (recortar, extender, partir, empalme, chaflán, desfase, simetría, patrones, mover/copiar/girar/escalar); proyectar aristas, intersección, texto, imagen de referencia e importar DXF; los sketches terminados se guardan, sus perfiles y curvas se seleccionan en la vista 3D y se reabren con doble clic. Pendiente: las pruebas manuales de abajo y probar en Windows. Limitaciones: lo proyectado y el texto quedan bloqueados (no se actualizan con la pieza ni se editan como texto hasta la Fase 3); recortar/extender/partir y desfase trabajan con líneas, arcos y círculos; los patrones son copias independientes |
 | Fase 3 | 🚧 Implementada (3a–3c) — núcleo paramétrico con nombres estables de caras y aristas; sketches en el historial (sobre planos de origen o caras que siguen a la pieza); Extruir (todas sus variantes, empujar una cara) y Revolución con vista previa y flecha; timeline editable (editar, marcador, reordenar, suprimir, borrar, renombrar), navegador y deshacer/rehacer; lo proyectado sigue a su arista. Pendiente: las pruebas manuales 20–30 y probar en Windows. Limitaciones: los cuerpos que participan en unir/cortar son todos los que toca (sin elegirlos); «hasta una cara» solo con caras planas; el ángulo de la revolución se escribe en el panel (sin flecha) |
-| Fases 4–9 | Pendientes |
+| Fase 4 | 🚧 4a (Exportar STL/OBJ/STEP) implementada y con pruebas; 4b–4f sin empezar. El archivo `.nuf` es solo el esqueleto: `NufFile` crea/abre el `.nuf` (SQLite, esquema, tabla meta) con pruebas, y Nuevo/Abrir/Guardar siguen desactivados. Siguiente paso: 4b (serialización) |
+| Fases 5–9 | Pendientes (chaflán/fillet, shell, agujeros, patrones y espejo de sólidos, parámetros, generadores, ensambles, medición) |

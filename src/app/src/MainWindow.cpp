@@ -1,5 +1,6 @@
 #include "MainWindow.hpp"
 
+#include "ExportDialog.hpp"
 #include "FeatureTools.hpp"
 #include "Icons.hpp"
 #include "ModelPanels.hpp"
@@ -9,11 +10,15 @@
 
 #include <nuf/commands/FeatureCommands.hpp>
 #include <nuf/commands/RenameDocument.hpp>
+#include <nuf/geometry/Exchange.hpp>
 #include <nuf/geometry/Kernel.hpp>
 #include <nuf/io/NufFile.hpp>
 #include <nuf/render/Viewport.hpp>
 
 #include <QAction>
+#include <QFileInfo>
+#include <QDir>
+#include <QApplication>
 #include <QActionGroup>
 #include <QCloseEvent>
 #include <QDockWidget>
@@ -31,6 +36,7 @@
 #include <QToolBar>
 
 #include <algorithm>
+#include <filesystem>
 #include <memory>
 #include <tuple>
 #include <utility>
@@ -178,7 +184,7 @@ void MainWindow::createMenus()
     setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
     setIconSize(QSize(24, 24));
     QMenu* file = menuBar()->addMenu(QStringLiteral("&Archivo"));
-    // Fase 4: estas acciones se conectan al formato .nuf y a la exportación.
+    // Fase 4: Nuevo, Abrir y Guardar se conectan al formato .nuf (bloque 4c).
     for (const auto& [text, shortcut, icon] : {
              std::tuple{QStringLiteral("&Nuevo diseño"), QKeySequence(QKeySequence::New), QStringLiteral("file-new")},
              std::tuple{QStringLiteral("&Abrir…"), QKeySequence(QKeySequence::Open), QStringLiteral("file-open")},
@@ -188,6 +194,10 @@ void MainWindow::createMenus()
         action->setShortcut(shortcut);
         action->setEnabled(false);
         decorate(action, icon);
+        if (icon == QStringLiteral("file-export")) {
+            exportAction_ = action;
+            connect(action, &QAction::triggered, this, &MainWindow::exportBodies);
+        }
     }
     file->addSeparator();
     file->addAction(QStringLiteral("&Salir"), QKeySequence(QKeySequence::Quit), this, &QWidget::close);
@@ -825,6 +835,107 @@ bool MainWindow::sketchVisible(document::FeatureId id, std::size_t upTo) const
     return true;
 }
 
+void MainWindow::updateExportAction()
+{
+    if (exportAction_ != nullptr) {
+        exportAction_->setEnabled(!sketch_ && !tool_ && !document_.result().bodies.empty());
+    }
+}
+
+void MainWindow::exportBodies()
+{
+    const std::vector<document::Body>& bodies = document_.result().bodies;
+    std::vector<std::string> shown;
+    for (const document::Body& body : bodies) {
+        if (!hiddenBodies_.contains(body.key)) {
+            shown.push_back(body.key);
+        }
+    }
+    ExportDialog dialog(bodies, shown, this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    const QString extension = ExportDialog::extension(dialog.format());
+    const QString filter = QStringLiteral("%1 (*.%2)").arg(extension.toUpper(), extension);
+    const std::vector<std::size_t> chosen = dialog.selected();
+    const QString suggested = QString::fromStdString(document_.name());
+
+    // Una lista de (archivo, cuerpos) según «un archivo por cuerpo».
+    std::vector<std::pair<QString, std::vector<geometry::Shape>>> jobs;
+    if (dialog.onePerBody() && chosen.size() > 1) {
+        const QString folder = QFileDialog::getExistingDirectory(this, QStringLiteral("Carpeta donde exportar"));
+        if (folder.isEmpty()) {
+            return;
+        }
+        for (std::size_t index : chosen) {
+            const QString name = QString::fromStdString(bodies[index].name);
+            jobs.push_back({QDir(folder).filePath(name + QLatin1Char('.') + extension), {bodies[index].shape}});
+        }
+    } else {
+        QString path = QFileDialog::getSaveFileName(this, QStringLiteral("Exportar"), suggested + QLatin1Char('.') + extension,
+                                                    filter);
+        if (path.isEmpty()) {
+            return;
+        }
+        if (QFileInfo(path).suffix().isEmpty()) {
+            path += QLatin1Char('.') + extension;
+        }
+        std::vector<geometry::Shape> shapes;
+        for (std::size_t index : chosen) {
+            shapes.push_back(bodies[index].shape);
+        }
+        jobs.push_back({path, std::move(shapes)});
+    }
+
+    // «Un archivo por cuerpo» no pregunta cada nombre: avisa antes de pisar.
+    if (jobs.size() > 1) {
+        QStringList existing;
+        for (const auto& job : jobs) {
+            if (QFileInfo::exists(job.first)) {
+                existing << QFileInfo(job.first).fileName();
+            }
+        }
+        if (!existing.isEmpty()
+            && QMessageBox::question(this, QStringLiteral("Exportar"),
+                                     QStringLiteral("Ya existen y se reemplazarán:\n%1")
+                                         .arg(existing.join(QLatin1Char('\n'))))
+                   != QMessageBox::Yes) {
+            return;
+        }
+    }
+
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    QString error;
+    try {
+        for (const auto& [path, shapes] : jobs) {
+            const std::filesystem::path out = path.toStdU16String();
+            switch (dialog.format()) {
+            case ExportDialog::Format::Stl:
+                geometry::writeStl(out, shapes, dialog.quality());
+                break;
+            case ExportDialog::Format::Obj:
+                geometry::writeObj(out, shapes, dialog.quality());
+                break;
+            case ExportDialog::Format::Step:
+                geometry::writeStep(out, shapes);
+                break;
+            }
+        }
+    } catch (const std::exception& e) {
+        error = QString::fromUtf8(e.what());
+    }
+    QApplication::restoreOverrideCursor();
+
+    if (!error.isEmpty()) {
+        QMessageBox::warning(this, QStringLiteral("Exportar"), error);
+    } else {
+        statusBar()->showMessage(jobs.size() == 1 ? QStringLiteral("Exportado a %1").arg(QDir::toNativeSeparators(jobs.front().first))
+                                                  : QStringLiteral("Exportados %1 archivos").arg(jobs.size()),
+                                 8000);
+    }
+}
+
 void MainWindow::refreshModel()
 {
     if (!viewport_ || !timeline_ || !navigator_ || !modelStatusLabel_) {
@@ -832,6 +943,7 @@ void MainWindow::refreshModel()
     }
     const std::size_t upTo = shownUpTo();
     const document::ModelState& state = document_.stateBefore(upTo);
+    updateExportAction();
 
     // Con una herramienta activa, ella muestra su vista previa.
     if (!tool_) {
@@ -941,6 +1053,7 @@ void MainWindow::cancel()
 
 void MainWindow::updateSketchActions()
 {
+    updateExportAction();
     const bool picking = viewport_->isPickingSketchPlane();
     createSketchAction_->setEnabled(!sketch_ && !picking && !tool_);
     extrudeAction_->setEnabled(!sketch_ && !picking && !tool_);
