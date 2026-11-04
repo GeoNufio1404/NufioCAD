@@ -3,6 +3,7 @@
 #include "FeatureTools.hpp"
 #include "Icons.hpp"
 #include "ModelPanels.hpp"
+#include "NavBar.hpp"
 #include "Ribbon.hpp"
 #include "Theme.hpp"
 
@@ -437,15 +438,18 @@ void MainWindow::createMenus()
 
 
     QMenu* view = menuBar()->addMenu(QStringLiteral("&Ver"));
-    decorate(view->addAction(QStringLiteral("Vista &inicial"), QKeySequence(Qt::Key_Home), this,
-                             [this] { viewport_->resetView(); }),
-             QStringLiteral("view-home"));
-    decorate(view->addAction(QStringLiteral("&Ajustar a la ventana"), QKeySequence(Qt::Key_F6), this,
-                             [this] { viewport_->fitAll(); }),
-             QStringLiteral("view-fit"));
+    QAction* homeAction = view->addAction(QStringLiteral("Vista &inicial"), QKeySequence(Qt::Key_Home), this,
+                                          [this] { viewport_->resetView(); });
+    decorate(homeAction, QStringLiteral("view-home"), QStringLiteral("Vista isométrica de todo el modelo"));
+    QAction* fitAction = view->addAction(QStringLiteral("&Ajustar a la ventana"), QKeySequence(Qt::Key_F6), this,
+                                         [this] { viewport_->fitAll(); });
+    decorate(fitAction, QStringLiteral("view-fit"), QStringLiteral("Encuadrar todo el modelo en la ventana"));
     lookAtSketchAction_ = view->addAction(QStringLiteral("&Mirar al sketch"), this,
                                           [this] { viewport_->lookAtSketch(); });
-    decorate(lookAtSketchAction_, QStringLiteral("look-at-sketch"));
+    decorate(lookAtSketchAction_, QStringLiteral("look-at-sketch"),
+             QStringLiteral("Orientar la cámara de frente al plano del sketch"));
+    // Barra flotante sobre el visor, como la de navegación de Fusion 360.
+    new NavBar(viewport_, {homeAction, fitAction, lookAtSketchAction_});
     updateSketchActions();
     view->addSeparator();
     QMenu* panels = view->addMenu(QStringLiteral("&Paneles"));

@@ -20,6 +20,8 @@ add_executable(nuf_app
     src/Theme.cpp
     src/Theme.hpp
     src/Icons.cpp
+    src/NavBar.cpp
+    src/NavBar.hpp
     src/Ribbon.cpp
     src/Ribbon.hpp
     src/Icons.hpp
