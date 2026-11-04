@@ -758,7 +758,9 @@ public:
 
     void showDistanceHandle(const sketch::Vec3& origin, const sketch::Vec3& direction, double distance)
     {
-        hideDistanceHandle();
+        // Se redibuja en cada paso de un arrastre (la vista previa lo pide al
+        // cambiar la distancia): no se debe cortar el arrastre en curso.
+        removeHandle();
         handleOrigin = toPnt(origin);
         handleDirection = toDir(direction);
         handleDistance = distance;
@@ -783,11 +785,16 @@ public:
 
     void hideDistanceHandle()
     {
+        removeHandle();
+        handleDragging = false;
+    }
+
+    void removeHandle()
+    {
         if (!handle.IsNull()) {
             context->Remove(handle, false);
             handle.Nullify();
         }
-        handleDragging = false;
     }
 
     // Parámetro sobre el eje de la flecha del punto más cercano al rayo del píxel.
