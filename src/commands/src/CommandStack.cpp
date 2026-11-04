@@ -16,6 +16,10 @@ void CommandStack::push(std::unique_ptr<Command> command)
         throw std::invalid_argument("CommandStack::push recibió un comando nulo");
     }
     command->execute(doc_);
+    // Si el punto guardado estaba en lo que se podía rehacer, ya no existe.
+    if (savedDepth_ && *savedDepth_ > done_.size()) {
+        savedDepth_.reset();
+    }
     done_.push_back(std::move(command));
     undone_.clear();
     changed.notify();
@@ -59,6 +63,7 @@ void CommandStack::clear() noexcept
 {
     done_.clear();
     undone_.clear();
+    savedDepth_.reset();
     changed.notify();
 }
 

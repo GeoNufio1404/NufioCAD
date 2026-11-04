@@ -127,19 +127,23 @@ MainWindow::MainWindow(QWidget* parent)
         } else {
             hiddenBodies_.insert(key);
         }
+        setViewDirty(true);
         refreshModel();
     });
     connect(navigator_, &NavigatorWidget::sketchVisibilityChanged, this, [this](document::FeatureId id, bool visible) {
         sketchVisibility_[id] = visible;
+        setViewDirty(true);
         refreshModel();
     });
     connect(navigator_, &NavigatorWidget::originVisibilityChanged, this, [this](bool visible) {
         originVisible_ = visible;
+        setViewDirty(true);
         viewport_->setOriginVisible(visible);
     });
     connect(navigator_, &NavigatorWidget::sketchActivated, this, &MainWindow::editSketch);
     connect(navigator_, &NavigatorWidget::groundVisibilityChanged, this, [this](bool visible) {
         groundVisible_ = visible;
+        setViewDirty(true);
         viewport_->setGroundVisible(visible);
     });
     connect(viewport_, &render::Viewport::sketchCursorMoved, this, [this](bool hasPoint, double x, double y) {
@@ -152,7 +156,11 @@ MainWindow::MainWindow(QWidget* parent)
         updateTitle();
         refreshModel();
     });
-    commands_.changed.connect([this] { updateUndoActions(); });
+    commands_.changed.connect([this] {
+        updateUndoActions();
+        updateTitle();
+    });
+    setAcceptDrops(true);
     updateTitle();
     updateUndoActions();
     refreshModel();
@@ -172,6 +180,10 @@ MainWindow::~MainWindow() = default;
 
 void MainWindow::closeEvent(QCloseEvent* event)
 {
+    if (!maybeSave()) {
+        event->ignore();
+        return;
+    }
     QSettings settings;
     settings.setValue(QStringLiteral("ui/geometry"), saveGeometry());
     settings.setValue(QStringLiteral("ui/layout"), saveState(kLayoutVersion));
@@ -184,21 +196,26 @@ void MainWindow::createMenus()
     setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
     setIconSize(QSize(24, 24));
     QMenu* file = menuBar()->addMenu(QStringLiteral("&Archivo"));
-    // Fase 4: Nuevo, Abrir y Guardar se conectan al formato .nuf (bloque 4c).
-    for (const auto& [text, shortcut, icon] : {
-             std::tuple{QStringLiteral("&Nuevo diseño"), QKeySequence(QKeySequence::New), QStringLiteral("file-new")},
-             std::tuple{QStringLiteral("&Abrir…"), QKeySequence(QKeySequence::Open), QStringLiteral("file-open")},
-             std::tuple{QStringLiteral("&Guardar"), QKeySequence(QKeySequence::Save), QStringLiteral("file-save")},
-             std::tuple{QStringLiteral("&Exportar…"), QKeySequence(), QStringLiteral("file-export")}}) {
+    const auto addFile = [&](const QString& text, const QKeySequence& shortcut, const QString& icon, auto slot) {
         QAction* action = file->addAction(text);
         action->setShortcut(shortcut);
-        action->setEnabled(false);
         decorate(action, icon);
-        if (icon == QStringLiteral("file-export")) {
-            exportAction_ = action;
-            connect(action, &QAction::triggered, this, &MainWindow::exportBodies);
-        }
-    }
+        connect(action, &QAction::triggered, this, slot);
+        return action;
+    };
+    addFile(QStringLiteral("&Nuevo diseño"), QKeySequence(QKeySequence::New), QStringLiteral("file-new"),
+            &MainWindow::newDocument);
+    addFile(QStringLiteral("&Abrir…"), QKeySequence(QKeySequence::Open), QStringLiteral("file-open"),
+            &MainWindow::openDocument);
+    file->addSeparator();
+    addFile(QStringLiteral("&Guardar"), QKeySequence(QKeySequence::Save), QStringLiteral("file-save"),
+            [this] { saveDocument(); });
+    addFile(QStringLiteral("Guardar &como…"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_S),
+            QStringLiteral("file-save"), [this] { saveDocumentAs(); });
+    file->addSeparator();
+    exportAction_ = addFile(QStringLiteral("&Exportar…"), QKeySequence(), QStringLiteral("file-export"),
+                            &MainWindow::exportBodies);
+    exportAction_->setEnabled(false);
     file->addSeparator();
     file->addAction(QStringLiteral("&Salir"), QKeySequence(QKeySequence::Quit), this, &QWidget::close);
 
@@ -579,7 +596,8 @@ void MainWindow::updateUndoActions()
 
 void MainWindow::updateTitle()
 {
-    setWindowTitle(QString::fromStdString(document_.name()));
+    setWindowTitle(QString::fromStdString(document_.name()) + QStringLiteral("[*]"));
+    setWindowModified(hasUnsavedWork());
 }
 
 void MainWindow::createSketch()

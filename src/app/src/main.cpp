@@ -66,5 +66,13 @@ int main(int argc, char* argv[])
 
     nuf::app::MainWindow window;
     window.show();
+    // NufioCAD archivo.nuf (también lo que pasa el sistema al abrir un .nuf).
+    const QStringList arguments = QApplication::arguments();
+    for (int i = 1; i < arguments.size(); ++i) {
+        if (!arguments[i].startsWith(QLatin1Char('-'))) {
+            window.openFromCommandLine(arguments[i]);
+            break;
+        }
+    }
     return QApplication::exec();
 }

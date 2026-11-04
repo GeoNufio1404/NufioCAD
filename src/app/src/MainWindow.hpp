@@ -3,6 +3,7 @@
 #include <nuf/commands/CommandStack.hpp>
 #include <nuf/document/Document.hpp>
 #include <nuf/document/Features.hpp>
+#include <nuf/io/DocumentFile.hpp>
 #include <nuf/sketch/Plane.hpp>
 
 #include "SketchSession.hpp"
@@ -10,6 +11,7 @@
 #include <QByteArray>
 #include <QMainWindow>
 
+#include <filesystem>
 #include <map>
 #include <memory>
 #include <optional>
@@ -18,6 +20,8 @@
 #include <vector>
 
 class QAction;
+class QDragEnterEvent;
+class QDropEvent;
 class QActionGroup;
 class QDockWidget;
 class QLabel;
@@ -44,14 +48,34 @@ public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override;
 
+    // Abre el archivo dado en la línea de comandos.
+    void openFromCommandLine(const QString& file);
+
 protected:
     void closeEvent(QCloseEvent* event) override;
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
 
 private:
     void createMenus();
     void createDocks();
     void updateUndoActions();
     void updateTitle();
+
+    // Archivo (MainWindowFiles.cpp).
+    bool hasUnsavedWork() const;
+    void setViewDirty(bool dirty);
+    bool isEditing() const;
+    io::ViewState currentView() const;
+    void applyView(const io::ViewState& view);
+    void abandonEditing();
+    bool maybeSave();
+    void newDocument();
+    void openDocument();
+    bool openPath(const std::filesystem::path& path);
+    bool saveDocument();
+    bool saveDocumentAs();
+    bool writeTo(const std::filesystem::path& path);
 
     void createSketch();
     void startSketch(const sketch::Plane& plane, const QString& description,
@@ -105,6 +129,8 @@ private:
     std::map<document::FeatureId, bool> sketchVisibility_;  // elegida a mano
     bool originVisible_ = false;
     bool groundVisible_ = true;
+    bool viewDirty_ = false;          // visibilidad cambiada desde el último guardado
+    std::filesystem::path path_;      // vacío = diseño sin guardar
     // Sketches a la vista, para rehacer solo los que cambian.
     struct ShownSketch {
         const sketch::Sketch* sketch = nullptr;

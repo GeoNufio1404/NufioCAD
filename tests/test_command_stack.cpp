@@ -70,3 +70,37 @@ TEST_CASE("El documento notifica cada cambio", "[commands]")
     REQUIRE(notifications == 2);
     REQUIRE(doc.revision() == 2);
 }
+
+TEST_CASE("Punto guardado: limpio al volver a él, sucio si se pierde", "[commands]")
+{
+    Document doc;
+    CommandStack stack(doc);
+    REQUIRE(stack.isClean());  // sin cambios
+
+    stack.push(std::make_unique<RenameDocument>("a"));
+    REQUIRE_FALSE(stack.isClean());
+    stack.markSaved();
+    REQUIRE(stack.isClean());
+
+    stack.push(std::make_unique<RenameDocument>("b"));
+    REQUIRE_FALSE(stack.isClean());
+    stack.undo();
+    REQUIRE(stack.isClean());  // deshacer hasta el guardado
+    stack.redo();
+    REQUIRE_FALSE(stack.isClean());
+    stack.undo();
+
+    // Un cambio nuevo descarta lo rehacible: el estado guardado sigue en el pasado.
+    stack.undo();  // por debajo del guardado
+    REQUIRE_FALSE(stack.isClean());
+    stack.push(std::make_unique<RenameDocument>("c"));
+    REQUIRE_FALSE(stack.isClean());
+    stack.undo();
+    REQUIRE_FALSE(stack.isClean());  // el punto guardado ya no existe
+
+    // Tras abrir otro diseño: se vacía y se marca limpio.
+    stack.clear();
+    REQUIRE_FALSE(stack.isClean());
+    stack.markSaved();
+    REQUIRE(stack.isClean());
+}
