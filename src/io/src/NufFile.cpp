@@ -200,6 +200,98 @@ std::optional<std::string> NufFile::meta(std::string_view key) const
     return std::string(text != nullptr ? text : "");
 }
 
+void NufFile::begin()
+{
+    exec(db_, "BEGIN;", "No se pudo iniciar la transacción");
+}
+
+void NufFile::commit()
+{
+    exec(db_, "COMMIT;", "No se pudo guardar el archivo");
+}
+
+void NufFile::rollback() noexcept
+{
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+}
+
+namespace {
+
+using Stmt = std::unique_ptr<sqlite3_stmt, decltype(&sqlite3_finalize)>;
+
+Stmt prepare(sqlite3* db, const char* sql, const char* context)
+{
+    sqlite3_stmt* raw = nullptr;
+    if (sqlite3_prepare_v2(db, sql, -1, &raw, nullptr) != SQLITE_OK) {
+        fail(db, context);
+    }
+    return Stmt(raw, &sqlite3_finalize);
+}
+
+std::string columnText(sqlite3_stmt* stmt, int column)
+{
+    const auto* text = reinterpret_cast<const char*>(sqlite3_column_text(stmt, column));
+    return text != nullptr ? std::string(text, std::size_t(sqlite3_column_bytes(stmt, column))) : std::string();
+}
+
+void bindText(sqlite3_stmt* stmt, int index, const std::string& value)
+{
+    sqlite3_bind_text(stmt, index, value.data(), static_cast<int>(value.size()), SQLITE_TRANSIENT);
+}
+
+} // namespace
+
+void NufFile::writeFeatures(const std::vector<FeatureRow>& rows)
+{
+    exec(db_, "DELETE FROM features;", "No se pudo escribir las operaciones");
+    Stmt stmt = prepare(db_, "INSERT INTO features(id, position, type, name, suppressed, params) VALUES(?1,?2,?3,?4,?5,?6);",
+                        "No se pudo escribir las operaciones");
+    int position = 0;
+    for (const FeatureRow& row : rows) {
+        sqlite3_reset(stmt.get());
+        sqlite3_bind_int64(stmt.get(), 1, row.id);
+        sqlite3_bind_int(stmt.get(), 2, position++);
+        bindText(stmt.get(), 3, row.type);
+        bindText(stmt.get(), 4, row.name);
+        sqlite3_bind_int(stmt.get(), 5, row.suppressed ? 1 : 0);
+        bindText(stmt.get(), 6, row.params);
+        if (sqlite3_step(stmt.get()) != SQLITE_DONE) {
+            fail(db_, "No se pudo escribir las operaciones");
+        }
+    }
+}
+
+std::vector<FeatureRow> NufFile::readFeatures() const
+{
+    Stmt stmt = prepare(db_, "SELECT id, type, name, suppressed, params FROM features ORDER BY position;",
+                        "No se pudo leer las operaciones");
+    std::vector<FeatureRow> rows;
+    int rc = 0;
+    while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
+        FeatureRow row;
+        row.id = sqlite3_column_int64(stmt.get(), 0);
+        row.type = columnText(stmt.get(), 1);
+        row.name = columnText(stmt.get(), 2);
+        row.suppressed = sqlite3_column_int(stmt.get(), 3) != 0;
+        row.params = columnText(stmt.get(), 4);
+        rows.push_back(std::move(row));
+    }
+    if (rc != SQLITE_DONE) {
+        fail(db_, "No se pudo leer las operaciones");
+    }
+    return rows;
+}
+
+std::vector<std::pair<std::string, std::string>> NufFile::allMeta() const
+{
+    Stmt stmt = prepare(db_, "SELECT key, value FROM meta ORDER BY key;", "No se pudo leer meta");
+    std::vector<std::pair<std::string, std::string>> entries;
+    while (sqlite3_step(stmt.get()) == SQLITE_ROW) {
+        entries.emplace_back(columnText(stmt.get(), 0), columnText(stmt.get(), 1));
+    }
+    return entries;
+}
+
 std::string NufFile::sqliteVersion()
 {
     return sqlite3_libversion();

@@ -282,6 +282,48 @@ Sketch::Sketch()
     addEntity(Line{{0.0, 0.0}, {0.0, 1.0}}, true, true);
 }
 
+Sketch Sketch::restore(std::vector<Entity> entities, std::vector<Constraint> constraints,
+                       EntityId nextEntityId, ConstraintId nextConstraintId)
+{
+    Sketch result;
+    result.entities_ = std::move(entities);
+    result.constraints_ = std::move(constraints);
+    result.nextEntityId_ = nextEntityId;
+    result.nextConstraintId_ = nextConstraintId;
+
+    for (std::size_t i = 0; i < result.entities_.size(); ++i) {
+        const EntityId id = result.entities_[i].id;
+        if (id == 0 || id >= nextEntityId) {
+            invalid("Entidad con id fuera de rango");
+        }
+        for (std::size_t j = 0; j < i; ++j) {
+            if (result.entities_[j].id == id) {
+                invalid("Entidad con id repetido");
+            }
+        }
+    }
+    // El origen y los ejes siempre están.
+    for (EntityId reference : {kOrigin, kAxisX, kAxisY}) {
+        const Entity* e = result.entity(reference);
+        if (e == nullptr || !e->reference) {
+            invalid("Falta el origen o un eje del sketch");
+        }
+    }
+    for (std::size_t i = 0; i < result.constraints_.size(); ++i) {
+        const Constraint& c = result.constraints_[i];
+        if (c.id == 0 || c.id >= nextConstraintId) {
+            invalid("Restricción con id fuera de rango");
+        }
+        for (std::size_t j = 0; j < i; ++j) {
+            if (result.constraints_[j].id == c.id) {
+                invalid("Restricción con id repetido");
+            }
+        }
+        result.validate(c);
+    }
+    return result;
+}
+
 EntityId Sketch::addEntity(Geometry geometry, bool construction, bool reference)
 {
     Entity added;

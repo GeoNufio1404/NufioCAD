@@ -28,6 +28,7 @@ endif()
 # ---------------------------------------------------------------------------
 find_package(OpenCASCADE CONFIG REQUIRED)
 find_package(SQLite3 REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 message(STATUS "OpenCASCADE ${OpenCASCADE_VERSION}")
 message(STATUS "SQLite ${SQLite3_VERSION}")
 

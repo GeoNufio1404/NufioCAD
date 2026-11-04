@@ -245,19 +245,19 @@ Parece mucho, pero son seis bloques que se pueden hacer y probar por separado. L
 - **Hecho:** `geometry/Exchange` (`writeStl` binario y `writeObj` propios sobre la malla, `writeStep` con `STEPControl_Writer::WriteStream`, `countTriangles`, `meshVolume`), diálogo `ExportDialog` (formato, cuerpos, calidad Baja/Media/Alta, triángulos estimados, un archivo por cuerpo) y Archivo › Exportar activado cuando hay cuerpos y no se edita un sketch o herramienta. 7 pruebas nuevas (`tests/test_exchange.cpp`) pasan en Windows; el STEP solo se comprueba por su texto (no se relee).
 - **Pendiente de 4a:** calidad «Personalizada»; releer el STEP y comparar volumen (llega con la importación, 4d); compilar en Fedora y en el CI de Ubuntu (el enlace de STEP elige `TKDESTEP` o `TKSTEP` según la versión de OCCT, sin probar con la antigua); probar el diálogo a mano (pruebas 31–32).
 
-**4b — Serialización** (el corazón de la fase)
+**4b — Serialización** ✅ implementado (sin interfaz: se usa desde 4c)
 
 Antes hay que preparar el modelo, porque hoy no se puede reconstruir desde fuera:
 - `Sketch::restore(...)`: hoy los ids y sus contadores son privados y `addConstraint` siempre asigna un id nuevo. Los ids deben conservarse tal cual y los contadores guardarse, porque no se reutilizan y los perfiles, ejes y vínculos apuntan a ellos.
 - `Document::restore(...)`: carga operaciones, marcador y `nextId_` de una vez, con un solo recálculo. Mantiene el mismo objeto, porque `MainWindow`, `CommandStack` y los paneles están conectados a él (además, insertar de una en una recalcularía de más).
-- Imagen de referencia: hoy solo vive en el visor y no llega al modelo, así que se perdería. Pasa a `SketchFeature` con posición y tamaño, y sus bytes van en `blobs`, para que el `.nuf` no dependa de que el archivo original siga ahí.
+- ~~Imagen de referencia~~ **Descartado:** la imagen solo se muestra mientras se edita el sketch y se quita al terminarlo (no forma parte del modelo), así que no se guarda. Si algún día debe persistir, irá en `blobs`.
 
 Después, el formato:
 - `io/DocumentFile`: `saveDocument(Document, ruta)` y `loadDocument(ruta, Document)`, sobre `features`, `meta` y `blobs`, que ya existen en el esquema.
 - JSON por tipo: `Sketch` (las 7 geometrías, indicadores, `ModelLink`, restricciones), `SketchAttachment`, `ProfileRef`, `ExtrudeSpec`, `RevolveSpec`, `AxisRef`, `ElementRef`.
 - `meta`: nombre, marcador, `nextId`, unidades, versión de la app y estado de vista (cuerpos y sketches ocultos, origen, rejilla, cámara).
 - `Guardar` reescribe todas las filas en una transacción (atómica por SQLite). `Guardar como` sobre un archivo existente escribe en temporal y reemplaza, con reintentos si OneDrive lo tiene bloqueado, sin borrar nunca el original antes.
-- Comando `nuf-dump` para ver un `.nuf` como JSON, previsto en la arquitectura.
+- Comando para ver un `.nuf` como JSON: `NufioCAD --dump archivo.nuf`.
 - Pruebas:
   - **Ida y vuelta:** guardar, abrir y comprobar mismas operaciones, mismos volúmenes y **mismos nombres de caras y aristas**, con cada variante de extruir, revolución, sketch en cara y lo proyectado vinculado.
   - **Seguir editando tras abrir:** editar una operación pasada de un archivo reabierto y que las referencias se resuelvan; los ids nuevos no chocan con los viejos.
@@ -287,6 +287,9 @@ Después, el formato:
 - Se borra al guardar o cerrar bien. Si al arrancar queda alguna: ofrecer Restaurar / Descartar.
 
 **Fuera de esta fase:** caché de geometría, pestañas con varios documentos, nombres de cuerpos en el STEP (requiere XDE), importar STL/OBJ, y asociar `.nuf` al sistema (va con el instalador).
+
+- **Hecho en 4b:** `Sketch::restore` y `Document::restore`; `io/DocumentFile` (`saveDocument`, `loadDocument`, `dumpDocument`); `NufFile` con transacciones y filas de operaciones; nlohmann-json en vcpkg, CI y README; archivo de referencia `tests/data/v1.nuf` (se regenera solo a propósito con `NUF_WRITE_REFERENCE=1`). 11 pruebas nuevas: ida y vuelta con nombres de caras/aristas idénticos, seguir editando tras abrir, operación que falla al abrir, 8 tipos de archivo dañado, guardado atómico y volcado.
+- **Pendiente de 4b:** la cámara no se guarda (solo qué está oculto o visible); compilar en Fedora y el CI de Ubuntu (nlohmann-json es nueva ahí); el reemplazo del archivo al guardar (con reintentos) solo se ha probado en Windows, sin OneDrive bloqueándolo.
 
 **Pruebas manuales al terminar (Fase 4)**
 
@@ -343,5 +346,5 @@ Después, el formato:
 | Windows | 🚧 Compila (MSVC), las pruebas pasan y la app abre y funciona en Debug. Pendiente: pasar las pruebas manuales 1–30 en Windows y el build Release (Smart App Control bloquea las DLL sin firmar de OCCT en esta PC) |
 | Fase 2 | 🚧 Implementada (2a–2d) — sketch completo: dibujo con variantes, elipse, spline y cónica; restricciones (incluida G2), cotas y valores junto al cursor; selección (también por rectángulo), deshacer, arrastre y perfiles; edición (recortar, extender, partir, empalme, chaflán, desfase, simetría, patrones, mover/copiar/girar/escalar); proyectar aristas, intersección, texto, imagen de referencia e importar DXF; los sketches terminados se guardan, sus perfiles y curvas se seleccionan en la vista 3D y se reabren con doble clic. Pendiente: las pruebas manuales de abajo y probar en Windows. Limitaciones: lo proyectado y el texto quedan bloqueados (no se actualizan con la pieza ni se editan como texto hasta la Fase 3); recortar/extender/partir y desfase trabajan con líneas, arcos y círculos; los patrones son copias independientes |
 | Fase 3 | 🚧 Implementada (3a–3c) — núcleo paramétrico con nombres estables de caras y aristas; sketches en el historial (sobre planos de origen o caras que siguen a la pieza); Extruir (todas sus variantes, empujar una cara) y Revolución con vista previa y flecha; timeline editable (editar, marcador, reordenar, suprimir, borrar, renombrar), navegador y deshacer/rehacer; lo proyectado sigue a su arista. Pendiente: las pruebas manuales 20–30 y probar en Windows. Limitaciones: los cuerpos que participan en unir/cortar son todos los que toca (sin elegirlos); «hasta una cara» solo con caras planas; el ángulo de la revolución se escribe en el panel (sin flecha) |
-| Fase 4 | 🚧 4a (Exportar STL/OBJ/STEP) implementada y con pruebas; 4b–4f sin empezar. El archivo `.nuf` es solo el esqueleto: `NufFile` crea/abre el `.nuf` (SQLite, esquema, tabla meta) con pruebas, y Nuevo/Abrir/Guardar siguen desactivados. Siguiente paso: 4b (serialización) |
+| Fase 4 | 🚧 4a (Exportar STL/OBJ/STEP) y 4b (serialización del documento a `.nuf`, con pruebas) implementadas; 4c–4f sin empezar. Nuevo/Abrir/Guardar siguen desactivados. Siguiente paso: 4c (Guardar y abrir en la interfaz) |
 | Fases 5–9 | Pendientes (chaflán/fillet, shell, agujeros, patrones y espejo de sólidos, parámetros, generadores, ensambles, medición) |

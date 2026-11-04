@@ -58,6 +58,14 @@ public:
     // Reserva un id (para una vista previa que luego se agrega).
     FeatureId reserveId() { return nextId_++; }
 
+    // Sustituye todo el contenido (al abrir un archivo) con un solo
+    // recálculo y sin cambiar el objeto, para que lo conectado a él siga
+    // funcionando. Lanza std::invalid_argument si hay ids repetidos o nulos.
+    void restore(std::string name, std::vector<std::unique_ptr<Feature>> features, std::size_t marker,
+                 FeatureId nextId);
+    // Siguiente id libre (se guarda en el archivo).
+    FeatureId nextId() const noexcept { return nextId_; }
+
     // --- Resultado ---
     // El modelo tras la última operación activa.
     const ModelState& result() const;

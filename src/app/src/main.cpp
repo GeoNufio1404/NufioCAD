@@ -2,16 +2,30 @@
 #include "SelfCheck.hpp"
 #include "Theme.hpp"
 
+#include <nuf/io/DocumentFile.hpp>
 #include <nuf/render/Viewport.hpp>
 
 #include <QApplication>
 #include <QIcon>
 
+#include <filesystem>
 #include <iostream>
 #include <string_view>
 
 int main(int argc, char* argv[])
 {
+    // --dump archivo.nuf: imprime el diseño como JSON legible (depuración).
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::string_view(argv[i]) == "--dump") {
+            try {
+                std::cout << nuf::io::dumpDocument(std::filesystem::path(argv[i + 1])) << '\n';
+                return 0;
+            } catch (const std::exception& e) {
+                std::cerr << e.what() << '\n';
+                return 1;
+            }
+        }
+    }
     // --self-check: verifica Qt, OCCT y SQLite sin abrir ventanas.
     for (int i = 1; i < argc; ++i) {
         if (std::string_view(argv[i]) == "--self-check") {

@@ -43,7 +43,7 @@ las distribuciones solo trae GLX.
 NufioCAD/
 ├── CMakeLists.txt         proyecto raíz
 ├── CMakePresets.json      un preset por sistema (Linux / Windows)
-├── vcpkg.json             dependencias con versión fijada (OCCT, Eigen, SQLite, Catch2)
+├── vcpkg.json             dependencias con versión fijada (OCCT, Eigen, SQLite, nlohmann-json, Catch2)
 ├── cmake/                 funciones comunes (advertencias, bibliotecas)
 ├── src/
 │   ├── geometry/          adaptador de OpenCASCADE (único que lo incluye)
@@ -71,7 +71,7 @@ usa como `nuf::<módulo>` en CMake. El núcleo (`geometry`, `document`,
 
 ```bash
 sudo dnf install gcc-c++ cmake ninja-build git \
-    opencascade-devel qt6-qtbase-devel qt6-qtsvg-devel sqlite-devel eigen3-devel catch-devel
+    opencascade-devel qt6-qtbase-devel qt6-qtsvg-devel sqlite-devel json-devel eigen3-devel catch-devel
 ```
 
 Si CMake reporta que falta TBB al configurar, instala también `tbb-devel`.

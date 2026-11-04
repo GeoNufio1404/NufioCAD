@@ -242,6 +242,14 @@ public:
 
     Sketch();
 
+    // Reconstruye un sketch guardado conservando los ids y sus contadores (no
+    // se reutilizan: lo que apunta a ellos —perfiles, ejes, vínculos— sigue
+    // valiendo). Lanza std::invalid_argument si los datos no son coherentes.
+    static Sketch restore(std::vector<Entity> entities, std::vector<Constraint> constraints,
+                          EntityId nextEntityId, ConstraintId nextConstraintId);
+    EntityId nextEntityId() const noexcept { return nextEntityId_; }
+    ConstraintId nextConstraintId() const noexcept { return nextConstraintId_; }
+
     EntityId addPoint(Vec2 position, bool construction = false);
     EntityId addLine(Vec2 start, Vec2 end, bool construction = false);
     EntityId addCircle(Vec2 center, double radius, bool construction = false);

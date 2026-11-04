@@ -295,6 +295,30 @@ std::string Document::defaultName(FeatureKind kind) const
     return label + std::to_string(highest + 1);
 }
 
+void Document::restore(std::string name, std::vector<std::unique_ptr<Feature>> features, std::size_t marker,
+                       FeatureId nextId)
+{
+    FeatureId highest = 0;
+    for (std::size_t i = 0; i < features.size(); ++i) {
+        if (!features[i] || features[i]->id() == 0) {
+            throw std::invalid_argument("Operación sin id");
+        }
+        for (std::size_t j = 0; j < i; ++j) {
+            if (features[j]->id() == features[i]->id()) {
+                throw std::invalid_argument("Hay dos operaciones con el mismo id");
+            }
+        }
+        highest = std::max(highest, features[i]->id());
+    }
+    name_ = std::move(name);
+    features_ = std::move(features);
+    states_.assign(features_.size(), ModelState{});
+    statuses_.assign(features_.size(), FeatureStatus{});
+    marker_ = std::min(marker, features_.size());
+    nextId_ = std::max(nextId, highest + 1);
+    recomputeFrom(0);
+}
+
 const ModelState& Document::result() const
 {
     return marker_ == 0 ? empty_ : states_[marker_ - 1];

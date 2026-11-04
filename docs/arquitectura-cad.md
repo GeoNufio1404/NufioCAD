@@ -211,7 +211,7 @@ redundantes y en conflicto y los grados de libertad restantes.
 | Tema | Opciones | Cuándo |
 |---|---|---|
 | Recálculo en segundo plano | Hilo de trabajo para no congelar la UI | Cuando los modelos lo pidan (Fase 5+) |
-| Biblioteca JSON | Ej. nlohmann/json | Fase 4 |
+| ~~Biblioteca JSON~~ | **nlohmann/json** (decidido en la Fase 4) | — |
 
 ---
 

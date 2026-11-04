@@ -8,6 +8,7 @@
     "opencascade",
     "eigen3",
     "sqlite3",
+    "nlohmann-json",
     "catch2"
   ]
 }

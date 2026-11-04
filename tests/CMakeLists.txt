@@ -7,6 +7,7 @@ add_executable(nuf_tests
     test_modeling.cpp
     test_document_model.cpp
     test_nuf_file.cpp
+    test_document_file.cpp
     test_sketch.cpp
     test_sketch_pick.cpp
     test_sketch_plane.cpp
@@ -20,6 +21,7 @@ add_executable(nuf_tests
     test_sketch_tools_2b.cpp)
 
 nuf_set_warnings(nuf_tests)
+target_compile_definitions(nuf_tests PRIVATE NUF_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 target_link_libraries(nuf_tests PRIVATE
     nuf::document
     nuf::commands
