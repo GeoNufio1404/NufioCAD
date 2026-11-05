@@ -34,6 +34,7 @@ class Viewport;
 namespace nuf::app {
 
 class FeatureTool;
+class Recovery;
 class Ribbon;
 class StartScreen;
 class NavigatorWidget;
@@ -51,6 +52,8 @@ public:
 
     // Abre el archivo dado en la línea de comandos.
     void openFromCommandLine(const QString& file);
+    // Si quedó una copia de una sesión que se cerró mal, ofrece restaurarla.
+    void offerRecovery();
 
 protected:
     void closeEvent(QCloseEvent* event) override;
@@ -73,7 +76,9 @@ private:
     bool maybeSave();
     void newDocument();
     void openDocument();
-    bool openPath(const std::filesystem::path& path);
+    // `recovered`: es una copia de recuperación; `original` es de dónde venía.
+    bool openPath(const std::filesystem::path& path, bool recovered = false, const std::filesystem::path& original = {});
+    void saveRecovery();
     bool saveDocument();
     bool saveDocumentAs();
     bool writeTo(const std::filesystem::path& path);
@@ -123,6 +128,7 @@ private:
     QAction* exportAction_ = nullptr;
     QAction* importAction_ = nullptr;
     QMenu* recentMenu_ = nullptr;
+    std::unique_ptr<Recovery> recovery_;
     StartScreen* startScreen_ = nullptr;
     bool startDismissed_ = false;  // la pantalla de inicio solo sale al arrancar
 

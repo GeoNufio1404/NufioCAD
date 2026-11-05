@@ -2,6 +2,7 @@
 
 #include "MainWindow.hpp"
 #include "ModelPanels.hpp"
+#include "Recovery.hpp"
 #include "StartScreen.hpp"
 
 #include <nuf/commands/FeatureCommands.hpp>
@@ -13,6 +14,7 @@
 #include <QApplication>
 #include <QBuffer>
 #include <QImage>
+#include <QLocale>
 #include <QMenu>
 #include <QCloseEvent>
 #include <QDir>
@@ -167,6 +169,7 @@ void MainWindow::newDocument()
         return;
     }
     abandonEditing();
+    recovery_->discard();
     startDismissed_ = true;
     document_.restore("Sin título", {}, 0, 1);
     applyView(io::ViewState{});
@@ -190,7 +193,7 @@ void MainWindow::openDocument()
     }
 }
 
-bool MainWindow::openPath(const std::filesystem::path& path)
+bool MainWindow::openPath(const std::filesystem::path& path, bool recovered, const std::filesystem::path& original)
 {
     abandonEditing();
     io::ViewState view;
@@ -211,10 +214,13 @@ bool MainWindow::openPath(const std::filesystem::path& path)
     applyView(view);
     commands_.clear();
     commands_.markSaved();
-    path_ = path;
-    viewDirty_ = false;
-    rememberDirectory(fromPath(path));
-    RecentFiles::add(fromPath(path));
+    path_ = recovered ? original : path;
+    viewDirty_ = recovered;  // lo recuperado sigue sin guardarse
+    if (!recovered) {
+        recovery_->discard();
+        rememberDirectory(fromPath(path));
+        RecentFiles::add(fromPath(path));
+    }
     updateTitle();
     refreshModel();
     viewport_->fitAll();
@@ -323,6 +329,7 @@ bool MainWindow::writeTo(const std::filesystem::path& path)
     path_ = path;
     commands_.markSaved();
     viewDirty_ = false;
+    recovery_->discard();
     rememberDirectory(fromPath(path));
     RecentFiles::add(fromPath(path));
     updateTitle();
@@ -422,6 +429,42 @@ void MainWindow::dropEvent(QDropEvent* event)
             }, Qt::QueuedConnection);
             return;
         }
+    }
+}
+
+void MainWindow::saveRecovery()
+{
+    if (hasUnsavedWork()) {
+        recovery_->write(document_, currentView(), QString::fromStdU16String(path_.u16string()));
+    } else {
+        recovery_->discard();
+    }
+}
+
+void MainWindow::offerRecovery()
+{
+    const std::vector<Recovery::Orphan> orphans = Recovery::orphans();
+    if (orphans.empty() || hasUnsavedWork() || !path_.empty()) {
+        return;
+    }
+    const Recovery::Orphan& newest = orphans.front();
+    const QString name = newest.name.isEmpty() ? QStringLiteral("Sin título") : newest.name;
+    QMessageBox box(QMessageBox::Question, QStringLiteral("NufioCAD"),
+                    QStringLiteral("La sesión anterior se cerró sin guardar «%1».").arg(name), QMessageBox::NoButton, this);
+    box.setInformativeText(QStringLiteral("Hay una copia de recuperación del %1. ¿Quieres restaurarla?")
+                               .arg(QLocale().toString(newest.when, QLocale::ShortFormat)));
+    QPushButton* restore = box.addButton(QStringLiteral("Restaurar"), QMessageBox::AcceptRole);
+    QPushButton* discard = box.addButton(QStringLiteral("Descartar"), QMessageBox::DestructiveRole);
+    box.addButton(QStringLiteral("Decidir después"), QMessageBox::RejectRole);
+    box.setDefaultButton(restore);
+    box.exec();
+    if (box.clickedButton() == static_cast<QAbstractButton*>(restore)) {
+        if (openPath(newest.file, true, newest.original.isEmpty() ? std::filesystem::path{} : toPath(newest.original))) {
+            Recovery::remove(newest);
+            statusBar()->showMessage(QStringLiteral("Diseño restaurado: guárdalo para no perderlo otra vez"), 15000);
+        }
+    } else if (box.clickedButton() == static_cast<QAbstractButton*>(discard)) {
+        Recovery::remove(newest);
     }
 }
 

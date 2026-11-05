@@ -25,6 +25,8 @@ add_executable(nuf_app
     src/Icons.cpp
     src/NavBar.cpp
     src/NavBar.hpp
+    src/Recovery.cpp
+    src/Recovery.hpp
     src/Ribbon.cpp
     src/StartScreen.cpp
     src/StartScreen.hpp

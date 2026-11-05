@@ -74,5 +74,6 @@ int main(int argc, char* argv[])
             break;
         }
     }
+    window.offerRecovery();
     return QApplication::exec();
 }

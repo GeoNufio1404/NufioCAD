@@ -5,6 +5,7 @@
 #include "Icons.hpp"
 #include "ModelPanels.hpp"
 #include "NavBar.hpp"
+#include "Recovery.hpp"
 #include "StartScreen.hpp"
 #include "Ribbon.hpp"
 #include "Theme.hpp"
@@ -33,6 +34,7 @@
 #include <QMessageBox>
 #include <QScrollArea>
 #include <QSettings>
+#include <QTimer>
 #include <QStatusBar>
 #include <QToolBar>
 
@@ -162,6 +164,14 @@ MainWindow::MainWindow(QWidget* parent)
         updateTitle();
     });
     setAcceptDrops(true);
+    // Copia de recuperación cada minuto si hay cambios sin guardar.
+    recovery_ = std::make_unique<Recovery>();
+    bool secondsOk = false;
+    const int seconds = qEnvironmentVariableIntValue("NUF_RECOVERY_SECONDS", &secondsOk);
+    auto* recoveryTimer = new QTimer(this);
+    recoveryTimer->setInterval((secondsOk && seconds > 0 ? seconds : 60) * 1000);
+    connect(recoveryTimer, &QTimer::timeout, this, &MainWindow::saveRecovery);
+    recoveryTimer->start();
     updateTitle();
     updateUndoActions();
     refreshModel();
@@ -185,6 +195,7 @@ void MainWindow::closeEvent(QCloseEvent* event)
         event->ignore();
         return;
     }
+    recovery_->discard();  // cierre normal: no hace falta la copia
     QSettings settings;
     settings.setValue(QStringLiteral("ui/geometry"), saveGeometry());
     settings.setValue(QStringLiteral("ui/layout"), saveState(kLayoutVersion));
