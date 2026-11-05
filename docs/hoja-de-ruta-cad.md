@@ -394,6 +394,11 @@ Todas siguen el patrón de las operaciones actuales: una clase en `document/Feat
 
 ---
 
+### Fase de pruebas (manual, transversal)
+Guía paso a paso para probar cada fase y dar feedback: [`guia-de-pruebas.md`](guia-de-pruebas.md) (con plantilla para reportar). Se hace fase por fase cuando haya tiempo; lo que salga se anota aquí como pendiente de la fase correspondiente.
+
+**Convención:** cada bloque termina con su línea «**Pendiente de …**» (lo que no se hizo, lo que no se probó a mano, límites conocidos). Todo pendiente nuevo se documenta ahí al cerrar el bloque, y al hacer la segunda auditoría de código se repasan todos.
+
 ## Notas de planificación
 
 - **Orden:** la Fase 4 va justo después del modelado básico para tener un flujo útil de punta a punta lo antes posible; cada fase siguiente agrega valor real.
