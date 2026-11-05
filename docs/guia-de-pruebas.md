@@ -200,9 +200,7 @@ Necesitas un cuerpo (la caja de 40×25×10 de «Antes de empezar»). Los botones
 
 **Fíjate en:** ¿los avisos se entienden sin explicación? ¿Hay falsos avisos (te avisa de una pared que no existe)? ¿Echas de menos que señale dónde está el problema en la vista? ¿Los valores de tu impresora son los correctos (anota tu modelo)?
 
-## Fase 9 (pendiente de implementar)
-
-Aún no existe; cuando se implemente agregaré sus pruebas aquí.
+Medición, análisis de sección y el botón «Imprimir» (abrir el slicer): se agregan aquí cuando se implementen.
 
 ---
 
