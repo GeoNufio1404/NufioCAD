@@ -395,6 +395,14 @@ Todas siguen el patrón de las operaciones actuales: una clase en `document/Feat
 - Control de calidad de malla al exportar.
 - Posible envío directo al slicer.
 
+### Fase 10 — Herramientas generadoras (tipo MakerLab)
+Asistentes que hacen preguntas («redonda o rectangular», grosor de paredes, grosor del frente, profundidad, alto, ancho…) y **generan un diseño normal** en el timeline, con las respuestas como parámetros con nombre: se puede seguir editando con el CAD después. Un solo motor, dos entradas: tarjeta «Herramientas» junto a «Diseñar desde cero» sobre el lienzo vacío, y pestaña HERRAMIENTAS en la cinta.
+- **10a Base común:** formulario de preguntas con vista previa en vivo (esperando a que se deje de escribir) y generación del historial con parámetros; resultado agrupado en un componente.
+- **10b Lightbox** rectangular y redonda: forma, medidas, paredes, frente, tapa trasera con holgura, agujero para cable, canal para tira LED.
+- **10c Caja con tapa** y otras piezas geométricas (carcasas, soportes, bisagras).
+- **10d Con texto:** letreros y llaveros.
+- **Más adelante (aparte):** litofanías y relieves desde imagen (mallas, camino fuera de OpenCASCADE) y letreros multicolor (requiere exportar 3MF).
+
 ---
 
 ### Fase de pruebas (manual, transversal)
