@@ -170,7 +170,6 @@ void MainWindow::newDocument()
     }
     abandonEditing();
     recovery_->discard();
-    startDismissed_ = true;
     document_.restore("Sin título", {}, 0, 1);
     applyView(io::ViewState{});
     commands_.clear();

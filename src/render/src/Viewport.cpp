@@ -94,6 +94,7 @@
 #include <cstring>
 #include <map>
 #include <numbers>
+#include <set>
 #include <optional>
 #include <tuple>
 #include <utility>
@@ -732,8 +733,34 @@ public:
         context->Display(toolEdges, AIS_WireFrame, -1, false);
     }
 
+    void showToolFaces(const geometry::Shape& body, const std::vector<int>& faces)
+    {
+        if (!toolFaces.IsNull()) {
+            context->Remove(toolFaces, false);
+            toolFaces.Nullify();
+        }
+        if (body.isNull() || faces.empty()) {
+            return;
+        }
+        TopoDS_Compound compound;
+        BRep_Builder builder;
+        builder.MakeCompound(compound);
+        for (int index : faces) {
+            builder.Add(compound, geometry::faceAt(body, index));
+        }
+        toolFaces = new AIS_Shape(compound);
+        toolFaces->SetColor(rgb(0x2F, 0x80, 0xED));
+        toolFaces->SetTransparency(0.45);
+        toolFaces->Attributes()->SetFaceBoundaryDraw(false);
+        context->Display(toolFaces, AIS_Shaded, -1, false);
+    }
+
     void clearToolPreview()
     {
+        if (!toolFaces.IsNull()) {
+            context->Remove(toolFaces, false);
+            toolFaces.Nullify();
+        }
         if (!toolEdges.IsNull()) {
             context->Remove(toolEdges, false);
             toolEdges.Nullify();
@@ -1018,6 +1045,72 @@ public:
         }
     }
 
+    // Medida de 12.50 mm como «12.5» (sin ceros de sobra).
+    static std::string formatMeasure(double value)
+    {
+        char text[32];
+        std::snprintf(text, sizeof(text), "%.2f", value);
+        std::string result = text;
+        while (!result.empty() && result.back() == '0') {
+            result.pop_back();
+        }
+        if (!result.empty() && result.back() == '.') {
+            result.pop_back();
+        }
+        return result;
+    }
+
+    // Largo de cada línea, Ø de cada círculo y R de cada arco, para tener
+    // referencia del tamaño sin tener que acotar. Lo que ya tiene una cota
+    // propia no se repite, y lo proyectado (cientos de curvas) ni la
+    // construcción se rotulan.
+    void addMeasures(const sketch::Sketch& sketch, const Quantity_Color& color, const Quantity_Color& box)
+    {
+        std::set<sketch::EntityId> dimensioned;
+        for (const sketch::Constraint& c : sketch.constraints()) {
+            if (c.type == sketch::ConstraintType::Distance || c.type == sketch::ConstraintType::Radius
+                || c.type == sketch::ConstraintType::Diameter) {
+                dimensioned.insert(c.first.entity);
+            }
+        }
+        const double gap = 14.0 * annotationScale;      // separación de la curva, en mm
+        const double minimum = 24.0 * annotationScale;  // una línea más corta no cabe con su texto
+        int shown = 0;
+        for (const sketch::Entity& e : sketch.entities()) {
+            if (e.reference || e.locked || e.construction || dimensioned.contains(e.id)) {
+                continue;
+            }
+            if (++shown > 200) {
+                break;
+            }
+            if (const auto* line = std::get_if<sketch::Line>(&e.geometry)) {
+                const double dx = line->end.x - line->start.x;
+                const double dy = line->end.y - line->start.y;
+                const double length = std::hypot(dx, dy);
+                if (length < minimum) {
+                    continue;
+                }
+                const sketch::Vec2 middle{(line->start.x + line->end.x) / 2.0 - dy / length * gap,
+                                          (line->start.y + line->end.y) / 2.0 + dx / length * gap};
+                drawing->addText(middle, formatMeasure(length), color, box);
+            } else if (const auto* circle = std::get_if<sketch::Circle>(&e.geometry)) {
+                constexpr double kDiagonal = 0.70710678118654752;
+                const double reach = (circle->radius + gap) * kDiagonal;
+                drawing->addText({circle->center.x + reach, circle->center.y + reach},
+                                 "\xC3\x98" + formatMeasure(2.0 * circle->radius), color, box);
+            } else if (const auto* arc = std::get_if<sketch::Arc>(&e.geometry)) {
+                double sweep = arc->endAngle - arc->startAngle;
+                while (sweep < 0.0) {
+                    sweep += 2.0 * std::numbers::pi;
+                }
+                const double middle = arc->startAngle + sweep / 2.0;
+                drawing->addText({arc->center.x + (arc->radius + gap) * std::cos(middle),
+                                  arc->center.y + (arc->radius + gap) * std::sin(middle)},
+                                 "R" + formatMeasure(arc->radius), color, box);
+            }
+        }
+    }
+
     // Vuelve a dibujar el último sketch mostrado (también al cambiar el zoom,
     // porque las anotaciones se colocan en píxeles).
     void rebuildSketch()
@@ -1121,6 +1214,9 @@ public:
                 drawing->addGeometry(line, {color, 1.0});
             }
             drawing->addText(note.anchor, note.text, color, box);
+        }
+        if (measuresVisible) {
+            addMeasures(sketch, dimmed, box);
         }
         context->Redisplay(drawing, false);
     }
@@ -1338,6 +1434,7 @@ public:
     std::vector<sketch::EntityId> shownUnderconstrained;
     SketchHighlight shownHighlight;
     double annotationScale = 0.0;
+    bool measuresVisible = true;
     bool leftPressed = false;
     Viewport::NavigationMode navMode = Viewport::NavigationMode::Default;
     std::map<document::FeatureId, FinishedSketch> finished;
@@ -1682,6 +1779,7 @@ private:
     Viewport& widget_;
     Handle(AIS_Shape) toolPreview;
     Handle(AIS_Shape) toolEdges;
+    Handle(AIS_Shape) toolFaces;
     gp_Pnt handleOrigin;
     gp_Dir handleDirection;
     gp_Dir handleBuiltDirection;  // con la que se construyó la flecha mostrada
@@ -1817,6 +1915,14 @@ void Viewport::setGroundVisible(bool visible)
     update();
 }
 
+void Viewport::setSketchMeasuresVisible(bool visible)
+{
+    impl_->measuresVisible = visible;
+    impl_->rebuildSketch();
+    impl_->view->Invalidate();
+    update();
+}
+
 void Viewport::setOriginVisible(bool visible)
 {
     impl_->originShown = visible;
@@ -1844,6 +1950,13 @@ void Viewport::showToolPreview(const geometry::Shape& tool, bool removes)
 void Viewport::showToolEdges(const geometry::Shape& body, const std::vector<int>& edges)
 {
     impl_->showToolEdges(body, edges);
+    impl_->view->Invalidate();
+    update();
+}
+
+void Viewport::showToolFaces(const geometry::Shape& body, const std::vector<int>& faces)
+{
+    impl_->showToolFaces(body, faces);
     impl_->view->Invalidate();
     update();
 }

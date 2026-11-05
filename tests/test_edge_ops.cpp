@@ -170,3 +170,99 @@ TEST_CASE("Redondeo y chaflán se guardan y se abren con el mismo resultado", "[
     REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(doc.result().bodies.front().shape.volume(), 1e-9));
     REQUIRE(reopened.result().bodies.front().shape.faceCount() == doc.result().bodies.front().shape.faceCount());
 }
+
+// --- Vaciado ---------------------------------------------------------------------
+
+namespace {
+
+geometry::ElementRef topFaceOf(const Document& doc)
+{
+    const geometry::Shape& body = doc.result().bodies.front().shape;
+    for (int i = 0; i < body.faceCount(); ++i) {
+        if (const auto plane = body.facePlane(i); plane && plane->normal.z > 0.9) {
+            return body.faceRef(i);
+        }
+    }
+    return {};
+}
+
+FeatureId addShell(Document& doc, double thickness, bool outward, std::vector<geometry::ElementRef> faces)
+{
+    auto f = std::make_unique<ShellFeature>();
+    f->thickness = thickness;
+    f->outward = outward;
+    f->faces = std::move(faces);
+    return doc.addFeature(std::move(f));
+}
+
+int countNamed(const geometry::Shape& body, const std::string& prefix)
+{
+    int n = 0;
+    for (int i = 0; i < body.faceCount(); ++i) {
+        n += body.faceName(i).starts_with(prefix) ? 1 : 0;
+    }
+    return n;
+}
+
+} // namespace
+
+TEST_CASE("Vaciar una caja por arriba deja una copa de paredes del espesor pedido", "[shell]")
+{
+    Document doc = boxDocument();
+    const FeatureId id = addShell(doc, 1.0, false, {topFaceOf(doc)});
+    REQUIRE(doc.status(id).health == Health::Ok);
+    REQUIRE(doc.result().bodies.size() == 1);
+    const geometry::Shape& body = doc.result().bodies.front().shape;
+    REQUIRE(body.isValid());
+    // 20×10×5 menos la cavidad de 18×8×4.
+    REQUIRE_THAT(body.volume(), WithinRel(1000.0 - 18.0 * 8.0 * 4.0, 1e-6));
+    const std::string tag = "f" + std::to_string(id);
+    REQUIRE(countNamed(body, tag + ":interior:") == 5);
+    // Las 5 caras de fuera siguen, las 5 interiores son nuevas y el borde de la abertura conserva su nombre.
+    REQUIRE(body.faceCount() == 11);
+    REQUIRE(countNamed(body, "f2:") == 6);
+}
+
+TEST_CASE("Vaciar hacia fuera y los casos que no se pueden", "[shell]")
+{
+    Document outward = boxDocument();
+    const FeatureId o = addShell(outward, 1.0, true, {topFaceOf(outward)});
+    REQUIRE(outward.status(o).health == Health::Ok);
+    REQUIRE(outward.result().bodies.front().shape.isValid());
+    // La cavidad es la caja original; las paredes quedan fuera de ella.
+    REQUIRE(outward.result().bodies.front().shape.volume() > 400.0);
+    REQUIRE(outward.result().bodies.front().shape.volume() < 1000.0);
+
+    Document doc = boxDocument();
+    const double before = doc.result().bodies.front().shape.volume();
+    const FeatureId tooThick = addShell(doc, 6.0, false, {topFaceOf(doc)});
+    REQUIRE(doc.status(tooThick).health == Health::Error);
+    REQUIRE_THAT(doc.result().bodies.front().shape.volume(), WithinRel(before, 1e-9));
+    REQUIRE(doc.status(addShell(doc, 1.0, false, {})).health == Health::Error);
+    REQUIRE(doc.status(addShell(doc, 0.0, false, {topFaceOf(doc)})).health == Health::Error);
+}
+
+TEST_CASE("El vaciado sigue a la pieza, se guarda y se abre", "[shell][io]")
+{
+    Document doc = boxDocument(5.0);
+    const FeatureId id = addShell(doc, 1.0, false, {topFaceOf(doc)});
+    REQUIRE(doc.status(id).health == Health::Ok);
+
+    auto taller = std::unique_ptr<Feature>(doc.findFeature(2)->clone());
+    static_cast<ExtrudeFeature&>(*taller).spec.side1.distance = 8.0;
+    doc.replaceFeature(2, std::move(taller));
+    REQUIRE(doc.status(id).health == Health::Ok);
+    REQUIRE_THAT(doc.result().bodies.front().shape.volume(), WithinRel(20.0 * 10.0 * 8.0 - 18.0 * 8.0 * 7.0, 1e-6));
+
+    const auto path = std::filesystem::temp_directory_path() / "nuf_vaciado.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    REQUIRE(reopened.findFeature(id)->kind() == FeatureKind::Shell);
+    REQUIRE(reopened.status(id).health == Health::Ok);
+    REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(doc.result().bodies.front().shape.volume(), 1e-9));
+    REQUIRE(reopened.result().bodies.front().shape.faceCount() == doc.result().bodies.front().shape.faceCount());
+}

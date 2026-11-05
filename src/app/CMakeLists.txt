@@ -27,6 +27,8 @@ add_executable(nuf_app
     src/NavBar.hpp
     src/Recovery.cpp
     src/Recovery.hpp
+    src/CrashHandler.cpp
+    src/CrashHandler.hpp
     src/Ribbon.cpp
     src/StartScreen.cpp
     src/StartScreen.hpp
@@ -48,3 +50,6 @@ target_link_libraries(nuf_app PRIVATE
     nuf::geometry
     nuf::io
     nuf::sketch)
+if(WIN32)
+    target_link_libraries(nuf_app PRIVATE dbghelp)
+endif()

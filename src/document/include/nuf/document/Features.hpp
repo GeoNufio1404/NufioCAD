@@ -1,6 +1,6 @@
 #pragma once
 
-// Operaciones concretas: sketch, extruir, revolución, importar, redondeo y chaflán.
+// Operaciones concretas: sketch, extruir, revolución, importar, redondeo, chaflán y vaciado.
 
 #include <nuf/document/Feature.hpp>
 #include <nuf/geometry/Modeling.hpp>
@@ -148,6 +148,20 @@ protected:
     {
         return geometry::chamfer(tag, body, indices, size);
     }
+};
+
+// Vaciado de un cuerpo: las caras elegidas quedan abiertas y el resto se
+// convierte en paredes del espesor dado.
+class ShellFeature final : public Feature {
+public:
+    std::vector<geometry::ElementRef> faces;  // las que se quitan
+    double thickness = 1.0;                   // mm
+    bool outward = false;                     // las paredes crecen hacia fuera
+
+    FeatureKind kind() const override { return FeatureKind::Shell; }
+    std::unique_ptr<Feature> clone() const override { return std::make_unique<ShellFeature>(*this); }
+    std::optional<std::string> compute(ModelState& state) const override;
+    std::vector<FeatureId> dependencies() const override;
 };
 
 // Sólidos que vienen de otro programa (STEP). Guarda el BREP ya reparado, no el

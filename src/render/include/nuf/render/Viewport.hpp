@@ -98,6 +98,9 @@ public:
 
     // Planos de origen siempre a la vista (no solo al elegir el plano).
     void setOriginVisible(bool visible);
+    // Rotula en el sketch el largo de las líneas y el Ø o R de círculos y arcos
+    // (lo que no tiene cota propia).
+    void setSketchMeasuresVisible(bool visible);
     // Rejilla del suelo (plano XY) fuera del sketch.
     void setGroundVisible(bool visible);
 
@@ -107,6 +110,8 @@ public:
     void showToolPreview(const geometry::Shape& tool, bool removes);
     // Resalta aristas de un cuerpo (por índice) en azul; clearToolPreview() las quita.
     void showToolEdges(const geometry::Shape& body, const std::vector<int>& edges);
+    // Resalta caras de un cuerpo (por índice) en azul translúcido; clearToolPreview() las quita.
+    void showToolFaces(const geometry::Shape& body, const std::vector<int>& faces);
     void clearToolPreview();
 
     ModelSelection modelSelection() const;

@@ -33,6 +33,7 @@ public:
     void reload();
 
 signals:
+    void closeRequested();
     void newRequested();
     void openRequested();
     void importRequested();

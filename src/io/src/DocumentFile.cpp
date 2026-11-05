@@ -474,6 +474,12 @@ FeatureRow rowOf(const Feature& f)
         params = {{"edges", toJson(e.edges)}, {"size", e.size}};
         break;
     }
+    case FeatureKind::Shell: {
+        const auto& s = static_cast<const ShellFeature&>(f);
+        row.type = "shell";
+        params = {{"faces", toJson(s.faces)}, {"thickness", s.thickness}, {"outward", s.outward}};
+        break;
+    }
     case FeatureKind::Import: {
         const auto& i = static_cast<const ImportFeature&>(f);
         row.type = "import";
@@ -526,6 +532,14 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         }
         e->size = number(p, "size");
         feature = std::move(e);
+    } else if (row.type == "shell") {
+        auto s = std::make_unique<ShellFeature>();
+        for (const Json& face : p.at("faces")) {
+            s->faces.push_back(elementRef(face));
+        }
+        s->thickness = number(p, "thickness");
+        s->outward = p.at("outward").get<bool>();
+        feature = std::move(s);
     } else if (row.type == "import") {
         auto i = std::make_unique<ImportFeature>();
         i->source = text(p, "source");

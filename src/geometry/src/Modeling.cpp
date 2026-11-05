@@ -18,6 +18,8 @@
 #include <BRepGProp.hxx>
 #include <BRepOffsetAPI_DraftAngle.hxx>
 #include <BRepOffsetAPI_MakeOffset.hxx>
+#include <BRepOffsetAPI_MakeThickSolid.hxx>
+#include <NCollection_List.hxx>
 #include <GProp_GProps.hxx>
 #include <BRepPrimAPI_MakeHalfSpace.hxx>
 #include <BRepPrimAPI_MakePrism.hxx>
@@ -557,6 +559,66 @@ Shape chamfer(std::string_view tag, const Shape& body, const std::vector<int>& e
 {
     return edgeOperation<BRepFilletAPI_MakeChamfer>(tag, "chaflan", body, edges, distance,
                                                      "No se pudo achaflanar: prueba con una distancia menor");
+}
+
+Shape shell(std::string_view tag, const Shape& body, const std::vector<int>& removedFaces, double thickness, bool outward)
+{
+    if (body.isNull()) {
+        throw GeometryError("No hay cuerpo sobre el que trabajar");
+    }
+    if (removedFaces.empty()) {
+        throw GeometryError("Elige al menos una cara para dejar abierta");
+    }
+    if (thickness <= kTiny) {
+        throw GeometryError("El espesor debe ser mayor que cero");
+    }
+    const std::string failure = "No se pudo vaciar: prueba con un espesor menor";
+    try {
+        NCollection_List<TopoDS_Shape> removed;
+        for (int index : removedFaces) {
+            removed.Append(faceAt(body, index));
+        }
+        BRepOffsetAPI_MakeThickSolid maker;
+        maker.MakeThickSolidByJoin(occtShape(body), removed, outward ? thickness : -thickness, 1e-4, BRepOffset_Skin,
+                                   false, false, GeomAbs_Intersection);
+        if (!maker.IsDone() || maker.Shape().IsNull()) {
+            throw GeometryError(failure);
+        }
+        Namer namer(maker.Shape());
+        const Shape::Impl& in = *body.impl();
+        for (int i = 1; i <= in.faces.Extent(); ++i) {
+            const TopoDS_Shape& face = in.faces(i);
+            const std::string& name = in.faceNames[std::size_t(i - 1)];
+            if (maker.IsDeleted(face)) {
+                continue;
+            }
+            const auto& modified = maker.Modified(face);
+            if (modified.IsEmpty()) {
+                namer.name(face, name);
+            }
+            for (const TopoDS_Shape& image : modified) {
+                namer.name(image, name);
+            }
+        }
+        // La pared nueva de cada cara que se queda.
+        for (int i = 1; i <= in.faces.Extent(); ++i) {
+            for (const TopoDS_Shape& generated : maker.Generated(in.faces(i))) {
+                namer.name(generated, std::string(tag) + ":interior:" + in.faceNames[std::size_t(i - 1)]);
+            }
+        }
+        namer.nameUnnamed(std::string(tag) + ":borde");
+        Shape result = namer.finish(std::string(tag));
+        if (!result.isValid() || result.solidCount() == 0) {
+            throw GeometryError(failure);
+        }
+        // Con un espesor imposible el kernel a veces devuelve el cuerpo intacto sin avisar.
+        if (result.faceCount() == body.faceCount() && std::abs(result.volume() - body.volume()) < 1e-9) {
+            throw GeometryError(failure);
+        }
+        return result;
+    } catch (const Standard_Failure& e) {
+        throw GeometryError(failure + " (" + kernelMessage(e) + ")");
+    }
 }
 
 } // namespace nuf::geometry

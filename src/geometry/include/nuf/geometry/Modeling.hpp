@@ -98,4 +98,10 @@ bool touches(const Shape& a, const Shape& b);
 Shape fillet(std::string_view tag, const Shape& body, const std::vector<int>& edges, double radius);
 Shape chamfer(std::string_view tag, const Shape& body, const std::vector<int>& edges, double distance);
 
+// Vacía el cuerpo: quita las caras dadas (por índice) y deja paredes de
+// «thickness» mm, hacia dentro o hacia fuera. Las caras de las paredes nuevas se
+// llaman «tag:interior:<cara de origen>»; las demás, incluida la que queda como
+// borde de la abertura, conservan su nombre.
+Shape shell(std::string_view tag, const Shape& body, const std::vector<int>& removedFaces, double thickness, bool outward);
+
 } // namespace nuf::geometry

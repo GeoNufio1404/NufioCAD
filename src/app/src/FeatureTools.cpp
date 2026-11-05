@@ -794,4 +794,94 @@ QString EdgeTool::inputsText() const
     return edges_.size() == 1 ? QStringLiteral("1 arista") : QStringLiteral("%1 aristas").arg(edges_.size());
 }
 
+// --- Vaciado -----------------------------------------------------------------------
+
+ShellTool::ShellTool(document::Document& document, render::Viewport& viewport,
+                     std::optional<document::FeatureId> editing)
+    : FeatureTool(document, viewport, editing)
+{
+    if (const auto* s = dynamic_cast<const document::ShellFeature*>(original_.get())) {
+        faces_ = s->faces;
+    }
+}
+
+void ShellTool::createFields(QFormLayout* form)
+{
+    thickness_ = lengthBox(1.0);
+    thickness_->setMinimum(0.01);
+    direction_ = combo({QStringLiteral("Hacia dentro"), QStringLiteral("Hacia fuera")});
+    if (const auto* s = dynamic_cast<const document::ShellFeature*>(original_.get())) {
+        thickness_->setValue(s->thickness);
+        direction_->setCurrentIndex(s->outward ? 1 : 0);
+    }
+    form->addRow(QStringLiteral("Espesor"), thickness_);
+    form->addRow(QStringLiteral("Dirección"), direction_);
+    auto* clear = new QPushButton(QStringLiteral("Quitar selección"));
+    form->addRow(QString(), clear);
+    connect(thickness_, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
+    connect(direction_, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
+    connect(clear, &QPushButton::clicked, this, [this] {
+        faces_.clear();
+        viewport_.clearModelSelection();
+        updatePreview();
+    });
+}
+
+void ShellTool::selectionChanged(const render::ModelSelection& selection)
+{
+    // Igual que en EdgeTool: la lista es de la herramienta y cada clic agrega o quita.
+    for (const render::ModelSelection::Face& face : selection.faces) {
+        if (!before().findFace(face.ref)) {
+            continue;  // una cara del resultado de la vista previa, no del cuerpo
+        }
+        const auto it = std::ranges::find(faces_, face.ref);
+        if (it == faces_.end()) {
+            faces_.push_back(face.ref);
+        } else {
+            faces_.erase(it);
+        }
+    }
+    if (!selection.empty()) {
+        viewport_.clearModelSelection();
+    }
+}
+
+void ShellTool::afterPreview(const document::ModelState& before)
+{
+    std::optional<std::size_t> body;
+    std::vector<int> indices;
+    for (const geometry::ElementRef& ref : faces_) {
+        if (const auto hit = before.findFace(ref); hit && (!body || *body == hit->body)) {
+            body = hit->body;
+            indices.push_back(hit->face);
+        }
+    }
+    if (body) {
+        viewport_.showToolFaces(before.bodies[*body].shape, indices);
+    }
+}
+
+std::unique_ptr<document::Feature> ShellTool::build() const
+{
+    if (faces_.empty()) {
+        return nullptr;
+    }
+    auto f = std::make_unique<document::ShellFeature>();
+    if (original_) {
+        f->setName(original_->name());
+    }
+    f->faces = faces_;
+    f->thickness = thickness_->value();
+    f->outward = direction_->currentIndex() == 1;
+    return f;
+}
+
+QString ShellTool::inputsText() const
+{
+    if (faces_.empty()) {
+        return QStringLiteral("Elige las caras que quedan abiertas (varias con clics sucesivos)");
+    }
+    return faces_.size() == 1 ? QStringLiteral("1 cara abierta") : QStringLiteral("%1 caras abiertas").arg(faces_.size());
+}
+
 } // namespace nuf::app

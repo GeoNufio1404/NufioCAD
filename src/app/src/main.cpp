@@ -1,3 +1,4 @@
+#include "CrashHandler.hpp"
 #include "MainWindow.hpp"
 #include "SelfCheck.hpp"
 #include "Theme.hpp"
@@ -49,6 +50,13 @@ int main(int argc, char* argv[])
     }
 #endif
 
+    nuf::app::installCrashHandler();
+    // --probar-cierre: provoca un fallo a propósito para comprobar el informe de cierres.
+    for (int i = 1; i < argc; ++i) {
+        if (std::string_view(argv[i]) == "--probar-cierre") {
+            *static_cast<volatile int*>(nullptr) = 1;
+        }
+    }
     QSurfaceFormat::setDefaultFormat(nuf::render::Viewport::defaultFormat());
     QApplication app(argc, argv);
     QApplication::setOrganizationName(QStringLiteral("NufioCAD"));

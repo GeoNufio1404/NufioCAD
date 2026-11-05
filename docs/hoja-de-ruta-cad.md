@@ -82,6 +82,9 @@ Hecho (probado en Windows; en Linux falta compilar con `qt6-qtsvg`):
 - [x] Cinta (*ribbon*) con pestañas **Sólido** y **Sketch** (contextual, aparece al editar un sketch), grupos con título, desplegables por familia que recuerdan la última variante y botón verde «Terminar sketch».
 - [x] Barra de navegación inferior flotante.
 - [x] Flecha de extrusión: ya no se suelta tras el primer paso y el arrastre va fluido (un valor por cuadro, la flecha se reutiliza).
+- [x] Como Fusion 360 (revisado contra su documentación): la aplicación abre **directo en un lienzo vacío**, sin pantalla de inicio; los recientes con miniatura están en Archivo › Recientes… (Ctrl+Mayús+O, se cierra con Esc) y en Abrir reciente. El panel de propiedades ya no está fijo y vacío: aparece solo mientras hay un comando activo, como los diálogos de Fusion.
+- [x] Medidas visibles en el sketch: largo de cada línea y Ø/R de círculos y arcos, sin tener que acotar (lo que ya tiene cota propia, lo proyectado y la construcción no se rotulan). Se apagan en Ver › Mostrar medidas del sketch.
+- [ ] Barra de aplicación superior (Guardar, Deshacer, Rehacer y pestaña del documento) y selector de espacio de trabajo, como en Fusion; el navegador con el nombre del documento como raíz; controles de reproducción en el timeline; los comandos como diálogo flotante sobre el lienzo en vez de un panel acoplado.
 - [ ] Menú radial con clic derecho y atajos de una tecla para todo (hoy hay atajos de sketch, E y Mayús+P).
 - [ ] Valores editables junto al cursor también en Extruir/Revolución (hoy solo en el sketch y en el panel).
 - [ ] Rendimiento de la vista previa medido en Release (en Debug quedan ~25 ms por paso; Smart App Control de esta PC bloquea las DLL de OCCT en Release).
@@ -293,6 +296,7 @@ Después, el formato:
 - Cada minuto, si hay cambios, una copia en `QStandardPaths::AppDataLocation/recuperacion/`. Nunca se toca el archivo del usuario.
 - Se borra al guardar o cerrar bien. Si al arrancar queda alguna: ofrecer Restaurar / Descartar.
 - **Hecho:** cada ventana tiene su copia (`rec-<id>.nuf` + `.origen` con la ruta y el nombre) y un archivo de bloqueo (`QLockFile`): una copia cuyo bloqueo ya no tiene dueño es de una sesión muerta, y una ventana viva de otra instancia no se toca. Cada minuto (`NUF_RECOVERY_SECONDS` lo cambia, para probar) se guarda si hay cambios y se borra si no los hay; también al guardar, abrir, Nuevo y cerrar bien. Al arrancar sale «Restaurar / Descartar / Decidir después» con la más reciente; restaurar abre el diseño con `*` (sigue sin guardar) y a nombre del archivo original, sin añadirlo a recientes. Comprobado a mano en Windows: importar, esperar, matar el proceso, reabrir → aviso → restaurar; cierre normal no deja nada; se limpian los bloqueos sueltos.
+- **Registro de cierres inesperados (Windows):** si el programa se cierra por un fallo, guarda en la carpeta `cierres` de los datos de la aplicación (`%APPDATA%/NufioCAD/NufioCAD/cierres`) un informe `.txt` con la pila de llamadas (archivo y línea de nuestro código) y un volcado `.dmp`. `NufioCAD --probar-cierre` lo comprueba. Primer cierre real (4 nov. 2026, dentro de `Qt6Widgetsd.dll`, con la herramienta Extruir abierta sobre un sketch de 20 curvas y 43 restricciones): causa desconocida, no se pudo reproducir ni con ~1150 acciones al azar ni extruyendo ese sketch. Si vuelve a pasar, el informe dirá dónde.
 - **Pendiente de 4f:** si hay varias copias huérfanas solo se ofrece la más reciente (las otras esperan al siguiente arranque); lo que está a medias en un sketch o herramienta no entra en la copia (como al guardar); sin prueba automática (el módulo vive en la app, que no tiene pruebas); Linux sin probar.
 
 **Fuera de esta fase:** caché de geometría, pestañas con varios documentos, nombres de cuerpos en el STEP (requiere XDE), importar STL/OBJ, y asociar `.nuf` al sistema (va con el instalador).
@@ -318,10 +322,18 @@ Todas siguen el patrón de las operaciones actuales: una clase en `document/Feat
 | Bloque | Qué se obtiene | Tamaño | Estado |
 |---|---|---|---|
 | **5a** Redondeo y chaflán | Aristas elegidas en el visor, radio/distancia, vista previa | Mediano | ✅ |
-| **5b** Shell | Vaciar un cuerpo quitando caras, con espesor | Mediano | pendiente |
+| **5b** Shell | Vaciar un cuerpo quitando caras, con espesor | Mediano | ✅ |
 | **5c** Agujeros | Sketch de puntos + diámetro, profundidad, avellanado/abocardado | Mediano | pendiente |
 | **5d** Patrones | Lineal y circular de una operación o cuerpo | **Grande** | pendiente |
 | **5e** Espejo | Reflejar un cuerpo o una operación sobre un plano | Pequeño | pendiente |
+
+**5b — Vaciado (shell) ✅**
+- `geometry::shell` con `BRepOffsetAPI_MakeThickSolid`: las caras elegidas quedan abiertas y el resto se vuelve pared del espesor dado, hacia dentro o hacia fuera. Las paredes nuevas se llaman `f<id>:interior:<cara de origen>`; las demás caras, incluida la que queda como borde de la abertura, conservan su nombre.
+- El kernel devuelve el cuerpo intacto, sin error, cuando el espesor es imposible; se detecta y se informa («prueba con un espesor menor»).
+- `ShellFeature` (caras por nombre, espesor, dirección), como `shell` en el `.nuf`; si una cara ya no existe se avisa y se hace con las demás.
+- Herramienta `ShellTool`: Sólido › Vaciado (cinta, grupo MODIFICAR). Los clics en caras agregan o quitan, las elegidas se resaltan en azul translúcido (nuevo `Viewport::showToolFaces`) y el resultado se ve en vivo.
+- **Hecho:** 3 pruebas nuevas (copa de 20×10×5 con paredes de 1: volumen exacto, 5 caras interiores nuevas y las exteriores con su nombre; hacia fuera; espesor demasiado grande, sin caras y espesor cero; seguir a la pieza al hacerla más alta, guardar y abrir). Comprobado a mano en Windows: elegir la cara de arriba, espesor 2, vista previa.
+- **Pendiente de 5b:** vaciar sin abrir ninguna cara (hueco cerrado); espesores distintos por cara; el vaciado hacia fuera solo se probó con la caja; aceptar con el botón se probó en 5a (mismo código) pero no en esta ronda; Linux sin probar.
 
 **5a — Redondeo y chaflán ✅**
 - `geometry::fillet` y `geometry::chamfer` sobre `BRepFilletAPI` con las aristas por índice; las cadenas de aristas tangentes se siguen solas. Las caras nuevas se llaman `f<id>:redondeo:<arista>` / `f<id>:chaflan:<arista>` (esquinas: `f<id>:esquina:?<n>`) y las demás conservan su nombre, así que un sketch sobre una cara anterior sigue funcionando.
@@ -370,5 +382,5 @@ Todas siguen el patrón de las operaciones actuales: una clase en `document/Feat
 | Fase 2 | 🚧 Implementada (2a–2d) — sketch completo: dibujo con variantes, elipse, spline y cónica; restricciones (incluida G2), cotas y valores junto al cursor; selección (también por rectángulo), deshacer, arrastre y perfiles; edición (recortar, extender, partir, empalme, chaflán, desfase, simetría, patrones, mover/copiar/girar/escalar); proyectar aristas, intersección, texto, imagen de referencia e importar DXF; los sketches terminados se guardan, sus perfiles y curvas se seleccionan en la vista 3D y se reabren con doble clic. Pendiente: las pruebas manuales de abajo y probar en Windows. Limitaciones: lo proyectado y el texto quedan bloqueados (no se actualizan con la pieza ni se editan como texto hasta la Fase 3); recortar/extender/partir y desfase trabajan con líneas, arcos y círculos; los patrones son copias independientes |
 | Fase 3 | 🚧 Implementada (3a–3c) — núcleo paramétrico con nombres estables de caras y aristas; sketches en el historial (sobre planos de origen o caras que siguen a la pieza); Extruir (todas sus variantes, empujar una cara) y Revolución con vista previa y flecha; timeline editable (editar, marcador, reordenar, suprimir, borrar, renombrar), navegador y deshacer/rehacer; lo proyectado sigue a su arista. Pendiente: las pruebas manuales 20–30 y probar en Windows. Limitaciones: los cuerpos que participan en unir/cortar son todos los que toca (sin elegirlos); «hasta una cara» solo con caras planas; el ángulo de la revolución se escribe en el panel (sin flecha) |
 | Fase 4 | 🚧 4a (Exportar), 4b (serialización), 4c (Nuevo/Abrir/Guardar/Guardar como con aviso de cambios), 4d (importar STEP), 4e (pantalla de inicio con recientes) y 4f (recuperación) implementadas: **Fase 4 completa**. Pendiente: probar a mano las pruebas 31–38 y compilar en Fedora/CI |
-| Fase 5 | 🚧 5a (redondeo y chaflán) implementada; 5b shell, 5c agujeros, 5d patrones y 5e espejo pendientes. Siguiente paso: 5b |
+| Fase 5 | 🚧 5a (redondeo y chaflán) y 5b (shell) implementadas; 5c agujeros, 5d patrones y 5e espejo pendientes. Siguiente paso: 5c |
 | Fases 6–9 | Pendientes (parámetros, generadores, ensambles, medición) |

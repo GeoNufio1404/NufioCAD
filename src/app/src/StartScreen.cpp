@@ -103,16 +103,19 @@ StartScreen::StartScreen(QWidget* viewport) : QWidget(viewport)
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(10);
 
-    auto* title = new QLabel(QStringLiteral("NufioCAD"), column);
+    auto* top = new QHBoxLayout();
+    auto* title = new QLabel(QStringLiteral("Recientes y archivos"), column);
     QFont titleFont = title->font();
     titleFont.setPointSizeF(titleFont.pointSizeF() * 2.4);
     titleFont.setBold(true);
     title->setFont(titleFont);
-    layout->addWidget(title);
-
-    auto* subtitle = new QLabel(QStringLiteral("Diseño paramétrico 3D"), column);
-    subtitle->setForegroundRole(QPalette::PlaceholderText);
-    layout->addWidget(subtitle);
+    top->addWidget(title);
+    top->addStretch();
+    auto* close = new QPushButton(QStringLiteral("Cerrar (Esc)"), column);
+    close->setFocusPolicy(Qt::NoFocus);
+    connect(close, &QPushButton::clicked, this, &StartScreen::closeRequested);
+    top->addWidget(close);
+    layout->addLayout(top);
     layout->addSpacing(4);
 
     auto* buttons = new QHBoxLayout();

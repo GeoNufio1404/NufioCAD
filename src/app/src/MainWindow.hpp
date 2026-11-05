@@ -100,6 +100,7 @@ private:
     std::string thumbnailPng();
     void rebuildRecentMenu();
     void updateStartScreen();
+    void showRecents();
     bool importStepFile(const std::filesystem::path& path);
 
     // Operaciones sólidas.
@@ -127,12 +128,13 @@ private:
     QAction* redoAction_ = nullptr;
     QAction* filletAction_ = nullptr;
     QAction* chamferAction_ = nullptr;
+    QAction* shellAction_ = nullptr;
     QAction* exportAction_ = nullptr;
     QAction* importAction_ = nullptr;
     QMenu* recentMenu_ = nullptr;
     std::unique_ptr<Recovery> recovery_;
     StartScreen* startScreen_ = nullptr;
-    bool startDismissed_ = false;  // la pantalla de inicio solo sale al arrancar
+    bool recentsOpen_ = false;  // el panel de recientes (Archivo › Recientes…) está a la vista
 
     // Sketch en edición (nuevo o una operación del historial).
     std::unique_ptr<SketchSession> sketch_;

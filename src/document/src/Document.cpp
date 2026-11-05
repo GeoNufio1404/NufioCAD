@@ -27,6 +27,8 @@ std::string kindLabel(FeatureKind kind)
         return "Redondeo";
     case FeatureKind::Chamfer:
         return "Chaflán";
+    case FeatureKind::Shell:
+        return "Vaciado";
     }
     return "Operación";
 }

@@ -38,6 +38,8 @@ QString glyph(document::FeatureKind kind)
         return QStringLiteral("◜");
     case document::FeatureKind::Chamfer:
         return QStringLiteral("◿");
+    case document::FeatureKind::Shell:
+        return QStringLiteral("▢");
     }
     return QStringLiteral("?");
 }

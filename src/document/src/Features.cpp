@@ -475,6 +475,53 @@ std::vector<FeatureId> EdgeFeature::dependencies() const
     return ids;
 }
 
+// --- Vaciado -----------------------------------------------------------------
+
+std::optional<std::string> ShellFeature::compute(ModelState& state) const
+{
+    if (faces.empty()) {
+        throw FeatureError("No hay caras elegidas");
+    }
+    std::optional<std::size_t> bodyIndex;
+    std::vector<int> indices;
+    int lost = 0;
+    for (const geometry::ElementRef& ref : faces) {
+        const auto hit = state.findFace(ref);
+        if (!hit) {
+            ++lost;
+            continue;
+        }
+        if (bodyIndex && *bodyIndex != hit->body) {
+            throw FeatureError("Las caras elegidas son de cuerpos distintos");
+        }
+        bodyIndex = hit->body;
+        if (std::ranges::find(indices, hit->face) == indices.end()) {
+            indices.push_back(hit->face);
+        }
+    }
+    if (!bodyIndex) {
+        throw FeatureError("Las caras elegidas ya no existen");
+    }
+    try {
+        state.bodies[*bodyIndex].shape = geometry::shell(tag(), state.bodies[*bodyIndex].shape, indices, thickness, outward);
+    } catch (const geometry::GeometryError& e) {
+        throw FeatureError(e.what());
+    }
+    if (lost > 0) {
+        return lost == 1 ? "Una cara elegida ya no existe." : "Algunas caras elegidas ya no existen.";
+    }
+    return std::nullopt;
+}
+
+std::vector<FeatureId> ShellFeature::dependencies() const
+{
+    std::vector<FeatureId> ids;
+    for (const geometry::ElementRef& ref : faces) {
+        addAll(ids, ref);
+    }
+    return ids;
+}
+
 // --- Importar ----------------------------------------------------------------
 
 std::optional<std::string> ImportFeature::compute(ModelState& state) const

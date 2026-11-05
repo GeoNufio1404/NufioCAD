@@ -195,4 +195,27 @@ private:
     QDoubleSpinBox* size_ = nullptr;
 };
 
+// Vaciado: elige las caras que quedan abiertas y el espesor de las paredes.
+class ShellTool final : public FeatureTool {
+    Q_OBJECT
+
+public:
+    ShellTool(document::Document& document, render::Viewport& viewport, std::optional<document::FeatureId> editing);
+
+    std::unique_ptr<document::Feature> build() const override;
+
+protected:
+    QString title() const override { return QStringLiteral("Vaciado"); }
+    void createFields(QFormLayout* form) override;
+    void selectionChanged(const render::ModelSelection& selection) override;
+    void afterPreview(const document::ModelState& before) override;
+    QString inputsText() const override;
+    bool removesMaterial() const override { return false; }
+
+private:
+    std::vector<geometry::ElementRef> faces_;
+    QDoubleSpinBox* thickness_ = nullptr;
+    QComboBox* direction_ = nullptr;
+};
+
 } // namespace nuf::app

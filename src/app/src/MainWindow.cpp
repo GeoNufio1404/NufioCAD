@@ -185,6 +185,7 @@ MainWindow::MainWindow(QWidget* parent)
     // Si cambian las barras o los paneles, kLayoutVersion sube y la
     // distribución guardada (que ya no encaja) se descarta.
     restoreState(settings.value(QStringLiteral("ui/layout")).toByteArray(), kLayoutVersion);
+    propertiesDock_->hide();  // aparece al usar una herramienta
 }
 
 MainWindow::~MainWindow() = default;
@@ -219,6 +220,8 @@ void MainWindow::createMenus()
             &MainWindow::newDocument);
     addFile(QStringLiteral("&Abrir…"), QKeySequence(QKeySequence::Open), QStringLiteral("file-open"),
             &MainWindow::openDocument);
+    addFile(QStringLiteral("&Recientes…"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_O), QStringLiteral("file-open"),
+            &MainWindow::showRecents);
     recentMenu_ = file->addMenu(QStringLiteral("Abrir &reciente"));
     connect(recentMenu_, &QMenu::aboutToShow, this, &MainWindow::rebuildRecentMenu);
     file->addSeparator();
@@ -300,6 +303,10 @@ void MainWindow::createMenus()
         startTool(std::make_unique<EdgeTool>(document_, *viewport_, std::nullopt, EdgeTool::Style::Chamfer));
     });
     decorate(chamferAction_, QStringLiteral("chamfer"), QStringLiteral("Achaflanar aristas de un cuerpo"));
+    shellAction_ = solidMenu->addAction(QStringLiteral("&Vaciado"), this, [this] {
+        startTool(std::make_unique<ShellTool>(document_, *viewport_, std::nullopt));
+    });
+    decorate(shellAction_, QStringLiteral("shell"), QStringLiteral("Vaciar un cuerpo dejando abiertas las caras elegidas"));
 
     // Herramientas de dibujo por familias (como en Fusion 360); la primera
     // de cada familia lleva su tecla.
@@ -456,6 +463,7 @@ void MainWindow::createMenus()
     ribbon_->addGroup(solidTab_, QStringLiteral("MODIFICAR"));
     ribbon_->addAction(solidTab_, filletAction_);
     ribbon_->addAction(solidTab_, chamferAction_);
+    ribbon_->addAction(solidTab_, shellAction_);
 
     auto family = [this, &families](const QString& name) {
         const std::size_t i = static_cast<std::size_t>(
@@ -543,11 +551,39 @@ void MainWindow::createMenus()
     new NavBar(viewport_, navActions);
     // Encima de todo lo que flota sobre el visor.
     startScreen_ = new StartScreen(viewport_);
-    connect(startScreen_, &StartScreen::newRequested, this, &MainWindow::newDocument);
-    connect(startScreen_, &StartScreen::openRequested, this, &MainWindow::openDocument);
-    connect(startScreen_, &StartScreen::importRequested, this, &MainWindow::importStep);
-    connect(startScreen_, &StartScreen::recentRequested, this, &MainWindow::openRecent);
+    startScreen_->hide();
+    // Cualquier cosa que se elija en el panel lo cierra antes de actuar.
+    const auto closeRecents = [this] {
+        recentsOpen_ = false;
+        updateStartScreen();
+    };
+    connect(startScreen_, &StartScreen::closeRequested, this, closeRecents);
+    connect(startScreen_, &StartScreen::newRequested, this, [this, closeRecents] {
+        closeRecents();
+        newDocument();
+    });
+    connect(startScreen_, &StartScreen::openRequested, this, [this, closeRecents] {
+        closeRecents();
+        openDocument();
+    });
+    connect(startScreen_, &StartScreen::importRequested, this, [this, closeRecents] {
+        closeRecents();
+        importStep();
+    });
+    connect(startScreen_, &StartScreen::recentRequested, this, [this, closeRecents](const QString& path) {
+        closeRecents();
+        openRecent(path);
+    });
     updateSketchActions();
+    view->addSeparator();
+    auto* measures = view->addAction(QStringLiteral("Mostrar &medidas del sketch"));
+    measures->setCheckable(true);
+    measures->setChecked(QSettings().value(QStringLiteral("view/sketchMeasures"), true).toBool());
+    viewport_->setSketchMeasuresVisible(measures->isChecked());
+    connect(measures, &QAction::toggled, this, [this](bool on) {
+        QSettings().setValue(QStringLiteral("view/sketchMeasures"), on);
+        viewport_->setSketchMeasuresVisible(on);
+    });
     view->addSeparator();
     QMenu* panels = view->addMenu(QStringLiteral("&Paneles"));
     panels->addAction(navigatorDock_->toggleViewAction());
@@ -635,18 +671,27 @@ void MainWindow::updateTitle()
     updateStartScreen();
 }
 
-// Aparece al arrancar y se va con la primera acción: no vuelve a salir sola.
+// Como Fusion 360, la aplicación abre directo en un lienzo vacío. Los recientes
+// están en un panel que se abre a petición (Archivo › Recientes…) y se cierra
+// con cualquier acción o con Esc.
 void MainWindow::updateStartScreen()
 {
     if (startScreen_ == nullptr) {
         return;
     }
-    const bool show = !startDismissed_ && document_.featureCount() == 0 && path_.empty() && !isEditing()
-                      && !viewport_->isPickingSketchPlane();
-    if (!show) {
-        startDismissed_ = true;
+    if (isEditing() || viewport_->isPickingSketchPlane()) {
+        recentsOpen_ = false;
     }
-    startScreen_->setVisible(show);
+    startScreen_->setVisible(recentsOpen_);
+}
+
+void MainWindow::showRecents()
+{
+    if (isEditing() || viewport_->isPickingSketchPlane()) {
+        return;
+    }
+    recentsOpen_ = true;
+    updateStartScreen();
 }
 
 void MainWindow::createSketch()
@@ -780,6 +825,7 @@ void MainWindow::finishTool(bool accepted)
     const document::FeatureId id = tool_->featureId();
     // Se destruye después: esta llamada viene de una señal de la herramienta.
     propertiesDock_->setWidget(propertiesPlaceholder_);
+    propertiesDock_->hide();  // como los diálogos de Fusion: solo mientras hay un comando
     tool_.release()->deleteLater();
     timeline_->setEditing(std::nullopt);
     statusBar()->clearMessage();
@@ -819,6 +865,9 @@ void MainWindow::activateFeature(document::FeatureId id)
     case document::FeatureKind::Fillet:
     case document::FeatureKind::Chamfer:
         startTool(std::make_unique<EdgeTool>(document_, *viewport_, id));
+        break;
+    case document::FeatureKind::Shell:
+        startTool(std::make_unique<ShellTool>(document_, *viewport_, id));
         break;
     case document::FeatureKind::Import:
         break;  // no tiene parámetros que editar
@@ -911,7 +960,7 @@ bool MainWindow::sketchVisible(document::FeatureId id, std::size_t upTo) const
 void MainWindow::updateExportAction()
 {
     updateStartScreen();
-    for (QAction* action : {filletAction_, chamferAction_}) {
+    for (QAction* action : {filletAction_, chamferAction_, shellAction_}) {
         if (action != nullptr) {
             action->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane() && !document_.result().bodies.empty());
         }
@@ -1115,6 +1164,11 @@ void MainWindow::clearNavigation()
 
 void MainWindow::cancel()
 {
+    if (recentsOpen_) {
+        recentsOpen_ = false;
+        updateStartScreen();
+        return;
+    }
     if (navGroup_ && navGroup_->checkedAction()) {
         clearNavigation();
         return;

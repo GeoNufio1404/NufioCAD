@@ -73,6 +73,7 @@
         <file alias="ui/revolve.svg">icons/ui/revolve.svg</file>
         <file alias="ui/rotate.svg">icons/ui/rotate.svg</file>
         <file alias="ui/scale.svg">icons/ui/scale.svg</file>
+        <file alias="ui/shell.svg">icons/ui/shell.svg</file>
         <file alias="ui/slot-arc.svg">icons/ui/slot-arc.svg</file>
         <file alias="ui/slot-center-point.svg">icons/ui/slot-center-point.svg</file>
         <file alias="ui/slot-center-to-center.svg">icons/ui/slot-center-to-center.svg</file>
