@@ -5,6 +5,8 @@
 #include <QLineEdit>
 #include <QLocale>
 
+#include <cmath>
+
 namespace nuf::app {
 
 ValueInput::ValueInput(QWidget* parent)
@@ -22,11 +24,20 @@ void ValueInput::setFields(const std::vector<QString>& labels, const std::vector
 {
     if (labels != labels_) {
         // Campos nuevos (otra herramienta u otro paso): se rehacen.
+        // Se retiran ya, pero se destruyen después: este cambio de campos puede
+        // venir de un Enter en uno de ellos (al terminar la figura la
+        // herramienta vuelve al primer paso), y destruir un QLineEdit mientras
+        // procesa su propia tecla cierra el programa.
+        const auto discard = [this](QWidget* widget) {
+            widget->hide();
+            layout()->removeWidget(widget);
+            widget->deleteLater();
+        };
         for (QLabel* caption : captions_) {
-            delete caption;
+            discard(caption);
         }
         for (QLineEdit* edit : edits_) {
-            delete edit;
+            discard(edit);
         }
         captions_.clear();
         edits_.clear();
@@ -40,11 +51,18 @@ void ValueInput::setFields(const std::vector<QString>& labels, const std::vector
             layout()->addWidget(edit);
             captions_.push_back(caption);
             edits_.push_back(edit);
+            // Los hijos creados con el recuadro ya visible nacen ocultos: sin
+            // esto se encoge a un rectángulo diminuto y no se puede escribir.
+            caption->show();
+            edit->show();
         }
+        layout()->activate();
         adjustSize();
     }
     for (std::size_t i = 0; i < edits_.size() && i < current.size(); ++i) {
-        edits_[i]->setPlaceholderText(QLocale().toString(current[i], 'f', 2));
+        // Un entero (número de lados) sin decimales; una medida, con dos.
+        const bool whole = std::abs(current[i] - std::round(current[i])) < 1e-9 && std::abs(current[i]) < 1000.0;
+        edits_[i]->setPlaceholderText(QLocale().toString(current[i], 'f', whole ? 0 : 2));
     }
 }
 
