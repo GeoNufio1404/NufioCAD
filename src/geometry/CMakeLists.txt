@@ -4,6 +4,7 @@ nuf_add_library(geometry SOURCES
     src/Exchange.cpp
     src/Kernel.cpp
     src/Modeling.cpp
+    src/Printability.cpp
     src/Shape.cpp
     src/SketchFaces.cpp)
 

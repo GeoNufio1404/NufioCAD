@@ -4,6 +4,11 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
+#include <QDoubleSpinBox>
+#include <QGroupBox>
+#include <QSettings>
+#include <QTimer>
+#include <QHBoxLayout>
 #include <QFormLayout>
 #include <QLabel>
 #include <QListWidget>
@@ -53,6 +58,45 @@ ExportDialog::ExportDialog(const std::vector<document::Body>& bodies, const std:
     form->addRow(QStringLiteral("Cuerpos:"), list_);
     form->addRow(QString(), onePerBody_);
 
+    // La impresora del usuario: con sus medidas se calcula la revisión.
+    QSettings settings;
+    const auto spin = [&](const char* key, double value, double low, double high, const QString& suffix) {
+        auto* box = new QDoubleSpinBox(this);
+        box->setRange(low, high);
+        box->setDecimals(2);
+        box->setSuffix(suffix);
+        box->setValue(settings.value(QLatin1String(key), value).toDouble());
+        box->setKeyboardTracking(false);
+        return box;
+    };
+    nozzle_ = spin("print/nozzle", 0.4, 0.1, 2.0, QStringLiteral(" mm"));
+    bedX_ = spin("print/bedX", 256.0, 10.0, 2000.0, QStringLiteral(" mm"));
+    bedY_ = spin("print/bedY", 256.0, 10.0, 2000.0, QStringLiteral(" mm"));
+    bedZ_ = spin("print/bedZ", 256.0, 10.0, 2000.0, QStringLiteral(" mm"));
+    auto* printerBox = new QGroupBox(QStringLiteral("Mi impresora"), this);
+    auto* printerForm = new QFormLayout(printerBox);
+    printerForm->addRow(QStringLiteral("Boquilla:"), nozzle_);
+    auto* bed = new QHBoxLayout();
+    bed->addWidget(bedX_);
+    bed->addWidget(bedY_);
+    bed->addWidget(bedZ_);
+    printerForm->addRow(QStringLiteral("Cama X × Y × Z:"), bed);
+    printer_ = printerBox;
+
+    review_ = new QLabel(this);
+    review_->setWordWrap(true);
+    review_->setTextFormat(Qt::RichText);
+    reviewTimer_ = new QTimer(this);
+    reviewTimer_->setSingleShot(true);
+    reviewTimer_->setInterval(250);
+    connect(reviewTimer_, &QTimer::timeout, this, &ExportDialog::runReview);
+    for (QDoubleSpinBox* box : {nozzle_, bedX_, bedY_, bedZ_}) {
+        connect(box, &QDoubleSpinBox::valueChanged, this, [this] {
+            savePrinterSettings();
+            reviewTimer_->start();
+        });
+    }
+
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     ok_ = buttons->button(QDialogButtonBox::Ok);
     ok_->setText(QStringLiteral("Exportar…"));
@@ -63,6 +107,8 @@ ExportDialog::ExportDialog(const std::vector<document::Body>& bodies, const std:
     auto* layout = new QVBoxLayout(this);
     layout->addLayout(form);
     layout->addWidget(summary_);
+    layout->addWidget(review_);
+    layout->addWidget(printer_);
     layout->addWidget(buttons);
 
     connect(format_, &QComboBox::currentIndexChanged, this, &ExportDialog::updateSummary);
@@ -126,11 +172,66 @@ std::vector<geometry::Shape> ExportDialog::selectedShapes() const
     return shapes;
 }
 
+geometry::PrintSettings ExportDialog::printSettings() const
+{
+    geometry::PrintSettings settings;
+    settings.nozzle = nozzle_->value();
+    settings.bedX = bedX_->value();
+    settings.bedY = bedY_->value();
+    settings.bedZ = bedZ_->value();
+    return settings;
+}
+
+void ExportDialog::savePrinterSettings() const
+{
+    QSettings settings;
+    settings.setValue(QStringLiteral("print/nozzle"), nozzle_->value());
+    settings.setValue(QStringLiteral("print/bedX"), bedX_->value());
+    settings.setValue(QStringLiteral("print/bedY"), bedY_->value());
+    settings.setValue(QStringLiteral("print/bedZ"), bedZ_->value());
+}
+
+void ExportDialog::runReview()
+{
+    std::vector<std::pair<std::string, geometry::Shape>> chosen;
+    for (std::size_t index : selected()) {
+        chosen.emplace_back(bodies_[index].name, bodies_[index].shape);
+    }
+    if (chosen.empty() || format() == Format::Step) {
+        return;
+    }
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    const std::vector<geometry::PrintIssue> issues = geometry::checkPrintable(chosen, printSettings());
+    QApplication::restoreOverrideCursor();
+    if (issues.empty()) {
+        review_->setText(QStringLiteral("<span style='color:#3FB950'>✓ Todo en orden para imprimir con tu impresora.</span>"));
+        return;
+    }
+    QStringList lines;
+    for (const geometry::PrintIssue& issue : issues) {
+        const char* color = issue.level == geometry::PrintIssue::Level::Error ? "#E5484D"
+                            : issue.level == geometry::PrintIssue::Level::Warning ? "#F2A34B"
+                                                                                   : "#8B949E";
+        const QString icon = issue.level == geometry::PrintIssue::Level::Error ? QStringLiteral("⛔")
+                             : issue.level == geometry::PrintIssue::Level::Warning ? QStringLiteral("⚠")
+                                                                                   : QStringLiteral("ℹ");
+        lines << QStringLiteral("<span style='color:%1'>%2 %3</span>")
+                     .arg(QLatin1String(color), icon, QString::fromStdString(issue.text).toHtmlEscaped());
+    }
+    review_->setText(lines.join(QStringLiteral("<br>")));
+}
+
 void ExportDialog::updateSummary()
 {
     const std::size_t count = selected().size();
     const bool mesh = format() != Format::Step;
     quality_->setEnabled(mesh);
+    review_->setVisible(mesh && count > 0);
+    printer_->setVisible(mesh);
+    if (mesh && count > 0) {
+        review_->setText(QStringLiteral("Revisando la pieza para imprimir…"));
+        reviewTimer_->start();
+    }
     onePerBody_->setEnabled(count > 1);
     ok_->setEnabled(count > 0);
 

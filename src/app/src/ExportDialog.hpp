@@ -2,6 +2,7 @@
 
 #include <nuf/document/Feature.hpp>
 #include <nuf/geometry/Exchange.hpp>
+#include <nuf/geometry/Printability.hpp>
 
 #include <QDialog>
 
@@ -9,6 +10,8 @@
 
 class QCheckBox;
 class QComboBox;
+class QDoubleSpinBox;
+class QTimer;
 class QLabel;
 class QPushButton;
 class QListWidget;
@@ -29,6 +32,8 @@ public:
     Format format() const;
     geometry::MeshQuality quality() const;
     bool onePerBody() const;
+    // Las medidas de la impresora (boquilla y cama) que se usan en la revisión.
+    geometry::PrintSettings printSettings() const;
     // Posiciones (en `bodies`) de los cuerpos marcados.
     std::vector<std::size_t> selected() const;
 
@@ -37,6 +42,9 @@ public:
 
 private:
     void updateSummary();
+    // Revisión para imprimir de los cuerpos marcados (solo con mallas).
+    void runReview();
+    void savePrinterSettings() const;
     std::vector<geometry::Shape> selectedShapes() const;
 
     const std::vector<document::Body>& bodies_;
@@ -45,6 +53,13 @@ private:
     QListWidget* list_ = nullptr;
     QCheckBox* onePerBody_ = nullptr;
     QLabel* summary_ = nullptr;
+    QLabel* review_ = nullptr;
+    QWidget* printer_ = nullptr;
+    QDoubleSpinBox* nozzle_ = nullptr;
+    QDoubleSpinBox* bedX_ = nullptr;
+    QDoubleSpinBox* bedY_ = nullptr;
+    QDoubleSpinBox* bedZ_ = nullptr;
+    QTimer* reviewTimer_ = nullptr;
     QPushButton* ok_ = nullptr;
 };
 

@@ -199,6 +199,25 @@ std::optional<sketch::Plane> Shape::facePlane(int index) const
     return sketch::Plane::fromPointAndNormal(toVec3(pln.Location().XYZ()), toVec3(normal.XYZ()));
 }
 
+Box Shape::faceBounds(int index) const
+{
+    Box box;
+    if (index < 0 || index >= faceCount()) {
+        return box;
+    }
+    Bnd_Box bnd;
+    BRepBndLib::Add(faceAt(*this, index), bnd);
+    if (bnd.IsVoid()) {
+        return box;
+    }
+    double x0, y0, z0, x1, y1, z1;
+    bnd.Get(x0, y0, z0, x1, y1, z1);
+    box.min = {x0, y0, z0};
+    box.max = {x1, y1, z1};
+    box.empty = false;
+    return box;
+}
+
 sketch::Vec3 Shape::faceCenter(int index) const
 {
     if (index < 0 || index >= faceCount()) {

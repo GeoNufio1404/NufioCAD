@@ -184,7 +184,23 @@ Necesitas un cuerpo (la caja de 40×25×10 de «Antes de empezar»). Los botones
 
 **Fíjate en:** ¿se entiende qué cuerpo se mueve? ¿Mover con números es suficiente o echas de menos arrastrar con el ratón? (ver «Pendiente de 8a»).
 
-## Fase 9
+## Fase 9 — Pulido para impresión 3D
+
+| # | Qué hacer | Qué debería pasar |
+|---|---|---|
+| 9.1 | Archivo › **Exportar** con una pieza normal, formato STL | Debajo del resumen de triángulos aparece «✓ Todo en orden para imprimir con tu impresora» |
+| 9.2 | Hacer una extrusión de `0.3` mm de grosor y exportar | Aviso naranja «Pared de 0.30 mm … más fina que tu boquilla … no se imprimirá» |
+| 9.3 | Grosor `0.6` | Aviso de «menos de dos líneas de boquilla … saldrá débil» |
+| 9.4 | Vaciar una caja con espesor `0.3` y exportar | Aviso de pared fina en esa pieza |
+| 9.5 | Dos cuerpos que se solapan (copia desplazada 15 mm de una caja de 20) | Aviso «Cuerpo1 y Cuerpo2 se solapan (… mm³)»; si los separas, desaparece |
+| 9.6 | En «Mi impresora», poner la cama en `10 × 256 × 256` | Aviso «no cabe en tu cama» (el resumen se actualiza al cambiar el número); al volver a `256` desaparece |
+| 9.7 | Cerrar el diálogo y abrirlo de nuevo, o reiniciar el programa | La boquilla y la cama se recuerdan |
+| 9.8 | Cambiar el formato a STEP | La revisión y «Mi impresora» se ocultan (no es malla) |
+| 9.9 | Pieza con muchos detalles (engranaje de 60 dientes) | La revisión no se queda colgada (puede tardar un poco) |
+
+**Fíjate en:** ¿los avisos se entienden sin explicación? ¿Hay falsos avisos (te avisa de una pared que no existe)? ¿Echas de menos que señale dónde está el problema en la vista? ¿Los valores de tu impresora son los correctos (anota tu modelo)?
+
+## Fase 9 (pendiente de implementar)
 
 Aún no existe; cuando se implemente agregaré sus pruebas aquí.
 

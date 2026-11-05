@@ -2,6 +2,7 @@
 #include <nuf/document/Expression.hpp>
 #include <nuf/document/Features.hpp>
 #include <nuf/geometry/Modeling.hpp>
+#include <nuf/geometry/Printability.hpp>
 #include <nuf/io/DocumentFile.hpp>
 #include <nuf/sketch/Profiles.hpp>
 
@@ -1385,4 +1386,75 @@ TEST_CASE("La unión sigue a las piezas, avisa de los errores y se guarda", "[jo
     REQUIRE(reopened.findFeature(id)->kind() == FeatureKind::Joint);
     REQUIRE(reopened.status(id).health == Health::Ok);
     REQUIRE_THAT(reopened.result().bodies[1].shape.bounds().min.z, Catch::Matchers::WithinAbs(9.0, 1e-6));
+}
+
+namespace {
+
+std::vector<std::pair<std::string, geometry::Shape>> namedBodies(const Document& doc)
+{
+    std::vector<std::pair<std::string, geometry::Shape>> bodies;
+    for (const Body& body : doc.result().bodies) {
+        bodies.emplace_back(body.name, body.shape);
+    }
+    return bodies;
+}
+
+bool mentions(const std::vector<geometry::PrintIssue>& issues, const std::string& text)
+{
+    return std::ranges::any_of(issues, [&](const geometry::PrintIssue& i) { return i.text.find(text) != std::string::npos; });
+}
+
+} // namespace
+
+TEST_CASE("La revisión para imprimir da el visto bueno a una pieza normal", "[print]")
+{
+    Document doc = boxDocument();  // 20×10×5
+    REQUIRE(geometry::checkPrintable(namedBodies(doc), {}).empty());
+}
+
+TEST_CASE("La revisión avisa de paredes finas, cuerpos solapados y piezas que no caben", "[print]")
+{
+    // Una lámina de 0,3 mm es más fina que una boquilla de 0,4; de 0,6 sale débil; de 1 mm está bien.
+    for (const auto& [thickness, expected] : std::vector<std::pair<double, bool>>{{0.3, true}, {0.6, true}, {1.0, false}}) {
+        Document doc = boxDocument(thickness);
+        const auto issues = geometry::checkPrintable(namedBodies(doc), {});
+        INFO(thickness);
+        REQUIRE(mentions(issues, "Pared de") == expected);
+    }
+    {
+        Document doc = boxDocument(0.3);
+        REQUIRE(mentions(geometry::checkPrintable(namedBodies(doc), {}), "no se imprimirá"));
+    }
+
+    // Un vaciado con paredes de 0,3 mm.
+    Document shelled = boxDocument(10.0);
+    const geometry::Shape& box = shelled.result().bodies.front().shape;
+    auto shell = std::make_unique<ShellFeature>();
+    for (int i = 0; i < box.faceCount(); ++i) {
+        if (const auto plane = box.facePlane(i); plane && plane->normal.z > 0.9) {
+            shell->faces.push_back(box.faceRef(i));
+        }
+    }
+    shell->thickness = 0.3;
+    REQUIRE(shelled.status(shelled.addFeature(std::move(shell))).health == Health::Ok);
+    REQUIRE(mentions(geometry::checkPrintable(namedBodies(shelled), {}), "Pared de"));
+
+    // Dos cajas que se solapan.
+    Document overlapping = boxDocument();
+    addMove(overlapping, {15, 0, 0}, 0.0, true);
+    const auto overlapIssues = geometry::checkPrintable(namedBodies(overlapping), {});
+    REQUIRE(mentions(overlapIssues, "se solapan"));
+    Document apart = boxDocument();
+    addMove(apart, {50, 0, 0}, 0.0, true);
+    REQUIRE_FALSE(mentions(geometry::checkPrintable(namedBodies(apart), {}), "se solapan"));
+
+    // La cama de 15 mm no admite una pieza de 20×10×5; girada tampoco.
+    geometry::PrintSettings small;
+    small.bedX = small.bedY = small.bedZ = 15.0;
+    REQUIRE(mentions(geometry::checkPrintable(namedBodies(Document(boxDocument())), small), "no cabe"));
+    geometry::PrintSettings tight;
+    tight.bedX = 30.0;
+    tight.bedY = 12.0;
+    tight.bedZ = 6.0;
+    REQUIRE_FALSE(mentions(geometry::checkPrintable(namedBodies(Document(boxDocument())), tight), "no cabe"));
 }

@@ -70,6 +70,8 @@ public:
     std::optional<sketch::Plane> facePlane(int index) const;
     // Centro (de masas) de una cara.
     sketch::Vec3 faceCenter(int index) const;
+    // Caja que envuelve una cara.
+    Box faceBounds(int index) const;
     // Proyección de una arista sobre un plano, como geometría de su sketch.
     std::vector<sketch::Geometry> projectEdge(int index, const sketch::Plane& plane) const;
     // Recta de una arista recta (punto y dirección unitaria).
