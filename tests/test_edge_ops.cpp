@@ -1288,3 +1288,101 @@ TEST_CASE("Los cuerpos pueden llevar nombre propio y componente, con deshacer y 
     REQUIRE(doc.result().bodies[0].name == "Cuerpo1");
     REQUIRE(doc.componentOf("f2") == "Carcasa");
 }
+
+namespace {
+
+// Una segunda caja (copia de la primera, lejos) y una unión entre la cara superior de la primera y la
+// inferior de la segunda.
+FeatureId addJoint(Document& doc, JointType type, double offset, double angle, double slide)
+{
+    addMove(doc, {100, 0, 0}, 0.0, true);  // Cuerpo2 = f3
+    const geometry::Shape& first = doc.result().bodies[0].shape;
+    const geometry::Shape& second = doc.result().bodies[1].shape;
+    std::optional<geometry::ElementRef> top;
+    std::optional<geometry::ElementRef> bottom;
+    for (int i = 0; i < first.faceCount(); ++i) {
+        if (const auto plane = first.facePlane(i); plane && plane->normal.z > 0.9) {
+            top = first.faceRef(i);
+        }
+    }
+    for (int i = 0; i < second.faceCount(); ++i) {
+        if (const auto plane = second.facePlane(i); plane && plane->normal.z < -0.9) {
+            bottom = second.faceRef(i);
+        }
+    }
+    auto j = std::make_unique<JointFeature>();
+    j->fixedFace = *top;
+    j->movingFace = *bottom;
+    j->type = type;
+    j->offset = offset;
+    j->angle = angle;
+    j->slide = slide;
+    return doc.addFeature(std::move(j));
+}
+
+} // namespace
+
+TEST_CASE("Una unión apoya un cuerpo sobre otro por sus caras", "[joint]")
+{
+    Document doc = boxDocument();  // 20×10×5
+    const FeatureId id = addJoint(doc, JointType::Rigid, 0.0, 0.0, 0.0);
+    REQUIRE(doc.status(id).health == Health::Ok);
+    REQUIRE(doc.result().bodies.size() == 2);
+    const geometry::Box moved = doc.result().bodies[1].shape.bounds();
+    REQUIRE_THAT(moved.min.x, Catch::Matchers::WithinAbs(0.0, 1e-6));
+    REQUIRE_THAT(moved.max.x, Catch::Matchers::WithinAbs(20.0, 1e-6));
+    REQUIRE_THAT(moved.min.z, Catch::Matchers::WithinAbs(5.0, 1e-6));
+    REQUIRE_THAT(moved.max.z, Catch::Matchers::WithinAbs(10.0, 1e-6));
+    REQUIRE_THAT(doc.result().bodies[1].shape.volume(), WithinRel(kBox, 1e-9));
+
+    // La fija no se mueve.
+    REQUIRE_THAT(doc.result().bodies[0].shape.bounds().max.z, Catch::Matchers::WithinAbs(5.0, 1e-6));
+
+    // Con distancia, el cuerpo móvil se separa.
+    Document apart = boxDocument();
+    addJoint(apart, JointType::Rigid, 3.0, 0.0, 0.0);
+    REQUIRE_THAT(apart.result().bodies[1].shape.bounds().min.z, Catch::Matchers::WithinAbs(8.0, 1e-6));
+
+    // Giratoria 90°: la planta de 20×10 queda de 10×20 con el mismo centro.
+    Document turned = boxDocument();
+    addJoint(turned, JointType::Revolute, 0.0, kPi / 2.0, 0.0);
+    const geometry::Box tb = turned.result().bodies[1].shape.bounds();
+    REQUIRE_THAT(tb.max.x - tb.min.x, Catch::Matchers::WithinAbs(10.0, 1e-6));
+    REQUIRE_THAT(tb.max.y - tb.min.y, Catch::Matchers::WithinAbs(20.0, 1e-6));
+    REQUIRE_THAT((tb.min.x + tb.max.x) / 2.0, Catch::Matchers::WithinAbs(10.0, 1e-6));
+
+    // Deslizante 4 mm en X.
+    Document slid = boxDocument();
+    addJoint(slid, JointType::Slider, 0.0, 0.0, 4.0);
+    REQUIRE_THAT(slid.result().bodies[1].shape.bounds().min.x, Catch::Matchers::WithinAbs(4.0, 1e-6));
+}
+
+TEST_CASE("La unión sigue a las piezas, avisa de los errores y se guarda", "[joint][io]")
+{
+    Document doc = boxDocument();
+    const FeatureId id = addJoint(doc, JointType::Rigid, 0.0, 0.0, 0.0);
+
+    // Si la caja fija se hace más alta, la otra sube con ella.
+    auto taller = std::unique_ptr<Feature>(doc.findFeature(2)->clone());
+    static_cast<ExtrudeFeature&>(*taller).spec.side1.distance = 9.0;
+    doc.replaceFeature(2, std::move(taller));
+    REQUIRE(doc.status(id).health == Health::Ok);
+    REQUIRE_THAT(doc.result().bodies[1].shape.bounds().min.z, Catch::Matchers::WithinAbs(9.0, 1e-6));
+
+    // Dos caras del mismo cuerpo dan error.
+    auto same = std::make_unique<JointFeature>();
+    same->fixedFace = doc.result().bodies[0].shape.faceRef(0);
+    same->movingFace = doc.result().bodies[0].shape.faceRef(1);
+    REQUIRE(doc.status(doc.addFeature(std::move(same))).health == Health::Error);
+
+    const auto path = std::filesystem::temp_directory_path() / "nuf_union.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    REQUIRE(reopened.findFeature(id)->kind() == FeatureKind::Joint);
+    REQUIRE(reopened.status(id).health == Health::Ok);
+    REQUIRE_THAT(reopened.result().bodies[1].shape.bounds().min.z, Catch::Matchers::WithinAbs(9.0, 1e-6));
+}

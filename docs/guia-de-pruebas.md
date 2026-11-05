@@ -171,6 +171,17 @@ Necesitas un cuerpo (la caja de 40×25×10 de «Antes de empezar»). Los botones
 | 8.10 | Guardar, cerrar y abrir; luego Ctrl+Z tras cambiar nombres | Nombres y componentes se conservan; deshacer los revierte |
 | 8.11 | Borrar el texto de un nombre | El cuerpo recupera su nombre de fábrica (Cuerpo1) |
 
+| 8.12 | Dos cajas separadas (una con **Mover** → «Crear una copia»). Sólido › **Unión** (grupo ORGANIZAR). Clic en la cara **superior** de la primera y luego en la cara **inferior** de la segunda (hay que girar la vista para ver el fondo) | El panel dice «Fija: … — Móvil: …» y la segunda caja se apoya sobre la primera, centrada |
+| 8.13 | Distancia `5` | Quedan separadas 5 mm |
+| 8.14 | Tipo «Giratoria» con ángulo `90` | La segunda gira sobre la normal de la cara |
+| 8.15 | Tipo «Deslizante» con desplazamiento `10` | Se corre 10 mm sobre la cara |
+| 8.16 | Botón «Intercambiar fija y móvil» | Ahora se mueve la otra caja |
+| 8.17 | Clic en una cara ya elegida | La quita de la elección |
+| 8.18 | Elegir dos caras del mismo cuerpo | Error claro en el panel |
+| 8.19 | Cambiar la altura de la caja fija y volver a la Unión | La caja móvil sube con ella |
+
+**Fíjate en:** ¿las caras elegidas se distinguen en la vista (hoy no se resaltan)? ¿Se entiende cuál es la fija y cuál la móvil?
+
 **Fíjate en:** ¿se entiende qué cuerpo se mueve? ¿Mover con números es suficiente o echas de menos arrastrar con el ratón? (ver «Pendiente de 8a»).
 
 ## Fase 9

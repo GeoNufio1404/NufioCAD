@@ -96,6 +96,10 @@ const Table<PatternLayout, 2> kPatternLayouts{{
     {PatternLayout::Linear, "linear"}, {PatternLayout::Circular, "circular"},
 }};
 
+const Table<JointType, 3> kJointTypes{{
+    {JointType::Rigid, "rigid"}, {JointType::Revolute, "revolute"}, {JointType::Slider, "slider"},
+}};
+
 const Table<AxisRef::Kind, 6> kAxisKinds{{
     {AxisRef::Kind::OriginX, "originX"}, {AxisRef::Kind::OriginY, "originY"}, {AxisRef::Kind::OriginZ, "originZ"},
     {AxisRef::Kind::SketchLine, "sketchLine"}, {AxisRef::Kind::Edge, "edge"},
@@ -509,6 +513,13 @@ FeatureRow rowOf(const Feature& f)
         params = {{"base", toJson(cp.base)}, {"offset", cp.offset}, {"angle", cp.angle}, {"angleAxis", cp.angleAxis}};
         break;
     }
+    case FeatureKind::Joint: {
+        const auto& j = static_cast<const JointFeature&>(f);
+        row.type = "joint";
+        params = {{"fixed", toJson(j.fixedFace)}, {"moving", toJson(j.movingFace)}, {"type", nameOf(kJointTypes, j.type)},
+                  {"offset", j.offset}, {"angle", j.angle}, {"slide", j.slide}, {"flip", j.flip}};
+        break;
+    }
     case FeatureKind::Move: {
         const auto& m = static_cast<const MoveFeature&>(f);
         row.type = "move";
@@ -653,6 +664,16 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         cp->angle = number(p, "angle");
         cp->angleAxis = p.at("angleAxis").get<int>();
         feature = std::move(cp);
+    } else if (row.type == "joint") {
+        auto j = std::make_unique<JointFeature>();
+        j->fixedFace = elementRef(p.at("fixed"));
+        j->movingFace = elementRef(p.at("moving"));
+        j->type = parseEnum(kJointTypes, text(p, "type"), "tipo de unión");
+        j->offset = number(p, "offset");
+        j->angle = number(p, "angle");
+        j->slide = number(p, "slide");
+        j->flip = p.at("flip").get<bool>();
+        feature = std::move(j);
     } else if (row.type == "move") {
         auto m = std::make_unique<MoveFeature>();
         m->body = text(p, "body");

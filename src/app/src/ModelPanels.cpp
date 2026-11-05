@@ -62,6 +62,8 @@ QString glyph(document::FeatureKind kind)
         return QStringLiteral("✥");
     case document::FeatureKind::Combine:
         return QStringLiteral("⊕");
+    case document::FeatureKind::Joint:
+        return QStringLiteral("⚓");
     }
     return QStringLiteral("?");
 }

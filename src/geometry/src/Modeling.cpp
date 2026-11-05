@@ -1158,6 +1158,32 @@ Shape moveBody(std::string_view tag, const Shape& body, const sketch::Vec3& tran
     }
 }
 
+Shape placeBody(std::string_view tag, const Shape& body, const sketch::Plane& from, const sketch::Plane& to)
+{
+    if (body.isNull()) {
+        throw GeometryError("No hay cuerpo que colocar");
+    }
+    try {
+        gp_Trsf displacement;
+        displacement.SetDisplacement(toAx3(from), toAx3(to));
+        BRepBuilderAPI_Transform transform(occtShape(body), displacement, true);
+        if (!transform.IsDone() || transform.Shape().IsNull()) {
+            throw GeometryError("No se pudo colocar el cuerpo");
+        }
+        Namer namer(transform.Shape());
+        const Shape::Impl& in = *body.impl();
+        for (int i = 1; i <= in.faces.Extent(); ++i) {
+            for (const TopoDS_Shape& image : transform.Modified(in.faces(i))) {
+                namer.name(image, in.faceNames[std::size_t(i - 1)]);
+            }
+        }
+        namer.nameUnnamed(std::string(tag) + ":colocado");
+        return namer.finish(std::string(tag));
+    } catch (const Standard_Failure& e) {
+        throw GeometryError(std::string("Error del kernel al colocar el cuerpo: ") + kernelMessage(e));
+    }
+}
+
 Shape holeTool(std::string_view tag, const sketch::Plane& plane, const std::vector<sketch::Vec2>& centers,
                const HoleSpec& spec, bool flip, const std::vector<Shape>& context)
 {

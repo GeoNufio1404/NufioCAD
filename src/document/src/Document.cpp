@@ -51,6 +51,8 @@ std::string kindLabel(FeatureKind kind)
         return "Mover";
     case FeatureKind::Combine:
         return "Combinar";
+    case FeatureKind::Joint:
+        return "Unión";
     }
     return "Operación";
 }

@@ -472,6 +472,36 @@ private:
     std::vector<std::string> checked_;  // herramientas marcadas (al editar)
 };
 
+// Unión: dos caras planas (la fija y la móvil) de dos cuerpos se enfrentan.
+class JointTool final : public FeatureTool {
+    Q_OBJECT
+
+public:
+    JointTool(document::Document& document, render::Viewport& viewport, std::optional<document::FeatureId> editing);
+
+    std::unique_ptr<document::Feature> build() const override;
+
+protected:
+    QString title() const override { return QStringLiteral("Unión"); }
+    void createFields(QFormLayout* form) override;
+    void selectionChanged(const render::ModelSelection& selection) override;
+    QString inputsText() const override;
+    bool removesMaterial() const override { return false; }
+
+private:
+    void updateVisibility();
+    QString faceText(const geometry::ElementRef& ref) const;
+
+    geometry::ElementRef fixed_;
+    geometry::ElementRef moving_;
+    QComboBox* type_ = nullptr;
+    QDoubleSpinBox* offset_ = nullptr;
+    QDoubleSpinBox* angle_ = nullptr;
+    QDoubleSpinBox* slide_ = nullptr;
+    QCheckBox* flip_ = nullptr;
+    QFormLayout* form_ = nullptr;
+};
+
 // Rosca: varilla roscada métrica (con medidas estándar M3…M24 o propias).
 class ThreadTool final : public FeatureTool {
     Q_OBJECT

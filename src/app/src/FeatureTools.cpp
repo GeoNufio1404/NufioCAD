@@ -1893,6 +1893,129 @@ bool CombineTool::removesMaterial() const
     return operation_ != nullptr && operation_->currentIndex() != 0;
 }
 
+// --- Unión ---------------------------------------------------------------------------------
+
+JointTool::JointTool(document::Document& document, render::Viewport& viewport,
+                     std::optional<document::FeatureId> editing)
+    : FeatureTool(document, viewport, editing)
+{
+    if (const auto* j = dynamic_cast<const document::JointFeature*>(original_.get())) {
+        fixed_ = j->fixedFace;
+        moving_ = j->movingFace;
+    }
+}
+
+void JointTool::createFields(QFormLayout* form)
+{
+    form_ = form;
+    type_ = combo({QStringLiteral("Rígida"), QStringLiteral("Giratoria (con ángulo)"),
+                   QStringLiteral("Deslizante (con desplazamiento)")});
+    offset_ = lengthBox(0.0);
+    field("offset", offset_);
+    angle_ = angleBox(0.0, 360.0);
+    field("angle", angle_);
+    slide_ = lengthBox(0.0);
+    field("slide", slide_);
+    flip_ = new QCheckBox(QStringLiteral("Caras del mismo lado (no enfrentadas)"));
+    auto* swap = new QPushButton(QStringLiteral("Intercambiar fija y móvil"));
+    if (const auto* j = dynamic_cast<const document::JointFeature*>(original_.get())) {
+        type_->setCurrentIndex(int(j->type));
+        offset_->setValue(j->offset);
+        angle_->setValue(j->angle / kDegree);
+        slide_->setValue(j->slide);
+        flip_->setChecked(j->flip);
+    }
+    form->addRow(QStringLiteral("Tipo"), type_);
+    form->addRow(QStringLiteral("Distancia"), offset_);
+    form->addRow(QStringLiteral("Ángulo"), angle_);
+    form->addRow(QStringLiteral("Desplazamiento"), slide_);
+    form->addRow(QString(), flip_);
+    form->addRow(QString(), swap);
+    connect(type_, &QComboBox::currentIndexChanged, this, [this] {
+        updateVisibility();
+        updatePreview();
+    });
+    for (QDoubleSpinBox* box : {offset_, angle_, slide_}) {
+        connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
+    }
+    connect(flip_, &QCheckBox::toggled, this, [this] { updatePreview(); });
+    connect(swap, &QPushButton::clicked, this, [this] {
+        std::swap(fixed_, moving_);
+        updatePreview();
+    });
+    updateVisibility();
+}
+
+void JointTool::updateVisibility()
+{
+    const int type = type_->currentIndex();
+    form_->setRowVisible(angle_, type == int(document::JointType::Revolute));
+    form_->setRowVisible(slide_, type == int(document::JointType::Slider));
+}
+
+void JointTool::selectionChanged(const render::ModelSelection& selection)
+{
+    // Cada clic en una cara la elige (primero la fija, luego la móvil) o, si ya estaba elegida, la quita;
+    // la lista es de la herramienta y el visor se deja sin selección (la vista previa lo redibuja todo).
+    for (const render::ModelSelection::Face& f : selection.faces) {
+        if (!before().findFace(f.ref)) {
+            continue;  // una cara del resultado de la vista previa que no existe antes
+        }
+        if (f.ref == fixed_) {
+            fixed_ = moving_;
+            moving_ = {};
+        } else if (f.ref == moving_) {
+            moving_ = {};
+        } else if (fixed_.empty()) {
+            fixed_ = f.ref;
+        } else {
+            moving_ = f.ref;
+        }
+    }
+    if (!selection.empty()) {
+        viewport_.clearModelSelection();
+    }
+}
+
+QString JointTool::faceText(const geometry::ElementRef& ref) const
+{
+    if (ref.empty()) {
+        return QStringLiteral("—");
+    }
+    const auto hit = before().findFace(ref);
+    return hit ? QString::fromStdString(before().bodies[hit->body].name) : QStringLiteral("(ya no existe)");
+}
+
+std::unique_ptr<document::Feature> JointTool::build() const
+{
+    if (fixed_.empty() || moving_.empty()) {
+        return nullptr;
+    }
+    auto f = std::make_unique<document::JointFeature>();
+    if (original_) {
+        f->setName(original_->name());
+    }
+    f->fixedFace = fixed_;
+    f->movingFace = moving_;
+    f->type = document::JointType(type_->currentIndex());
+    f->offset = offset_->value();
+    f->angle = angle_->value() * kDegree;
+    f->slide = slide_->value();
+    f->flip = flip_->isChecked();
+    return f;
+}
+
+QString JointTool::inputsText() const
+{
+    if (fixed_.empty()) {
+        return QStringLiteral("Elige en la vista una cara del cuerpo que se queda quieto y luego una cara del que se mueve");
+    }
+    if (moving_.empty()) {
+        return QStringLiteral("Fija: %1. Ahora elige la cara del cuerpo que se mueve").arg(faceText(fixed_));
+    }
+    return QStringLiteral("Fija: %1 — Móvil: %2").arg(faceText(fixed_), faceText(moving_));
+}
+
 // --- Rosca ----------------------------------------------------------------------------
 
 namespace {

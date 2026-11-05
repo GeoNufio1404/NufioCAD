@@ -175,6 +175,10 @@ Shape loft(std::string_view tag, const std::vector<SketchRegion>& sections, bool
 Shape moveBody(std::string_view tag, const Shape& body, const sketch::Vec3& translation, const Axis& axis, double angle,
                bool copy);
 
+// Mueve el cuerpo de modo que el sistema de ejes «from» (origen, ejes X e Y, normal)
+// quede sobre «to». Las caras conservan su nombre.
+Shape placeBody(std::string_view tag, const Shape& body, const sketch::Plane& from, const sketch::Plane& to);
+
 enum class HoleKind { Simple, Counterbore, Countersink };
 
 struct HoleSpec {

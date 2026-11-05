@@ -142,6 +142,7 @@ private:
     QAction* moveAction_ = nullptr;
     QAction* combineAction_ = nullptr;
     QAction* organizeAction_ = nullptr;
+    QAction* jointAction_ = nullptr;
     QAction* exportAction_ = nullptr;
     QAction* importAction_ = nullptr;
     QMenu* recentMenu_ = nullptr;

@@ -309,6 +309,30 @@ public:
     std::vector<FeatureId> dependencies() const override;
 };
 
+enum class JointType { Rigid, Revolute, Slider };
+
+// Unión entre dos caras planas de dos cuerpos: el cuerpo de la segunda cara se
+// coloca de modo que sus caras queden enfrentadas (centro con centro). La
+// rígida solo deja una distancia entre ellas; la giratoria, además, un ángulo
+// alrededor de la normal; la deslizante, un desplazamiento en el plano de la
+// primera cara. La primera cara es la fija.
+class JointFeature final : public Feature {
+public:
+    geometry::ElementRef fixedFace;
+    geometry::ElementRef movingFace;
+    JointType type = JointType::Rigid;
+    double offset = 0.0;  // mm entre las caras (positivo las separa)
+    double angle = 0.0;   // rad alrededor de la normal
+    double slide = 0.0;   // mm a lo largo del eje X de la cara fija
+    bool flip = false;    // caras del mismo lado (no enfrentadas)
+
+    FeatureKind kind() const override { return FeatureKind::Joint; }
+    std::unique_ptr<Feature> clone() const override { return std::make_unique<JointFeature>(*this); }
+    std::optional<std::string> compute(ModelState& state) const override;
+    std::vector<FeatureId> dependencies() const override;
+    std::vector<NumericField> numericFields() override;
+};
+
 enum class PatternLayout { Linear, Circular };
 
 // Patrón: copias de un cuerpo en fila (a lo largo de un eje de origen) o

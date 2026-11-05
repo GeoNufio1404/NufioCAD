@@ -404,6 +404,11 @@ void MainWindow::createMenus()
     });
     decorate(organizeAction_, QStringLiteral("components-solid"),
              QStringLiteral("Ponerle nombre a los cuerpos y agruparlos en componentes"), QStringLiteral("Componentes"));
+    jointAction_ = solidMenu->addAction(QStringLiteral("&Unión"), this, [this] {
+        startTool(std::make_unique<JointTool>(document_, *viewport_, std::nullopt));
+    });
+    decorate(jointAction_, QStringLiteral("joint-solid"),
+             QStringLiteral("Unir dos cuerpos por sus caras (rígida, giratoria o deslizante)"), QStringLiteral("Unión"));
     decorate(shellAction_, QStringLiteral("shell"), QStringLiteral("Vaciar un cuerpo dejando abiertas las caras elegidas"));
 
     // Herramientas de dibujo por familias (como en Fusion 360); la primera
@@ -571,6 +576,7 @@ void MainWindow::createMenus()
     ribbon_->addAction(solidTab_, combineAction_);
     ribbon_->addGroup(solidTab_, QStringLiteral("ORGANIZAR"));
     ribbon_->addAction(solidTab_, organizeAction_);
+    ribbon_->addAction(solidTab_, jointAction_);
     ribbon_->addGroup(solidTab_, QStringLiteral("CONSTRUIR"));
     ribbon_->addAction(solidTab_, planeAction_);
     ribbon_->addAction(solidTab_, axisAction_);
@@ -1032,6 +1038,9 @@ void MainWindow::activateFeature(document::FeatureId id)
     case document::FeatureKind::Combine:
         startTool(std::make_unique<CombineTool>(document_, *viewport_, id));
         break;
+    case document::FeatureKind::Joint:
+        startTool(std::make_unique<JointTool>(document_, *viewport_, id));
+        break;
     case document::FeatureKind::Import:
         break;  // no tiene parámetros que editar
     }
@@ -1123,7 +1132,7 @@ bool MainWindow::sketchVisible(document::FeatureId id, std::size_t upTo) const
 void MainWindow::updateExportAction()
 {
     updateStartScreen();
-    for (QAction* action : {filletAction_, chamferAction_, shellAction_, holeAction_, mirrorAction_, patternAction_, moveAction_, combineAction_, organizeAction_}) {
+    for (QAction* action : {filletAction_, chamferAction_, shellAction_, holeAction_, mirrorAction_, patternAction_, moveAction_, combineAction_, organizeAction_, jointAction_}) {
         if (action != nullptr) {
             action->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane() && !document_.result().bodies.empty());
         }

@@ -915,6 +915,70 @@ std::vector<FeatureId> CombineFeature::dependencies() const
     return ids;
 }
 
+// --- Unión entre cuerpos ------------------------------------------------------------
+
+std::optional<std::string> JointFeature::compute(ModelState& state) const
+{
+    const auto fixedHit = state.findFace(fixedFace);
+    const auto movingHit = state.findFace(movingFace);
+    if (!fixedHit) {
+        throw FeatureError("La cara fija de la unión ya no existe");
+    }
+    if (!movingHit) {
+        throw FeatureError("La cara móvil de la unión ya no existe");
+    }
+    if (fixedHit->body == movingHit->body) {
+        throw FeatureError("Las dos caras son del mismo cuerpo: elige caras de cuerpos distintos");
+    }
+    const Body& fixedBody = state.bodies[fixedHit->body];
+    Body& movingBody = state.bodies[movingHit->body];
+    const auto a = fixedBody.shape.facePlane(fixedHit->face);
+    const auto b = movingBody.shape.facePlane(movingHit->face);
+    if (!a || !b) {
+        throw FeatureError("Por ahora las uniones solo funcionan con caras planas");
+    }
+    const sketch::Vec3 centerA = fixedBody.shape.faceCenter(fixedHit->face);
+    const sketch::Vec3 centerB = movingBody.shape.faceCenter(movingHit->face);
+
+    const auto cross = [](const sketch::Vec3& u, const sketch::Vec3& v) {
+        return sketch::Vec3{u.y * v.z - u.z * v.y, u.z * v.x - u.x * v.z, u.x * v.y - u.y * v.x};
+    };
+    // Sistema de origen: el centro de la cara móvil con los ejes de su plano.
+    sketch::Plane from;
+    from.origin = centerB;
+    from.xAxis = b->xAxis;
+    from.normal = b->normal;
+    from.yAxis = cross(from.normal, from.xAxis);
+    // Destino: el centro de la cara fija, con la normal opuesta (caras enfrentadas)
+    // y el giro y los desplazamientos pedidos.
+    sketch::Plane to;
+    to.normal = flip ? a->normal : sketch::Vec3{-a->normal.x, -a->normal.y, -a->normal.z};
+    to.xAxis = rotateAbout(a->xAxis, a->normal, angle);
+    to.yAxis = cross(to.normal, to.xAxis);
+    to.origin = {centerA.x + a->normal.x * offset + a->xAxis.x * slide, centerA.y + a->normal.y * offset + a->xAxis.y * slide,
+                 centerA.z + a->normal.z * offset + a->xAxis.z * slide};
+    try {
+        movingBody.shape = geometry::placeBody(tag(), movingBody.shape, from, to);
+    } catch (const geometry::GeometryError& e) {
+        throw FeatureError(e.what());
+    }
+    return std::nullopt;
+}
+
+std::vector<FeatureId> JointFeature::dependencies() const
+{
+    std::vector<FeatureId> ids;
+    addAll(ids, fixedFace);
+    addAll(ids, movingFace);
+    return ids;
+}
+
+std::vector<Feature::NumericField> JointFeature::numericFields()
+{
+    return {field("offset", "Distancia", offset), field("angle", "Ángulo", angle, kRadiansPerDegree),
+            field("slide", "Desplazamiento", slide)};
+}
+
 // --- Eje de construcción ------------------------------------------------------
 
 std::optional<std::string> ConstructionAxisFeature::compute(ModelState& state) const
