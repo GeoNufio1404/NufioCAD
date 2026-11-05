@@ -675,3 +675,89 @@ TEST_CASE("Se puede reflejar sobre un plano de construcción y se guarda en el a
     REQUIRE(reopened.result().bodies.size() == doc.result().bodies.size());
     REQUIRE_THAT(reopened.result().planes.at(plane).origin.x, Catch::Matchers::WithinAbs(30.0, 1e-9));
 }
+
+namespace {
+
+FeatureId addAxis(Document& doc, SketchAttachment first, std::optional<SketchAttachment> second)
+{
+    auto a = std::make_unique<ConstructionAxisFeature>();
+    a->first = std::move(first);
+    a->useSecond = second.has_value();
+    if (second) {
+        a->second = std::move(*second);
+    }
+    return doc.addFeature(std::move(a));
+}
+
+SketchAttachment originAt(OriginPlane plane)
+{
+    SketchAttachment at;
+    at.origin = plane;
+    return at;
+}
+
+SketchAttachment refAt(FeatureId id)
+{
+    SketchAttachment at;
+    at.origin.reset();
+    at.reference = id;
+    return at;
+}
+
+} // namespace
+
+TEST_CASE("Un eje de construcción es la intersección de dos planos o la perpendicular a uno", "[axis]")
+{
+    Document doc;
+    const FeatureId raised = addPlane(doc, 10.0);  // z = 10
+    const FeatureId along = addAxis(doc, refAt(raised), originAt(OriginPlane::YZ));
+    REQUIRE(doc.status(along).health == Health::Ok);
+    const AxisLine line = doc.result().axes.at(along);
+    REQUIRE_THAT(std::abs(line.direction.y), Catch::Matchers::WithinAbs(1.0, 1e-9));  // a lo largo de Y
+    REQUIRE_THAT(line.point.z, Catch::Matchers::WithinAbs(10.0, 1e-9));
+    REQUIRE_THAT(line.point.x, Catch::Matchers::WithinAbs(0.0, 1e-9));
+
+    const FeatureId normal = addAxis(doc, refAt(raised), std::nullopt);
+    REQUIRE_THAT(doc.result().axes.at(normal).point.z, Catch::Matchers::WithinAbs(10.0, 1e-9));
+    REQUIRE_THAT(std::abs(doc.result().axes.at(normal).direction.z), Catch::Matchers::WithinAbs(1.0, 1e-9));
+
+    // Dos planos paralelos no tienen una recta en com\u00fan.
+    const FeatureId parallel = addAxis(doc, originAt(OriginPlane::XY), refAt(raised));
+    REQUIRE(doc.status(parallel).health == Health::Error);
+}
+
+TEST_CASE("Un patrón circular puede girar alrededor de un eje de construcción y se guarda", "[axis][pattern][io]")
+{
+    Document doc = boxDocument();  // x 0..20, y 0..10
+    const FeatureId plane = addPlane(doc, 30.0, 0.0, 0, OriginPlane::YZ);  // x = 30
+    const FeatureId axis = addAxis(doc, refAt(plane), originAt(OriginPlane::XZ));  // x = 30, y = 0: vertical
+    REQUIRE(doc.status(axis).health == Health::Ok);
+
+    auto p = std::make_unique<PatternFeature>();
+    p->body = "f2";
+    p->layout = PatternLayout::Circular;
+    p->axisRef = axis;
+    p->count = 2;
+    p->angle = kPi;
+    p->operation = Operation::NewBody;
+    const FeatureId pattern = doc.addFeature(std::move(p));
+    REQUIRE(doc.status(pattern).health == Health::Ok);
+    REQUIRE(doc.result().bodies.size() == 2);
+    const geometry::Box copy = doc.result().bodies[1].shape.bounds();
+    REQUIRE_THAT(copy.min.x, Catch::Matchers::WithinAbs(40.0, 1e-6));
+    REQUIRE_THAT(copy.max.x, Catch::Matchers::WithinAbs(60.0, 1e-6));
+    REQUIRE_THAT(copy.min.y, Catch::Matchers::WithinAbs(-10.0, 1e-6));
+    REQUIRE_THAT(copy.max.y, Catch::Matchers::WithinAbs(0.0, 1e-6));
+
+    const auto path = std::filesystem::temp_directory_path() / "nuf_eje.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    REQUIRE(reopened.findFeature(axis)->kind() == FeatureKind::ConstructionAxis);
+    REQUIRE(reopened.status(pattern).health == Health::Ok);
+    REQUIRE(reopened.result().bodies.size() == 2);
+    REQUIRE_THAT(reopened.result().bodies[1].shape.bounds().min.x, Catch::Matchers::WithinAbs(40.0, 1e-6));
+}

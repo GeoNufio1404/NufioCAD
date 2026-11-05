@@ -90,11 +90,12 @@ public:
 
 // Eje de una revolución.
 struct AxisRef {
-    enum class Kind { OriginX, OriginY, OriginZ, SketchLine, Edge };
+    enum class Kind { OriginX, OriginY, OriginZ, SketchLine, Edge, Construction };
     Kind kind = Kind::OriginZ;
     FeatureId sketch = 0;          // con SketchLine
     sketch::EntityId entity = 0;   // con SketchLine
     geometry::ElementRef edge;     // con Edge (arista recta)
+    FeatureId reference = 0;       // con Construction: el eje de construcción
 };
 
 class RevolveFeature final : public Feature {
@@ -197,6 +198,20 @@ public:
     std::vector<FeatureId> dependencies() const override;
 };
 
+// Eje de construcción: la intersección de dos planos o, con un solo plano, la
+// recta perpendicular a él por su origen. No cambia ningún cuerpo.
+class ConstructionAxisFeature final : public Feature {
+public:
+    SketchAttachment first;
+    bool useSecond = true;
+    SketchAttachment second;
+
+    FeatureKind kind() const override { return FeatureKind::ConstructionAxis; }
+    std::unique_ptr<Feature> clone() const override { return std::make_unique<ConstructionAxisFeature>(*this); }
+    std::optional<std::string> compute(ModelState& state) const override;
+    std::vector<FeatureId> dependencies() const override;
+};
+
 enum class PatternLayout { Linear, Circular };
 
 // Patrón: copias de un cuerpo en fila (a lo largo de un eje de origen) o
@@ -207,6 +222,7 @@ public:
     std::string body;                          // clave del cuerpo («f3»)
     PatternLayout layout = PatternLayout::Linear;
     int axis = 0;                              // 0 = X, 1 = Y, 2 = Z (por el origen)
+    FeatureId axisRef = 0;                     // si no es 0, un eje de construcción (en vez de axis)
     int count = 3;                             // con el original
     double spacing = 30.0;                     // mm entre copias (lineal)
     double angle = 6.283185307179586;          // rad en total (circular; 2π = vuelta completa)

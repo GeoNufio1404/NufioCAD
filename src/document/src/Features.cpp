@@ -400,6 +400,13 @@ geometry::Axis resolveAxis(const ModelState& state, const AxisRef& axis)
         }
         return {a, {d.x / len, d.y / len, d.z / len}};
     }
+    case AxisRef::Kind::Construction: {
+        const auto it = state.axes.find(axis.reference);
+        if (it == state.axes.end()) {
+            throw FeatureError("El eje de construcción ya no existe");
+        }
+        return {it->second.point, it->second.direction};
+    }
     case AxisRef::Kind::Edge: {
         const auto hit = state.findEdge(axis.edge);
         if (!hit) {
@@ -456,6 +463,9 @@ std::vector<FeatureId> RevolveFeature::dependencies() const
     }
     if (axis.kind == AxisRef::Kind::Edge) {
         addAll(ids, axis.edge);
+    }
+    if (axis.kind == AxisRef::Kind::Construction) {
+        addUnique(ids, axis.reference);
     }
     return ids;
 }
@@ -613,6 +623,48 @@ std::vector<FeatureId> ConstructionPlaneFeature::dependencies() const
     return ids;
 }
 
+// --- Eje de construcción ------------------------------------------------------
+
+std::optional<std::string> ConstructionAxisFeature::compute(ModelState& state) const
+{
+    std::optional<std::string> warning;
+    const sketch::Plane a = resolvePlane(state, first, "del primer plano", "se usa su última posición", warning);
+    if (!useSecond) {
+        state.axes[id()] = {a.origin, a.normal};
+        return warning;
+    }
+    const sketch::Plane b = resolvePlane(state, second, "del segundo plano", "se usa su última posición", warning);
+    const sketch::Vec3& n1 = a.normal;
+    const sketch::Vec3& n2 = b.normal;
+    const auto cross = [](const sketch::Vec3& u, const sketch::Vec3& v) {
+        return sketch::Vec3{u.y * v.z - u.z * v.y, u.z * v.x - u.x * v.z, u.x * v.y - u.y * v.x};
+    };
+    const auto dot = [](const sketch::Vec3& u, const sketch::Vec3& v) { return u.x * v.x + u.y * v.y + u.z * v.z; };
+    const sketch::Vec3 d = cross(n1, n2);
+    const double dd = dot(d, d);
+    if (dd < 1e-12) {
+        throw FeatureError("Los dos planos son paralelos: no tienen una recta en común");
+    }
+    const double h1 = dot(n1, a.origin);
+    const double h2 = dot(n2, b.origin);
+    const sketch::Vec3 u = cross(n2, d);
+    const sketch::Vec3 v = cross(d, n1);
+    const sketch::Vec3 point{(h1 * u.x + h2 * v.x) / dd, (h1 * u.y + h2 * v.y) / dd, (h1 * u.z + h2 * v.z) / dd};
+    const double len = std::sqrt(dd);
+    state.axes[id()] = {point, {d.x / len, d.y / len, d.z / len}};
+    return warning;
+}
+
+std::vector<FeatureId> ConstructionAxisFeature::dependencies() const
+{
+    std::vector<FeatureId> ids;
+    addAttachmentDependencies(ids, first);
+    if (useSecond) {
+        addAttachmentDependencies(ids, second);
+    }
+    return ids;
+}
+
 // --- Patrón ------------------------------------------------------------------
 
 std::optional<std::string> PatternFeature::compute(ModelState& state) const
@@ -624,6 +676,14 @@ std::optional<std::string> PatternFeature::compute(ModelState& state) const
     geometry::PatternSpec spec;
     spec.circular = layout == PatternLayout::Circular;
     spec.axis.direction = {axis == 0 ? 1.0 : 0.0, axis == 1 ? 1.0 : 0.0, axis == 2 ? 1.0 : 0.0};
+    if (axisRef != 0) {
+        const auto line = state.axes.find(axisRef);
+        if (line == state.axes.end()) {
+            throw FeatureError("El eje de construcción del patrón ya no existe");
+        }
+        spec.axis.point = line->second.point;
+        spec.axis.direction = line->second.direction;
+    }
     spec.spacing = spacing;
     spec.angle = angle;
     spec.count = count;
@@ -653,6 +713,9 @@ std::vector<FeatureId> PatternFeature::dependencies() const
 {
     std::vector<FeatureId> ids;
     addAll(ids, geometry::ElementRef{body + ":", 0});  // la operación que creó el cuerpo
+    if (axisRef != 0) {
+        ids.push_back(axisRef);
+    }
     return ids;
 }
 

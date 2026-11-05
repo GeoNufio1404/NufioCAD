@@ -225,6 +225,12 @@ void showPlanes(render::Viewport& viewport, const document::Document& doc, const
         planes.push_back({id, f ? QString::fromStdString(f->name()) : QString(), plane});
     }
     viewport.showConstructionPlanes(planes);
+    std::vector<render::Viewport::ConstructionAxisView> axes;
+    for (const auto& [id, line] : state.axes) {
+        const document::Feature* f = preview != nullptr && preview->id() == id ? preview : doc.findFeature(id);
+        axes.push_back({id, f ? QString::fromStdString(f->name()) : QString(), line.point, line.direction});
+    }
+    viewport.showConstructionAxes(axes);
 }
 
 } // namespace
@@ -587,6 +593,11 @@ void RevolveTool::createFields(QFormLayout* form)
     form_ = form;
     axisKind_ = combo({QStringLiteral("Eje X"), QStringLiteral("Eje Y"), QStringLiteral("Eje Z"),
                        QStringLiteral("Línea o arista elegida")});
+    for (const auto& [id, line] : before().axes) {
+        const document::Feature* f = document_.findFeature(id);
+        axisKind_->addItem(f ? QString::fromStdString(f->name()) : QStringLiteral("Eje"));
+        axisIds_.push_back(id);
+    }
     axisLabel_ = new QLabel(QStringLiteral("Haz clic en una línea del sketch o en una arista recta"));
     axisLabel_->setWordWrap(true);
     extent_ = combo({QStringLiteral("Ángulo"), QStringLiteral("Vuelta completa")});
@@ -605,7 +616,12 @@ void RevolveTool::createFields(QFormLayout* form)
     form->addRow(QStringLiteral("Operación"), operation_);
 
     if (const auto* r = dynamic_cast<const document::RevolveFeature*>(original_.get())) {
-        axisKind_->setCurrentIndex(std::min(int(r->axis.kind), 3));
+        int at = std::min(int(r->axis.kind), 3);
+        if (r->axis.kind == document::AxisRef::Kind::Construction) {
+            const auto it = std::ranges::find(axisIds_, r->axis.reference);
+            at = it != axisIds_.end() ? 4 + int(it - axisIds_.begin()) : 3;
+        }
+        axisKind_->setCurrentIndex(at);
         extent_->setCurrentIndex(int(r->spec.extent));
         direction_->setCurrentIndex(int(r->spec.direction));
         angle1_->setValue(r->spec.angle1 / kDegree);
@@ -689,6 +705,10 @@ std::unique_ptr<document::Feature> RevolveTool::build() const
         f->axis = {document::AxisRef::Kind::OriginZ, 0, 0, {}};
         break;
     default:
+        if (axisKind_->currentIndex() >= 4) {
+            f->axis = {document::AxisRef::Kind::Construction, 0, 0, {}, axisIds_[std::size_t(axisKind_->currentIndex() - 4)]};
+            break;
+        }
         if (axis_.kind != document::AxisRef::Kind::SketchLine && axis_.kind != document::AxisRef::Kind::Edge) {
             return nullptr;
         }
@@ -1251,6 +1271,118 @@ QString PlaneTool::inputsText() const
     return QStringLiteral("Plano a %1 mm de «%2»").arg(offset_->value()).arg(base_->currentText());
 }
 
+// --- Eje de construcción -----------------------------------------------------------
+
+AxisTool::AxisTool(document::Document& document, render::Viewport& viewport,
+                   std::optional<document::FeatureId> editing)
+    : FeatureTool(document, viewport, editing)
+{
+    if (const auto* a = dynamic_cast<const document::ConstructionAxisFeature*>(original_.get())) {
+        face_ = a->first.face;
+    }
+}
+
+void AxisTool::createFields(QFormLayout* form)
+{
+    first_ = combo({QStringLiteral("Plano XY"), QStringLiteral("Plano XZ"), QStringLiteral("Plano YZ"),
+                    QStringLiteral("Cara plana elegida")});
+    second_ = combo({QStringLiteral("Ninguno (perpendicular al primero)"), QStringLiteral("Plano XY"),
+                     QStringLiteral("Plano XZ"), QStringLiteral("Plano YZ")});
+    for (const auto& [id, plane] : before().planes) {
+        const document::Feature* f = document_.findFeature(id);
+        const QString name = f ? QString::fromStdString(f->name()) : QStringLiteral("Plano");
+        first_->addItem(name);
+        second_->addItem(name);
+        planeIds_.push_back(id);
+    }
+    second_->setCurrentIndex(2);  // XZ: con XY da el eje Y
+    first_->setCurrentIndex(0);
+    if (const auto* a = dynamic_cast<const document::ConstructionAxisFeature*>(original_.get())) {
+        const auto indexOf = [&](const document::SketchAttachment& at, int whenFace) {
+            if (at.origin) {
+                return int(*at.origin);
+            }
+            if (at.reference != 0) {
+                const auto it = std::ranges::find(planeIds_, at.reference);
+                return it != planeIds_.end() ? 4 + int(it - planeIds_.begin()) : whenFace;
+            }
+            return whenFace;
+        };
+        first_->setCurrentIndex(indexOf(a->first, 3));
+        if (!a->useSecond) {
+            second_->setCurrentIndex(0);
+        } else {
+            const int at = indexOf(a->second, 0);
+            second_->setCurrentIndex(a->second.origin ? at + 1 : at);
+        }
+    }
+    form->addRow(QStringLiteral("Primer plano"), first_);
+    form->addRow(QStringLiteral("Segundo plano"), second_);
+    for (QComboBox* box : {first_, second_}) {
+        connect(box, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
+    }
+}
+
+void AxisTool::selectionChanged(const render::ModelSelection& selection)
+{
+    for (const render::ModelSelection::Face& face : selection.faces) {
+        if (const auto hit = before().findFace(face.ref); hit && before().bodies[hit->body].shape.facePlane(hit->face)) {
+            face_ = face.ref;
+            first_->setCurrentIndex(3);
+            break;
+        }
+    }
+}
+
+std::unique_ptr<document::Feature> AxisTool::build() const
+{
+    auto f = std::make_unique<document::ConstructionAxisFeature>();
+    if (original_) {
+        f->setName(original_->name());
+    }
+    // Primer plano.
+    const int a = first_->currentIndex();
+    if (a < 3) {
+        f->first.origin = document::OriginPlane(a);
+    } else if (a >= 4) {
+        const document::FeatureId id = planeIds_[std::size_t(a - 4)];
+        f->first.origin.reset();
+        f->first.reference = id;
+        f->first.lastPlane = before().planes.at(id);
+    } else {
+        const auto hit = before().findFace(face_);
+        const auto facePlane = hit ? before().bodies[hit->body].shape.facePlane(hit->face) : std::nullopt;
+        if (!facePlane) {
+            return nullptr;
+        }
+        f->first.origin.reset();
+        f->first.face = face_;
+        f->first.lastPlane = *facePlane;
+    }
+    // Segundo plano (o ninguno).
+    const int b = second_->currentIndex();
+    f->useSecond = b != 0;
+    if (b >= 1 && b <= 3) {
+        f->second.origin = document::OriginPlane(b - 1);
+    } else if (b >= 4) {
+        const document::FeatureId id = planeIds_[std::size_t(b - 4)];
+        f->second.origin.reset();
+        f->second.reference = id;
+        f->second.lastPlane = before().planes.at(id);
+    }
+    return f;
+}
+
+QString AxisTool::inputsText() const
+{
+    if (first_->currentIndex() == 3 && face_.empty()) {
+        return QStringLiteral("Elige en la vista la cara plana del primer plano");
+    }
+    return second_->currentIndex() == 0
+               ? QStringLiteral("Perpendicular a «%1»").arg(first_->currentText())
+               : QStringLiteral("Intersección de «%1» y «%2»").arg(first_->currentText(), second_->currentText());
+}
+
 // --- Patrón -----------------------------------------------------------------------
 
 PatternTool::PatternTool(document::Document& document, render::Viewport& viewport,
@@ -1277,6 +1409,11 @@ void PatternTool::createFields(QFormLayout* form)
     }
     layout_ = combo({QStringLiteral("Lineal"), QStringLiteral("Circular")});
     axis_ = combo({QStringLiteral("Eje X"), QStringLiteral("Eje Y"), QStringLiteral("Eje Z")});
+    for (const auto& [id, line] : before().axes) {
+        const document::Feature* f = document_.findFeature(id);
+        axis_->addItem(f ? QString::fromStdString(f->name()) : QStringLiteral("Eje"));
+        axisIds_.push_back(id);
+    }
     count_ = new QSpinBox();
     count_->setRange(2, 200);
     count_->setValue(3);
@@ -1287,7 +1424,12 @@ void PatternTool::createFields(QFormLayout* form)
     operation_ = combo({QStringLiteral("Unir"), QStringLiteral("Cuerpo nuevo")});
     if (const auto* p = dynamic_cast<const document::PatternFeature*>(original_.get())) {
         layout_->setCurrentIndex(int(p->layout));
-        axis_->setCurrentIndex(p->axis);
+        int at = p->axis;
+        if (p->axisRef != 0) {
+            const auto it = std::ranges::find(axisIds_, p->axisRef);
+            at = it != axisIds_.end() ? 3 + int(it - axisIds_.begin()) : 0;
+        }
+        axis_->setCurrentIndex(at);
         count_->setValue(p->count);
         spacing_->setValue(p->spacing);
         angle_->setValue(p->angle / kDegree);
@@ -1336,7 +1478,11 @@ std::unique_ptr<document::Feature> PatternTool::build() const
     }
     f->body = body_;
     f->layout = layout_->currentIndex() == 1 ? document::PatternLayout::Circular : document::PatternLayout::Linear;
-    f->axis = axis_->currentIndex();
+    if (axis_->currentIndex() >= 3) {
+        f->axisRef = axisIds_[std::size_t(axis_->currentIndex() - 3)];
+    } else {
+        f->axis = axis_->currentIndex();
+    }
     f->count = count_->value();
     f->spacing = spacing_->value();
     f->angle = angle_->value() * kDegree;

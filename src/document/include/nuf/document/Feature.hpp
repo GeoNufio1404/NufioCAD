@@ -30,11 +30,18 @@ struct SketchOutput {
     sketch::Plane plane;
 };
 
+// Eje de construcción: una recta por un punto, con dirección unitaria.
+struct AxisLine {
+    sketch::Vec3 point;
+    sketch::Vec3 direction{0.0, 0.0, 1.0};
+};
+
 // Resultado acumulado tras una operación.
 struct ModelState {
     std::vector<Body> bodies;
     std::map<FeatureId, SketchOutput> sketches;
     std::map<FeatureId, sketch::Plane> planes;  // planos de construcción
+    std::map<FeatureId, AxisLine> axes;         // ejes de construcción
     int bodiesCreated = 0;  // para numerar «Cuerpo N»
 
     std::vector<geometry::Shape> shapes() const;
@@ -51,7 +58,7 @@ struct ModelState {
     std::optional<EdgeHit> findEdge(const geometry::ElementRef& ref) const;
 };
 
-enum class FeatureKind { Sketch, Extrude, Revolve, Import, Fillet, Chamfer, Shell, Hole, Mirror, Pattern, ConstructionPlane };
+enum class FeatureKind { Sketch, Extrude, Revolve, Import, Fillet, Chamfer, Shell, Hole, Mirror, Pattern, ConstructionPlane, ConstructionAxis };
 
 enum class Health {
     Ok,

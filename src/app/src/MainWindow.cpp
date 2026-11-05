@@ -335,6 +335,11 @@ void MainWindow::createMenus()
     decorate(planeAction_, QStringLiteral("plane-solid"),
              QStringLiteral("Crear un plano desfasado o girado respecto a un plano de origen, una cara u otro plano"),
              QStringLiteral("Plano"));
+    axisAction_ = solidMenu->addAction(QStringLiteral("Eje de construcción"), this, [this] {
+        startTool(std::make_unique<AxisTool>(document_, *viewport_, std::nullopt));
+    });
+    decorate(axisAction_, QStringLiteral("axis-solid"),
+             QStringLiteral("Crear un eje: la intersección de dos planos o la perpendicular a un plano"), QStringLiteral("Eje"));
     decorate(shellAction_, QStringLiteral("shell"), QStringLiteral("Vaciar un cuerpo dejando abiertas las caras elegidas"));
 
     // Herramientas de dibujo por familias (como en Fusion 360); la primera
@@ -498,6 +503,7 @@ void MainWindow::createMenus()
     ribbon_->addAction(solidTab_, patternAction_);
     ribbon_->addGroup(solidTab_, QStringLiteral("CONSTRUIR"));
     ribbon_->addAction(solidTab_, planeAction_);
+    ribbon_->addAction(solidTab_, axisAction_);
 
     auto family = [this, &families](const QString& name) {
         const std::size_t i = static_cast<std::size_t>(
@@ -931,6 +937,9 @@ void MainWindow::activateFeature(document::FeatureId id)
     case document::FeatureKind::ConstructionPlane:
         startTool(std::make_unique<PlaneTool>(document_, *viewport_, id));
         break;
+    case document::FeatureKind::ConstructionAxis:
+        startTool(std::make_unique<AxisTool>(document_, *viewport_, id));
+        break;
     case document::FeatureKind::Import:
         break;  // no tiene parámetros que editar
     }
@@ -1027,8 +1036,10 @@ void MainWindow::updateExportAction()
             action->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane() && !document_.result().bodies.empty());
         }
     }
-    if (planeAction_ != nullptr) {
-        planeAction_->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane());
+    for (QAction* action : {planeAction_, axisAction_}) {
+        if (action != nullptr) {
+            action->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane());
+        }
     }
     if (importAction_ != nullptr) {
         importAction_->setEnabled(!sketch_ && !tool_);
@@ -1159,6 +1170,15 @@ void MainWindow::refreshModel()
             planes.push_back({id, f ? QString::fromStdString(f->name()) : QString(), plane});
         }
         viewport_->showConstructionPlanes(planes);
+        std::vector<render::Viewport::ConstructionAxisView> axes;
+        for (const auto& [id, line] : state.axes) {
+            if (hiddenPlanes_.contains(id)) {
+                continue;
+            }
+            const document::Feature* f = document_.findFeature(id);
+            axes.push_back({id, f ? QString::fromStdString(f->name()) : QString(), line.point, line.direction});
+        }
+        viewport_->showConstructionAxes(axes);
     }
 
     std::map<document::FeatureId, ShownSketch> wanted;

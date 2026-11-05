@@ -96,9 +96,10 @@ const Table<PatternLayout, 2> kPatternLayouts{{
     {PatternLayout::Linear, "linear"}, {PatternLayout::Circular, "circular"},
 }};
 
-const Table<AxisRef::Kind, 5> kAxisKinds{{
+const Table<AxisRef::Kind, 6> kAxisKinds{{
     {AxisRef::Kind::OriginX, "originX"}, {AxisRef::Kind::OriginY, "originY"}, {AxisRef::Kind::OriginZ, "originZ"},
     {AxisRef::Kind::SketchLine, "sketchLine"}, {AxisRef::Kind::Edge, "edge"},
+    {AxisRef::Kind::Construction, "construction"},
 }};
 
 // ---------------------------------------------------------------------------
@@ -432,7 +433,11 @@ SketchAttachment attachmentOf(const Json& j)
 
 Json toJson(const AxisRef& a)
 {
-    return {{"kind", nameOf(kAxisKinds, a.kind)}, {"sketch", a.sketch}, {"entity", a.entity}, {"edge", toJson(a.edge)}};
+    Json j{{"kind", nameOf(kAxisKinds, a.kind)}, {"sketch", a.sketch}, {"entity", a.entity}, {"edge", toJson(a.edge)}};
+    if (a.reference != 0) {
+        j["reference"] = a.reference;
+    }
+    return j;
 }
 AxisRef axisOf(const Json& j)
 {
@@ -441,6 +446,9 @@ AxisRef axisOf(const Json& j)
     a.sketch = unsignedValue(j, "sketch");
     a.entity = static_cast<sk::EntityId>(unsignedValue(j, "entity"));
     a.edge = elementRef(j.at("edge"));
+    if (j.contains("reference")) {
+        a.reference = unsignedValue(j, "reference");
+    }
     return a;
 }
 
@@ -501,11 +509,17 @@ FeatureRow rowOf(const Feature& f)
         params = {{"base", toJson(cp.base)}, {"offset", cp.offset}, {"angle", cp.angle}, {"angleAxis", cp.angleAxis}};
         break;
     }
+    case FeatureKind::ConstructionAxis: {
+        const auto& ca = static_cast<const ConstructionAxisFeature&>(f);
+        row.type = "axis";
+        params = {{"first", toJson(ca.first)}, {"useSecond", ca.useSecond}, {"second", toJson(ca.second)}};
+        break;
+    }
     case FeatureKind::Pattern: {
         const auto& pt = static_cast<const PatternFeature&>(f);
         row.type = "pattern";
         params = {{"body", pt.body}, {"layout", nameOf(kPatternLayouts, pt.layout)}, {"axis", pt.axis},
-                  {"count", pt.count}, {"spacing", pt.spacing}, {"angle", pt.angle},
+                  {"axisRef", pt.axisRef}, {"count", pt.count}, {"spacing", pt.spacing}, {"angle", pt.angle},
                   {"operation", nameOf(kOperations, pt.operation)}};
         break;
     }
@@ -588,11 +602,20 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         cp->angle = number(p, "angle");
         cp->angleAxis = p.at("angleAxis").get<int>();
         feature = std::move(cp);
+    } else if (row.type == "axis") {
+        auto ca = std::make_unique<ConstructionAxisFeature>();
+        ca->first = attachmentOf(p.at("first"));
+        ca->useSecond = p.at("useSecond").get<bool>();
+        ca->second = attachmentOf(p.at("second"));
+        feature = std::move(ca);
     } else if (row.type == "pattern") {
         auto pt = std::make_unique<PatternFeature>();
         pt->body = text(p, "body");
         pt->layout = parseEnum(kPatternLayouts, text(p, "layout"), "tipo de patrón");
         pt->axis = p.at("axis").get<int>();
+        if (p.contains("axisRef")) {
+            pt->axisRef = unsignedValue(p, "axisRef");
+        }
         pt->count = p.at("count").get<int>();
         pt->spacing = number(p, "spacing");
         pt->angle = number(p, "angle");

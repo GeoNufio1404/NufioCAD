@@ -104,6 +104,14 @@ public:
         sketch::Plane plane;
     };
     void showConstructionPlanes(const std::vector<ConstructionPlaneView>& planes);
+    // Ejes de construcción a la vista (una línea turquesa que atraviesa la pieza).
+    struct ConstructionAxisView {
+        document::FeatureId id = 0;
+        QString name;
+        sketch::Vec3 point;
+        sketch::Vec3 direction;
+    };
+    void showConstructionAxes(const std::vector<ConstructionAxisView>& axes);
 
     // Planos de origen siempre a la vista (no solo al elegir el plano).
     void setOriginVisible(bool visible);

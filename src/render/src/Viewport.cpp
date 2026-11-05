@@ -1656,7 +1656,7 @@ private:
     // Los planos de construcción son cuadrados centrados en el origen del plano;
     // su tamaño sigue al de las piezas (como mínimo 60 mm de lado).
 public:
-    void showConstructionPlanes(const std::vector<Viewport::ConstructionPlaneView>& wanted)
+    double referenceHalf() const
     {
         double largest = 0.0;
         for (const ShownBody& b : bodies) {
@@ -1665,7 +1665,50 @@ public:
                 largest = std::max({largest, box.max.x - box.min.x, box.max.y - box.min.y, box.max.z - box.min.z});
             }
         }
-        const double half = std::max(30.0, 0.75 * largest);
+        return std::max(30.0, 0.75 * largest);
+    }
+
+    struct ShownAxis {
+        document::FeatureId id = 0;
+        sketch::Vec3 point;
+        sketch::Vec3 direction;
+        double half = 0.0;
+        Handle(AIS_Shape) shape;
+    };
+
+    void showConstructionAxes(const std::vector<Viewport::ConstructionAxisView>& wanted)
+    {
+        const double half = referenceHalf() * 1.5;
+        const auto same = [&](const ShownAxis& a, const Viewport::ConstructionAxisView& b) {
+            const auto eq = [](const sketch::Vec3& p, const sketch::Vec3& q) { return p.x == q.x && p.y == q.y && p.z == q.z; };
+            return a.id == b.id && a.half == half && eq(a.point, b.point) && eq(a.direction, b.direction);
+        };
+        if (wanted.size() == constructionAxes.size()
+            && std::ranges::all_of(std::views::iota(std::size_t(0), wanted.size()),
+                                   [&](std::size_t i) { return same(constructionAxes[i], wanted[i]); })) {
+            return;
+        }
+        for (const ShownAxis& old : constructionAxes) {
+            context->Remove(old.shape, false);
+        }
+        constructionAxes.clear();
+        for (const Viewport::ConstructionAxisView& item : wanted) {
+            const gp_Pnt a(item.point.x - item.direction.x * half, item.point.y - item.direction.y * half,
+                           item.point.z - item.direction.z * half);
+            const gp_Pnt b(item.point.x + item.direction.x * half, item.point.y + item.direction.y * half,
+                           item.point.z + item.direction.z * half);
+            Handle(AIS_Shape) shape = new AIS_Shape(BRepBuilderAPI_MakeEdge(a, b).Edge());
+            shape->SetColor(rgb(0x39, 0xB5, 0xC8));
+            shape->SetWidth(2.5);
+            shape->SetZLayer(Graphic3d_ZLayerId_Topmost);
+            context->Display(shape, 0, -1, false);
+            constructionAxes.push_back({item.id, item.point, item.direction, half, shape});
+        }
+    }
+
+    void showConstructionPlanes(const std::vector<Viewport::ConstructionPlaneView>& wanted)
+    {
+        const double half = referenceHalf();
         const auto same = [&](const ShownPlane& a, const Viewport::ConstructionPlaneView& b) {
             const auto eq = [](const sketch::Vec3& p, const sketch::Vec3& q) { return p.x == q.x && p.y == q.y && p.z == q.z; };
             return a.id == b.id && a.name == b.name && a.half == half && eq(a.plane.origin, b.plane.origin)
@@ -1910,6 +1953,7 @@ private:
     AIS_SelectionScheme defaultClickScheme = AIS_SelectionScheme_Replace;
     std::vector<OriginPlane> originPlanes;
     std::vector<ShownPlane> constructionPlanes;
+    std::vector<ShownAxis> constructionAxes;
     Handle(SketchPlaneFilter) planeFilter;
     Handle(SketchGrid) grid;
     Handle(SketchGrid) ground;
@@ -2068,6 +2112,13 @@ void Viewport::setOriginVisible(bool visible)
 void Viewport::showConstructionPlanes(const std::vector<ConstructionPlaneView>& planes)
 {
     impl_->showConstructionPlanes(planes);
+    impl_->view->Invalidate();
+    update();
+}
+
+void Viewport::showConstructionAxes(const std::vector<ConstructionAxisView>& axes)
+{
+    impl_->showConstructionAxes(axes);
     impl_->view->Invalidate();
     update();
 }

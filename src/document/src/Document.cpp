@@ -37,6 +37,8 @@ std::string kindLabel(FeatureKind kind)
         return "Patrón";
     case FeatureKind::ConstructionPlane:
         return "Plano";
+    case FeatureKind::ConstructionAxis:
+        return "Eje";
     }
     return "Operación";
 }

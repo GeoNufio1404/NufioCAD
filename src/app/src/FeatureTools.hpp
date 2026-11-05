@@ -159,6 +159,7 @@ private:
 
     std::vector<document::ProfileRef> profiles_;
     document::AxisRef axis_;
+    std::vector<document::FeatureId> axisIds_;  // ejes de construcción del desplegable (tras los 4 fijos)
     QComboBox* axisKind_ = nullptr;
     QLabel* axisLabel_ = nullptr;
     QComboBox* extent_ = nullptr;
@@ -305,6 +306,29 @@ private:
     QComboBox* angleAxis_ = nullptr;
 };
 
+// Eje de construcción: intersección de dos planos, o perpendicular a un plano.
+class AxisTool final : public FeatureTool {
+    Q_OBJECT
+
+public:
+    AxisTool(document::Document& document, render::Viewport& viewport, std::optional<document::FeatureId> editing);
+
+    std::unique_ptr<document::Feature> build() const override;
+
+protected:
+    QString title() const override { return QStringLiteral("Eje de construcción"); }
+    void createFields(QFormLayout* form) override;
+    void selectionChanged(const render::ModelSelection& selection) override;
+    QString inputsText() const override;
+    bool removesMaterial() const override { return false; }
+
+private:
+    geometry::ElementRef face_;
+    std::vector<document::FeatureId> planeIds_;  // planos de construcción de los desplegables (tras los fijos)
+    QComboBox* first_ = nullptr;
+    QComboBox* second_ = nullptr;
+};
+
 // Patrón: repite un cuerpo en fila o alrededor de un eje de origen.
 class PatternTool final : public FeatureTool {
     Q_OBJECT
@@ -325,6 +349,7 @@ private:
     void updateVisibility();
 
     std::string body_;
+    std::vector<document::FeatureId> axisIds_;  // ejes de construcción del desplegable (tras X, Y, Z)
     QFormLayout* form_ = nullptr;
     QComboBox* bodyBox_ = nullptr;
     QComboBox* layout_ = nullptr;

@@ -334,7 +334,7 @@ Todas siguen el patrón de las operaciones actuales: una clase en `document/Feat
 - `PatternFeature`: clave del cuerpo + tipo + eje + cantidad (con el original, 2–200) + distancia o ángulo + operación. **Unir** funde las copias con el cuerpo una a una (si se solapan se unen en una pieza; si no, quedan como piezas del mismo cuerpo); **Cuerpo nuevo** las junta en un cuerpo aparte. Se guarda como `pattern`.
 - Herramienta `PatternTool`: Sólido › Patrón en la cinta, con vista previa en vivo.
 - **Hecho:** 3 pruebas nuevas (lineal separado, solapado y como cuerpo nuevo hacia atrás; circular 4×90° y medio giro; seguir a la pieza, errores y guardar/abrir). Comprobado a mano: botón, panel y vista previa.
-- **Pendiente de 5d:** repetir **operaciones** (no solo cuerpos), patrón por trayectoria, ejes y direcciones propios (llegan con los ejes de construcción de la Fase 6; hoy solo los ejes de origen).
+- **Pendiente de 5d:** repetir **operaciones** (no solo cuerpos) y patrón por trayectoria. (Los ejes propios ya llegaron con 6b.)
 
 **5e — Espejo ✅ (de cuerpos)**
 - `geometry::mirror`: copia del cuerpo reflejada sobre un plano; se reorienta el sólido (un espejo lo deja «del revés») y las caras se llaman `f<id>:espejo:<nombre original>`.
@@ -367,7 +367,7 @@ Todas siguen el patrón de las operaciones actuales: una clase en `document/Feat
 
 ### Fase 6 — Geometría de referencia y parámetros
 - **6a Planos de construcción ✅:** `ConstructionPlaneFeature` (plano base —de origen, una cara plana u otro plano de construcción—, giro alrededor del eje X o Y del plano y desfase a lo largo de su normal; se publica en `ModelState::planes`). Un sitio (`SketchAttachment`) puede apuntar a un plano de construcción (`reference`), así que sirven para sketches y para el plano de simetría del espejo, y siguen al plano si se edita. Se ven como cuadrados translúcidos turquesa (tamaño según la pieza), con carpeta «Planos de construcción» en el navegador (casilla para ocultar) y se eligen en «Crear sketch». Herramienta Sólido › Plano (grupo CONSTRUIR). Se guarda como `plane`. 3 pruebas nuevas.
-- **6b Ejes de construcción:** pendiente.
+- **6b Ejes de construcción ✅:** `ConstructionAxisFeature` (intersección de dos planos —de origen, cara o de construcción— o, con uno solo, la perpendicular a él por su origen; planos paralelos dan error). Se publica en `ModelState::axes`, se ve como una línea turquesa y se usa como eje de **Revolución** (`AxisRef::Kind::Construction`) y de **Patrón** (lineal: su dirección; circular: eje de giro, ya sin limitarse al origen). Herramienta Sólido › Eje; carpeta «Ejes de construcción» en el navegador. Se guarda como `axis`. 2 pruebas nuevas. Con esto el patrón y la revolución ya aceptan ejes propios.
 - Tabla de parámetros con nombre (ej. `grosor = 3 mm`).
 - Expresiones entre parámetros.
 

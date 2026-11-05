@@ -48,6 +48,8 @@ QString glyph(document::FeatureKind kind)
         return QStringLiteral("▦");
     case document::FeatureKind::ConstructionPlane:
         return QStringLiteral("▱");
+    case document::FeatureKind::ConstructionAxis:
+        return QStringLiteral("╱");
     }
     return QStringLiteral("?");
 }
@@ -385,6 +387,19 @@ void NavigatorWidget::refresh(const document::Document& document, const document
             planes = new QTreeWidgetItem(this, {QStringLiteral("Planos de construcción")});
         }
         auto* item = new QTreeWidgetItem(planes, {QString::fromStdString(f.name())});
+        checkable(item, !hiddenPlanes.contains(f.id()), PlaneItem, QVariant::fromValue<qulonglong>(f.id()));
+    }
+
+    QTreeWidgetItem* axes = nullptr;
+    for (std::size_t i = 0; i < std::min(upTo, document.featureCount()); ++i) {
+        const document::Feature& f = document.feature(i);
+        if (f.kind() != document::FeatureKind::ConstructionAxis || !state.axes.contains(f.id())) {
+            continue;
+        }
+        if (axes == nullptr) {
+            axes = new QTreeWidgetItem(this, {QStringLiteral("Ejes de construcción")});
+        }
+        auto* item = new QTreeWidgetItem(axes, {QString::fromStdString(f.name())});
         checkable(item, !hiddenPlanes.contains(f.id()), PlaneItem, QVariant::fromValue<qulonglong>(f.id()));
     }
 
