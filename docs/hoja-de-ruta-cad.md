@@ -384,7 +384,9 @@ Todas siguen el patrón de las operaciones actuales: una clase en `document/Feat
 ### Fase 8 — Multi-cuerpo y ensambles
 - **8a Mover, copiar y combinar cuerpos ✅:** `geometry::moveBody` (giro alrededor de un eje + desplazamiento; al mover conserva el nombre de las caras, al copiar las llama `f<id>:copia:<nombre>`), `MoveFeature` (cuerpo, X/Y/Z, eje de origen o de construcción, el eje pasa por el centro del cuerpo o por el origen, ángulo, copia sí/no) y `CombineFeature` (cuerpo destino + cuerpos herramienta + unir/cortar/intersecar + conservar herramientas). Herramientas Sólido › Mover cuerpo (un clic en una cara elige su cuerpo) y Combinar cuerpos (grupo MODIFICAR); valores ligables a parámetros. 2 pruebas nuevas.
 - **Pendiente de 8a:** mover con un gizmo/flechas arrastrables en la vista; mover por la distancia entre dos puntos o caras; combinar eligiendo los cuerpos en la vista; dividir un cuerpo en piezas; sin probar a mano el flujo completo (solo que los paneles abren).
-- Componentes (8b) y uniones (8c): pendientes.
+- **8b Nombres y componentes ✅:** `Document::bodyInfo` (nombre propio y componente por clave de cuerpo; los nombres sustituyen a «Cuerpo1»… en todos los estados sin recalcular y sobreviven a cambios del historial), comando `SetBodyInfo` (con deshacer), guardado en el archivo (meta `cuerpos`) y diálogo Sólido › Componentes (grupo ORGANIZAR) con la tabla Cuerpo / Nombre / Componente. En el navegador cada componente es una carpeta con casilla que muestra u oculta todos sus cuerpos. 1 prueba nueva (más un error real encontrado y corregido: iterar `items()` de un JSON temporal).
+- **Pendiente de 8b:** los componentes son solo una agrupación (nombre y visibilidad): no tienen origen propio ni se pueden mover o instanciar varias veces como en Fusion; crear un componente desde el navegador (clic derecho) o arrastrando cuerpos; exportar «un archivo por componente»; la carpeta «Cuerpos» queda vacía cuando todos están en componentes.
+- Uniones (8c): pendientes.
 
 ### Fase 9 — Pulido para impresión 3D
 - Herramientas de medición.

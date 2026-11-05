@@ -1252,3 +1252,39 @@ TEST_CASE("Combinar cuerpos une, corta o interseca, y se guarda", "[combine][io]
     REQUIRE(reopened.status(j).health == Health::Ok);
     REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(join.result().bodies.front().shape.volume(), 1e-9));
 }
+
+TEST_CASE("Los cuerpos pueden llevar nombre propio y componente, con deshacer y archivo", "[bodies][io]")
+{
+    Document doc = boxDocument();
+    addMove(doc, {0, 20, 0}, 0.0, true);  // Cuerpo2
+    REQUIRE(doc.result().bodies[0].name == "Cuerpo1");
+    REQUIRE(doc.result().bodies[1].name == "Cuerpo2");
+
+    const std::map<std::string, BodyInfo> info{{"f2", {"Base", "Carcasa"}}, {"f3", {"Tapa", "Carcasa"}}};
+    doc.setBodyInfo(info);
+    REQUIRE(doc.result().bodies[0].name == "Base");
+    REQUIRE(doc.result().bodies[1].name == "Tapa");
+    REQUIRE(doc.componentOf("f2") == "Carcasa");
+    REQUIRE(doc.componentOf("f99").empty());
+
+    // Un cambio posterior en el historial conserva los nombres.
+    const FeatureId later = addMove(doc, {0, 0, 10});
+    REQUIRE(doc.status(later).health == Health::Ok);
+    REQUIRE(doc.result().bodies.size() == 2);
+    REQUIRE(doc.result().bodies[0].name == "Base");
+
+    const auto path = std::filesystem::temp_directory_path() / "nuf_cuerpos.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    REQUIRE(reopened.bodyInfo() == doc.bodyInfo());
+    REQUIRE(reopened.result().bodies[1].name == "Tapa");
+
+    // Quitar el nombre devuelve el de fábrica.
+    doc.setBodyInfo({{"f2", {"", "Carcasa"}}});
+    REQUIRE(doc.result().bodies[0].name == "Cuerpo1");
+    REQUIRE(doc.componentOf("f2") == "Carcasa");
+}

@@ -84,7 +84,7 @@ QString statusText(const document::FeatureStatus& status)
 }
 
 enum Role { KindRole = Qt::UserRole, KeyRole };
-enum ItemKind { OriginItem = 1, BodyItem, SketchItem, GroundItem, PlaneItem };
+enum ItemKind { OriginItem = 1, BodyItem, SketchItem, GroundItem, PlaneItem, ComponentItem };
 
 } // namespace
 
@@ -359,6 +359,9 @@ NavigatorWidget::NavigatorWidget(QWidget* parent)
         case PlaneItem:
             emit planeVisibilityChanged(item->data(0, KeyRole).toULongLong(), visible);
             break;
+        case ComponentItem:
+            emit componentVisibilityChanged(item->data(0, KeyRole).toString().toStdString(), visible);
+            break;
         default:
             break;
         }
@@ -416,9 +419,28 @@ void NavigatorWidget::refresh(const document::Document& document, const document
     }
 
     auto* bodies = new QTreeWidgetItem(this, {QStringLiteral("Cuerpos")});
+    std::map<std::string, QTreeWidgetItem*> components;
     for (const document::Body& body : state.bodies) {
-        auto* item = new QTreeWidgetItem(bodies, {QString::fromStdString(body.name)});
+        QTreeWidgetItem* parent = bodies;
+        const std::string component = document.componentOf(body.key);
+        if (!component.empty()) {
+            auto& node = components[component];
+            if (node == nullptr) {
+                node = new QTreeWidgetItem(this, {QString::fromStdString(component)});
+                node->setIcon(0, QIcon());
+            }
+            parent = node;
+        }
+        auto* item = new QTreeWidgetItem(parent, {QString::fromStdString(body.name)});
         checkable(item, !hiddenBodies.contains(body.key), BodyItem, QString::fromStdString(body.key));
+    }
+    // Cada componente se muestra u oculta de una vez (marcado si todos sus cuerpos se ven).
+    for (auto& [name, node] : components) {
+        bool allShown = true;
+        for (int i = 0; i < node->childCount(); ++i) {
+            allShown = allShown && node->child(i)->checkState(0) == Qt::Checked;
+        }
+        checkable(node, allShown, ComponentItem, QString::fromStdString(name));
     }
 
     auto* sketches = new QTreeWidgetItem(this, {QStringLiteral("Sketches")});

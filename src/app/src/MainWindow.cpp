@@ -1,6 +1,7 @@
 #include "MainWindow.hpp"
 
 #include "ExportDialog.hpp"
+#include "BodiesDialog.hpp"
 #include "ExpressionSpinBox.hpp"
 #include "ParametersDialog.hpp"
 #include "FeatureTools.hpp"
@@ -14,6 +15,7 @@
 
 #include <nuf/commands/FeatureCommands.hpp>
 #include <nuf/commands/RenameDocument.hpp>
+#include <nuf/commands/SetBodyInfo.hpp>
 #include <nuf/commands/SetParameters.hpp>
 #include <nuf/geometry/Exchange.hpp>
 #include <nuf/geometry/Kernel.hpp>
@@ -143,6 +145,19 @@ MainWindow::MainWindow(QWidget* parent)
         } else {
             hiddenPlanes_.insert(id);
         }
+        refreshModel();
+    });
+    connect(navigator_, &NavigatorWidget::componentVisibilityChanged, this, [this](const std::string& name, bool visible) {
+        for (const document::Body& body : document_.result().bodies) {
+            if (document_.componentOf(body.key) == name) {
+                if (visible) {
+                    hiddenBodies_.erase(body.key);
+                } else {
+                    hiddenBodies_.insert(body.key);
+                }
+            }
+        }
+        setViewDirty(true);
         refreshModel();
     });
     connect(navigator_, &NavigatorWidget::sketchVisibilityChanged, this, [this](document::FeatureId id, bool visible) {
@@ -381,6 +396,14 @@ void MainWindow::createMenus()
     });
     decorate(combineAction_, QStringLiteral("combine-solid"),
              QStringLiteral("Unir, cortar o intersecar cuerpos entre sí"), QStringLiteral("Combinar"));
+    organizeAction_ = solidMenu->addAction(QStringLiteral("Cuerpos y &componentes…"), this, [this] {
+        BodiesDialog dialog(document_, this);
+        if (dialog.exec() == QDialog::Accepted && dialog.info() != document_.bodyInfo()) {
+            commands_.push(std::make_unique<commands::SetBodyInfo>(dialog.info()));
+        }
+    });
+    decorate(organizeAction_, QStringLiteral("components-solid"),
+             QStringLiteral("Ponerle nombre a los cuerpos y agruparlos en componentes"), QStringLiteral("Componentes"));
     decorate(shellAction_, QStringLiteral("shell"), QStringLiteral("Vaciar un cuerpo dejando abiertas las caras elegidas"));
 
     // Herramientas de dibujo por familias (como en Fusion 360); la primera
@@ -546,6 +569,8 @@ void MainWindow::createMenus()
     ribbon_->addAction(solidTab_, patternAction_);
     ribbon_->addAction(solidTab_, moveAction_);
     ribbon_->addAction(solidTab_, combineAction_);
+    ribbon_->addGroup(solidTab_, QStringLiteral("ORGANIZAR"));
+    ribbon_->addAction(solidTab_, organizeAction_);
     ribbon_->addGroup(solidTab_, QStringLiteral("CONSTRUIR"));
     ribbon_->addAction(solidTab_, planeAction_);
     ribbon_->addAction(solidTab_, axisAction_);
@@ -1098,7 +1123,7 @@ bool MainWindow::sketchVisible(document::FeatureId id, std::size_t upTo) const
 void MainWindow::updateExportAction()
 {
     updateStartScreen();
-    for (QAction* action : {filletAction_, chamferAction_, shellAction_, holeAction_, mirrorAction_, patternAction_, moveAction_, combineAction_}) {
+    for (QAction* action : {filletAction_, chamferAction_, shellAction_, holeAction_, mirrorAction_, patternAction_, moveAction_, combineAction_, organizeAction_}) {
         if (action != nullptr) {
             action->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane() && !document_.result().bodies.empty());
         }

@@ -855,6 +855,13 @@ void saveDocument(const std::filesystem::path& path, const Document& document, c
                     parameters.emplace_back(p.name, p.expression);
                 }
                 file.writeParameters(parameters);
+                if (!document.bodyInfo().empty()) {
+                    Json bodies = Json::object();
+                    for (const auto& [key, info] : document.bodyInfo()) {
+                        bodies[key] = {{"name", info.name}, {"component", info.component}};
+                    }
+                    file.setMeta("cuerpos", bodies.dump());
+                }
                 for (std::size_t i = 0; i < document.featureCount(); ++i) {
                     if (document.feature(i).kind() == FeatureKind::Import) {
                         const auto& imported = static_cast<const ImportFeature&>(document.feature(i));
@@ -892,6 +899,7 @@ void loadDocument(const std::filesystem::path& path, Document& document, ViewSta
 {
     std::vector<std::unique_ptr<Feature>> features;
     std::vector<Parameter> parameters;
+    std::map<std::string, BodyInfo> bodyInfo;
     std::string name;
     std::size_t marker = 0;
     FeatureId nextId = 1;
@@ -909,6 +917,12 @@ void loadDocument(const std::filesystem::path& path, Document& document, ViewSta
         for (const FeatureRow& row : file.readFeatures()) {
             features.push_back(featureOf(row, file));
         }
+        if (const auto bodies = file.meta("cuerpos")) {
+            const Json parsed = Json::parse(*bodies);  // con nombre: items() de un temporal queda colgando
+            for (const auto& [key, value] : parsed.items()) {
+                bodyInfo[key] = {value.at("name").get<std::string>(), value.at("component").get<std::string>()};
+            }
+        }
         for (auto& [pname, expression] : file.readParameters()) {
             parameters.push_back({std::move(pname), std::move(expression)});
         }
@@ -922,6 +936,7 @@ void loadDocument(const std::filesystem::path& path, Document& document, ViewSta
     }
     try {
         document.restore(std::move(name), std::move(features), marker, nextId, std::move(parameters));
+        document.setBodyInfo(std::move(bodyInfo));
     } catch (const std::invalid_argument& e) {
         throw NufError(std::string("El archivo está dañado: ") + e.what());
     }

@@ -21,6 +21,14 @@ struct Parameter {
     bool operator==(const Parameter&) const = default;
 };
 
+// Lo que el usuario le puso a un cuerpo: un nombre propio y el componente al que
+// pertenece (vacío = ninguno). Se guarda por la clave del cuerpo («f3»).
+struct BodyInfo {
+    std::string name;
+    std::string component;
+    bool operator==(const BodyInfo&) const = default;
+};
+
 // Valor evaluado de un parámetro, o el motivo por el que no se pudo.
 struct ParameterValue {
     std::optional<double> value;
@@ -90,6 +98,13 @@ public:
     // Para evaluar una expresión con los parámetros del documento.
     ParameterLookup lookup() const;
 
+    // --- Nombres y componentes de los cuerpos ---
+    const std::map<std::string, BodyInfo>& bodyInfo() const noexcept { return bodyInfo_; }
+    // Los nombres propios sustituyen a «Cuerpo1»… en todos los estados (sin recalcular).
+    void setBodyInfo(std::map<std::string, BodyInfo> info);
+    // Componente de un cuerpo ("" si no tiene).
+    std::string componentOf(const std::string& bodyKey) const;
+
     // --- Resultado ---
     // El modelo tras la última operación activa.
     const ModelState& result() const;
@@ -104,6 +119,7 @@ private:
     void markChanged();
     void recomputeFrom(std::size_t index);
     void evaluateParameters();
+    void applyBodyInfo();
 
     std::string name_ = "Sin título";
     std::uint64_t revision_ = 0;
@@ -114,6 +130,7 @@ private:
     FeatureId nextId_ = 1;
     std::vector<Parameter> parameters_;
     std::map<std::string, ParameterValue> values_;
+    std::map<std::string, BodyInfo> bodyInfo_;
     ModelState empty_;
 };
 

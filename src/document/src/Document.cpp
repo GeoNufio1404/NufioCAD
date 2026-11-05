@@ -349,6 +349,48 @@ std::string Document::defaultName(FeatureKind kind) const
     return label + std::to_string(highest + 1);
 }
 
+void Document::setBodyInfo(std::map<std::string, BodyInfo> info)
+{
+    // Una entrada vacía no dice nada.
+    std::erase_if(info, [](const auto& entry) { return entry.second.name.empty() && entry.second.component.empty(); });
+    if (info == bodyInfo_) {
+        return;
+    }
+    // Los cuerpos que ya no llevan nombre propio vuelven al suyo: se rehace el estado.
+    const bool lostName = std::ranges::any_of(bodyInfo_, [&](const auto& entry) {
+        const auto next = info.find(entry.first);
+        return !entry.second.name.empty() && (next == info.end() || next->second.name.empty());
+    });
+    bodyInfo_ = std::move(info);
+    if (lostName) {
+        recomputeFrom(0);
+    } else {
+        applyBodyInfo();
+        markChanged();
+    }
+}
+
+std::string Document::componentOf(const std::string& bodyKey) const
+{
+    const auto it = bodyInfo_.find(bodyKey);
+    return it == bodyInfo_.end() ? std::string() : it->second.component;
+}
+
+void Document::applyBodyInfo()
+{
+    if (bodyInfo_.empty()) {
+        return;
+    }
+    for (ModelState& state : states_) {
+        for (Body& body : state.bodies) {
+            const auto it = bodyInfo_.find(body.key);
+            if (it != bodyInfo_.end() && !it->second.name.empty()) {
+                body.name = it->second.name;
+            }
+        }
+    }
+}
+
 void Document::setParameters(std::vector<Parameter> parameters)
 {
     if (parameters == parameters_) {
@@ -492,6 +534,7 @@ void Document::recomputeFrom(std::size_t index)
             statuses_[i] = std::move(status);
         }
     }
+    applyBodyInfo();
     markChanged();
 }
 

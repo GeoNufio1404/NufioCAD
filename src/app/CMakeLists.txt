@@ -26,6 +26,8 @@ add_executable(nuf_app
     src/ExpressionSpinBox.hpp
     src/ParametersDialog.cpp
     src/ParametersDialog.hpp
+    src/BodiesDialog.cpp
+    src/BodiesDialog.hpp
     src/Icons.cpp
     src/NavBar.cpp
     src/NavBar.hpp

@@ -81,6 +81,7 @@ signals:
     void originVisibilityChanged(bool visible);
     void groundVisibilityChanged(bool visible);
     void planeVisibilityChanged(nuf::document::FeatureId id, bool visible);
+    void componentVisibilityChanged(const std::string& name, bool visible);
     void sketchActivated(nuf::document::FeatureId id);
 
 private:

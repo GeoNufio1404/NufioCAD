@@ -166,6 +166,11 @@ Necesitas un cuerpo (la caja de 40×25×10 de «Antes de empezar»). Los botones
 | 8.6 | Combinar con «Conservar los cuerpos herramienta» | Los dos cuerpos siguen en el navegador |
 | 8.7 | Editar la pieza original (cambiar la altura de su extrusión) | Mover y Combinar se rehacen sobre ella |
 
+| 8.8 | Con dos cuerpos, Sólido › **Componentes** (grupo ORGANIZAR): ponle nombre a cada uno (`Base`, `Tapa`) y escribe `Carcasa` como componente de los dos | En el navegador aparece la carpeta «Carcasa» con los dos cuerpos con sus nombres nuevos |
+| 8.9 | Casilla de «Carcasa» en el navegador | Oculta y muestra los dos cuerpos a la vez |
+| 8.10 | Guardar, cerrar y abrir; luego Ctrl+Z tras cambiar nombres | Nombres y componentes se conservan; deshacer los revierte |
+| 8.11 | Borrar el texto de un nombre | El cuerpo recupera su nombre de fábrica (Cuerpo1) |
+
 **Fíjate en:** ¿se entiende qué cuerpo se mueve? ¿Mover con números es suficiente o echas de menos arrastrar con el ratón? (ver «Pendiente de 8a»).
 
 ## Fase 9
