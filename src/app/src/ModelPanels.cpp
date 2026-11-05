@@ -6,6 +6,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QTimer>
 #include <QToolTip>
 
 #include <algorithm>
@@ -344,33 +345,41 @@ NavigatorWidget::NavigatorWidget(QWidget* parent)
         if (refreshing_) {
             return;
         }
+        // Se avisa fuera de la señal del propio árbol: quien recibe rehace el árbol entero
+        // (refresh() lo vacía) y no puede borrar el elemento mientras Qt aún lo está usando.
+        // Varios clics seguidos solo encolan varios avisos.
         const bool visible = item->checkState(0) == Qt::Checked;
-        switch (item->data(0, KindRole).toInt()) {
-        case OriginItem:
-            emit originVisibilityChanged(visible);
-            break;
-        case GroundItem:
-            emit groundVisibilityChanged(visible);
-            break;
-        case BodyItem:
-            emit bodyVisibilityChanged(item->data(0, KeyRole).toString().toStdString(), visible);
-            break;
-        case SketchItem:
-            emit sketchVisibilityChanged(item->data(0, KeyRole).toULongLong(), visible);
-            break;
-        case PlaneItem:
-            emit planeVisibilityChanged(item->data(0, KeyRole).toULongLong(), visible);
-            break;
-        case ComponentItem:
-            emit componentVisibilityChanged(item->data(0, KeyRole).toString().toStdString(), visible);
-            break;
-        default:
-            break;
-        }
+        const int kind = item->data(0, KindRole).toInt();
+        const QVariant key = item->data(0, KeyRole);
+        QTimer::singleShot(0, this, [this, visible, kind, key] {
+            switch (kind) {
+            case OriginItem:
+                emit originVisibilityChanged(visible);
+                break;
+            case GroundItem:
+                emit groundVisibilityChanged(visible);
+                break;
+            case BodyItem:
+                emit bodyVisibilityChanged(key.toString().toStdString(), visible);
+                break;
+            case SketchItem:
+                emit sketchVisibilityChanged(key.toULongLong(), visible);
+                break;
+            case PlaneItem:
+                emit planeVisibilityChanged(key.toULongLong(), visible);
+                break;
+            case ComponentItem:
+                emit componentVisibilityChanged(key.toString().toStdString(), visible);
+                break;
+            default:
+                break;
+            }
+        });
     });
     connect(this, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item) {
         if (item->data(0, KindRole).toInt() == SketchItem) {
-            emit sketchActivated(item->data(0, KeyRole).toULongLong());
+            const auto id = item->data(0, KeyRole).toULongLong();
+            QTimer::singleShot(0, this, [this, id] { emit sketchActivated(id); });
         }
     });
 }
