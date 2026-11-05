@@ -1,10 +1,12 @@
 #pragma once
 
-// Operaciones concretas: sketch, extruir, revolución e importar.
+// Operaciones concretas: sketch, extruir, revolución, importar, redondeo y chaflán.
 
 #include <nuf/document/Feature.hpp>
 #include <nuf/geometry/Modeling.hpp>
 #include <nuf/sketch/Profiles.hpp>
+
+#include <string_view>
 
 namespace nuf::document {
 
@@ -107,6 +109,45 @@ public:
     std::vector<FeatureId> dependencies() const override;
 
     geometry::Shape tool(const ModelState& state, std::vector<std::string>* warnings = nullptr) const;
+};
+
+// Redondeo o chaflán de aristas de un cuerpo. Las aristas se guardan por
+// nombre (como todo lo que apunta a la geometría), así que siguen a la pieza si
+// se edita lo anterior. Si alguna ya no existe se avisa y se hace con las demás.
+class EdgeFeature : public Feature {
+public:
+    std::vector<geometry::ElementRef> edges;
+    double size = 1.0;  // radio o distancia, mm
+
+    std::optional<std::string> compute(ModelState& state) const override;
+    std::vector<FeatureId> dependencies() const override;
+
+protected:
+    virtual geometry::Shape apply(std::string_view tag, const geometry::Shape& body, const std::vector<int>& indices) const = 0;
+};
+
+class FilletFeature final : public EdgeFeature {
+public:
+    FeatureKind kind() const override { return FeatureKind::Fillet; }
+    std::unique_ptr<Feature> clone() const override { return std::make_unique<FilletFeature>(*this); }
+
+protected:
+    geometry::Shape apply(std::string_view tag, const geometry::Shape& body, const std::vector<int>& indices) const override
+    {
+        return geometry::fillet(tag, body, indices, size);
+    }
+};
+
+class ChamferFeature final : public EdgeFeature {
+public:
+    FeatureKind kind() const override { return FeatureKind::Chamfer; }
+    std::unique_ptr<Feature> clone() const override { return std::make_unique<ChamferFeature>(*this); }
+
+protected:
+    geometry::Shape apply(std::string_view tag, const geometry::Shape& body, const std::vector<int>& indices) const override
+    {
+        return geometry::chamfer(tag, body, indices, size);
+    }
 };
 
 // Sólidos que vienen de otro programa (STEP). Guarda el BREP ya reparado, no el

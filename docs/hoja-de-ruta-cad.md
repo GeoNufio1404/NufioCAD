@@ -311,12 +311,24 @@ Después, el formato:
 37. **Importar un STEP real**: uno de otro programa (con varios sólidos y en pulgadas, si se puede) → Ctrl+I: aparece la ficha «Importación», cada sólido es un cuerpo, y se puede hacer un sketch en una cara y cortar. Guardar, mover el STEP, abrir: igual.
 38. **Recientes**: guardar varios diseños → cerrar → la pantalla de inicio los lista con miniatura; borrar uno desde el explorador → aparece «ya no existe» y se quita; clic derecho › Quitar de la lista.
 
-### Fase 5 — Operaciones de acabado
-- Chaflán y fillet.
-- Shell (vaciado).
-- Agujeros (con avellanado/abocardado).
-- Patrones lineales y circulares.
-- Espejo.
+### Fase 5 — Operaciones de acabado 🚧
+
+Todas siguen el patrón de las operaciones actuales: una clase en `document/Features`, su función en `geometry/Modeling` con nombres de cara estables, serialización en `io/DocumentFile`, una herramienta con vista previa en `app/FeatureTools`, y pruebas.
+
+| Bloque | Qué se obtiene | Tamaño | Estado |
+|---|---|---|---|
+| **5a** Redondeo y chaflán | Aristas elegidas en el visor, radio/distancia, vista previa | Mediano | ✅ |
+| **5b** Shell | Vaciar un cuerpo quitando caras, con espesor | Mediano | pendiente |
+| **5c** Agujeros | Sketch de puntos + diámetro, profundidad, avellanado/abocardado | Mediano | pendiente |
+| **5d** Patrones | Lineal y circular de una operación o cuerpo | **Grande** | pendiente |
+| **5e** Espejo | Reflejar un cuerpo o una operación sobre un plano | Pequeño | pendiente |
+
+**5a — Redondeo y chaflán ✅**
+- `geometry::fillet` y `geometry::chamfer` sobre `BRepFilletAPI` con las aristas por índice; las cadenas de aristas tangentes se siguen solas. Las caras nuevas se llaman `f<id>:redondeo:<arista>` / `f<id>:chaflan:<arista>` (esquinas: `f<id>:esquina:?<n>`) y las demás conservan su nombre, así que un sketch sobre una cara anterior sigue funcionando.
+- `FilletFeature` y `ChamferFeature` (base `EdgeFeature`): aristas por nombre + medida. Si una arista ya no existe se avisa y se hace con las demás; si ninguna, error. Se guardan como `fillet`/`chamfer` en el `.nuf`.
+- Herramienta `EdgeTool`: Sólido › Redondeo (F) y Chaflán. Cada clic en una arista la agrega o la quita; las elegidas se resaltan en azul sobre el cuerpo y el visor muestra el resultado en vivo; «Quitar selección». Editar la operación (doble clic en la ficha) conserva sus aristas.
+- **Hecho:** 6 pruebas nuevas (volúmenes exactos de redondeo y chaflán, nombres de las caras nuevas, radio imposible, seguir a la pieza al editar la altura, arista desaparecida con aviso, guardar y abrir). Comprobado a mano en Windows: elegir 3 aristas, cambiar el radio, vista previa y aceptar.
+- **Pendiente de 5a:** chaflán con dos distancias o distancia y ángulo; radio variable; elegir una cara para redondear todas sus aristas; en edición las aristas no se marcan en el visor hasta que se cambian (solo se resaltan en azul); sin probar en Linux; la prueba con un STEP real aún no.
 
 ### Fase 6 — Geometría de referencia y parámetros
 - Planos y ejes de construcción.
@@ -358,4 +370,5 @@ Después, el formato:
 | Fase 2 | 🚧 Implementada (2a–2d) — sketch completo: dibujo con variantes, elipse, spline y cónica; restricciones (incluida G2), cotas y valores junto al cursor; selección (también por rectángulo), deshacer, arrastre y perfiles; edición (recortar, extender, partir, empalme, chaflán, desfase, simetría, patrones, mover/copiar/girar/escalar); proyectar aristas, intersección, texto, imagen de referencia e importar DXF; los sketches terminados se guardan, sus perfiles y curvas se seleccionan en la vista 3D y se reabren con doble clic. Pendiente: las pruebas manuales de abajo y probar en Windows. Limitaciones: lo proyectado y el texto quedan bloqueados (no se actualizan con la pieza ni se editan como texto hasta la Fase 3); recortar/extender/partir y desfase trabajan con líneas, arcos y círculos; los patrones son copias independientes |
 | Fase 3 | 🚧 Implementada (3a–3c) — núcleo paramétrico con nombres estables de caras y aristas; sketches en el historial (sobre planos de origen o caras que siguen a la pieza); Extruir (todas sus variantes, empujar una cara) y Revolución con vista previa y flecha; timeline editable (editar, marcador, reordenar, suprimir, borrar, renombrar), navegador y deshacer/rehacer; lo proyectado sigue a su arista. Pendiente: las pruebas manuales 20–30 y probar en Windows. Limitaciones: los cuerpos que participan en unir/cortar son todos los que toca (sin elegirlos); «hasta una cara» solo con caras planas; el ángulo de la revolución se escribe en el panel (sin flecha) |
 | Fase 4 | 🚧 4a (Exportar), 4b (serialización), 4c (Nuevo/Abrir/Guardar/Guardar como con aviso de cambios), 4d (importar STEP), 4e (pantalla de inicio con recientes) y 4f (recuperación) implementadas: **Fase 4 completa**. Pendiente: probar a mano las pruebas 31–38 y compilar en Fedora/CI |
-| Fases 5–9 | Pendientes (chaflán/fillet, shell, agujeros, patrones y espejo de sólidos, parámetros, generadores, ensambles, medición) |
+| Fase 5 | 🚧 5a (redondeo y chaflán) implementada; 5b shell, 5c agujeros, 5d patrones y 5e espejo pendientes. Siguiente paso: 5b |
+| Fases 6–9 | Pendientes (parámetros, generadores, ensambles, medición) |

@@ -694,4 +694,104 @@ bool RevolveTool::removesMaterial() const
     return op == document::Operation::Cut || op == document::Operation::Intersect;
 }
 
+// --- Redondeo y chaflán ------------------------------------------------------------
+
+EdgeTool::EdgeTool(document::Document& document, render::Viewport& viewport,
+                   std::optional<document::FeatureId> editing, Style style)
+    : FeatureTool(document, viewport, editing)
+    , style_(style)
+{
+    if (const auto* e = dynamic_cast<const document::EdgeFeature*>(original_.get())) {
+        style_ = e->kind() == document::FeatureKind::Chamfer ? Style::Chamfer : Style::Fillet;
+        edges_ = e->edges;
+    }
+}
+
+QString EdgeTool::title() const
+{
+    return style_ == Style::Fillet ? QStringLiteral("Redondeo") : QStringLiteral("Chaflán");
+}
+
+void EdgeTool::createFields(QFormLayout* form)
+{
+    size_ = lengthBox(1.0);
+    size_->setMinimum(0.01);
+    if (const auto* e = dynamic_cast<const document::EdgeFeature*>(original_.get())) {
+        size_->setValue(e->size);
+    }
+    form->addRow(style_ == Style::Fillet ? QStringLiteral("Radio") : QStringLiteral("Distancia"), size_);
+    connect(size_, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
+    auto* clear = new QPushButton(QStringLiteral("Quitar selección"));
+    form->addRow(QString(), clear);
+    connect(clear, &QPushButton::clicked, this, [this] {
+        edges_.clear();
+        viewport_.clearModelSelection();
+        updatePreview();
+    });
+}
+
+void EdgeTool::selectionChanged(const render::ModelSelection& selection)
+{
+    // La lista de aristas es de la herramienta, no del visor (que redibuja el
+    // resultado en cada cambio y pierde su selección): cada clic en una arista
+    // la agrega o la quita, y el visor se deja sin selección.
+    for (const render::ModelSelection::Edge& edge : selection.edges) {
+        if (!before().findEdge(edge.ref)) {
+            continue;  // una arista del resultado de la vista previa, no del cuerpo
+        }
+        const auto it = std::ranges::find(edges_, edge.ref);
+        if (it == edges_.end()) {
+            edges_.push_back(edge.ref);
+        } else {
+            edges_.erase(it);
+        }
+    }
+    if (!selection.empty()) {
+        viewport_.clearModelSelection();
+    }
+}
+
+std::unique_ptr<document::Feature> EdgeTool::build() const
+{
+    if (edges_.empty()) {
+        return nullptr;
+    }
+    std::unique_ptr<document::EdgeFeature> f;
+    if (style_ == Style::Fillet) {
+        f = std::make_unique<document::FilletFeature>();
+    } else {
+        f = std::make_unique<document::ChamferFeature>();
+    }
+    if (original_) {
+        f->setName(original_->name());
+    }
+    f->edges = edges_;
+    f->size = size_->value();
+    return f;
+}
+
+void EdgeTool::afterPreview(const document::ModelState& before)
+{
+    // Las aristas elegidas, resaltadas sobre el cuerpo de antes.
+    std::optional<std::size_t> body;
+    std::vector<int> indices;
+    for (const geometry::ElementRef& ref : edges_) {
+        if (const auto hit = before.findEdge(ref); hit && (!body || *body == hit->body)) {
+            body = hit->body;
+            indices.push_back(hit->edge);
+        }
+    }
+    if (body) {
+        viewport_.showToolEdges(before.bodies[*body].shape, indices);
+    }
+}
+
+QString EdgeTool::inputsText() const
+{
+    if (edges_.empty()) {
+        return QStringLiteral("Elige las aristas del cuerpo (varias con clics sucesivos)");
+    }
+    return edges_.size() == 1 ? QStringLiteral("1 arista") : QStringLiteral("%1 aristas").arg(edges_.size());
+}
+
 } // namespace nuf::app

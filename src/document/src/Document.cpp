@@ -23,6 +23,10 @@ std::string kindLabel(FeatureKind kind)
         return "Revolución";
     case FeatureKind::Import:
         return "Importación";
+    case FeatureKind::Fillet:
+        return "Redondeo";
+    case FeatureKind::Chamfer:
+        return "Chaflán";
     }
     return "Operación";
 }

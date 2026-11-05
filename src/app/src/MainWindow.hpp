@@ -125,6 +125,8 @@ private:
     QByteArray defaultLayout_; // distribución original, para "Restablecer paneles"
     QAction* undoAction_ = nullptr;
     QAction* redoAction_ = nullptr;
+    QAction* filletAction_ = nullptr;
+    QAction* chamferAction_ = nullptr;
     QAction* exportAction_ = nullptr;
     QAction* importAction_ = nullptr;
     QMenu* recentMenu_ = nullptr;

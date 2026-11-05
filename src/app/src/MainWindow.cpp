@@ -291,6 +291,15 @@ void MainWindow::createMenus()
     });
     decorate(revolveAction_, QStringLiteral("revolve"),
              QStringLiteral("Girar perfiles de un sketch alrededor de un eje"));
+    solidMenu->addSeparator();
+    filletAction_ = solidMenu->addAction(QStringLiteral("Re&dondeo"), QKeySequence(Qt::Key_F), this, [this] {
+        startTool(std::make_unique<EdgeTool>(document_, *viewport_, std::nullopt, EdgeTool::Style::Fillet));
+    });
+    decorate(filletAction_, QStringLiteral("fillet"), QStringLiteral("Redondear aristas de un cuerpo"));
+    chamferAction_ = solidMenu->addAction(QStringLiteral("&Chaflán"), this, [this] {
+        startTool(std::make_unique<EdgeTool>(document_, *viewport_, std::nullopt, EdgeTool::Style::Chamfer));
+    });
+    decorate(chamferAction_, QStringLiteral("chamfer"), QStringLiteral("Achaflanar aristas de un cuerpo"));
 
     // Herramientas de dibujo por familias (como en Fusion 360); la primera
     // de cada familia lleva su tecla.
@@ -444,6 +453,9 @@ void MainWindow::createMenus()
     ribbon_->addAction(solidTab_, createSketchAction_);
     ribbon_->addAction(solidTab_, extrudeAction_);
     ribbon_->addAction(solidTab_, revolveAction_);
+    ribbon_->addGroup(solidTab_, QStringLiteral("MODIFICAR"));
+    ribbon_->addAction(solidTab_, filletAction_);
+    ribbon_->addAction(solidTab_, chamferAction_);
 
     auto family = [this, &families](const QString& name) {
         const std::size_t i = static_cast<std::size_t>(
@@ -804,6 +816,10 @@ void MainWindow::activateFeature(document::FeatureId id)
     case document::FeatureKind::Revolve:
         startTool(std::make_unique<RevolveTool>(document_, *viewport_, id));
         break;
+    case document::FeatureKind::Fillet:
+    case document::FeatureKind::Chamfer:
+        startTool(std::make_unique<EdgeTool>(document_, *viewport_, id));
+        break;
     case document::FeatureKind::Import:
         break;  // no tiene parámetros que editar
     }
@@ -895,6 +911,11 @@ bool MainWindow::sketchVisible(document::FeatureId id, std::size_t upTo) const
 void MainWindow::updateExportAction()
 {
     updateStartScreen();
+    for (QAction* action : {filletAction_, chamferAction_}) {
+        if (action != nullptr) {
+            action->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane() && !document_.result().bodies.empty());
+        }
+    }
     if (importAction_ != nullptr) {
         importAction_->setEnabled(!sketch_ && !tool_);
     }

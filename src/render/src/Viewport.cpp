@@ -711,8 +711,33 @@ public:
         context->Display(toolPreview, AIS_Shaded, -1, false);
     }
 
+    void showToolEdges(const geometry::Shape& body, const std::vector<int>& edges)
+    {
+        if (!toolEdges.IsNull()) {
+            context->Remove(toolEdges, false);
+            toolEdges.Nullify();
+        }
+        if (body.isNull() || edges.empty()) {
+            return;
+        }
+        TopoDS_Compound compound;
+        BRep_Builder builder;
+        builder.MakeCompound(compound);
+        for (int index : edges) {
+            builder.Add(compound, geometry::edgeAt(body, index));
+        }
+        toolEdges = new AIS_Shape(compound);
+        toolEdges->SetColor(rgb(0x2F, 0x80, 0xED));
+        toolEdges->SetWidth(3.5);
+        context->Display(toolEdges, AIS_WireFrame, -1, false);
+    }
+
     void clearToolPreview()
     {
+        if (!toolEdges.IsNull()) {
+            context->Remove(toolEdges, false);
+            toolEdges.Nullify();
+        }
         if (!toolPreview.IsNull()) {
             context->Remove(toolPreview, false);
             toolPreview.Nullify();
@@ -1656,6 +1681,7 @@ private:
 
     Viewport& widget_;
     Handle(AIS_Shape) toolPreview;
+    Handle(AIS_Shape) toolEdges;
     gp_Pnt handleOrigin;
     gp_Dir handleDirection;
     gp_Dir handleBuiltDirection;  // con la que se construyó la flecha mostrada
@@ -1811,6 +1837,13 @@ void Viewport::showBodies(const std::vector<document::Body>& bodies)
 void Viewport::showToolPreview(const geometry::Shape& tool, bool removes)
 {
     impl_->showToolPreview(tool, removes);
+    impl_->view->Invalidate();
+    update();
+}
+
+void Viewport::showToolEdges(const geometry::Shape& body, const std::vector<int>& edges)
+{
+    impl_->showToolEdges(body, edges);
     impl_->view->Invalidate();
     update();
 }

@@ -105,6 +105,8 @@ public:
     void showBodies(const std::vector<document::Body>& bodies);
     // Sólido de la operación en curso, translúcido (rojo si quita material).
     void showToolPreview(const geometry::Shape& tool, bool removes);
+    // Resalta aristas de un cuerpo (por índice) en azul; clearToolPreview() las quita.
+    void showToolEdges(const geometry::Shape& body, const std::vector<int>& edges);
     void clearToolPreview();
 
     ModelSelection modelSelection() const;

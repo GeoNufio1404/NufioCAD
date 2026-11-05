@@ -5,6 +5,7 @@ add_executable(nuf_tests
     test_geometry.cpp
     test_exchange.cpp
     test_modeling.cpp
+    test_edge_ops.cpp
     test_document_model.cpp
     test_nuf_file.cpp
     test_document_file.cpp

@@ -89,4 +89,13 @@ Shape boolean(BooleanOp op, const Shape& target, const Shape& tool);
 // true si las formas se tocan o se solapan (para elegir con qué unir).
 bool touches(const Shape& a, const Shape& b);
 
+// Redondea (radio en mm) o achaflana (distancia en mm) las aristas del cuerpo
+// dadas por su índice (Shape::findEdge). Las cadenas de aristas tangentes se
+// siguen solas. Las caras nuevas se llaman «tag:redondeo:<arista>» o
+// «tag:chaflan:<arista>» (las de las esquinas, «tag:esquina:?<n>»); las demás
+// conservan su nombre. Lanzan GeometryError si el kernel no puede (radio
+// demasiado grande, aristas que no se pueden redondear…).
+Shape fillet(std::string_view tag, const Shape& body, const std::vector<int>& edges, double radius);
+Shape chamfer(std::string_view tag, const Shape& body, const std::vector<int>& edges, double distance);
+
 } // namespace nuf::geometry

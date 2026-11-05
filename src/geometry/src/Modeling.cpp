@@ -13,6 +13,8 @@
 #include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
 #include <BRepExtrema_DistShapeShape.hxx>
+#include <BRepFilletAPI_MakeChamfer.hxx>
+#include <BRepFilletAPI_MakeFillet.hxx>
 #include <BRepGProp.hxx>
 #include <BRepOffsetAPI_DraftAngle.hxx>
 #include <BRepOffsetAPI_MakeOffset.hxx>
@@ -483,6 +485,78 @@ bool touches(const Shape& a, const Shape& b)
     }
     BRepExtrema_DistShapeShape distance(occtShape(a), occtShape(b));
     return distance.IsDone() && distance.Value() < 1e-6;
+}
+
+// Redondeo y chaflán comparten todo salvo la herramienta del kernel.
+namespace {
+
+template <typename Maker>
+Shape edgeOperation(std::string_view tag, const std::string& label, const Shape& body, const std::vector<int>& edges,
+                    double size, const std::string& failure)
+{
+    if (body.isNull()) {
+        throw GeometryError("No hay cuerpo sobre el que trabajar");
+    }
+    if (edges.empty()) {
+        throw GeometryError("No hay aristas elegidas");
+    }
+    if (size <= kTiny) {
+        throw GeometryError("La medida debe ser mayor que cero");
+    }
+    try {
+        Maker maker(occtShape(body));
+        for (int edge : edges) {
+            maker.Add(size, edgeAt(body, edge));
+        }
+        maker.Build();
+        if (!maker.IsDone() || maker.Shape().IsNull()) {
+            throw GeometryError(failure);
+        }
+        Namer namer(maker.Shape());
+        const Shape::Impl& in = *body.impl();
+        // Lo que sigue en el resultado conserva su nombre.
+        for (int i = 1; i <= in.faces.Extent(); ++i) {
+            const TopoDS_Shape& face = in.faces(i);
+            if (maker.IsDeleted(face)) {
+                continue;
+            }
+            const auto& modified = maker.Modified(face);
+            if (modified.IsEmpty()) {
+                namer.name(face, in.faceNames[std::size_t(i - 1)]);
+            }
+            for (const TopoDS_Shape& image : modified) {
+                namer.name(image, in.faceNames[std::size_t(i - 1)]);
+            }
+        }
+        // Las caras nuevas se nombran por la arista de la que salen.
+        for (int edge : edges) {
+            for (const TopoDS_Shape& generated : maker.Generated(edgeAt(body, edge))) {
+                namer.name(generated, std::string(tag) + ":" + label + ":" + body.edgeName(edge));
+            }
+        }
+        namer.nameUnnamed(std::string(tag) + ":esquina");
+        Shape result = namer.finish(std::string(tag));
+        if (!result.isValid()) {
+            throw GeometryError(failure);
+        }
+        return result;
+    } catch (const Standard_Failure& e) {
+        throw GeometryError(failure + " (" + kernelMessage(e) + ")");
+    }
+}
+
+} // namespace
+
+Shape fillet(std::string_view tag, const Shape& body, const std::vector<int>& edges, double radius)
+{
+    return edgeOperation<BRepFilletAPI_MakeFillet>(tag, "redondeo", body, edges, radius,
+                                                   "No se pudo redondear: prueba con un radio menor");
+}
+
+Shape chamfer(std::string_view tag, const Shape& body, const std::vector<int>& edges, double distance)
+{
+    return edgeOperation<BRepFilletAPI_MakeChamfer>(tag, "chaflan", body, edges, distance,
+                                                     "No se pudo achaflanar: prueba con una distancia menor");
 }
 
 } // namespace nuf::geometry

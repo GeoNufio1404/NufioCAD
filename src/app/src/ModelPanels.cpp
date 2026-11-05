@@ -34,6 +34,10 @@ QString glyph(document::FeatureKind kind)
         return QStringLiteral("⟳");
     case document::FeatureKind::Import:
         return QStringLiteral("⇩");
+    case document::FeatureKind::Fillet:
+        return QStringLiteral("◜");
+    case document::FeatureKind::Chamfer:
+        return QStringLiteral("◿");
     }
     return QStringLiteral("?");
 }

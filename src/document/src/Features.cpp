@@ -427,6 +427,54 @@ std::vector<FeatureId> RevolveFeature::dependencies() const
     return ids;
 }
 
+// --- Redondeo y chaflán --------------------------------------------------------
+
+std::optional<std::string> EdgeFeature::compute(ModelState& state) const
+{
+    if (edges.empty()) {
+        throw FeatureError("No hay aristas elegidas");
+    }
+    // Todas las aristas deben ser del mismo cuerpo.
+    std::optional<std::size_t> bodyIndex;
+    std::vector<int> indices;
+    int lost = 0;
+    for (const geometry::ElementRef& ref : edges) {
+        const auto hit = state.findEdge(ref);
+        if (!hit) {
+            ++lost;
+            continue;
+        }
+        if (bodyIndex && *bodyIndex != hit->body) {
+            throw FeatureError("Las aristas elegidas son de cuerpos distintos");
+        }
+        bodyIndex = hit->body;
+        if (std::ranges::find(indices, hit->edge) == indices.end()) {
+            indices.push_back(hit->edge);
+        }
+    }
+    if (!bodyIndex) {
+        throw FeatureError("Las aristas elegidas ya no existen");
+    }
+    try {
+        state.bodies[*bodyIndex].shape = apply(tag(), state.bodies[*bodyIndex].shape, indices);
+    } catch (const geometry::GeometryError& e) {
+        throw FeatureError(e.what());
+    }
+    if (lost > 0) {
+        return lost == 1 ? "Una arista elegida ya no existe." : "Algunas aristas elegidas ya no existen.";
+    }
+    return std::nullopt;
+}
+
+std::vector<FeatureId> EdgeFeature::dependencies() const
+{
+    std::vector<FeatureId> ids;
+    for (const geometry::ElementRef& ref : edges) {
+        addAll(ids, ref);
+    }
+    return ids;
+}
+
 // --- Importar ----------------------------------------------------------------
 
 std::optional<std::string> ImportFeature::compute(ModelState& state) const

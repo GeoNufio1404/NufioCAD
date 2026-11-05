@@ -168,4 +168,31 @@ private:
     QFormLayout* form_ = nullptr;
 };
 
+// Redondeo y chaflán: eligen aristas de un cuerpo y una medida. Con «editing»
+// el tipo sale de la operación; si no, de «style».
+class EdgeTool final : public FeatureTool {
+    Q_OBJECT
+
+public:
+    enum class Style { Fillet, Chamfer };
+
+    EdgeTool(document::Document& document, render::Viewport& viewport, std::optional<document::FeatureId> editing,
+             Style style = Style::Fillet);
+
+    std::unique_ptr<document::Feature> build() const override;
+
+protected:
+    QString title() const override;
+    void createFields(QFormLayout* form) override;
+    void selectionChanged(const render::ModelSelection& selection) override;
+    QString inputsText() const override;
+    bool removesMaterial() const override { return false; }
+    void afterPreview(const document::ModelState& before) override;
+
+private:
+    Style style_;
+    std::vector<geometry::ElementRef> edges_;
+    QDoubleSpinBox* size_ = nullptr;
+};
+
 } // namespace nuf::app

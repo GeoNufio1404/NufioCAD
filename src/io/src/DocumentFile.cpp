@@ -162,6 +162,14 @@ sk::Plane plane(const Json& j)
 }
 
 Json toJson(const geo::ElementRef& r) { return {{"name", r.name}, {"occurrence", r.occurrence}}; }
+Json toJson(const std::vector<geo::ElementRef>& refs)
+{
+    Json list = Json::array();
+    for (const geo::ElementRef& r : refs) {
+        list.push_back(toJson(r));
+    }
+    return list;
+}
 geo::ElementRef elementRef(const Json& j)
 {
     geo::ElementRef r;
@@ -459,6 +467,13 @@ FeatureRow rowOf(const Feature& f)
                   {"angle2", r.spec.angle2}, {"operation", nameOf(kOperations, r.operation)}};
         break;
     }
+    case FeatureKind::Fillet:
+    case FeatureKind::Chamfer: {
+        const auto& e = static_cast<const EdgeFeature&>(f);
+        row.type = f.kind() == FeatureKind::Fillet ? "fillet" : "chamfer";
+        params = {{"edges", toJson(e.edges)}, {"size", e.size}};
+        break;
+    }
     case FeatureKind::Import: {
         const auto& i = static_cast<const ImportFeature&>(f);
         row.type = "import";
@@ -499,6 +514,18 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         r->spec.angle2 = number(p, "angle2");
         r->operation = parseEnum(kOperations, text(p, "operation"), "operación");
         feature = std::move(r);
+    } else if (row.type == "fillet" || row.type == "chamfer") {
+        std::unique_ptr<EdgeFeature> e;
+        if (row.type == "fillet") {
+            e = std::make_unique<FilletFeature>();
+        } else {
+            e = std::make_unique<ChamferFeature>();
+        }
+        for (const Json& edge : p.at("edges")) {
+            e->edges.push_back(elementRef(edge));
+        }
+        e->size = number(p, "size");
+        feature = std::move(e);
     } else if (row.type == "import") {
         auto i = std::make_unique<ImportFeature>();
         i->source = text(p, "source");

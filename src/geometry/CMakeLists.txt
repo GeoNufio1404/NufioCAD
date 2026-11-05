@@ -12,7 +12,7 @@ target_link_libraries(nuf_geometry
     PUBLIC nuf::sketch
     PRIVATE
         TKernel TKMath TKG2d TKG3d TKGeomBase TKGeomAlgo TKBRep TKPrim TKTopAlgo
-        TKBO TKFeat TKOffset TKShHealing TKMesh)
+        TKBO TKFeat TKFillet TKOffset TKShHealing TKMesh)
 
 # STEP: las bibliotecas de intercambio se llaman TKDESTEP (OCCT 7.8 y 8) o
 # TKSTEP (anteriores).
