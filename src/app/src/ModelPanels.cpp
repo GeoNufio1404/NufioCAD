@@ -40,6 +40,8 @@ QString glyph(document::FeatureKind kind)
         return QStringLiteral("◿");
     case document::FeatureKind::Shell:
         return QStringLiteral("▢");
+    case document::FeatureKind::Hole:
+        return QStringLiteral("◎");
     }
     return QStringLiteral("?");
 }

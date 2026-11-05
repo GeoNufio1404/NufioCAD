@@ -129,6 +129,7 @@ private:
     QAction* filletAction_ = nullptr;
     QAction* chamferAction_ = nullptr;
     QAction* shellAction_ = nullptr;
+    QAction* holeAction_ = nullptr;
     QAction* exportAction_ = nullptr;
     QAction* importAction_ = nullptr;
     QMenu* recentMenu_ = nullptr;

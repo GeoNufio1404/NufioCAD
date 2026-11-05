@@ -164,6 +164,22 @@ public:
     std::vector<FeatureId> dependencies() const override;
 };
 
+// Agujeros: un sketch cuyos círculos (su centro) y puntos marcan dónde van; se
+// restan del cuerpo hacia dentro del material, desde el plano del sketch.
+class HoleFeature final : public Feature {
+public:
+    FeatureId sketch = 0;
+    geometry::HoleSpec spec;
+    bool flip = false;  // al otro lado del plano
+
+    FeatureKind kind() const override { return FeatureKind::Hole; }
+    std::unique_ptr<Feature> clone() const override { return std::make_unique<HoleFeature>(*this); }
+    std::optional<std::string> compute(ModelState& state) const override;
+    std::vector<FeatureId> dependencies() const override { return {sketch}; }
+    // Solo el sólido que se resta (para la vista previa).
+    geometry::Shape tool(const ModelState& state) const;
+};
+
 // Sólidos que vienen de otro programa (STEP). Guarda el BREP ya reparado, no el
 // archivo original: se puede mover o borrar el STEP sin afectar al diseño.
 // Cada sólido es un cuerpo; si hay varios, sus claves son «f<id>:c<n>».

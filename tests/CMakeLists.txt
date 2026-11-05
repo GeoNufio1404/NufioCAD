@@ -6,6 +6,8 @@ add_executable(nuf_tests
     test_exchange.cpp
     test_modeling.cpp
     test_edge_ops.cpp
+    test_perf.cpp
+    test_solver_groups.cpp
     test_document_model.cpp
     test_nuf_file.cpp
     test_document_file.cpp

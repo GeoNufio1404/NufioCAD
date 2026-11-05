@@ -29,6 +29,8 @@ std::string kindLabel(FeatureKind kind)
         return "Chaflán";
     case FeatureKind::Shell:
         return "Vaciado";
+    case FeatureKind::Hole:
+        return "Agujero";
     }
     return "Operación";
 }

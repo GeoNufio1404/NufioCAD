@@ -3,6 +3,7 @@
 #include <nuf/geometry/Modeling.hpp>
 #include <nuf/render/Viewport.hpp>
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
@@ -238,6 +239,8 @@ void FeatureTool::updatePreview()
                 tool = e->tool(before());
             } else if (const auto* r = dynamic_cast<const document::RevolveFeature*>(feature.get())) {
                 tool = r->tool(before());
+            } else if (const auto* h = dynamic_cast<const document::HoleFeature*>(feature.get())) {
+                tool = h->tool(before());
             }
             viewport_.showToolPreview(tool, true);
         } catch (const std::exception&) {
@@ -882,6 +885,133 @@ QString ShellTool::inputsText() const
         return QStringLiteral("Elige las caras que quedan abiertas (varias con clics sucesivos)");
     }
     return faces_.size() == 1 ? QStringLiteral("1 cara abierta") : QStringLiteral("%1 caras abiertas").arg(faces_.size());
+}
+
+// --- Agujeros ----------------------------------------------------------------------
+
+HoleTool::HoleTool(document::Document& document, render::Viewport& viewport,
+                   std::optional<document::FeatureId> editing)
+    : FeatureTool(document, viewport, editing)
+{
+    if (const auto* h = dynamic_cast<const document::HoleFeature*>(original_.get())) {
+        sketch_ = h->sketch;
+    }
+}
+
+void HoleTool::createFields(QFormLayout* form)
+{
+    form_ = form;
+    sketchBox_ = new QComboBox();
+    // Los sketches ya calculados con círculos o puntos donde poner agujeros.
+    for (const auto& [id, out] : before().sketches) {
+        const document::Feature* f = document_.findFeature(id);
+        const bool marks = std::ranges::any_of(out.sketch->entities(), [](const sketch::Entity& e) {
+            return !e.reference && (std::holds_alternative<sketch::Point>(e.geometry)
+                                    || (std::holds_alternative<sketch::Circle>(e.geometry) && !e.construction));
+        });
+        if (f && marks) {
+            sketchBox_->addItem(QString::fromStdString(f->name()), qulonglong(id));
+        }
+    }
+    if (sketch_ == 0 && sketchBox_->count() > 0) {
+        sketch_ = document::FeatureId(sketchBox_->itemData(sketchBox_->count() - 1).toULongLong());  // el último
+    }
+    if (const int at = sketchBox_->findData(qulonglong(sketch_)); at >= 0) {
+        sketchBox_->setCurrentIndex(at);
+    }
+    kind_ = combo({QStringLiteral("Simple"), QStringLiteral("Abocardado"), QStringLiteral("Avellanado")});
+    diameter_ = lengthBox(5.0);
+    diameter_->setMinimum(0.01);
+    throughAll_ = new QCheckBox(QStringLiteral("Atravesar todo"));
+    depth_ = lengthBox(10.0);
+    depth_->setMinimum(0.01);
+    headDiameter_ = lengthBox(10.0);
+    headDiameter_->setMinimum(0.01);
+    headDepth_ = lengthBox(3.0);
+    headDepth_->setMinimum(0.01);
+    headAngle_ = angleBox(90.0, 179.0);
+    headAngle_->setMinimum(1.0);
+    flip_ = new QCheckBox(QStringLiteral("Al otro lado del plano"));
+    if (const auto* h = dynamic_cast<const document::HoleFeature*>(original_.get())) {
+        kind_->setCurrentIndex(int(h->spec.kind));
+        diameter_->setValue(h->spec.diameter);
+        throughAll_->setChecked(h->spec.throughAll);
+        depth_->setValue(h->spec.depth);
+        headDiameter_->setValue(h->spec.headDiameter);
+        headDepth_->setValue(h->spec.headDepth);
+        headAngle_->setValue(h->spec.headAngle / kDegree);
+        flip_->setChecked(h->flip);
+    }
+    form->addRow(QStringLiteral("Sketch"), sketchBox_);
+    form->addRow(QStringLiteral("Tipo"), kind_);
+    form->addRow(QStringLiteral("Diámetro"), diameter_);
+    form->addRow(QString(), throughAll_);
+    form->addRow(QStringLiteral("Profundidad"), depth_);
+    form->addRow(QStringLiteral("Diámetro de la cabeza"), headDiameter_);
+    form->addRow(QStringLiteral("Profundidad de la cabeza"), headDepth_);
+    form->addRow(QStringLiteral("Ángulo del cono"), headAngle_);
+    form->addRow(QString(), flip_);
+    for (QDoubleSpinBox* box : {diameter_, depth_, headDiameter_, headDepth_, headAngle_}) {
+        connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
+    }
+    for (QCheckBox* box : {throughAll_, flip_}) {
+        connect(box, &QCheckBox::toggled, this, [this] {
+            updateVisibility();
+            updatePreview();
+        });
+    }
+    connect(kind_, &QComboBox::currentIndexChanged, this, [this] {
+        updateVisibility();
+        updatePreview();
+    });
+    connect(sketchBox_, &QComboBox::currentIndexChanged, this, [this] {
+        sketch_ = document::FeatureId(sketchBox_->currentData().toULongLong());
+        updatePreview();
+    });
+    updateVisibility();
+}
+
+void HoleTool::updateVisibility()
+{
+    const int kind = kind_->currentIndex();
+    form_->setRowVisible(depth_, !throughAll_->isChecked());
+    form_->setRowVisible(headDiameter_, kind != 0);
+    form_->setRowVisible(headDepth_, kind == 1);
+    form_->setRowVisible(headAngle_, kind == 2);
+}
+
+void HoleTool::selectionChanged(const render::ModelSelection&)
+{
+    // El sketch se elige en la lista; la selección en la vista no cambia nada.
+}
+
+std::unique_ptr<document::Feature> HoleTool::build() const
+{
+    if (sketch_ == 0) {
+        return nullptr;
+    }
+    auto f = std::make_unique<document::HoleFeature>();
+    if (original_) {
+        f->setName(original_->name());
+    }
+    f->sketch = sketch_;
+    f->spec.kind = geometry::HoleKind(kind_->currentIndex());
+    f->spec.diameter = diameter_->value();
+    f->spec.throughAll = throughAll_->isChecked();
+    f->spec.depth = depth_->value();
+    f->spec.headDiameter = headDiameter_->value();
+    f->spec.headDepth = headDepth_->value();
+    f->spec.headAngle = headAngle_->value() * kDegree;
+    f->flip = flip_->isChecked();
+    return f;
+}
+
+QString HoleTool::inputsText() const
+{
+    if (sketchBox_->count() == 0) {
+        return QStringLiteral("Primero dibuja un sketch con círculos (o puntos) donde van los agujeros");
+    }
+    return QStringLiteral("Agujeros en los círculos de «%1»").arg(sketchBox_->currentText());
 }
 
 } // namespace nuf::app

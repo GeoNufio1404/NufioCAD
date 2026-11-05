@@ -98,6 +98,25 @@ bool touches(const Shape& a, const Shape& b);
 Shape fillet(std::string_view tag, const Shape& body, const std::vector<int>& edges, double radius);
 Shape chamfer(std::string_view tag, const Shape& body, const std::vector<int>& edges, double distance);
 
+enum class HoleKind { Simple, Counterbore, Countersink };
+
+struct HoleSpec {
+    HoleKind kind = HoleKind::Simple;
+    double diameter = 5.0;               // mm
+    double depth = 10.0;                 // mm; no se usa con throughAll
+    bool throughAll = false;
+    double headDiameter = 10.0;          // abocardado o avellanado: diámetro en la superficie
+    double headDepth = 3.0;              // abocardado: profundidad del escalón
+    double headAngle = 1.5707963267948966;  // avellanado: ángulo total del cono (90°)
+};
+
+// Sólido que se resta para hacer los agujeros: uno por centro, en el plano
+// dado, hacia dentro del material (en contra de la normal; «flip» la invierte).
+// Empieza 1 mm fuera de la superficie para que el corte sea limpio. Con
+// throughAll atraviesa todo lo de «context». Las caras se llaman «tag:pared».
+Shape holeTool(std::string_view tag, const sketch::Plane& plane, const std::vector<sketch::Vec2>& centers,
+               const HoleSpec& spec, bool flip, const std::vector<Shape>& context = {});
+
 // Vacía el cuerpo: quita las caras dadas (por índice) y deja paredes de
 // «thickness» mm, hacia dentro o hacia fuera. Las caras de las paredes nuevas se
 // llaman «tag:interior:<cara de origen>»; las demás, incluida la que queda como

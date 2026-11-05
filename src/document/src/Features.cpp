@@ -522,6 +522,52 @@ std::vector<FeatureId> ShellFeature::dependencies() const
     return ids;
 }
 
+// --- Agujeros ----------------------------------------------------------------
+
+geometry::Shape HoleFeature::tool(const ModelState& state) const
+{
+    const auto out = state.sketches.find(sketch);
+    if (out == state.sketches.end()) {
+        throw FeatureError("Falta el sketch que marca los agujeros");
+    }
+    // Centros de círculos y puntos sueltos, sin repetir (un punto en el centro
+    // de un círculo es el mismo agujero).
+    std::vector<sketch::Vec2> centers;
+    const auto add = [&](sketch::Vec2 p) {
+        const bool known = std::ranges::any_of(centers, [&](const sketch::Vec2& q) {
+            return std::abs(q.x - p.x) < 1e-6 && std::abs(q.y - p.y) < 1e-6;
+        });
+        if (!known) {
+            centers.push_back(p);
+        }
+    };
+    for (const sketch::Entity& e : out->second.sketch->entities()) {
+        if (e.reference) {
+            continue;
+        }
+        if (const auto* circle = std::get_if<sketch::Circle>(&e.geometry); circle && !e.construction) {
+            add(circle->center);
+        } else if (const auto* point = std::get_if<sketch::Point>(&e.geometry)) {
+            add(point->position);
+        }
+    }
+    try {
+        return geometry::holeTool(tag(), out->second.plane, centers, spec, flip, state.shapes());
+    } catch (const geometry::GeometryError& e) {
+        throw FeatureError(e.what());
+    }
+}
+
+std::optional<std::string> HoleFeature::compute(ModelState& state) const
+{
+    const geometry::Shape solid = tool(state);
+    try {
+        return applyOperation(state, *this, Operation::Cut, solid);
+    } catch (const geometry::GeometryError& e) {
+        throw FeatureError(e.what());
+    }
+}
+
 // --- Importar ----------------------------------------------------------------
 
 std::optional<std::string> ImportFeature::compute(ModelState& state) const

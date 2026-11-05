@@ -266,3 +266,127 @@ TEST_CASE("El vaciado sigue a la pieza, se guarda y se abre", "[shell][io]")
     REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(doc.result().bodies.front().shape.volume(), 1e-9));
     REQUIRE(reopened.result().bodies.front().shape.faceCount() == doc.result().bodies.front().shape.faceCount());
 }
+
+// --- Agujeros --------------------------------------------------------------------
+
+namespace {
+
+// La caja de 20×10×5 y un sketch en el plano XY (z = 0) con círculos de radio 2.
+// Para que el agujero entre en el material se invierte («flip»): sube desde z = 0.
+FeatureId addHoleSketch(Document& doc, std::vector<sketch::Vec2> centers)
+{
+    sketch::Sketch s;
+    for (const sketch::Vec2& c : centers) {
+        s.addCircle(c, 2.0);
+    }
+    SketchAttachment at;
+    at.origin = OriginPlane::XY;
+    return doc.addFeature(std::make_unique<SketchFeature>(std::move(s), at));
+}
+
+FeatureId addHole(Document& doc, FeatureId sketchId, const geometry::HoleSpec& spec)
+{
+    auto h = std::make_unique<HoleFeature>();
+    h->sketch = sketchId;
+    h->spec = spec;
+    h->flip = true;
+    return doc.addFeature(std::move(h));
+}
+
+constexpr double kBox = 20.0 * 10.0 * 5.0;
+
+} // namespace
+
+TEST_CASE("Un agujero simple resta un cilindro de la profundidad pedida", "[hole]")
+{
+    Document doc = boxDocument();
+    const FeatureId sk = addHoleSketch(doc, {{10, 5}});
+    geometry::HoleSpec spec;
+    spec.diameter = 4;
+    spec.depth = 3;
+    const FeatureId id = addHole(doc, sk, spec);
+    REQUIRE(doc.status(id).health == Health::Ok);
+    const geometry::Shape& body = doc.result().bodies.front().shape;
+    REQUIRE(body.isValid());
+    REQUIRE_THAT(body.volume(), WithinRel(kBox - kPi * 4.0 * 3.0, 1e-6));
+    REQUIRE(countNamed(body, "f" + std::to_string(id) + ":pared") >= 1);
+
+    // Atravesando todo: la altura entera de la caja.
+    spec.throughAll = true;
+    Document through = boxDocument();
+    const FeatureId skThrough = addHoleSketch(through, {{10, 5}});
+    addHole(through, skThrough, spec);
+    REQUIRE_THAT(through.result().bodies.front().shape.volume(), WithinRel(kBox - kPi * 4.0 * 5.0, 1e-6));
+
+    // Dos círculos, dos agujeros.
+    Document two = boxDocument();
+    const FeatureId skTwo = addHoleSketch(two, {{5, 5}, {15, 5}});
+    spec.throughAll = false;
+    addHole(two, skTwo, spec);
+    REQUIRE_THAT(two.result().bodies.front().shape.volume(), WithinRel(kBox - 2 * kPi * 4.0 * 3.0, 1e-6));
+}
+
+TEST_CASE("Abocardado y avellanado quitan más que un agujero simple", "[hole]")
+{
+    geometry::HoleSpec spec;
+    spec.diameter = 4;
+    spec.depth = 3;
+
+    Document counter = boxDocument();
+    const FeatureId skA = addHoleSketch(counter, {{10, 5}});
+    spec.kind = geometry::HoleKind::Counterbore;
+    spec.headDiameter = 8;
+    spec.headDepth = 2;
+    const FeatureId a = addHole(counter, skA, spec);
+    REQUIRE(counter.status(a).health == Health::Ok);
+    // Cilindro de la cabeza (r 4, 2 de hondo) y el resto del agujero (r 2, 1 más).
+    REQUIRE_THAT(counter.result().bodies.front().shape.volume(),
+                 WithinRel(kBox - kPi * 16.0 * 2.0 - kPi * 4.0 * 1.0, 1e-6));
+
+    Document sink = boxDocument();
+    const FeatureId skB = addHoleSketch(sink, {{10, 5}});
+    spec.kind = geometry::HoleKind::Countersink;
+    const FeatureId b = addHole(sink, skB, spec);
+    REQUIRE(sink.status(b).health == Health::Ok);
+    REQUIRE(sink.result().bodies.front().shape.isValid());
+    REQUIRE(sink.result().bodies.front().shape.volume() < kBox - kPi * 4.0 * 3.0);
+}
+
+TEST_CASE("Los agujeros dan errores claros, se guardan y se abren", "[hole][io]")
+{
+    Document doc = boxDocument();
+    geometry::HoleSpec spec;
+    spec.diameter = 4;
+
+    // Sin círculos ni puntos: no hay dónde.
+    sketch::Sketch empty;
+    SketchAttachment at;
+    at.origin = OriginPlane::XY;
+    const FeatureId none = doc.addFeature(std::make_unique<SketchFeature>(empty, at));
+    REQUIRE(doc.status(addHole(doc, none, spec)).health == Health::Error);
+
+    // Una cabeza más chica que el agujero no tiene sentido.
+    const FeatureId sk = addHoleSketch(doc, {{10, 5}});
+    spec.kind = geometry::HoleKind::Counterbore;
+    spec.headDiameter = 3;
+    REQUIRE(doc.status(addHole(doc, sk, spec)).health == Health::Error);
+
+    // Uno bueno, y ida y vuelta por el archivo.
+    spec.headDiameter = 8;
+    spec.headDepth = 2;
+    spec.depth = 4;
+    const FeatureId good = addHole(doc, sk, spec);
+    REQUIRE(doc.status(good).health == Health::Ok);
+    const auto path = std::filesystem::temp_directory_path() / "nuf_agujero.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    REQUIRE(reopened.findFeature(good)->kind() == FeatureKind::Hole);
+    const auto& h = static_cast<const HoleFeature&>(*reopened.findFeature(good));
+    REQUIRE(h.spec.kind == geometry::HoleKind::Counterbore);
+    REQUIRE(h.flip);
+    REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(doc.result().bodies.front().shape.volume(), 1e-9));
+}

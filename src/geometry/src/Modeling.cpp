@@ -6,6 +6,7 @@
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepAlgoAPI_Common.hxx>
 #include <BRepBndLib.hxx>
+#include <BRepCheck_Analyzer.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRep_Tool.hxx>
 #include <Bnd_Box.hxx>
@@ -21,6 +22,8 @@
 #include <BRepOffsetAPI_MakeThickSolid.hxx>
 #include <NCollection_List.hxx>
 #include <GProp_GProps.hxx>
+#include <BRepPrimAPI_MakeCone.hxx>
+#include <BRepPrimAPI_MakeCylinder.hxx>
 #include <BRepPrimAPI_MakeHalfSpace.hxx>
 #include <BRepPrimAPI_MakePrism.hxx>
 #include <BRepPrimAPI_MakeRevol.hxx>
@@ -446,15 +449,24 @@ Shape boolean(BooleanOp op, const Shape& target, const Shape& tool)
         std::unique_ptr<BRepAlgoAPI_BooleanOperation> algo;
         switch (op) {
         case BooleanOp::Fuse:
-            algo = std::make_unique<BRepAlgoAPI_Fuse>(a, b);
+            algo = std::make_unique<BRepAlgoAPI_Fuse>();
             break;
         case BooleanOp::Cut:
-            algo = std::make_unique<BRepAlgoAPI_Cut>(a, b);
+            algo = std::make_unique<BRepAlgoAPI_Cut>();
             break;
         case BooleanOp::Common:
-            algo = std::make_unique<BRepAlgoAPI_Common>(a, b);
+            algo = std::make_unique<BRepAlgoAPI_Common>();
             break;
         }
+        // En paralelo (el kernel reparte el trabajo entre los núcleos).
+        NCollection_List<TopoDS_Shape> objects;
+        NCollection_List<TopoDS_Shape> tools;
+        objects.Append(a);
+        tools.Append(b);
+        algo->SetArguments(objects);
+        algo->SetTools(tools);
+        algo->SetRunParallel(true);
+        algo->Build();
         if (!algo->IsDone() || algo->HasErrors()) {
             throw GeometryError("La operación booleana falló");
         }
@@ -467,7 +479,13 @@ Shape boolean(BooleanOp op, const Shape& target, const Shape& tool)
         }
         // Si unir las caras coplanares estropea el sólido, mejor sin unirlas.
         Shape unified = unify(result, "bool");
-        return unified.isValid() || !result.isValid() ? unified : result;
+        // La comprobación completa (con los controles de geometría) cuesta tanto
+        // como la propia booleana; aquí solo hace falta saber si unir las caras
+        // estropeó la topología.
+        const auto sound = [](const Shape& shape) {
+            return !shape.isNull() && BRepCheck_Analyzer(occtShape(shape), false).IsValid();
+        };
+        return sound(unified) || !sound(result) ? unified : result;
     } catch (const Standard_Failure& e) {
         throw GeometryError(std::string("Error del kernel en la booleana: ") + kernelMessage(e));
     }
@@ -485,7 +503,27 @@ bool touches(const Shape& a, const Shape& b)
         || bb.max.y < ba.min.y - gap || ba.max.z < bb.min.z - gap || bb.max.z < ba.min.z - gap) {
         return false;
     }
-    BRepExtrema_DistShapeShape distance(occtShape(a), occtShape(b));
+    // Solo cuentan las caras de «a» cuya caja se cruza con la de «b»: medir la
+    // distancia contra el cuerpo entero crece con todas sus caras.
+    Bnd_Box toolBox;
+    BRepBndLib::AddOptimal(occtShape(b), toolBox, false, false);
+    toolBox.Enlarge(gap);
+    BRep_Builder builder;
+    TopoDS_Compound near;
+    builder.MakeCompound(near);
+    bool any = false;
+    for (int i = 0; i < a.faceCount(); ++i) {
+        Bnd_Box box;
+        BRepBndLib::AddOptimal(faceAt(a, i), box, false, false);
+        if (!box.IsOut(toolBox)) {
+            builder.Add(near, faceAt(a, i));
+            any = true;
+        }
+    }
+    if (!any) {
+        return false;
+    }
+    BRepExtrema_DistShapeShape distance(near, occtShape(b));
     return distance.IsDone() && distance.Value() < 1e-6;
 }
 
@@ -559,6 +597,83 @@ Shape chamfer(std::string_view tag, const Shape& body, const std::vector<int>& e
 {
     return edgeOperation<BRepFilletAPI_MakeChamfer>(tag, "chaflan", body, edges, distance,
                                                      "No se pudo achaflanar: prueba con una distancia menor");
+}
+
+Shape holeTool(std::string_view tag, const sketch::Plane& plane, const std::vector<sketch::Vec2>& centers,
+               const HoleSpec& spec, bool flip, const std::vector<Shape>& context)
+{
+    if (centers.empty()) {
+        throw GeometryError("No hay círculos ni puntos que marquen dónde van los agujeros");
+    }
+    if (spec.diameter <= kTiny) {
+        throw GeometryError("El diámetro del agujero debe ser mayor que cero");
+    }
+    double depth = spec.depth;
+    if (spec.throughAll) {
+        // Más largo que cualquier cuerpo: la diagonal de todo lo que hay.
+        depth = 1.0;
+        for (const Shape& shape : context) {
+            const Box box = shape.bounds();
+            if (!box.empty) {
+                depth += std::sqrt(std::pow(box.max.x - box.min.x, 2) + std::pow(box.max.y - box.min.y, 2)
+                                   + std::pow(box.max.z - box.min.z, 2));
+            }
+        }
+    } else if (depth <= kTiny) {
+        throw GeometryError("La profundidad del agujero debe ser mayor que cero");
+    }
+    const double radius = spec.diameter / 2.0;
+    const double headRadius = spec.headDiameter / 2.0;
+    if (spec.kind != HoleKind::Simple) {
+        if (headRadius <= radius + kTiny) {
+            throw GeometryError("El diámetro de la cabeza debe ser mayor que el del agujero");
+        }
+        if (spec.kind == HoleKind::Counterbore && (spec.headDepth <= kTiny || (!spec.throughAll && spec.headDepth >= depth))) {
+            throw GeometryError("La profundidad del abocardado debe ser positiva y menor que la del agujero");
+        }
+        if (spec.kind == HoleKind::Countersink && (spec.headAngle <= 0.01 || spec.headAngle >= std::numbers::pi - 0.01)) {
+            throw GeometryError("El ángulo del avellanado debe estar entre 0° y 180°");
+        }
+    }
+    constexpr double kLead = 1.0;  // el sólido empieza fuera de la superficie
+    try {
+        // Hacia dentro del material: en contra de la normal de la cara.
+        sketch::Vec3 direction = plane.normal;
+        if (!flip) {
+            direction = {-direction.x, -direction.y, -direction.z};
+        }
+        const gp_Dir axisDir = toDir(direction);
+        BRep_Builder builder;
+        TopoDS_Compound compound;
+        builder.MakeCompound(compound);
+        const auto fuse = [](const TopoDS_Shape& a, const TopoDS_Shape& b) {
+            BRepAlgoAPI_Fuse fused(a, b);
+            if (!fused.IsDone() || fused.HasErrors()) {
+                throw GeometryError("No se pudo construir el agujero");
+            }
+            return fused.Shape();
+        };
+        for (const sketch::Vec2& center : centers) {
+            const sketch::Vec3 on = plane.toWorld(center);
+            const gp_Pnt start(on.x - direction.x * kLead, on.y - direction.y * kLead, on.z - direction.z * kLead);
+            const gp_Ax2 axis(start, axisDir);
+            TopoDS_Shape hole = BRepPrimAPI_MakeCylinder(axis, radius, depth + kLead).Shape();
+            if (spec.kind == HoleKind::Counterbore) {
+                hole = fuse(hole, BRepPrimAPI_MakeCylinder(axis, headRadius, spec.headDepth + kLead).Shape());
+            } else if (spec.kind == HoleKind::Countersink) {
+                const double half = spec.headAngle / 2.0;
+                const double coneLength = (headRadius - radius) / std::tan(half);
+                // El cono llega al diámetro de la cabeza justo en la superficie.
+                hole = fuse(hole, BRepPrimAPI_MakeCone(axis, headRadius + kLead * std::tan(half), radius, coneLength + kLead).Shape());
+            }
+            builder.Add(compound, hole);
+        }
+        Namer namer(compound);
+        namer.nameUnnamed(std::string(tag) + ":pared");
+        return namer.finish(std::string(tag));
+    } catch (const Standard_Failure& e) {
+        throw GeometryError(std::string("Error del kernel al hacer el agujero: ") + kernelMessage(e));
+    }
 }
 
 Shape shell(std::string_view tag, const Shape& body, const std::vector<int>& removedFaces, double thickness, bool outward)

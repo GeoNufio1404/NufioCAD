@@ -942,6 +942,7 @@ public:
         }
         context->ClearSelected(false);
         sketchPlane = plane;
+        profilesPlaneDirty = true;
         grid->plane = toAx3(plane);
         updateGrid(true);
         context->Display(grid, 0, -1, false);
@@ -1039,13 +1040,23 @@ public:
         shownHighlight = highlight;
         rebuildSketch();
 
-        // Regiones cerradas, sombreadas como en Fusion.
-        profiles->SetShape(profileCompound(sketch, toAx3(sketchPlane)));
-        profiles->SetToUpdate();
-        if (context->IsDisplayed(profiles)) {
-            context->Redisplay(profiles, false);
-        } else {
-            context->Display(profiles, AIS_Shaded, -1, false);
+        // Regiones cerradas, sombreadas como en Fusion. Hallar los perfiles y
+        // construir sus caras es lo más caro de esta función y no cambia al
+        // mover el cursor ni al seleccionar: solo se rehace si cambió la
+        // geometría (o el plano).
+        const std::size_t fingerprint = sketch::geometryFingerprint(sketch);
+        const bool geometryChanged = fingerprint != profilesFingerprint || !context->IsDisplayed(profiles)
+                                     || profilesPlaneDirty;
+        if (geometryChanged) {
+            profilesFingerprint = fingerprint;
+            profilesPlaneDirty = false;
+            profiles->SetShape(profileCompound(sketch, toAx3(sketchPlane)));
+            profiles->SetToUpdate();
+            if (context->IsDisplayed(profiles)) {
+                context->Redisplay(profiles, false);
+            } else {
+                context->Display(profiles, AIS_Shaded, -1, false);
+            }
         }
     }
 
@@ -1474,6 +1485,8 @@ public:
     bool projectMode = false;
     bool sketchDragging = false;
     std::optional<sketch::Sketch> shownSketch;
+    std::size_t profilesFingerprint = 0;  // geometría con la que se calcularon los perfiles sombreados
+    bool profilesPlaneDirty = true;        // el plano cambió: hay que rehacerlos aunque la geometría sea la misma
     std::vector<sketch::EntityId> shownUnderconstrained;
     SketchHighlight shownHighlight;
     double annotationScale = 0.0;

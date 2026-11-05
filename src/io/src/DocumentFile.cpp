@@ -87,6 +87,11 @@ const Table<geo::RevolveExtent, 2> kRevolveExtents{{
     {geo::RevolveExtent::Angle, "angle"}, {geo::RevolveExtent::Full, "full"},
 }};
 
+const Table<geo::HoleKind, 3> kHoleKinds{{
+    {geo::HoleKind::Simple, "simple"}, {geo::HoleKind::Counterbore, "counterbore"},
+    {geo::HoleKind::Countersink, "countersink"},
+}};
+
 const Table<AxisRef::Kind, 5> kAxisKinds{{
     {AxisRef::Kind::OriginX, "originX"}, {AxisRef::Kind::OriginY, "originY"}, {AxisRef::Kind::OriginZ, "originZ"},
     {AxisRef::Kind::SketchLine, "sketchLine"}, {AxisRef::Kind::Edge, "edge"},
@@ -474,6 +479,14 @@ FeatureRow rowOf(const Feature& f)
         params = {{"edges", toJson(e.edges)}, {"size", e.size}};
         break;
     }
+    case FeatureKind::Hole: {
+        const auto& h = static_cast<const HoleFeature&>(f);
+        row.type = "hole";
+        params = {{"sketch", h.sketch}, {"kind", nameOf(kHoleKinds, h.spec.kind)}, {"diameter", h.spec.diameter},
+                  {"depth", h.spec.depth}, {"throughAll", h.spec.throughAll}, {"headDiameter", h.spec.headDiameter},
+                  {"headDepth", h.spec.headDepth}, {"headAngle", h.spec.headAngle}, {"flip", h.flip}};
+        break;
+    }
     case FeatureKind::Shell: {
         const auto& s = static_cast<const ShellFeature&>(f);
         row.type = "shell";
@@ -532,6 +545,18 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         }
         e->size = number(p, "size");
         feature = std::move(e);
+    } else if (row.type == "hole") {
+        auto h = std::make_unique<HoleFeature>();
+        h->sketch = unsignedValue(p, "sketch");
+        h->spec.kind = parseEnum(kHoleKinds, text(p, "kind"), "tipo de agujero");
+        h->spec.diameter = number(p, "diameter");
+        h->spec.depth = number(p, "depth");
+        h->spec.throughAll = p.at("throughAll").get<bool>();
+        h->spec.headDiameter = number(p, "headDiameter");
+        h->spec.headDepth = number(p, "headDepth");
+        h->spec.headAngle = number(p, "headAngle");
+        h->flip = p.at("flip").get<bool>();
+        feature = std::move(h);
     } else if (row.type == "shell") {
         auto s = std::make_unique<ShellFeature>();
         for (const Json& face : p.at("faces")) {

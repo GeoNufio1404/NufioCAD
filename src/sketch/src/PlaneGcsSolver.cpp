@@ -114,22 +114,42 @@ private:
 // Traduce un Sketch a un GCS::System. PlaneGCS trabaja con punteros a los
 // parámetros (coordenadas, radios, ángulos), así que se guardan en un deque,
 // que no los mueve al crecer.
+// ¿Todas las entidades que nombra la restricción cumplen «pred»? (0 = ninguna.)
+template <typename Predicate>
+bool idsIn(const Constraint& c, Predicate pred)
+{
+    for (const EntityId id : {c.first.entity, c.second.entity, c.third.entity}) {
+        if (id != 0 && !pred(id)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 class GcsProblem {
 public:
-    GcsProblem(Sketch& sketch, const std::vector<DragTarget>& drag) : sketch_(sketch)
+    // «scope»: si se da, solo entran esas entidades y las restricciones que
+    // solo hablan de ellas (un grupo independiente del sketch).
+    GcsProblem(Sketch& sketch, const std::vector<DragTarget>& drag, const std::set<EntityId>* scope = nullptr)
+        : sketch_(sketch)
     {
+        const auto inScope = [&](const Constraint& c) {
+            return scope == nullptr || (idsIn(c, [&](EntityId id) { return scope->contains(id); }));
+        };
         for (const Entity& e : sketch.entities()) {
-            addEntity(e);
+            if (scope == nullptr || scope->contains(e.id)) {
+                addEntity(e);
+            }
         }
         for (const Constraint& c : sketch.constraints()) {
-            if (c.type == ConstraintType::Fix) {
+            if (c.type == ConstraintType::Fix && inScope(c)) {
                 for (double* p : paramsOf(c.first)) {
                     fixed_.insert(p);
                 }
             }
         }
         for (const Constraint& c : sketch.constraints()) {
-            if (c.driving && c.type != ConstraintType::Fix) {
+            if (c.driving && c.type != ConstraintType::Fix && inScope(c)) {
                 addConstraint(c);
             }
         }
@@ -822,13 +842,155 @@ private:
     GCS::System system_;
 };
 
+// Grupo independiente del sketch: entidades que se mueven juntas porque las
+// une alguna restricción. Las fijas (origen, ejes, geometría bloqueada) son
+// constantes y no unen nada; solo entran en el «alcance» de los grupos cuyas
+// restricciones las nombran.
+struct Group {
+    std::set<EntityId> entities;  // las que se resuelven
+    std::set<EntityId> scope;     // ellas y las fijas que necesitan
+};
+
+std::vector<Group> partition(const Sketch& sketch)
+{
+    std::set<EntityId> fixed;
+    std::map<EntityId, EntityId> parent;
+    for (const Entity& e : sketch.entities()) {
+        if (e.reference || e.locked) {
+            fixed.insert(e.id);
+        } else {
+            parent[e.id] = e.id;
+        }
+    }
+    const auto find = [&](EntityId id) {
+        while (parent[id] != id) {
+            parent[id] = parent[parent[id]];
+            id = parent[id];
+        }
+        return id;
+    };
+    std::set<EntityId> constrained;
+    for (const Constraint& c : sketch.constraints()) {
+        if (!c.driving) {
+            continue;
+        }
+        EntityId first = 0;
+        for (const EntityId id : {c.first.entity, c.second.entity, c.third.entity}) {
+            if (id == 0 || !parent.contains(id)) {
+                continue;
+            }
+            constrained.insert(id);
+            if (first == 0) {
+                first = id;
+            } else {
+                parent[find(id)] = find(first);
+            }
+        }
+    }
+    // Las entidades sin ninguna restricción van todas juntas en un grupo: no
+    // cuestan nada y así no hay un problema por cada una.
+    std::map<EntityId, Group> byRoot;
+    constexpr EntityId kFree = 0;
+    for (const auto& [id, ignored] : parent) {
+        byRoot[constrained.contains(id) ? find(id) : kFree].entities.insert(id);
+    }
+    std::vector<Group> groups;
+    for (auto& [root, group] : byRoot) {
+        group.scope = group.entities;
+        groups.push_back(std::move(group));
+    }
+    for (const Constraint& c : sketch.constraints()) {
+        if (!c.driving) {
+            continue;
+        }
+        for (Group& g : groups) {
+            const bool touches = (c.first.entity != 0 && g.entities.contains(c.first.entity))
+                                 || (c.second.entity != 0 && g.entities.contains(c.second.entity))
+                                 || (c.third.entity != 0 && g.entities.contains(c.third.entity));
+            if (!touches) {
+                continue;
+            }
+            for (const EntityId id : {c.first.entity, c.second.entity, c.third.entity}) {
+                if (fixed.contains(id)) {
+                    g.scope.insert(id);
+                }
+            }
+        }
+    }
+    return groups;
+}
+
 class PlaneGcsSolver final : public ISolver {
 public:
-    SolveResult solve(Sketch& sketch) override { return GcsProblem(sketch, {}).solve(); }
+    // Cada grupo independiente se resuelve por separado (el costo crece con el
+    // tamaño de cada grupo, no con el del sketch entero). Si alguno falla, el
+    // sketch queda como estaba.
+    SolveResult solve(Sketch& sketch) override
+    {
+        Sketch work = sketch;
+        SolveResult total;
+        total.status = SolveStatus::Solved;
+        std::set<EntityId> loose;
+        for (const Group& group : partition(sketch)) {
+            const SolveResult part = GcsProblem(work, {}, &group.scope).solve();
+            total.degreesOfFreedom += part.degreesOfFreedom;
+            total.conflicting.insert(total.conflicting.end(), part.conflicting.begin(), part.conflicting.end());
+            total.redundant.insert(total.redundant.end(), part.redundant.begin(), part.redundant.end());
+            if (part.status == SolveStatus::Conflicting
+                || (part.status == SolveStatus::Failed && total.status != SolveStatus::Conflicting)) {
+                total.status = part.status;
+            }
+            loose.insert(part.underconstrained.begin(), part.underconstrained.end());
+        }
+        if (total.status != SolveStatus::Solved) {
+            return total;
+        }
+        sketch = std::move(work);
+        total.underconstrained.assign(loose.begin(), loose.end());
+        lastLoose_ = loose;
+        haveLast_ = true;
+        return total;
+    }
+
+    // Arrastrando, solo se vuelve a resolver el grupo de lo que se mueve; el
+    // resto conserva lo que se supo en la última resolución completa.
     SolveResult drag(Sketch& sketch, const std::vector<DragTarget>& targets) override
     {
-        return GcsProblem(sketch, targets).solve();
+        if (!targets.empty() && haveLast_) {
+            for (const Group& group : partition(sketch)) {
+                const bool all = std::ranges::all_of(targets, [&](const DragTarget& t) {
+                    return group.entities.contains(t.what.entity);
+                });
+                if (!all) {
+                    continue;
+                }
+                Sketch work = sketch;
+                SolveResult result = GcsProblem(work, targets, &group.scope).solve();
+                if (result.status != SolveStatus::Solved) {
+                    return result;
+                }
+                sketch = std::move(work);
+                for (const EntityId id : group.entities) {
+                    lastLoose_.erase(id);
+                }
+                lastLoose_.insert(result.underconstrained.begin(), result.underconstrained.end());
+                result.underconstrained.assign(lastLoose_.begin(), lastLoose_.end());
+                return result;
+            }
+        }
+        // Lo que se arrastra une varios grupos, o no hay una resolución previa.
+        SolveResult result = GcsProblem(sketch, targets).solve();
+        if (result.status == SolveStatus::Solved) {
+            lastLoose_.clear();
+            lastLoose_.insert(result.underconstrained.begin(), result.underconstrained.end());
+            haveLast_ = true;
+        }
+        return result;
     }
+
+private:
+    std::set<EntityId> lastLoose_;
+    bool haveLast_ = false;
 };
 
 } // namespace

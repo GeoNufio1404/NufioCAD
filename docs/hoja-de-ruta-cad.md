@@ -325,9 +325,16 @@ Todas siguen el patrón de las operaciones actuales: una clase en `document/Feat
 |---|---|---|---|
 | **5a** Redondeo y chaflán | Aristas elegidas en el visor, radio/distancia, vista previa | Mediano | ✅ |
 | **5b** Shell | Vaciar un cuerpo quitando caras, con espesor | Mediano | ✅ |
-| **5c** Agujeros | Sketch de puntos + diámetro, profundidad, avellanado/abocardado | Mediano | pendiente |
+| **5c** Agujeros | Sketch de puntos + diámetro, profundidad, avellanado/abocardado | Mediano | ✅ |
 | **5d** Patrones | Lineal y circular de una operación o cuerpo | **Grande** | pendiente |
 | **5e** Espejo | Reflejar un cuerpo o una operación sobre un plano | Pequeño | pendiente |
+
+**5c — Agujeros ✅**
+- `geometry::holeTool`: un cilindro por centro, hacia dentro del material, que empieza 1 mm fuera de la superficie para un corte limpio; **simple**, **abocardado** (cabeza cilíndrica) y **avellanado** (cono con ángulo), con profundidad o «atravesar todo». Las paredes se llaman `f<id>:pared`.
+- `HoleFeature`: un sketch cuyos **círculos** (su centro) y puntos marcan dónde van los agujeros, más el tipo y las medidas; se resta con la misma lógica que un corte (avisa si no toca nada). Se guarda como `hole`.
+- Herramienta `HoleTool`: Sólido › Agujero (H): elige el sketch (por defecto el último con círculos), tipo, diámetro, profundidad o atravesar, cabeza y «al otro lado del plano»; vista previa en rojo.
+- **Hecho:** 3 pruebas nuevas con volúmenes exactos (simple, atravesado, dos agujeros, abocardado; avellanado válido y mayor), errores claros (sin círculos, cabeza menor que el agujero) y ida y vuelta por el archivo. El botón aparece en la cinta.
+- **Pendiente de 5c:** no hay herramienta de **punto** en el sketch (hoy se usan círculos); colocar agujeros haciendo clic directo en una cara; roscas; la herramienta no se probó a mano en la ventana (solo que abre y aparece en la cinta).
 
 **5b — Vaciado (shell) ✅**
 - `geometry::shell` con `BRepOffsetAPI_MakeThickSolid`: las caras elegidas quedan abiertas y el resto se vuelve pared del espesor dado, hacia dentro o hacia fuera. Las paredes nuevas se llaman `f<id>:interior:<cara de origen>`; las demás caras, incluida la que queda como borde de la abertura, conservan su nombre.
@@ -384,5 +391,5 @@ Todas siguen el patrón de las operaciones actuales: una clase en `document/Feat
 | Fase 2 | 🚧 Implementada (2a–2d) — sketch completo: dibujo con variantes, elipse, spline y cónica; restricciones (incluida G2), cotas y valores junto al cursor; selección (también por rectángulo), deshacer, arrastre y perfiles; edición (recortar, extender, partir, empalme, chaflán, desfase, simetría, patrones, mover/copiar/girar/escalar); proyectar aristas, intersección, texto, imagen de referencia e importar DXF; los sketches terminados se guardan, sus perfiles y curvas se seleccionan en la vista 3D y se reabren con doble clic. Pendiente: las pruebas manuales de abajo y probar en Windows. Limitaciones: lo proyectado y el texto quedan bloqueados (no se actualizan con la pieza ni se editan como texto hasta la Fase 3); recortar/extender/partir y desfase trabajan con líneas, arcos y círculos; los patrones son copias independientes |
 | Fase 3 | 🚧 Implementada (3a–3c) — núcleo paramétrico con nombres estables de caras y aristas; sketches en el historial (sobre planos de origen o caras que siguen a la pieza); Extruir (todas sus variantes, empujar una cara) y Revolución con vista previa y flecha; timeline editable (editar, marcador, reordenar, suprimir, borrar, renombrar), navegador y deshacer/rehacer; lo proyectado sigue a su arista. Pendiente: las pruebas manuales 20–30 y probar en Windows. Limitaciones: los cuerpos que participan en unir/cortar son todos los que toca (sin elegirlos); «hasta una cara» solo con caras planas; el ángulo de la revolución se escribe en el panel (sin flecha) |
 | Fase 4 | 🚧 4a (Exportar), 4b (serialización), 4c (Nuevo/Abrir/Guardar/Guardar como con aviso de cambios), 4d (importar STEP), 4e (pantalla de inicio con recientes) y 4f (recuperación) implementadas: **Fase 4 completa**. Pendiente: probar a mano las pruebas 31–38 y compilar en Fedora/CI |
-| Fase 5 | 🚧 5a (redondeo y chaflán) y 5b (shell) implementadas; 5c agujeros, 5d patrones y 5e espejo pendientes. Siguiente paso: 5c |
+| Fase 5 | 🚧 5a (redondeo y chaflán), 5b (shell) y 5c (agujeros) implementadas; 5d patrones y 5e espejo pendientes. Siguiente paso: 5e |
 | Fases 6–9 | Pendientes (parámetros, generadores, ensambles, medición) |

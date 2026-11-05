@@ -3,6 +3,9 @@
 #include "Curves2d.hpp"
 
 #include <algorithm>
+#include <functional>
+#include <type_traits>
+#include <variant>
 #include <cmath>
 #include <map>
 #include <numbers>
@@ -481,6 +484,64 @@ std::vector<Profile> findProfiles(const Sketch& sketch, double tolerance)
         }
     }
     return profiles;
+}
+
+std::size_t geometryFingerprint(const Sketch& sketch)
+{
+    std::size_t seed = sketch.entities().size();
+    const auto mix = [&](std::size_t value) {
+        seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
+    };
+    const auto number = [&](double v) { mix(std::hash<double>{}(v)); };
+    const auto point = [&](const Vec2& p) {
+        number(p.x);
+        number(p.y);
+    };
+    const auto ellipse = [&](const Ellipse& e) {
+        point(e.center);
+        number(e.majorRadius);
+        number(e.minorRadius);
+        number(e.rotation);
+    };
+    for (const Entity& e : sketch.entities()) {
+        mix(e.id);
+        mix(e.construction ? 1 : 0);
+        mix(e.geometry.index());
+        std::visit(
+            [&](const auto& g) {
+                using T = std::decay_t<decltype(g)>;
+                if constexpr (std::is_same_v<T, Point>) {
+                    point(g.position);
+                } else if constexpr (std::is_same_v<T, Line>) {
+                    point(g.start);
+                    point(g.end);
+                } else if constexpr (std::is_same_v<T, Circle>) {
+                    point(g.center);
+                    number(g.radius);
+                } else if constexpr (std::is_same_v<T, Arc>) {
+                    point(g.center);
+                    number(g.radius);
+                    number(g.startAngle);
+                    number(g.endAngle);
+                } else if constexpr (std::is_same_v<T, Ellipse>) {
+                    ellipse(g);
+                } else if constexpr (std::is_same_v<T, EllipseArc>) {
+                    ellipse(g.ellipse);
+                    number(g.startParam);
+                    number(g.endParam);
+                } else if constexpr (std::is_same_v<T, BSpline>) {
+                    for (const Vec2& pole : g.poles) {
+                        point(pole);
+                    }
+                    for (double w : g.weights) {
+                        number(w);
+                    }
+                    mix(std::size_t(g.degree));
+                }
+            },
+            e.geometry);
+    }
+    return seed;
 }
 
 } // namespace nuf::sketch

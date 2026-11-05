@@ -218,4 +218,37 @@ private:
     QComboBox* direction_ = nullptr;
 };
 
+// Agujeros: elige el sketch cuyos círculos y puntos marcan dónde van, el tipo
+// (simple, abocardado, avellanado) y sus medidas.
+class HoleTool final : public FeatureTool {
+    Q_OBJECT
+
+public:
+    HoleTool(document::Document& document, render::Viewport& viewport, std::optional<document::FeatureId> editing);
+
+    std::unique_ptr<document::Feature> build() const override;
+
+protected:
+    QString title() const override { return QStringLiteral("Agujero"); }
+    void createFields(QFormLayout* form) override;
+    void selectionChanged(const render::ModelSelection& selection) override;
+    QString inputsText() const override;
+    bool removesMaterial() const override { return true; }
+
+private:
+    void updateVisibility();
+
+    document::FeatureId sketch_ = 0;
+    QComboBox* sketchBox_ = nullptr;
+    QComboBox* kind_ = nullptr;
+    QDoubleSpinBox* diameter_ = nullptr;
+    QCheckBox* throughAll_ = nullptr;
+    QDoubleSpinBox* depth_ = nullptr;
+    QDoubleSpinBox* headDiameter_ = nullptr;
+    QDoubleSpinBox* headDepth_ = nullptr;
+    QDoubleSpinBox* headAngle_ = nullptr;
+    QCheckBox* flip_ = nullptr;
+    QFormLayout* form_ = nullptr;
+};
+
 } // namespace nuf::app

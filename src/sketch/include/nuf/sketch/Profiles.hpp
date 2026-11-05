@@ -47,4 +47,12 @@ struct Profile {
 // Puntos a menos de «tolerance» se consideran el mismo vértice.
 std::vector<Profile> findProfiles(const Sketch& sketch, double tolerance = 1e-6);
 
+// Huella de lo que determina los perfiles: la geometría de cada entidad y si
+// es de construcción. Dos sketches con la misma huella dan los mismos perfiles
+// (con una colisión improbable); sirve para no recalcularlos cuando solo
+// cambió algo que no los afecta (qué está resaltado, restricciones que no
+// mueven nada…). Cuesta un recorrido de las entidades, mucho menos que
+// findProfiles.
+std::size_t geometryFingerprint(const Sketch& sketch);
+
 } // namespace nuf::sketch
