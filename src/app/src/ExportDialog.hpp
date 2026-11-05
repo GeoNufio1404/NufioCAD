@@ -13,6 +13,7 @@ class QComboBox;
 class QDoubleSpinBox;
 class QTimer;
 class QLabel;
+class QLineEdit;
 class QPushButton;
 class QListWidget;
 
@@ -24,14 +25,18 @@ class ExportDialog final : public QDialog {
 
 public:
     enum class Format { Stl, Obj, Step };
+    // Exportar a un archivo, o Imprimir: lo mismo pero siempre STL y, al aceptar, se abre en el slicer.
+    enum class Mode { Export, Print };
 
     // `bodies` son los cuerpos del modelo; `checkedKeys` los que se marcan al abrir.
     ExportDialog(const std::vector<document::Body>& bodies, const std::vector<std::string>& checkedKeys,
-                 QWidget* parent);
+                 QWidget* parent, Mode mode = Mode::Export);
 
     Format format() const;
     geometry::MeshQuality quality() const;
     bool onePerBody() const;
+    // El programa de laminado elegido (solo en el modo Imprimir).
+    QString slicerPath() const;
     // Las medidas de la impresora (boquilla y cama) que se usan en la revisión.
     geometry::PrintSettings printSettings() const;
     // Posiciones (en `bodies`) de los cuerpos marcados.
@@ -60,6 +65,8 @@ private:
     QDoubleSpinBox* bedY_ = nullptr;
     QDoubleSpinBox* bedZ_ = nullptr;
     QTimer* reviewTimer_ = nullptr;
+    QLineEdit* slicer_ = nullptr;
+    Mode mode_ = Mode::Export;
     QPushButton* ok_ = nullptr;
 };
 

@@ -5,6 +5,9 @@
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QLineEdit>
 #include <QGroupBox>
 #include <QSettings>
 #include <QTimer>
@@ -20,11 +23,12 @@
 namespace nuf::app {
 
 ExportDialog::ExportDialog(const std::vector<document::Body>& bodies, const std::vector<std::string>& checkedKeys,
-                           QWidget* parent)
+                           QWidget* parent, Mode mode)
     : QDialog(parent)
     , bodies_(bodies)
+    , mode_(mode)
 {
-    setWindowTitle(QStringLiteral("Exportar"));
+    setWindowTitle(mode == Mode::Print ? QStringLiteral("Imprimir") : QStringLiteral("Exportar"));
     setMinimumWidth(380);
 
     format_ = new QComboBox(this);
@@ -81,6 +85,29 @@ ExportDialog::ExportDialog(const std::vector<document::Body>& bodies, const std:
     bed->addWidget(bedY_);
     bed->addWidget(bedZ_);
     printerForm->addRow(QStringLiteral("Cama X × Y × Z:"), bed);
+    slicer_ = new QLineEdit(settings.value(QStringLiteral("print/slicer")).toString(), this);
+    slicer_->setPlaceholderText(QStringLiteral("Programa de laminado (Bambu Studio, Orca…)"));
+    auto* choose = new QPushButton(QStringLiteral("Elegir…"), this);
+    auto* slicerRow = new QHBoxLayout();
+    slicerRow->addWidget(slicer_, 1);
+    slicerRow->addWidget(choose);
+    if (mode == Mode::Print) {
+        printerForm->addRow(QStringLiteral("Slicer:"), slicerRow);
+    } else {
+        slicer_->hide();
+        choose->hide();
+    }
+    connect(choose, &QPushButton::clicked, this, [this] {
+        const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("Elegir el slicer"), QString(),
+                                                          QStringLiteral("Programas (*.exe);;Todos los archivos (*)"));
+        if (!path.isEmpty()) {
+            slicer_->setText(path);
+        }
+    });
+    connect(slicer_, &QLineEdit::textChanged, this, [this] {
+        QSettings().setValue(QStringLiteral("print/slicer"), slicer_->text());
+        updateSummary();
+    });
     printer_ = printerBox;
 
     review_ = new QLabel(this);
@@ -99,7 +126,7 @@ ExportDialog::ExportDialog(const std::vector<document::Body>& bodies, const std:
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     ok_ = buttons->button(QDialogButtonBox::Ok);
-    ok_->setText(QStringLiteral("Exportar…"));
+    ok_->setText(mode == Mode::Print ? QStringLiteral("Imprimir") : QStringLiteral("Exportar…"));
     buttons->button(QDialogButtonBox::Cancel)->setText(QStringLiteral("Cancelar"));
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -111,6 +138,11 @@ ExportDialog::ExportDialog(const std::vector<document::Body>& bodies, const std:
     layout->addWidget(printer_);
     layout->addWidget(buttons);
 
+    if (mode == Mode::Print) {
+        format_->setCurrentIndex(0);  // siempre STL
+        format_->setEnabled(false);
+        onePerBody_->hide();
+    }
     connect(format_, &QComboBox::currentIndexChanged, this, &ExportDialog::updateSummary);
     connect(quality_, &QComboBox::currentIndexChanged, this, &ExportDialog::updateSummary);
     connect(list_, &QListWidget::itemChanged, this, &ExportDialog::updateSummary);
@@ -136,7 +168,12 @@ geometry::MeshQuality ExportDialog::quality() const
 
 bool ExportDialog::onePerBody() const
 {
-    return onePerBody_->isEnabled() && onePerBody_->isChecked();
+    return mode_ == Mode::Export && onePerBody_->isEnabled() && onePerBody_->isChecked();
+}
+
+QString ExportDialog::slicerPath() const
+{
+    return slicer_->text().trimmed();
 }
 
 std::vector<std::size_t> ExportDialog::selected() const
@@ -233,10 +270,12 @@ void ExportDialog::updateSummary()
         reviewTimer_->start();
     }
     onePerBody_->setEnabled(count > 1);
-    ok_->setEnabled(count > 0);
+    ok_->setEnabled(count > 0 && (mode_ != Mode::Print || QFileInfo(slicerPath()).isFile()));
 
     if (count == 0) {
         summary_->setText(QStringLiteral("Marca al menos un cuerpo."));
+    } else if (mode_ == Mode::Print && !QFileInfo(slicerPath()).isFile()) {
+        summary_->setText(QStringLiteral("Elige el programa de tu slicer (abajo) para poder imprimir."));
     } else if (!mesh) {
         summary_->setText(QStringLiteral("Sólido exacto en milímetros, sin mallar."));
     } else {

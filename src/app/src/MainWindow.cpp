@@ -37,6 +37,8 @@
 #include <QLocale>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QProcess>
+#include <QStandardPaths>
 #include <QScrollArea>
 #include <QSettings>
 #include <QTimer>
@@ -262,6 +264,9 @@ void MainWindow::createMenus()
     exportAction_ = addFile(QStringLiteral("&Exportar…"), QKeySequence(), QStringLiteral("file-export"),
                             &MainWindow::exportBodies);
     exportAction_->setEnabled(false);
+    printAction_ = addFile(QStringLiteral("&Imprimir…"), QKeySequence(QStringLiteral("Ctrl+P")), QStringLiteral("file-export"),
+                           &MainWindow::printBodies);
+    printAction_->setEnabled(false);
     file->addSeparator();
     file->addAction(QStringLiteral("&Salir"), QKeySequence(QKeySequence::Quit), this, &QWidget::close);
 
@@ -1148,6 +1153,57 @@ void MainWindow::updateExportAction()
     if (exportAction_ != nullptr) {
         exportAction_->setEnabled(!sketch_ && !tool_ && !document_.result().bodies.empty());
     }
+    if (printAction_ != nullptr) {
+        printAction_->setEnabled(!sketch_ && !tool_ && !document_.result().bodies.empty());
+    }
+}
+
+// Imprimir: revisa la pieza, la exporta a STL en una carpeta temporal y abre el slicer con ella.
+void MainWindow::printBodies()
+{
+    const std::vector<document::Body>& bodies = document_.result().bodies;
+    std::vector<std::string> shown;
+    for (const document::Body& body : bodies) {
+        if (!hiddenBodies_.contains(body.key)) {
+            shown.push_back(body.key);
+        }
+    }
+    ExportDialog dialog(bodies, shown, this, ExportDialog::Mode::Print);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    std::vector<geometry::Shape> shapes;
+    for (std::size_t index : dialog.selected()) {
+        shapes.push_back(bodies[index].shape);
+    }
+    const QDir folder(QStandardPaths::writableLocation(QStandardPaths::TempLocation) + QStringLiteral("/NufioCAD"));
+    folder.mkpath(QStringLiteral("."));
+    // El nombre del diseño como nombre de archivo, sin caracteres que Windows no admite.
+    QString base = QString::fromStdString(document_.name());
+    for (const QChar bad : QStringLiteral("<>:\"/|?*")) {
+        base.replace(bad, QLatin1Char('_'));
+    }
+    base.replace(QLatin1Char('\\'), QLatin1Char('_'));
+    const QString path = folder.filePath(base + QStringLiteral(".stl"));
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    QString error;
+    try {
+        geometry::writeStl(std::filesystem::path(path.toStdU16String()), shapes, dialog.quality());
+    } catch (const std::exception& e) {
+        error = QString::fromUtf8(e.what());
+    }
+    QApplication::restoreOverrideCursor();
+    if (!error.isEmpty()) {
+        QMessageBox::warning(this, QStringLiteral("Imprimir"), error);
+        return;
+    }
+    if (!QProcess::startDetached(dialog.slicerPath(), {QDir::toNativeSeparators(path)})) {
+        QMessageBox::warning(this, QStringLiteral("Imprimir"),
+                             QStringLiteral("No se pudo abrir el slicer:\n%1\n\nEl archivo quedó en:\n%2")
+                                 .arg(QDir::toNativeSeparators(dialog.slicerPath()), QDir::toNativeSeparators(path)));
+        return;
+    }
+    statusBar()->showMessage(QStringLiteral("Abriendo %1 en el slicer").arg(QFileInfo(path).fileName()), 8000);
 }
 
 void MainWindow::exportBodies()

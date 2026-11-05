@@ -95,6 +95,7 @@ private:
     void updateSketchActions();
     void updateExportAction();
     void exportBodies();
+    void printBodies();
     void importStep();
     void openRecent(const QString& path);
     std::string thumbnailPng();
@@ -144,6 +145,7 @@ private:
     QAction* organizeAction_ = nullptr;
     QAction* jointAction_ = nullptr;
     QAction* exportAction_ = nullptr;
+    QAction* printAction_ = nullptr;
     QAction* importAction_ = nullptr;
     QMenu* recentMenu_ = nullptr;
     std::unique_ptr<Recovery> recovery_;
