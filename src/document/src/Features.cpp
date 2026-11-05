@@ -744,6 +744,37 @@ std::vector<Feature::NumericField> ThreadFeature::numericFields()
             field("length", "Largo", spec.length)};
 }
 
+// --- Barrido ---------------------------------------------------------------------
+
+std::optional<std::string> SweepFeature::compute(ModelState& state) const
+{
+    std::vector<std::string> warnings;
+    try {
+        const auto out = state.sketches.find(pathSketch);
+        if (out == state.sketches.end()) {
+            throw FeatureError("Falta el sketch de la trayectoria");
+        }
+        std::vector<geometry::Shape> tools;
+        for (const geometry::SketchRegion& region : regionsOf(state, profiles, warnings)) {
+            tools.push_back(geometry::sweep(tag(), region, *out->second.sketch, out->second.plane, path, spec));
+        }
+        if (auto w = applyOperation(state, *this, operation, fuseTools(tools))) {
+            warnings.push_back(*w);
+        }
+    } catch (const geometry::GeometryError& e) {
+        throw FeatureError(e.what());
+    }
+    return joinWarnings(warnings);
+}
+
+std::vector<FeatureId> SweepFeature::dependencies() const
+{
+    std::vector<FeatureId> ids;
+    addProfileDependencies(ids, profiles);
+    addUnique(ids, pathSketch);
+    return ids;
+}
+
 // --- Eje de construcción ------------------------------------------------------
 
 std::optional<std::string> ConstructionAxisFeature::compute(ModelState& state) const

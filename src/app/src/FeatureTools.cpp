@@ -1520,6 +1520,84 @@ QString GearTool::inputsText() const
         .arg(module_->value() * teeth_->value());
 }
 
+// --- Barrido ----------------------------------------------------------------------------
+
+SweepTool::SweepTool(document::Document& document, render::Viewport& viewport,
+                     std::optional<document::FeatureId> editing)
+    : FeatureTool(document, viewport, editing)
+{
+    if (const auto* s = dynamic_cast<const document::SweepFeature*>(original_.get())) {
+        profiles_ = s->profiles;
+        pathSketch_ = s->pathSketch;
+        path_ = s->path;
+    }
+}
+
+void SweepTool::createFields(QFormLayout* form)
+{
+    orientation_ = combo({QStringLiteral("Sigue la trayectoria"), QStringLiteral("Fija (paralela a sí misma)")});
+    operation_ = combo({QStringLiteral("Unir"), QStringLiteral("Cortar"), QStringLiteral("Intersecar"),
+                        QStringLiteral("Cuerpo nuevo")});
+    if (const auto* s = dynamic_cast<const document::SweepFeature*>(original_.get())) {
+        orientation_->setCurrentIndex(s->spec.followPath ? 0 : 1);
+        operation_->setCurrentIndex(operationIndex(s->operation));
+    } else {
+        operation_->setCurrentIndex(operationIndex(before().bodies.empty() ? document::Operation::NewBody
+                                                                           : document::Operation::Join));
+    }
+    form->addRow(QStringLiteral("Orientación"), orientation_);
+    form->addRow(QStringLiteral("Operación"), operation_);
+    for (QComboBox* box : {orientation_, operation_}) {
+        connect(box, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
+    }
+}
+
+void SweepTool::selectionChanged(const render::ModelSelection& selection)
+{
+    const std::vector<document::ProfileRef> profiles = profilesOf(selection);
+    if (!profiles.empty()) {
+        profiles_ = profiles;
+    }
+    // Las curvas elegidas son la trayectoria (de un solo sketch: el de la primera).
+    if (!selection.curves.empty()) {
+        pathSketch_ = selection.curves.front().sketch;
+        path_.clear();
+        for (const render::ModelSelection::Curve& c : selection.curves) {
+            if (c.sketch == pathSketch_) {
+                path_.push_back(c.entity);
+            }
+        }
+    }
+}
+
+std::unique_ptr<document::Feature> SweepTool::build() const
+{
+    if (profiles_.empty() || path_.empty()) {
+        return nullptr;
+    }
+    auto f = std::make_unique<document::SweepFeature>();
+    if (original_) {
+        f->setName(original_->name());
+    }
+    f->profiles = profiles_;
+    f->pathSketch = pathSketch_;
+    f->path = path_;
+    f->spec.followPath = orientation_->currentIndex() == 0;
+    f->operation = operationAt(operation_->currentIndex());
+    return f;
+}
+
+QString SweepTool::inputsText() const
+{
+    if (profiles_.empty()) {
+        return QStringLiteral("Elige el perfil (una región de un sketch) y las curvas de la trayectoria");
+    }
+    if (path_.empty()) {
+        return QStringLiteral("%1 perfil(es). Ahora elige las curvas de la trayectoria (de otro sketch)").arg(profiles_.size());
+    }
+    return QStringLiteral("%1 perfil(es), trayectoria de %2 curva(s)").arg(profiles_.size()).arg(path_.size());
+}
+
 // --- Rosca ----------------------------------------------------------------------------
 
 namespace {

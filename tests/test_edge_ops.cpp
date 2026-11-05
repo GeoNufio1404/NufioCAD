@@ -1004,3 +1004,84 @@ TEST_CASE("Una rosca da error con datos imposibles y se guarda en el archivo", "
     REQUIRE(reopened.findFeature(id)->kind() == FeatureKind::Thread);
     REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(doc.result().bodies.front().shape.volume(), 1e-9));
 }
+
+namespace {
+
+// Perfil cuadrado de 4 mm en XZ (centrado en el origen) y una trayectoria en XY hecha con las
+// líneas dadas; devuelve el barrido.
+FeatureId addSweepDocument(Document& doc, const std::vector<std::pair<sketch::Vec2, sketch::Vec2>>& lines, bool follow = true)
+{
+    sketch::Sketch profile;
+    profile.addLine({-2, -2}, {2, -2});
+    profile.addLine({2, -2}, {2, 2});
+    profile.addLine({2, 2}, {-2, 2});
+    profile.addLine({-2, 2}, {-2, -2});
+    SketchAttachment xz;
+    xz.origin = OriginPlane::XZ;
+    const FeatureId profileId = doc.addFeature(std::make_unique<SketchFeature>(std::move(profile), xz));
+
+    sketch::Sketch pathSketch;
+    std::vector<sketch::EntityId> ids;
+    for (const auto& [a, b] : lines) {
+        ids.push_back(pathSketch.addLine(a, b));
+    }
+    SketchAttachment xy;
+    xy.origin = OriginPlane::XY;
+    const FeatureId pathId = doc.addFeature(std::make_unique<SketchFeature>(std::move(pathSketch), xy));
+
+    auto sweep = std::make_unique<SweepFeature>();
+    sweep->profiles.push_back(profileRef(profileId, sketch::findProfiles(static_cast<const SketchFeature*>(doc.findFeature(profileId))->sketch()).front()));
+    sweep->pathSketch = pathId;
+    sweep->path = ids;
+    sweep->spec.followPath = follow;
+    return doc.addFeature(std::move(sweep));
+}
+
+} // namespace
+
+TEST_CASE("Un barrido lleva el perfil a lo largo de la trayectoria", "[sweep]")
+{
+    Document straight;
+    const FeatureId id = addSweepDocument(straight, {{{0, 0}, {0, 30}}});
+    REQUIRE(straight.status(id).health == Health::Ok);
+    REQUIRE(straight.result().bodies.size() == 1);
+    const geometry::Shape& bar = straight.result().bodies.front().shape;
+    REQUIRE(bar.isValid());
+    REQUIRE_THAT(bar.volume(), WithinRel(4.0 * 4.0 * 30.0, 1e-6));
+    REQUIRE_THAT(bar.bounds().min.y, Catch::Matchers::WithinAbs(0.0, 1e-6));
+    REQUIRE_THAT(bar.bounds().max.y, Catch::Matchers::WithinAbs(30.0, 1e-6));
+    bool side = false;
+    for (int i = 0; i < bar.faceCount(); ++i) {
+        side = side || bar.faceName(i).find(":lado:") != std::string::npos;
+    }
+    REQUIRE(side);
+
+    // Un camino en L (dos líneas unidas): el volumen se acerca a la sección por el largo.
+    Document bent;
+    const FeatureId b = addSweepDocument(bent, {{{0, 0}, {0, 30}}, {{0, 30}, {20, 30}}});
+    REQUIRE(bent.status(b).health == Health::Ok);
+    const double volume = bent.result().bodies.front().shape.volume();
+    REQUIRE(volume > 0.9 * 16.0 * 50.0);
+    REQUIRE(volume < 1.2 * 16.0 * 50.0);
+    REQUIRE_THAT(bent.result().bodies.front().shape.bounds().max.x, Catch::Matchers::WithinAbs(20.0, 3.0));
+}
+
+TEST_CASE("El barrido da error con una trayectoria rota y se guarda en el archivo", "[sweep][io]")
+{
+    Document broken;
+    // Dos líneas sin tocarse.
+    REQUIRE(broken.status(addSweepDocument(broken, {{{0, 0}, {0, 10}}, {{5, 20}, {5, 30}}})).health == Health::Error);
+
+    Document doc;
+    const FeatureId id = addSweepDocument(doc, {{{0, 0}, {0, 20}}});
+    const auto path = std::filesystem::temp_directory_path() / "nuf_barrido.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    REQUIRE(reopened.findFeature(id)->kind() == FeatureKind::Sweep);
+    REQUIRE(reopened.status(id).health == Health::Ok);
+    REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(16.0 * 20.0, 1e-6));
+}

@@ -509,6 +509,17 @@ FeatureRow rowOf(const Feature& f)
         params = {{"base", toJson(cp.base)}, {"offset", cp.offset}, {"angle", cp.angle}, {"angleAxis", cp.angleAxis}};
         break;
     }
+    case FeatureKind::Sweep: {
+        const auto& s = static_cast<const SweepFeature&>(f);
+        row.type = "sweep";
+        Json path = Json::array();
+        for (const sk::EntityId id : s.path) {
+            path.push_back(id);
+        }
+        params = {{"profiles", toJson(s.profiles)}, {"pathSketch", s.pathSketch}, {"path", path},
+                  {"followPath", s.spec.followPath}, {"operation", nameOf(kOperations, s.operation)}};
+        break;
+    }
     case FeatureKind::Thread: {
         const auto& t = static_cast<const ThreadFeature&>(f);
         row.type = "thread";
@@ -621,6 +632,16 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         cp->angle = number(p, "angle");
         cp->angleAxis = p.at("angleAxis").get<int>();
         feature = std::move(cp);
+    } else if (row.type == "sweep") {
+        auto s = std::make_unique<SweepFeature>();
+        s->profiles = profilesOf(p.at("profiles"));
+        s->pathSketch = unsignedValue(p, "pathSketch");
+        for (const Json& id : p.at("path")) {
+            s->path.push_back(static_cast<sk::EntityId>(id.get<std::uint64_t>()));
+        }
+        s->spec.followPath = p.at("followPath").get<bool>();
+        s->operation = parseEnum(kOperations, text(p, "operation"), "operación");
+        feature = std::move(s);
     } else if (row.type == "thread") {
         auto t = std::make_unique<ThreadFeature>();
         t->base = attachmentOf(p.at("base"));

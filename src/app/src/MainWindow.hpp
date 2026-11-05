@@ -137,6 +137,7 @@ private:
     QAction* parametersAction_ = nullptr;
     QAction* gearAction_ = nullptr;
     QAction* threadAction_ = nullptr;
+    QAction* sweepAction_ = nullptr;
     QAction* exportAction_ = nullptr;
     QAction* importAction_ = nullptr;
     QMenu* recentMenu_ = nullptr;

@@ -150,6 +150,18 @@ Shape thread(std::string_view tag, const sketch::Plane& plane, const ThreadSpec&
 // Diámetro menor de la rosca (el del agujero que se roscará).
 double threadMinorDiameter(const ThreadSpec& spec);
 
+struct SweepSpec {
+    bool followPath = true;  // el perfil gira con la trayectoria; si no, queda paralelo a sí mismo
+};
+
+// Barrido: el perfil (sus contornos) a lo largo de una trayectoria hecha con
+// curvas de otro sketch, que deben formar un solo camino continuo. El perfil
+// debe estar donde empieza la trayectoria y perpendicular a ella. Las caras se
+// llaman «tag:lado:<origen>» (como la extrusión), «tag:inicio:<perfil>» y
+// «tag:fin:<perfil>».
+Shape sweep(std::string_view tag, const SketchRegion& profile, const sketch::Sketch& pathSketch,
+            const sketch::Plane& pathPlane, const std::vector<sketch::EntityId>& pathEntities, const SweepSpec& spec);
+
 enum class HoleKind { Simple, Counterbore, Countersink };
 
 struct HoleSpec {

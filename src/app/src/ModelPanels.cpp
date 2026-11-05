@@ -54,6 +54,8 @@ QString glyph(document::FeatureKind kind)
         return QStringLiteral("⚙");
     case document::FeatureKind::Thread:
         return QStringLiteral("⟲");
+    case document::FeatureKind::Sweep:
+        return QStringLiteral("⤳");
     }
     return QStringLiteral("?");
 }

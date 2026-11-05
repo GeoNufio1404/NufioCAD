@@ -15,7 +15,9 @@
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeWire.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
+#include <BRepOffsetAPI_MakePipeShell.hxx>
 #include <BRepOffsetAPI_ThruSections.hxx>
+#include <BRepTools.hxx>
 #include <GeomAPI_Interpolate.hxx>
 #include <Geom_BSplineCurve.hxx>
 #include <NCollection_HArray1.hxx>
@@ -997,6 +999,88 @@ Shape thread(std::string_view tagView, const sketch::Plane& plane, const ThreadS
         return result;
     } catch (const Standard_Failure& e) {
         throw GeometryError(std::string("Error del kernel al generar la rosca: ") + kernelMessage(e));
+    }
+}
+
+Shape sweep(std::string_view tagView, const SketchRegion& profile, const sketch::Sketch& pathSketch,
+            const sketch::Plane& pathPlane, const std::vector<sketch::EntityId>& pathEntities, const SweepSpec& spec)
+{
+    const std::string tag(tagView);
+    if (pathEntities.empty()) {
+        throw GeometryError("Elige la trayectoria del barrido");
+    }
+    try {
+        const gp_Ax3 pathAxes = toAx3(pathPlane);
+        NCollection_List<TopoDS_Shape> edges;
+        for (const sketch::EntityId id : pathEntities) {
+            const sketch::Entity* entity = pathSketch.entity(id);
+            const auto edge = entity ? sketchEdge(*entity, pathAxes) : std::nullopt;
+            if (!edge) {
+                throw GeometryError("Una curva de la trayectoria ya no existe o no se puede usar");
+            }
+            edges.Append(*edge);
+        }
+        BRepBuilderAPI_MakeWire pathMaker;
+        pathMaker.Add(edges);
+        if (!pathMaker.IsDone()) {
+            throw GeometryError("Las curvas de la trayectoria no forman un camino continuo");
+        }
+        const TopoDS_Wire path = pathMaker.Wire();
+
+        std::vector<Shape> parts;
+        for (const ProfileFace& pf : regionFaces(profile)) {
+            const TopoDS_Wire outer = BRepTools::OuterWire(pf.face);
+            // Barre un contorno y devuelve el sólido (orientado hacia fuera).
+            const auto sweepWire = [&](const TopoDS_Wire& wire, BRepOffsetAPI_MakePipeShell& pipe) -> TopoDS_Shape {
+                pipe.SetTransitionMode(BRepBuilderAPI_RoundCorner);
+                if (!spec.followPath) {
+                    pipe.SetMode(gp_Ax2(toPnt(profile.plane.origin), toDir(profile.plane.normal)));
+                }
+                pipe.Add(wire, false, false);
+                pipe.Build();
+                if (!pipe.IsDone() || !pipe.MakeSolid()) {
+                    throw GeometryError("No se pudo barrer el perfil (¿está en el inicio de la trayectoria y de frente a ella?)");
+                }
+                TopoDS_Shape result = pipe.Shape();
+                TopExp_Explorer solids(result, TopAbs_SOLID);
+                if (!solids.More()) {
+                    throw GeometryError("El barrido no dio un sólido");
+                }
+                TopoDS_Solid solid = TopoDS::Solid(solids.Current());
+                BRepLib::OrientClosedSolid(solid);
+                return solid;
+            };
+            BRepOffsetAPI_MakePipeShell pipe(path);
+            const TopoDS_Shape solid = sweepWire(outer, pipe);
+            Namer namer(solid);
+            namer.name(pipe.FirstShape(), tag + ":inicio:" + pf.key);
+            namer.name(pipe.LastShape(), tag + ":fin:" + pf.key);
+            for (const auto& [edge, source] : pf.sources) {
+                for (const TopoDS_Shape& side : pipe.Generated(edge)) {
+                    namer.name(side, tag + ":lado:" + source);
+                }
+            }
+            Shape part = namer.finish(tag);
+            // Los huecos del perfil se barren aparte y se restan.
+            for (TopExp_Explorer ex(pf.face, TopAbs_WIRE); ex.More(); ex.Next()) {
+                const TopoDS_Wire hole = TopoDS::Wire(ex.Current());
+                if (hole.IsSame(outer)) {
+                    continue;
+                }
+                BRepOffsetAPI_MakePipeShell holePipe(path);
+                Namer holeNamer(sweepWire(hole, holePipe));
+                holeNamer.nameUnnamed(tag + ":hueco");
+                part = boolean(BooleanOp::Cut, part, holeNamer.finish(tag));
+            }
+            parts.push_back(std::move(part));
+        }
+        Shape result = fuseAll(parts, tag);
+        if (!result.isValid()) {
+            throw GeometryError("El barrido no es un sólido válido");
+        }
+        return result;
+    } catch (const Standard_Failure& e) {
+        throw GeometryError(std::string("Error del kernel al barrer: ") + kernelMessage(e));
     }
 }
 

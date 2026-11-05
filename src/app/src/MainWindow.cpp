@@ -306,6 +306,11 @@ void MainWindow::createMenus()
     });
     decorate(revolveAction_, QStringLiteral("revolve"),
              QStringLiteral("Girar perfiles de un sketch alrededor de un eje"));
+    sweepAction_ = solidMenu->addAction(QStringLiteral("&Barrido"), this, [this] {
+        startTool(std::make_unique<SweepTool>(document_, *viewport_, std::nullopt));
+    });
+    decorate(sweepAction_, QStringLiteral("sweep"),
+             QStringLiteral("Llevar un perfil a lo largo de una trayectoria de otro sketch"), QStringLiteral("Barrido"));
     solidMenu->addSeparator();
     filletAction_ = solidMenu->addAction(QStringLiteral("Re&dondeo"), QKeySequence(Qt::Key_F), this, [this] {
         startTool(std::make_unique<EdgeTool>(document_, *viewport_, std::nullopt, EdgeTool::Style::Fillet));
@@ -516,6 +521,7 @@ void MainWindow::createMenus()
     ribbon_->addAction(solidTab_, createSketchAction_);
     ribbon_->addAction(solidTab_, extrudeAction_);
     ribbon_->addAction(solidTab_, revolveAction_);
+    ribbon_->addAction(solidTab_, sweepAction_);
     ribbon_->addGroup(solidTab_, QStringLiteral("MODIFICAR"));
     ribbon_->addAction(solidTab_, filletAction_);
     ribbon_->addAction(solidTab_, chamferAction_);
@@ -972,6 +978,9 @@ void MainWindow::activateFeature(document::FeatureId id)
     case document::FeatureKind::Thread:
         startTool(std::make_unique<ThreadTool>(document_, *viewport_, id));
         break;
+    case document::FeatureKind::Sweep:
+        startTool(std::make_unique<SweepTool>(document_, *viewport_, id));
+        break;
     case document::FeatureKind::Import:
         break;  // no tiene parámetros que editar
     }
@@ -1320,6 +1329,7 @@ void MainWindow::updateSketchActions()
     createSketchAction_->setEnabled(!sketch_ && !picking && !tool_);
     extrudeAction_->setEnabled(!sketch_ && !picking && !tool_);
     revolveAction_->setEnabled(!sketch_ && !picking && !tool_);
+    sweepAction_->setEnabled(!sketch_ && !picking && !tool_);
     finishSketchAction_->setEnabled(sketch_ != nullptr);
     if (ribbon_ && (sketch_ != nullptr) != ribbonSketching_) {
         ribbonSketching_ = sketch_ != nullptr;

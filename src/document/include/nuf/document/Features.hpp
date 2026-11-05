@@ -247,6 +247,21 @@ public:
     std::vector<NumericField> numericFields() override;
 };
 
+// Barrido: perfiles de un sketch a lo largo de una trayectoria de curvas de otro.
+class SweepFeature final : public Feature {
+public:
+    std::vector<ProfileRef> profiles;
+    FeatureId pathSketch = 0;
+    std::vector<sketch::EntityId> path;
+    geometry::SweepSpec spec;
+    Operation operation = Operation::NewBody;
+
+    FeatureKind kind() const override { return FeatureKind::Sweep; }
+    std::unique_ptr<Feature> clone() const override { return std::make_unique<SweepFeature>(*this); }
+    std::optional<std::string> compute(ModelState& state) const override;
+    std::vector<FeatureId> dependencies() const override;
+};
+
 enum class PatternLayout { Linear, Circular };
 
 // Patrón: copias de un cuerpo en fila (a lo largo de un eje de origen) o

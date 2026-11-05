@@ -43,6 +43,8 @@ std::string kindLabel(FeatureKind kind)
         return "Engranaje";
     case FeatureKind::Thread:
         return "Rosca";
+    case FeatureKind::Sweep:
+        return "Barrido";
     }
     return "Operación";
 }

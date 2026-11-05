@@ -76,6 +76,7 @@
         <file alias="ui/parameters-solid.svg">icons/ui/parameters-solid.svg</file>
         <file alias="ui/gear-solid.svg">icons/ui/gear-solid.svg</file>
         <file alias="ui/thread-solid.svg">icons/ui/thread-solid.svg</file>
+        <file alias="ui/sweep.svg">icons/ui/sweep.svg</file>
         <file alias="ui/redo.svg">icons/ui/redo.svg</file>
         <file alias="ui/rename.svg">icons/ui/rename.svg</file>
         <file alias="ui/revolve.svg">icons/ui/revolve.svg</file>

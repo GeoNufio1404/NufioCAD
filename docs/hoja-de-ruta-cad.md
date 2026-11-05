@@ -376,7 +376,9 @@ Todas siguen el patrón de las operaciones actuales: una clase en `document/Feat
 - **Pendiente de 7a:** engranajes internos y cremallera, redondeo de raíz, perfil de cicloide, juego/corrección de dentado.
 - **7b Roscas ✅:** `geometry::thread` (varilla roscada métrica ISO aproximada: cresta P/8, fondo P/4, profundidad 0,6134 P; derecha o izquierda; el corte transversal es una curva cerrada que se gira a lo largo del eje y se une con superficies regladas, 16 secciones por vuelta) y `ThreadFeature` (plano, diámetro, paso, largo, operación nuevo cuerpo/unir/cortar; con «Cortar» sobre un agujero del diámetro menor da una rosca interior; ligable a parámetros). Herramienta Sólido › Rosca con medidas estándar M3–M24 o propias; avisa del diámetro menor para el agujero. Caras `f<id>:rosca`, `:inicio`, `:fin`. 2 pruebas nuevas.
 - **Pendiente de 7b:** el cálculo es lento en Debug (unos 2 s por rosca de 10 mm; la vista previa de una de 20 mm tarda ~10 s) — medir en Release; rosca sobre una cara cilíndrica existente, perfiles no métricos (trapezoidal, UNC) y chaflán de entrada.
-- Sweep y loft.
+- **7c Barrido (sweep) ✅:** `geometry::sweep` (contornos del perfil con `BRepOffsetAPI_MakePipeShell`; trayectoria = curvas de otro sketch que formen un camino continuo; esquinas redondeadas; orientación que sigue la trayectoria o fija; huecos del perfil restados) y `SweepFeature` (perfiles + sketch y curvas de la trayectoria + operación). Caras `f<id>:lado:<origen>`, `:inicio:<perfil>`, `:fin:<perfil>`. Herramienta Sólido › Barrido (grupo CREAR): se eligen en la vista las regiones del perfil y las curvas de la trayectoria. Errores claros si el camino está roto. 2 pruebas nuevas (recto, en L, camino roto, guardar).
+- **Pendiente de 7c:** guías/secciones intermedias, torsión y escala a lo largo del camino, trayectoria con aristas de un cuerpo; probado a mano solo que el botón aparece (el flujo completo con dos sketches está cubierto por las pruebas).
+- Loft: pendiente (7d).
 
 ### Fase 8 — Multi-cuerpo y ensambles
 - Varios cuerpos en un mismo diseño.
