@@ -116,6 +116,23 @@ struct PatternSpec {
 // total va del original a la última copia.
 std::vector<Shape> pattern(std::string_view tag, const Shape& body, const PatternSpec& spec);
 
+struct GearSpec {
+    double module = 2.0;                 // mm
+    int teeth = 20;
+    double pressureAngle = 0.3490658503988659;  // rad (20°)
+    double thickness = 10.0;             // mm a lo largo de la normal del plano (el signo da el sentido)
+    double bore = 0.0;                   // diámetro del agujero central (0 = macizo)
+    double helixAngle = 0.0;             // rad; 0 = recto, el signo es el sentido de la hélice
+};
+
+// Engranaje cilíndrico de involuta centrado en el origen del plano (con su
+// eje a lo largo de la normal). Diámetro primitivo = módulo × dientes, cabeza
+// +1 módulo, raíz −1,25 módulo. Las caras se llaman
+// «tag:lado:d<i>:flanco_d|flanco_i|cabeza|raiz|rad_d|rad_i» (i = número de
+// diente), «tag:lado:agujero», «tag:inicio» y «tag:fin». Lanza GeometryError si
+// los datos no dan un engranaje (dientes puntiagudos o solapados…).
+Shape gear(std::string_view tag, const sketch::Plane& plane, const GearSpec& spec);
+
 enum class HoleKind { Simple, Counterbore, Countersink };
 
 struct HoleSpec {

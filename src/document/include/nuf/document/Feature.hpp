@@ -59,7 +59,7 @@ struct ModelState {
     std::optional<EdgeHit> findEdge(const geometry::ElementRef& ref) const;
 };
 
-enum class FeatureKind { Sketch, Extrude, Revolve, Import, Fillet, Chamfer, Shell, Hole, Mirror, Pattern, ConstructionPlane, ConstructionAxis };
+enum class FeatureKind { Sketch, Extrude, Revolve, Import, Fillet, Chamfer, Shell, Hole, Mirror, Pattern, ConstructionPlane, ConstructionAxis, Gear };
 
 enum class Health {
     Ok,

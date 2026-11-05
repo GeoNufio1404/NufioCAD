@@ -135,6 +135,7 @@ private:
     QAction* planeAction_ = nullptr;
     QAction* axisAction_ = nullptr;
     QAction* parametersAction_ = nullptr;
+    QAction* gearAction_ = nullptr;
     QAction* exportAction_ = nullptr;
     QAction* importAction_ = nullptr;
     QMenu* recentMenu_ = nullptr;

@@ -509,6 +509,14 @@ FeatureRow rowOf(const Feature& f)
         params = {{"base", toJson(cp.base)}, {"offset", cp.offset}, {"angle", cp.angle}, {"angleAxis", cp.angleAxis}};
         break;
     }
+    case FeatureKind::Gear: {
+        const auto& g = static_cast<const GearFeature&>(f);
+        row.type = "gear";
+        params = {{"base", toJson(g.base)}, {"module", g.spec.module}, {"teeth", g.spec.teeth},
+                  {"pressureAngle", g.spec.pressureAngle}, {"thickness", g.spec.thickness}, {"bore", g.spec.bore},
+                  {"helixAngle", g.spec.helixAngle}, {"operation", nameOf(kOperations, g.operation)}};
+        break;
+    }
     case FeatureKind::ConstructionAxis: {
         const auto& ca = static_cast<const ConstructionAxisFeature&>(f);
         row.type = "axis";
@@ -605,6 +613,17 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         cp->angle = number(p, "angle");
         cp->angleAxis = p.at("angleAxis").get<int>();
         feature = std::move(cp);
+    } else if (row.type == "gear") {
+        auto g = std::make_unique<GearFeature>();
+        g->base = attachmentOf(p.at("base"));
+        g->spec.module = number(p, "module");
+        g->spec.teeth = p.at("teeth").get<int>();
+        g->spec.pressureAngle = number(p, "pressureAngle");
+        g->spec.thickness = number(p, "thickness");
+        g->spec.bore = number(p, "bore");
+        g->spec.helixAngle = number(p, "helixAngle");
+        g->operation = parseEnum(kOperations, text(p, "operation"), "operación");
+        feature = std::move(g);
     } else if (row.type == "axis") {
         auto ca = std::make_unique<ConstructionAxisFeature>();
         ca->first = attachmentOf(p.at("first"));

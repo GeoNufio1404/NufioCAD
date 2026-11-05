@@ -1421,6 +1421,105 @@ QString AxisTool::inputsText() const
                : QStringLiteral("Intersección de «%1» y «%2»").arg(first_->currentText(), second_->currentText());
 }
 
+// --- Engranaje -----------------------------------------------------------------------
+
+GearTool::GearTool(document::Document& document, render::Viewport& viewport,
+                   std::optional<document::FeatureId> editing)
+    : FeatureTool(document, viewport, editing)
+{
+}
+
+void GearTool::createFields(QFormLayout* form)
+{
+    base_ = combo({QStringLiteral("Plano XY"), QStringLiteral("Plano XZ"), QStringLiteral("Plano YZ")});
+    for (const auto& [id, plane] : before().planes) {
+        const document::Feature* f = document_.findFeature(id);
+        base_->addItem(f ? QString::fromStdString(f->name()) : QStringLiteral("Plano"));
+        planeIds_.push_back(id);
+    }
+    module_ = lengthBox(2.0);
+    module_->setMinimum(0.1);
+    field("module", module_);
+    teeth_ = new QSpinBox();
+    teeth_->setRange(6, 300);
+    teeth_->setValue(20);
+    teeth_->setKeyboardTracking(false);
+    pressure_ = angleBox(20.0, 35.0);
+    pressure_->setMinimum(5.0);
+    field("pressureAngle", pressure_);
+    thickness_ = lengthBox(10.0);
+    field("thickness", thickness_);
+    bore_ = lengthBox(5.0);
+    bore_->setMinimum(0.0);
+    field("bore", bore_);
+    helix_ = angleBox(0.0, 45.0);
+    field("helixAngle", helix_);
+    operation_ = combo({QStringLiteral("Cuerpo nuevo"), QStringLiteral("Unir")});
+    if (const auto* g = dynamic_cast<const document::GearFeature*>(original_.get())) {
+        int at = g->base.origin ? int(*g->base.origin) : 0;
+        if (!g->base.origin && g->base.reference != 0) {
+            const auto it = std::ranges::find(planeIds_, g->base.reference);
+            at = it != planeIds_.end() ? 3 + int(it - planeIds_.begin()) : 0;
+        }
+        base_->setCurrentIndex(at);
+        module_->setValue(g->spec.module);
+        teeth_->setValue(g->spec.teeth);
+        pressure_->setValue(g->spec.pressureAngle / kDegree);
+        thickness_->setValue(g->spec.thickness);
+        bore_->setValue(g->spec.bore);
+        helix_->setValue(g->spec.helixAngle / kDegree);
+        operation_->setCurrentIndex(g->operation == document::Operation::Join ? 1 : 0);
+    }
+    form->addRow(QStringLiteral("Plano"), base_);
+    form->addRow(QStringLiteral("Módulo"), module_);
+    form->addRow(QStringLiteral("Dientes"), teeth_);
+    form->addRow(QStringLiteral("Ángulo de presión"), pressure_);
+    form->addRow(QStringLiteral("Ancho"), thickness_);
+    form->addRow(QStringLiteral("Agujero central"), bore_);
+    form->addRow(QStringLiteral("Ángulo de hélice"), helix_);
+    form->addRow(QStringLiteral("Operación"), operation_);
+    for (QComboBox* box : {base_, operation_}) {
+        connect(box, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
+    }
+    connect(teeth_, &QSpinBox::valueChanged, this, [this] { updatePreview(); });
+    for (QDoubleSpinBox* box : {module_, pressure_, thickness_, bore_, helix_}) {
+        connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
+    }
+}
+
+std::unique_ptr<document::Feature> GearTool::build() const
+{
+    auto f = std::make_unique<document::GearFeature>();
+    if (original_) {
+        f->setName(original_->name());
+    }
+    const int base = base_->currentIndex();
+    if (base < 3) {
+        f->base.origin = document::OriginPlane(base);
+    } else {
+        const document::FeatureId id = planeIds_[std::size_t(base - 3)];
+        f->base.origin.reset();
+        f->base.reference = id;
+        f->base.lastPlane = before().planes.at(id);
+    }
+    f->spec.module = module_->value();
+    f->spec.teeth = teeth_->value();
+    f->spec.pressureAngle = pressure_->value() * kDegree;
+    f->spec.thickness = thickness_->value();
+    f->spec.bore = bore_->value();
+    f->spec.helixAngle = helix_->value() * kDegree;
+    f->operation = operation_->currentIndex() == 1 ? document::Operation::Join : document::Operation::NewBody;
+    return f;
+}
+
+QString GearTool::inputsText() const
+{
+    return QStringLiteral("%1 dientes, módulo %2: Ø primitivo %3 mm")
+        .arg(teeth_->value())
+        .arg(module_->value())
+        .arg(module_->value() * teeth_->value());
+}
+
 // --- Patrón -----------------------------------------------------------------------
 
 PatternTool::PatternTool(document::Document& document, render::Viewport& viewport,

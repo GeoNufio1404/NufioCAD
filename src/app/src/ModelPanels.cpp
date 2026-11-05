@@ -50,6 +50,8 @@ QString glyph(document::FeatureKind kind)
         return QStringLiteral("▱");
     case document::FeatureKind::ConstructionAxis:
         return QStringLiteral("╱");
+    case document::FeatureKind::Gear:
+        return QStringLiteral("⚙");
     }
     return QStringLiteral("?");
 }

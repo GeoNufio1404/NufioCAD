@@ -341,6 +341,35 @@ private:
     QComboBox* second_ = nullptr;
 };
 
+// Engranaje: módulo, dientes, ángulo de presión, ancho, agujero y hélice, sobre un
+// plano de origen o de construcción.
+class GearTool final : public FeatureTool {
+    Q_OBJECT
+
+public:
+    GearTool(document::Document& document, render::Viewport& viewport, std::optional<document::FeatureId> editing);
+
+    std::unique_ptr<document::Feature> build() const override;
+
+protected:
+    QString title() const override { return QStringLiteral("Engranaje"); }
+    void createFields(QFormLayout* form) override;
+    void selectionChanged(const render::ModelSelection&) override {}
+    QString inputsText() const override;
+    bool removesMaterial() const override { return false; }
+
+private:
+    std::vector<document::FeatureId> planeIds_;
+    QComboBox* base_ = nullptr;
+    QDoubleSpinBox* module_ = nullptr;
+    QSpinBox* teeth_ = nullptr;
+    QDoubleSpinBox* pressure_ = nullptr;
+    QDoubleSpinBox* thickness_ = nullptr;
+    QDoubleSpinBox* bore_ = nullptr;
+    QDoubleSpinBox* helix_ = nullptr;
+    QComboBox* operation_ = nullptr;
+};
+
 // Patrón: repite un cuerpo en fila o alrededor de un eje de origen.
 class PatternTool final : public FeatureTool {
     Q_OBJECT

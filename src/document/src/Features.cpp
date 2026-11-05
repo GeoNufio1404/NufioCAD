@@ -680,6 +680,40 @@ std::vector<Feature::NumericField> ConstructionPlaneFeature::numericFields()
     return {field("offset", "Distancia", offset), field("angle", "Ángulo", angle, kRadiansPerDegree)};
 }
 
+// --- Engranaje -----------------------------------------------------------------
+
+std::optional<std::string> GearFeature::compute(ModelState& state) const
+{
+    std::optional<std::string> warning;
+    const sketch::Plane plane = resolvePlane(state, base, "del engranaje", "se usa su última posición", warning);
+    try {
+        const geometry::Shape gear = geometry::gear(tag(), plane, spec);
+        if (auto extra = applyOperation(state, *this, operation, gear)) {
+            warning = warning ? *warning + " " + *extra : *extra;
+        }
+    } catch (const geometry::GeometryError& e) {
+        throw FeatureError(e.what());
+    }
+    return warning;
+}
+
+std::vector<FeatureId> GearFeature::dependencies() const
+{
+    std::vector<FeatureId> ids;
+    addAttachmentDependencies(ids, base);
+    return ids;
+}
+
+std::vector<Feature::NumericField> GearFeature::numericFields()
+{
+    return {field("module", "Módulo", spec.module), field("thickness", "Ancho", spec.thickness),
+            field("bore", "Agujero central", spec.bore),
+            field("pressureAngle", "Ángulo de presión", spec.pressureAngle, kRadiansPerDegree),
+            field("helixAngle", "Ángulo de hélice", spec.helixAngle, kRadiansPerDegree),
+            {"teeth", "Dientes", 1.0, [this] { return double(spec.teeth); },
+             [this](double v) { spec.teeth = int(std::lround(v)); }}};
+}
+
 // --- Eje de construcción ------------------------------------------------------
 
 std::optional<std::string> ConstructionAxisFeature::compute(ModelState& state) const

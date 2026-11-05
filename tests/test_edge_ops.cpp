@@ -855,3 +855,88 @@ TEST_CASE("Los parámetros y las expresiones se guardan en el archivo", "[params
     reopened.setParameters({{"alto", "6"}});
     REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(2.0 * 20.0 * 10.0 * 6.0, 1e-6));  // 6 / 4 = 1,5 → 2 elementos
 }
+
+namespace {
+
+FeatureId addGear(Document& doc, int teeth, double bore = 0.0, double helix = 0.0, Operation operation = Operation::NewBody)
+{
+    auto g = std::make_unique<GearFeature>();
+    g->base.origin = OriginPlane::XY;
+    g->spec.module = 2.0;
+    g->spec.teeth = teeth;
+    g->spec.thickness = 10.0;
+    g->spec.bore = bore;
+    g->spec.helixAngle = helix;
+    g->operation = operation;
+    return doc.addFeature(std::move(g));
+}
+
+} // namespace
+
+TEST_CASE("Un engranaje recto tiene las medidas y las caras de su perfil de involuta", "[gear]")
+{
+    Document doc;
+    const FeatureId id = addGear(doc, 20, 5.0);
+    REQUIRE(doc.status(id).health == Health::Ok);
+    REQUIRE(doc.result().bodies.size() == 1);
+    const geometry::Shape& gear = doc.result().bodies.front().shape;
+    REQUIRE(gear.isValid());
+    // Ø primitivo 40 mm; cabeza a 22 mm (módulo 2).
+    REQUIRE_THAT(gear.bounds().max.x, Catch::Matchers::WithinAbs(22.0, 1e-3));
+    REQUIRE_THAT(gear.bounds().min.x, Catch::Matchers::WithinAbs(-22.0, 1e-3));
+    REQUIRE_THAT(gear.bounds().max.z, Catch::Matchers::WithinAbs(10.0, 1e-6));
+    // Entre el círculo de raíz y el de cabeza, cerca del primitivo, menos el agujero.
+    const double expected = kPi * 20.0 * 20.0 * 10.0;
+    REQUIRE(gear.volume() > 0.85 * expected);
+    REQUIRE(gear.volume() < 1.05 * expected);
+    // 6 caras por diente, las dos tapas y el agujero.
+    REQUIRE(gear.faceCount() == 6 * 20 + 2 + 1);
+    bool flank = false;
+    for (int i = 0; i < gear.faceCount(); ++i) {
+        flank = flank || gear.faceName(i).find(":lado:d1:flanco_d") != std::string::npos;
+    }
+    REQUIRE(flank);
+}
+
+TEST_CASE("Un engranaje helicoidal conserva el volumen del recto y valida sus datos", "[gear]")
+{
+    Document spur;
+    addGear(spur, 20);
+    Document helical;
+    const FeatureId id = addGear(helical, 20, 5.0, 15.0 * kPi / 180.0);
+    REQUIRE(helical.status(id).health == Health::Ok);
+    const geometry::Shape& gear = helical.result().bodies.front().shape;
+    REQUIRE(gear.isValid());
+    const double spurVolume = spur.result().bodies.front().shape.volume();
+    const double bore = kPi * 2.5 * 2.5 * 10.0;
+    REQUIRE_THAT(gear.volume(), WithinRel(spurVolume - bore, 0.03));
+
+    Document bad;
+    REQUIRE(bad.status(addGear(bad, 5)).health == Health::Error);
+    REQUIRE(bad.status(addGear(bad, 20, 40.0)).health == Health::Error);
+    REQUIRE(bad.status(addGear(bad, 20, 0.0, 60.0 * kPi / 180.0)).health == Health::Error);
+    REQUIRE(bad.result().bodies.empty());
+}
+
+TEST_CASE("Un engranaje ligado a parámetros se rehace al cambiarlos y se guarda", "[gear][params][io]")
+{
+    Document doc;
+    doc.setParameters({{"dientes", "16"}});
+    const FeatureId id = addGear(doc, 20);
+    auto bound = std::unique_ptr<Feature>(doc.findFeature(id)->clone());
+    bound->expressions["teeth"] = "dientes";
+    doc.replaceFeature(id, std::move(bound));
+    REQUIRE_THAT(doc.result().bodies.front().shape.bounds().max.x, Catch::Matchers::WithinAbs(18.0, 1e-3));  // rp 16 + 2
+
+    const auto path = std::filesystem::temp_directory_path() / "nuf_engranaje.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    REQUIRE(reopened.findFeature(id)->kind() == FeatureKind::Gear);
+    REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(doc.result().bodies.front().shape.volume(), 1e-9));
+    reopened.setParameters({{"dientes", "24"}});
+    REQUIRE_THAT(reopened.result().bodies.front().shape.bounds().max.x, Catch::Matchers::WithinAbs(26.0, 1e-3));
+}

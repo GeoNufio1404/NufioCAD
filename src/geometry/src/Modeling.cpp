@@ -12,7 +12,14 @@
 #include <Bnd_Box.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
+#include <BRepBuilderAPI_MakeEdge.hxx>
+#include <BRepBuilderAPI_MakeWire.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
+#include <BRepOffsetAPI_ThruSections.hxx>
+#include <GeomAPI_Interpolate.hxx>
+#include <Geom_BSplineCurve.hxx>
+#include <NCollection_HArray1.hxx>
+#include <gp_Circ.hxx>
 #include <BRepExtrema_DistShapeShape.hxx>
 #include <BRepFilletAPI_MakeChamfer.hxx>
 #include <BRepFilletAPI_MakeFillet.hxx>
@@ -33,6 +40,7 @@
 #include <Standard_Failure.hxx>
 #include <Standard_Version.hxx>
 #include <TopExp_Explorer.hxx>
+#include <TopoDS_Iterator.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Compound.hxx>
 #include <TopoDS_Solid.hxx>
@@ -700,6 +708,196 @@ std::vector<Shape> pattern(std::string_view tag, const Shape& body, const Patter
         return copies;
     } catch (const Standard_Failure& e) {
         throw GeometryError(std::string("Error del kernel al repetir el cuerpo: ") + kernelMessage(e));
+    }
+}
+
+Shape gear(std::string_view tagView, const sketch::Plane& plane, const GearSpec& spec)
+{
+    const std::string tag(tagView);
+    constexpr double kPi = std::numbers::pi;
+    constexpr double kDeg = kPi / 180.0;
+    if (spec.teeth < 6 || spec.teeth > 300) {
+        throw GeometryError("El número de dientes debe estar entre 6 y 300");
+    }
+    if (spec.module <= kTiny) {
+        throw GeometryError("El módulo debe ser mayor que cero");
+    }
+    if (std::abs(spec.thickness) <= kTiny) {
+        throw GeometryError("El ancho del engranaje debe ser distinto de cero");
+    }
+    if (spec.pressureAngle < 5.0 * kDeg || spec.pressureAngle > 35.0 * kDeg) {
+        throw GeometryError("El ángulo de presión debe estar entre 5° y 35°");
+    }
+    if (std::abs(spec.helixAngle) > 45.0 * kDeg) {
+        throw GeometryError("El ángulo de hélice no puede pasar de 45°");
+    }
+    const double z = spec.teeth;
+    const double rp = spec.module * z / 2.0;
+    const double rb = rp * std::cos(spec.pressureAngle);
+    const double ra = rp + spec.module;
+    const double rf = rp - 1.25 * spec.module;
+    if (rf <= kTiny) {
+        throw GeometryError("Hay muy pocos dientes para ese módulo");
+    }
+    const auto inv = [](double a) { return std::tan(a) - a; };
+    // Mitad del ancho angular del diente a un radio r (la evolvente).
+    const auto half = [&](double r) {
+        return kPi / (2.0 * z) - (inv(std::acos(std::min(1.0, rb / r))) - inv(spec.pressureAngle));
+    };
+    const double r0 = std::max(rb, rf);  // dónde empieza la evolvente
+    const double thetaS = half(r0);
+    const double thetaA = half(ra);
+    const double pitch = 2.0 * kPi / z;
+    if (thetaA <= 0.02 * pitch) {
+        throw GeometryError("Los dientes salen puntiagudos: prueba con menos ángulo de presión o más dientes");
+    }
+    if (pitch - 2.0 * thetaS <= 0.02 * pitch) {
+        throw GeometryError("Los dientes se solapan en la raíz");
+    }
+    if (spec.bore < 0.0 || spec.bore / 2.0 >= 0.9 * rf) {
+        throw GeometryError("El agujero central es demasiado grande para el engranaje");
+    }
+
+    try {
+        const gp_Pnt origin = toPnt(plane.origin);
+        const gp_Dir normal = toDir(plane.normal);
+        const gp_Ax2 frame(origin, normal, toDir(plane.xAxis));
+        const auto at = [&](double r, double phi) {
+            return toPnt(plane.toWorld({r * std::cos(phi), r * std::sin(phi)}));
+        };
+        const auto spline = [&](const std::vector<gp_Pnt>& points) {
+            occ::handle<NCollection_HArray1<gp_Pnt>> array = new NCollection_HArray1<gp_Pnt>(1, int(points.size()));
+            for (std::size_t i = 0; i < points.size(); ++i) {
+                array->SetValue(int(i) + 1, points[i]);
+            }
+            GeomAPI_Interpolate interpolation(array, false, 1e-7);
+            interpolation.Perform();
+            if (!interpolation.IsDone()) {
+                throw GeometryError("No se pudo trazar el flanco del diente");
+            }
+            return BRepBuilderAPI_MakeEdge(interpolation.Curve()).Edge();
+        };
+        constexpr int kSamples = 8;
+
+        std::vector<std::pair<TopoDS_Edge, std::string>> edges;
+        for (int i = 0; i < spec.teeth; ++i) {
+            const double phi = i * pitch;
+            const std::string name = "d" + std::to_string(i + 1) + ":";
+            const bool radial = rb > rf + kTiny;
+            if (radial) {
+                edges.emplace_back(BRepBuilderAPI_MakeEdge(at(rf, phi - thetaS), at(rb, phi - thetaS)).Edge(), name + "rad_d");
+            }
+            std::vector<gp_Pnt> right;
+            std::vector<gp_Pnt> left;
+            for (int j = 0; j <= kSamples; ++j) {
+                const double r = r0 + (ra - r0) * j / kSamples;
+                right.push_back(at(r, phi - half(r)));
+                left.push_back(at(r, phi + half(r)));
+            }
+            edges.emplace_back(spline(right), name + "flanco_d");
+            edges.emplace_back(BRepBuilderAPI_MakeEdge(gp_Circ(frame, ra), phi - thetaA, phi + thetaA).Edge(), name + "cabeza");
+            std::ranges::reverse(left);
+            edges.emplace_back(spline(left), name + "flanco_i");
+            if (radial) {
+                edges.emplace_back(BRepBuilderAPI_MakeEdge(at(rb, phi + thetaS), at(rf, phi + thetaS)).Edge(), name + "rad_i");
+            }
+            edges.emplace_back(BRepBuilderAPI_MakeEdge(gp_Circ(frame, rf), phi + thetaS, phi + pitch - thetaS).Edge(), name + "raiz");
+        }
+        BRepBuilderAPI_MakeWire outline;
+        for (const auto& [edge, name] : edges) {
+            outline.Add(edge);
+            if (!outline.IsDone()) {
+                throw GeometryError("No se pudo cerrar el contorno del engranaje");
+            }
+        }
+        // El constructor de caminos puede sustituir las aristas por copias (al unir vértices):
+        // los nombres van con las que quedaron en el contorno, en el mismo orden.
+        {
+            TopoDS_Iterator children(outline.Wire());
+            for (auto& [edge, name] : edges) {
+                if (!children.More()) {
+                    throw GeometryError("El contorno del engranaje quedó incompleto");
+                }
+                edge = TopoDS::Edge(children.Value());
+                children.Next();
+            }
+        }
+        const double twist = spec.thickness * std::tan(spec.helixAngle) / rp;  // giro total de la hélice
+        const gp_Vec along = gp_Vec(normal).Multiplied(spec.thickness);
+
+        if (std::abs(twist) < 1e-9) {
+            BRepBuilderAPI_MakeFace face(gp_Pln(origin, normal), outline.Wire(), true);
+            TopoDS_Edge boreEdge;
+            if (spec.bore > 0.0) {
+                boreEdge = BRepBuilderAPI_MakeEdge(gp_Circ(frame, spec.bore / 2.0)).Edge();
+                face.Add(TopoDS::Wire(BRepBuilderAPI_MakeWire(boreEdge).Wire().Reversed()));
+            }
+            BRepPrimAPI_MakePrism prism(face.Face(), along, true);
+            if (!prism.IsDone()) {
+                throw GeometryError("No se pudo extruir el engranaje");
+            }
+            Namer namer(prism.Shape());
+            namer.name(prism.FirstShape(), tag + ":inicio");
+            namer.name(prism.LastShape(), tag + ":fin");
+            for (const auto& [edge, name] : edges) {
+                for (const TopoDS_Shape& side : prism.Generated(edge)) {
+                    namer.name(side, tag + ":lado:" + name);
+                }
+            }
+            if (!boreEdge.IsNull()) {
+                for (const TopoDS_Shape& side : prism.Generated(boreEdge)) {
+                    namer.name(side, tag + ":lado:agujero");
+                }
+            }
+            Shape result = namer.finish(tag);
+            if (!result.isValid()) {
+                throw GeometryError("El engranaje no es un sólido válido");
+            }
+            return result;
+        }
+
+        // Helicoidal: secciones giradas a lo largo del ancho, unidas en un solo sólido.
+        const int sections = std::clamp(int(std::ceil(std::abs(twist) / (15.0 * kDeg))) + 1, 3, 24);
+        BRepOffsetAPI_ThruSections loft(true, false, 1e-6);
+        for (int k = 0; k <= sections; ++k) {
+            const double t = double(k) / sections;
+            if (k == 0) {
+                loft.AddWire(outline.Wire());
+                continue;
+            }
+            gp_Trsf turn;
+            turn.SetRotation(gp_Ax1(origin, normal), twist * t);
+            gp_Trsf slide;
+            slide.SetTranslation(gp_Vec(normal).Multiplied(spec.thickness * t));
+            BRepBuilderAPI_Transform moved(outline.Wire(), slide * turn, true);
+            loft.AddWire(TopoDS::Wire(moved.Shape()));
+        }
+        loft.Build();
+        if (!loft.IsDone()) {
+            throw GeometryError("No se pudo generar el engranaje helicoidal");
+        }
+        Namer namer(loft.Shape());
+        namer.name(loft.FirstShape(), tag + ":inicio");
+        namer.name(loft.LastShape(), tag + ":fin");
+        for (const auto& [edge, name] : edges) {
+            namer.name(loft.GeneratedFace(edge), tag + ":lado:" + name);
+        }
+        Shape result = namer.finish(tag);
+        if (!result.isValid()) {
+            throw GeometryError("El engranaje helicoidal no es un sólido válido");
+        }
+        if (spec.bore > 0.0) {
+            const double margin = 1.0;
+            const gp_Pnt start(origin.XYZ() - normal.XYZ() * (spec.thickness > 0 ? margin : -margin));
+            BRepPrimAPI_MakeCylinder cylinder(gp_Ax2(start, spec.thickness > 0 ? normal : normal.Reversed()), spec.bore / 2.0,
+                                              std::abs(spec.thickness) + 2.0 * margin);
+            Namer tool(cylinder.Shape());
+            tool.nameUnnamed(tag + ":lado:agujero");
+            result = boolean(BooleanOp::Cut, result, tool.finish(tag));
+        }
+        return result;
+    } catch (const Standard_Failure& e) {
+        throw GeometryError(std::string("Error del kernel al generar el engranaje: ") + kernelMessage(e));
     }
 }
 

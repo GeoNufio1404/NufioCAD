@@ -372,7 +372,8 @@ Todas siguen el patrón de las operaciones actuales: una clase en `document/Feat
 - **Pendiente de 6c:** cotas del sketch ligadas a parámetros; renombrar un parámetro no actualiza las expresiones que lo usan; cantidad del patrón solo ligable desde el archivo (el cuadro es entero).
 
 ### Fase 7 — Generadores
-- Engranajes rectos y helicoidales (perfil de involuta).
+- **7a Engranajes ✅:** `geometry::gear` (perfil de involuta con splines por flanco, cabeza y raíz en arcos, tramo radial si la base queda sobre la raíz; recto por prisma, helicoidal por secciones giradas en un solo sólido; agujero central) y `GearFeature` (plano de origen o de construcción, módulo, dientes 6–300, ángulo de presión 5–35°, ancho, agujero, ángulo de hélice hasta 45°, operación nuevo cuerpo/unir; todos ligables a parámetros). Caras con nombre estable: `f<id>:lado:d<i>:flanco_d|flanco_i|cabeza|raiz|rad_d|rad_i`, `…:lado:agujero`, `…:inicio`, `…:fin`. Herramienta Sólido › Engranaje (grupo GENERAR). Errores claros (dientes puntiagudos o solapados, agujero demasiado grande). 3 pruebas nuevas.
+- **Pendiente de 7a:** engranajes internos y cremallera, redondeo de raíz, perfil de cicloide, juego/corrección de dentado.
 - Roscas y tornillos métricos (sweep helicoidal).
 - Sweep y loft.
 

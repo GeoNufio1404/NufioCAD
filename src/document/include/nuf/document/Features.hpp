@@ -217,6 +217,21 @@ public:
     std::vector<FeatureId> dependencies() const override;
 };
 
+// Engranaje cilíndrico de involuta (recto o helicoidal) centrado en el origen de
+// un plano, con su eje a lo largo de la normal.
+class GearFeature final : public Feature {
+public:
+    SketchAttachment base;   // plano donde se coloca
+    geometry::GearSpec spec;
+    Operation operation = Operation::NewBody;
+
+    FeatureKind kind() const override { return FeatureKind::Gear; }
+    std::unique_ptr<Feature> clone() const override { return std::make_unique<GearFeature>(*this); }
+    std::optional<std::string> compute(ModelState& state) const override;
+    std::vector<FeatureId> dependencies() const override;
+    std::vector<NumericField> numericFields() override;
+};
+
 enum class PatternLayout { Linear, Circular };
 
 // Patrón: copias de un cuerpo en fila (a lo largo de un eje de origen) o

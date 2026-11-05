@@ -352,6 +352,11 @@ void MainWindow::createMenus()
     });
     decorate(parametersAction_, QStringLiteral("parameters-solid"),
              QStringLiteral("Nombrar valores (grosor = 3) y usarlos en las operaciones"), QStringLiteral("Parámetros"));
+    gearAction_ = solidMenu->addAction(QStringLiteral("&Engranaje"), this, [this] {
+        startTool(std::make_unique<GearTool>(document_, *viewport_, std::nullopt));
+    });
+    decorate(gearAction_, QStringLiteral("gear-solid"),
+             QStringLiteral("Generar un engranaje recto o helicoidal (perfil de involuta)"), QStringLiteral("Engranaje"));
     decorate(shellAction_, QStringLiteral("shell"), QStringLiteral("Vaciar un cuerpo dejando abiertas las caras elegidas"));
 
     // Herramientas de dibujo por familias (como en Fusion 360); la primera
@@ -517,6 +522,8 @@ void MainWindow::createMenus()
     ribbon_->addAction(solidTab_, planeAction_);
     ribbon_->addAction(solidTab_, axisAction_);
     ribbon_->addAction(solidTab_, parametersAction_);
+    ribbon_->addGroup(solidTab_, QStringLiteral("GENERAR"));
+    ribbon_->addAction(solidTab_, gearAction_);
 
     auto family = [this, &families](const QString& name) {
         const std::size_t i = static_cast<std::size_t>(
@@ -953,6 +960,9 @@ void MainWindow::activateFeature(document::FeatureId id)
     case document::FeatureKind::ConstructionAxis:
         startTool(std::make_unique<AxisTool>(document_, *viewport_, id));
         break;
+    case document::FeatureKind::Gear:
+        startTool(std::make_unique<GearTool>(document_, *viewport_, id));
+        break;
     case document::FeatureKind::Import:
         break;  // no tiene parámetros que editar
     }
@@ -1049,7 +1059,7 @@ void MainWindow::updateExportAction()
             action->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane() && !document_.result().bodies.empty());
         }
     }
-    for (QAction* action : {planeAction_, axisAction_, parametersAction_}) {
+    for (QAction* action : {planeAction_, axisAction_, parametersAction_, gearAction_}) {
         if (action != nullptr) {
             action->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane());
         }
