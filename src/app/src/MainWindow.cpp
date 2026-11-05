@@ -584,6 +584,22 @@ void MainWindow::createMenus()
         QSettings().setValue(QStringLiteral("view/sketchMeasures"), on);
         viewport_->setSketchMeasuresVisible(on);
     });
+    // Medidas y restricciones: por defecto solo en lo que se mira (cursor o selección).
+    auto* allMeasures = view->addAction(QStringLiteral("Medidas de &todo el sketch a la vez"));
+    auto* allConstraints = view->addAction(QStringLiteral("Restricciones de t&odo el sketch a la vez"));
+    for (QAction* action : {allMeasures, allConstraints}) {
+        action->setCheckable(true);
+    }
+    allMeasures->setChecked(QSettings().value(QStringLiteral("view/sketchAllMeasures"), false).toBool());
+    allConstraints->setChecked(QSettings().value(QStringLiteral("view/sketchAllConstraints"), false).toBool());
+    const auto applyAll = [this, allMeasures, allConstraints] {
+        QSettings().setValue(QStringLiteral("view/sketchAllMeasures"), allMeasures->isChecked());
+        QSettings().setValue(QStringLiteral("view/sketchAllConstraints"), allConstraints->isChecked());
+        viewport_->setSketchShowAll(allMeasures->isChecked(), allConstraints->isChecked());
+    };
+    connect(allMeasures, &QAction::toggled, this, applyAll);
+    connect(allConstraints, &QAction::toggled, this, applyAll);
+    applyAll();
     view->addSeparator();
     QMenu* panels = view->addMenu(QStringLiteral("&Paneles"));
     panels->addAction(navigatorDock_->toggleViewAction());

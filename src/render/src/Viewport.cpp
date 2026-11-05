@@ -353,10 +353,11 @@ public:
         texts_.clear();
     }
 
-    // Texto centrado en p, sobre un recuadro del color «box».
-    void addText(sketch::Vec2 p, const std::string& utf8, const Quantity_Color& color, const Quantity_Color& box)
+    // Texto centrado en p; con «boxed», sobre un recuadro del color «box».
+    void addText(sketch::Vec2 p, const std::string& utf8, const Quantity_Color& color, const Quantity_Color& box,
+                 double size = 13.0, bool boxed = true)
     {
-        texts_.push_back({p, utf8, color, box});
+        texts_.push_back({p, utf8, color, box, size, boxed});
     }
 
     void addGeometry(const sketch::Geometry& geometry, const SketchStroke& stroke)
@@ -411,10 +412,11 @@ public:
         for (const Label& label : texts_) {
             Handle(Graphic3d_Group) group = prs->NewGroup();
             Handle(Graphic3d_AspectText3d) aspect = new Graphic3d_AspectText3d(
-                label.color, font.ToCString(), 1.0, 0.0, Aspect_TOST_NORMAL, Aspect_TODT_SUBTITLE);
+                label.color, font.ToCString(), 1.0, 0.0, Aspect_TOST_NORMAL,
+                label.boxed ? Aspect_TODT_SUBTITLE : Aspect_TODT_NORMAL);
             aspect->SetColorSubTitle(label.box);
             group->SetGroupPrimitivesAspect(aspect);
-            Handle(Graphic3d_Text) text = new Graphic3d_Text(13.0f);
+            Handle(Graphic3d_Text) text = new Graphic3d_Text(static_cast<float>(label.size));
             text->SetText(label.text.c_str());
             text->SetPosition(at(label.position));
             text->SetHorizontalAlignment(Graphic3d_HTA_CENTER);
@@ -449,6 +451,8 @@ private:
         std::string text;
         Quantity_Color color;
         Quantity_Color box;
+        double size = 13.0;
+        bool boxed = true;
     };
 
     gp_Pnt at(sketch::Vec2 p) const
@@ -1064,8 +1068,10 @@ public:
     // referencia del tamaño sin tener que acotar. Lo que ya tiene una cota
     // propia no se repite, y lo proyectado (cientos de curvas) ni la
     // construcción se rotulan.
-    void addMeasures(const sketch::Sketch& sketch, const Quantity_Color& color, const Quantity_Color& box)
+    void addMeasures(const sketch::Sketch& sketch, const std::set<sketch::EntityId>& focus,
+                     const Quantity_Color& color, const Quantity_Color& focused)
     {
+        const Quantity_Color none = color;  // el recuadro no se usa: texto simple
         std::set<sketch::EntityId> dimensioned;
         for (const sketch::Constraint& c : sketch.constraints()) {
             if (c.type == sketch::ConstraintType::Distance || c.type == sketch::ConstraintType::Radius
@@ -1080,6 +1086,12 @@ public:
             if (e.reference || e.locked || e.construction || dimensioned.contains(e.id)) {
                 continue;
             }
+            const bool inFocus = focus.contains(e.id);
+            if (!measuresAll && !inFocus) {
+                continue;
+            }
+            // Lo enfocado se lee más claro que el resto.
+            const Quantity_Color& tone = inFocus ? focused : color;
             if (++shown > 200) {
                 break;
             }
@@ -1092,12 +1104,12 @@ public:
                 }
                 const sketch::Vec2 middle{(line->start.x + line->end.x) / 2.0 - dy / length * gap,
                                           (line->start.y + line->end.y) / 2.0 + dx / length * gap};
-                drawing->addText(middle, formatMeasure(length), color, box);
+                drawing->addText(middle, formatMeasure(length), tone, none, 12.0, false);
             } else if (const auto* circle = std::get_if<sketch::Circle>(&e.geometry)) {
                 constexpr double kDiagonal = 0.70710678118654752;
                 const double reach = (circle->radius + gap) * kDiagonal;
                 drawing->addText({circle->center.x + reach, circle->center.y + reach},
-                                 "\xC3\x98" + formatMeasure(2.0 * circle->radius), color, box);
+                                 "\xC3\x98" + formatMeasure(2.0 * circle->radius), tone, none, 12.0, false);
             } else if (const auto* arc = std::get_if<sketch::Arc>(&e.geometry)) {
                 double sweep = arc->endAngle - arc->startAngle;
                 while (sweep < 0.0) {
@@ -1106,7 +1118,7 @@ public:
                 const double middle = arc->startAngle + sweep / 2.0;
                 drawing->addText({arc->center.x + (arc->radius + gap) * std::cos(middle),
                                   arc->center.y + (arc->radius + gap) * std::sin(middle)},
-                                 "R" + formatMeasure(arc->radius), color, box);
+                                 "R" + formatMeasure(arc->radius), tone, none, 12.0, false);
             }
         }
     }
@@ -1203,20 +1215,51 @@ public:
         const Quantity_Color text = darkTheme ? rgb(0xE6, 0xE9, 0xED) : rgb(0x1F, 0x23, 0x29);
         const Quantity_Color dimmed = darkTheme ? rgb(0x9A, 0xA3, 0xAE) : rgb(0x6B, 0x74, 0x80);
         const Quantity_Color box = darkTheme ? rgb(0x2B, 0x30, 0x37) : rgb(0xF4, 0xF5, 0xF7);
+        // Tres niveles: las cotas que puso el usuario (azul, con sus líneas), las
+        // restricciones (iconos pequeños y apagados, solo donde se mira) y las
+        // medidas automáticas (texto simple, también solo donde se mira).
+        const Quantity_Color accent = darkTheme ? rgb(0x6C, 0xA6, 0xFF) : rgb(0x1F, 0x6F, 0xE0);
+        // Lo que tiene el cursor encima o está seleccionado.
+        std::set<sketch::EntityId> focus;
+        if (!highlight.hovered.empty()) {
+            focus.insert(highlight.hovered.entity);
+        }
+        for (const sketch::Ref& r : highlight.selected) {
+            focus.insert(r.entity);
+        }
+        const auto touchesFocus = [&](const sketch::Constraint& c) {
+            return focus.contains(c.first.entity) || focus.contains(c.second.entity) || focus.contains(c.third.entity);
+        };
         for (const sketch::Annotation& note : sketch::layoutAnnotations(sketch, annotationScale)) {
-            Quantity_Color color = note.reference ? dimmed : text;
-            if (std::ranges::find(highlight.selectedConstraints, note.constraint) != highlight.selectedConstraints.end()) {
+            const bool picked =
+                std::ranges::find(highlight.selectedConstraints, note.constraint) != highlight.selectedConstraints.end();
+            const bool hovered = note.constraint == highlight.hoveredConstraint;
+            bool relevant = note.dimension || constraintsAll || picked || hovered;
+            if (!relevant) {
+                for (const sketch::Constraint& c : sketch.constraints()) {
+                    if (c.id == note.constraint) {
+                        relevant = touchesFocus(c);
+                        break;
+                    }
+                }
+            }
+            if (!relevant) {
+                continue;
+            }
+            Quantity_Color color = note.dimension ? (note.reference ? dimmed : accent) : dimmed;
+            if (picked) {
                 color = selectedColor();
-            } else if (note.constraint == highlight.hoveredConstraint) {
+            } else if (hovered) {
                 color = hoveredColor();
             }
             for (const sketch::Geometry& line : note.lines) {
                 drawing->addGeometry(line, {color, 1.0});
             }
-            drawing->addText(note.anchor, note.text, color, box);
+            // Las cotas, con su recuadro y tamaño normal; las restricciones, más pequeñas.
+            drawing->addText(note.anchor, note.text, color, box, note.dimension ? 13.0 : 11.0);
         }
         if (measuresVisible) {
-            addMeasures(sketch, dimmed, box);
+            addMeasures(sketch, focus, dimmed, text);
         }
         context->Redisplay(drawing, false);
     }
@@ -1435,6 +1478,8 @@ public:
     SketchHighlight shownHighlight;
     double annotationScale = 0.0;
     bool measuresVisible = true;
+    bool measuresAll = false;      // todas las medidas, no solo las de lo que se mira
+    bool constraintsAll = false;   // todas las restricciones, no solo las de lo que se mira
     bool leftPressed = false;
     Viewport::NavigationMode navMode = Viewport::NavigationMode::Default;
     std::map<document::FeatureId, FinishedSketch> finished;
@@ -1911,6 +1956,15 @@ void Viewport::setGroundVisible(bool visible)
 {
     impl_->groundShown = visible;
     impl_->updateGround(true);
+    impl_->view->Invalidate();
+    update();
+}
+
+void Viewport::setSketchShowAll(bool measures, bool constraints)
+{
+    impl_->measuresAll = measures;
+    impl_->constraintsAll = constraints;
+    impl_->rebuildSketch();
     impl_->view->Invalidate();
     update();
 }

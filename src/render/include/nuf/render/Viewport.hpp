@@ -101,6 +101,10 @@ public:
     // Rotula en el sketch el largo de las líneas y el Ø o R de círculos y arcos
     // (lo que no tiene cota propia).
     void setSketchMeasuresVisible(bool visible);
+    // Por defecto las medidas y las restricciones solo se ven en lo que tiene el
+    // cursor encima o está seleccionado (así el sketch no se satura); estas
+    // opciones las muestran todas a la vez.
+    void setSketchShowAll(bool measures, bool constraints);
     // Rejilla del suelo (plano XY) fuera del sketch.
     void setGroundVisible(bool visible);
 
