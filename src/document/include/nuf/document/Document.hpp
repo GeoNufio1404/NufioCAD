@@ -1,16 +1,31 @@
 #pragma once
 
+#include <nuf/document/Expression.hpp>
 #include <nuf/document/Feature.hpp>
 #include <nuf/document/Signal.hpp>
 
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 
 namespace nuf::document {
+
+// Parámetro con nombre («grosor = 3 mm»): su expresión puede usar otros.
+struct Parameter {
+    std::string name;
+    std::string expression;
+    bool operator==(const Parameter&) const = default;
+};
+
+// Valor evaluado de un parámetro, o el motivo por el que no se pudo.
+struct ParameterValue {
+    std::optional<double> value;
+    std::string error;
+};
 
 // Documento de diseño: nombre e historial de operaciones (timeline) con su
 // marcador. Lo que queda después del marcador no se calcula. Cada cambio
@@ -62,9 +77,18 @@ public:
     // recálculo y sin cambiar el objeto, para que lo conectado a él siga
     // funcionando. Lanza std::invalid_argument si hay ids repetidos o nulos.
     void restore(std::string name, std::vector<std::unique_ptr<Feature>> features, std::size_t marker,
-                 FeatureId nextId);
+                 FeatureId nextId, std::vector<Parameter> parameters = {});
     // Siguiente id libre (se guarda en el archivo).
     FeatureId nextId() const noexcept { return nextId_; }
+
+    // --- Parámetros ---
+    const std::vector<Parameter>& parameters() const noexcept { return parameters_; }
+    // Cambia la tabla y recalcula lo que usa expresiones.
+    void setParameters(std::vector<Parameter> parameters);
+    // El valor (o el error) de un parámetro de la tabla.
+    ParameterValue parameterValue(const std::string& name) const;
+    // Para evaluar una expresión con los parámetros del documento.
+    ParameterLookup lookup() const;
 
     // --- Resultado ---
     // El modelo tras la última operación activa.
@@ -79,6 +103,7 @@ public:
 private:
     void markChanged();
     void recomputeFrom(std::size_t index);
+    void evaluateParameters();
 
     std::string name_ = "Sin título";
     std::uint64_t revision_ = 0;
@@ -87,6 +112,8 @@ private:
     std::vector<FeatureStatus> statuses_;
     std::size_t marker_ = 0;
     FeatureId nextId_ = 1;
+    std::vector<Parameter> parameters_;
+    std::map<std::string, ParameterValue> values_;
     ModelState empty_;
 };
 

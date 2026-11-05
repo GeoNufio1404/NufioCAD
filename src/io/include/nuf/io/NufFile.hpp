@@ -66,6 +66,11 @@ public:
     void writeFeatures(const std::vector<FeatureRow>& rows);
     std::vector<FeatureRow> readFeatures() const;
 
+    // Parámetros con nombre (nombre, expresión), en orden. writeParameters
+    // reemplaza todas las filas (llamar dentro de begin/commit).
+    void writeParameters(const std::vector<std::pair<std::string, std::string>>& parameters);
+    std::vector<std::pair<std::string, std::string>> readParameters() const;
+
     // Datos binarios (sólidos importados, miniatura). writeBlob reemplaza el
     // que tenga esa clave; readBlob devuelve nullopt si no existe.
     void writeBlob(std::string_view key, std::string_view kind, std::string_view data);

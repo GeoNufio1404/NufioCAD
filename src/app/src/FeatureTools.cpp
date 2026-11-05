@@ -1,5 +1,7 @@
 #include "FeatureTools.hpp"
 
+#include "ExpressionSpinBox.hpp"
+
 #include <nuf/geometry/Modeling.hpp>
 #include <nuf/render/Viewport.hpp>
 
@@ -26,7 +28,7 @@ constexpr double kDegree = std::numbers::pi / 180.0;
 
 QDoubleSpinBox* lengthBox(double value)
 {
-    auto* box = new QDoubleSpinBox();
+    auto* box = new ExpressionSpinBox();
     box->setRange(-100000.0, 100000.0);
     box->setDecimals(2);
     box->setSuffix(QStringLiteral(" mm"));
@@ -37,7 +39,7 @@ QDoubleSpinBox* lengthBox(double value)
 
 QDoubleSpinBox* angleBox(double value, double limit)
 {
-    auto* box = new QDoubleSpinBox();
+    auto* box = new ExpressionSpinBox();
     box->setRange(-limit, limit);
     box->setDecimals(1);
     box->setSuffix(QStringLiteral(" °"));
@@ -136,6 +138,15 @@ void FeatureTool::start()
     layout->addLayout(form);
     updating_ = true;
     createFields(form);
+    // Al editar, vuelven las expresiones que tenía la operación.
+    if (original_) {
+        for (const auto& [key, box] : fields_) {
+            const auto it = original_->expressions.find(key);
+            if (auto* e = dynamic_cast<ExpressionSpinBox*>(box); e != nullptr && it != original_->expressions.end()) {
+                e->setExpression(QString::fromStdString(it->second));
+            }
+        }
+    }
     updating_ = false;
     statusLabel_ = new QLabel();
     statusLabel_->setWordWrap(true);
@@ -187,6 +198,19 @@ void FeatureTool::start()
         selectionChanged(viewport_.modelSelection());
     }
     updatePreview();
+}
+
+std::unique_ptr<document::Feature> FeatureTool::make() const
+{
+    std::unique_ptr<document::Feature> feature = build();
+    if (feature) {
+        for (const auto& [key, box] : fields_) {
+            if (const auto* e = dynamic_cast<const ExpressionSpinBox*>(box); e != nullptr && !e->expression().isEmpty()) {
+                feature->expressions[key] = e->expression().toStdString();
+            }
+        }
+    }
+    return feature;
 }
 
 void FeatureTool::accept()
@@ -241,7 +265,7 @@ void FeatureTool::updatePreview()
         return;
     }
     inputsLabel_->setText(inputsText());
-    std::unique_ptr<document::Feature> feature = build();
+    std::unique_ptr<document::Feature> feature = make();
     if (!feature) {
         viewport_.showBodies(before().bodies);
         showPlanes(viewport_, document_, before(), nullptr);
@@ -316,14 +340,17 @@ void ExtrudeTool::createFields(QFormLayout* form)
     };
     extent1_ = extentCombo();
     distance1_ = lengthBox(1.0);
+    field("distance", distance1_);
     taper1_ = angleBox(0.0, 89.0);
     target1_ = new QPushButton(QStringLiteral("Elegir cara de destino"));
     extent2_ = extentCombo();
     distance2_ = lengthBox(1.0);
+    field("distance2", distance2_);
     distance2_->setMinimum(0.0);
     taper2_ = angleBox(0.0, 89.0);
     target2_ = new QPushButton(QStringLiteral("Elegir cara de destino"));
     offset_ = lengthBox(0.0);
+    field("startOffset", offset_);
     operation_ = combo({QStringLiteral("Unir"), QStringLiteral("Cortar"), QStringLiteral("Intersecar"),
                         QStringLiteral("Cuerpo nuevo")});
 
@@ -603,7 +630,9 @@ void RevolveTool::createFields(QFormLayout* form)
     extent_ = combo({QStringLiteral("Ángulo"), QStringLiteral("Vuelta completa")});
     direction_ = combo({QStringLiteral("Un lado"), QStringLiteral("Simétrica"), QStringLiteral("Dos lados")});
     angle1_ = angleBox(180.0, 360.0);
+    field("angle", angle1_);
     angle2_ = angleBox(90.0, 360.0);
+    field("angle2", angle2_);
     angle2_->setMinimum(0.0);
     operation_ = combo({QStringLiteral("Unir"), QStringLiteral("Cortar"), QStringLiteral("Intersecar"),
                         QStringLiteral("Cuerpo nuevo")});
@@ -758,6 +787,7 @@ QString EdgeTool::title() const
 void EdgeTool::createFields(QFormLayout* form)
 {
     size_ = lengthBox(1.0);
+    field("size", size_);
     size_->setMinimum(0.01);
     if (const auto* e = dynamic_cast<const document::EdgeFeature*>(original_.get())) {
         size_->setValue(e->size);
@@ -851,6 +881,7 @@ ShellTool::ShellTool(document::Document& document, render::Viewport& viewport,
 void ShellTool::createFields(QFormLayout* form)
 {
     thickness_ = lengthBox(1.0);
+    field("thickness", thickness_);
     thickness_->setMinimum(0.01);
     direction_ = combo({QStringLiteral("Hacia dentro"), QStringLiteral("Hacia fuera")});
     if (const auto* s = dynamic_cast<const document::ShellFeature*>(original_.get())) {
@@ -961,15 +992,20 @@ void HoleTool::createFields(QFormLayout* form)
     }
     kind_ = combo({QStringLiteral("Simple"), QStringLiteral("Abocardado"), QStringLiteral("Avellanado")});
     diameter_ = lengthBox(5.0);
+    field("diameter", diameter_);
     diameter_->setMinimum(0.01);
     throughAll_ = new QCheckBox(QStringLiteral("Atravesar todo"));
     depth_ = lengthBox(10.0);
+    field("depth", depth_);
     depth_->setMinimum(0.01);
     headDiameter_ = lengthBox(10.0);
+    field("headDiameter", headDiameter_);
     headDiameter_->setMinimum(0.01);
     headDepth_ = lengthBox(3.0);
+    field("headDepth", headDepth_);
     headDepth_->setMinimum(0.01);
     headAngle_ = angleBox(90.0, 179.0);
+    field("headAngle", headAngle_);
     headAngle_->setMinimum(1.0);
     flip_ = new QCheckBox(QStringLiteral("Al otro lado del plano"));
     if (const auto* h = dynamic_cast<const document::HoleFeature*>(original_.get())) {
@@ -1191,7 +1227,9 @@ void PlaneTool::createFields(QFormLayout* form)
         planeIds_.push_back(id);
     }
     offset_ = lengthBox(10.0);
+    field("offset", offset_);
     angle_ = angleBox(0.0, 180.0);
+    field("angle", angle_);
     angleAxis_ = combo({QStringLiteral("Eje X del plano"), QStringLiteral("Eje Y del plano")});
     base_->setCurrentIndex(0);
     if (const auto* p = dynamic_cast<const document::ConstructionPlaneFeature*>(original_.get())) {
@@ -1420,7 +1458,9 @@ void PatternTool::createFields(QFormLayout* form)
     count_->setSuffix(QStringLiteral(" copias en total"));
     count_->setKeyboardTracking(false);
     spacing_ = lengthBox(30.0);
+    field("spacing", spacing_);
     angle_ = angleBox(360.0, 360.0);
+    field("angle", angle_);
     operation_ = combo({QStringLiteral("Unir"), QStringLiteral("Cuerpo nuevo")});
     if (const auto* p = dynamic_cast<const document::PatternFeature*>(original_.get())) {
         layout_->setCurrentIndex(int(p->layout));

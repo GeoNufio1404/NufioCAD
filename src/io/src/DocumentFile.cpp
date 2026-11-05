@@ -544,6 +544,9 @@ FeatureRow rowOf(const Feature& f)
         break;
     }
     }
+    if (!f.expressions.empty()) {
+        params["expressions"] = f.expressions;
+    }
     row.params = params.dump();
     return row;
 }
@@ -659,6 +662,11 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
     feature->setId(static_cast<FeatureId>(row.id));
     feature->setName(row.name);
     feature->setSuppressed(row.suppressed);
+    if (p.contains("expressions")) {
+        for (const auto& [key, expression] : p.at("expressions").items()) {
+            feature->expressions[key] = expression.get<std::string>();
+        }
+    }
     return feature;
 }
 
@@ -738,6 +746,11 @@ void saveDocument(const std::filesystem::path& path, const Document& document, c
                     rows.push_back(rowOf(document.feature(i)));
                 }
                 file.writeFeatures(rows);
+                std::vector<std::pair<std::string, std::string>> parameters;
+                for (const Parameter& p : document.parameters()) {
+                    parameters.emplace_back(p.name, p.expression);
+                }
+                file.writeParameters(parameters);
                 for (std::size_t i = 0; i < document.featureCount(); ++i) {
                     if (document.feature(i).kind() == FeatureKind::Import) {
                         const auto& imported = static_cast<const ImportFeature&>(document.feature(i));
@@ -774,6 +787,7 @@ std::optional<std::string> readThumbnail(const std::filesystem::path& path) noex
 void loadDocument(const std::filesystem::path& path, Document& document, ViewState& view)
 {
     std::vector<std::unique_ptr<Feature>> features;
+    std::vector<Parameter> parameters;
     std::string name;
     std::size_t marker = 0;
     FeatureId nextId = 1;
@@ -791,6 +805,9 @@ void loadDocument(const std::filesystem::path& path, Document& document, ViewSta
         for (const FeatureRow& row : file.readFeatures()) {
             features.push_back(featureOf(row, file));
         }
+        for (auto& [pname, expression] : file.readParameters()) {
+            parameters.push_back({std::move(pname), std::move(expression)});
+        }
         if (marker > features.size()) {
             throw NufError("El marcador está fuera del historial");
         }
@@ -800,7 +817,7 @@ void loadDocument(const std::filesystem::path& path, Document& document, ViewSta
         throw NufError(std::string("El archivo está dañado: ") + e.what());
     }
     try {
-        document.restore(std::move(name), std::move(features), marker, nextId);
+        document.restore(std::move(name), std::move(features), marker, nextId, std::move(parameters));
     } catch (const std::invalid_argument& e) {
         throw NufError(std::string("El archivo está dañado: ") + e.what());
     }

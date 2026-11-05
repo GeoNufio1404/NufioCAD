@@ -282,6 +282,35 @@ std::vector<FeatureRow> NufFile::readFeatures() const
     return rows;
 }
 
+void NufFile::writeParameters(const std::vector<std::pair<std::string, std::string>>& parameters)
+{
+    exec(db_, "DELETE FROM parameters;", "No se pudo escribir los parámetros");
+    Stmt stmt = prepare(db_, "INSERT INTO parameters(name, expression) VALUES(?1,?2);", "No se pudo escribir los parámetros");
+    for (const auto& [name, expression] : parameters) {
+        sqlite3_reset(stmt.get());
+        bindText(stmt.get(), 1, name);
+        bindText(stmt.get(), 2, expression);
+        if (sqlite3_step(stmt.get()) != SQLITE_DONE) {
+            fail(db_, "No se pudo escribir los parámetros");
+        }
+    }
+}
+
+std::vector<std::pair<std::string, std::string>> NufFile::readParameters() const
+{
+    // rowid conserva el orden en que se escribieron.
+    Stmt stmt = prepare(db_, "SELECT name, expression FROM parameters ORDER BY rowid;", "No se pudo leer los parámetros");
+    std::vector<std::pair<std::string, std::string>> parameters;
+    int rc = 0;
+    while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
+        parameters.emplace_back(columnText(stmt.get(), 0), columnText(stmt.get(), 1));
+    }
+    if (rc != SQLITE_DONE) {
+        fail(db_, "No se pudo leer los parámetros");
+    }
+    return parameters;
+}
+
 void NufFile::writeBlob(std::string_view key, std::string_view kind, std::string_view data)
 {
     Stmt stmt = prepare(db_,

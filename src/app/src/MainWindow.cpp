@@ -1,6 +1,8 @@
 #include "MainWindow.hpp"
 
 #include "ExportDialog.hpp"
+#include "ExpressionSpinBox.hpp"
+#include "ParametersDialog.hpp"
 #include "FeatureTools.hpp"
 #include "Icons.hpp"
 #include "ModelPanels.hpp"
@@ -12,6 +14,7 @@
 
 #include <nuf/commands/FeatureCommands.hpp>
 #include <nuf/commands/RenameDocument.hpp>
+#include <nuf/commands/SetParameters.hpp>
 #include <nuf/geometry/Exchange.hpp>
 #include <nuf/geometry/Kernel.hpp>
 #include <nuf/io/NufFile.hpp>
@@ -124,6 +127,7 @@ MainWindow::MainWindow(QWidget* parent)
         }
         commands_.push(std::make_unique<commands::MoveFeature>(id, index));
     });
+    ExpressionSpinBox::setDocument(&document_);
     connect(navigator_, &NavigatorWidget::bodyVisibilityChanged, this, [this](const std::string& key, bool visible) {
         if (visible) {
             hiddenBodies_.erase(key);
@@ -340,6 +344,14 @@ void MainWindow::createMenus()
     });
     decorate(axisAction_, QStringLiteral("axis-solid"),
              QStringLiteral("Crear un eje: la intersección de dos planos o la perpendicular a un plano"), QStringLiteral("Eje"));
+    parametersAction_ = solidMenu->addAction(QStringLiteral("&Parámetros…"), this, [this] {
+        ParametersDialog dialog(document_.parameters(), this);
+        if (dialog.exec() == QDialog::Accepted && dialog.parameters() != document_.parameters()) {
+            commands_.push(std::make_unique<commands::SetParameters>(dialog.parameters()));
+        }
+    });
+    decorate(parametersAction_, QStringLiteral("parameters-solid"),
+             QStringLiteral("Nombrar valores (grosor = 3) y usarlos en las operaciones"), QStringLiteral("Parámetros"));
     decorate(shellAction_, QStringLiteral("shell"), QStringLiteral("Vaciar un cuerpo dejando abiertas las caras elegidas"));
 
     // Herramientas de dibujo por familias (como en Fusion 360); la primera
@@ -504,6 +516,7 @@ void MainWindow::createMenus()
     ribbon_->addGroup(solidTab_, QStringLiteral("CONSTRUIR"));
     ribbon_->addAction(solidTab_, planeAction_);
     ribbon_->addAction(solidTab_, axisAction_);
+    ribbon_->addAction(solidTab_, parametersAction_);
 
     auto family = [this, &families](const QString& name) {
         const std::size_t i = static_cast<std::size_t>(
@@ -876,7 +889,7 @@ void MainWindow::finishTool(bool accepted)
     if (!tool_) {
         return;
     }
-    std::unique_ptr<document::Feature> feature = accepted ? tool_->build() : nullptr;
+    std::unique_ptr<document::Feature> feature = accepted ? tool_->make() : nullptr;
     const std::optional<document::FeatureId> editing = tool_->editing();
     const document::FeatureId id = tool_->featureId();
     // Se destruye después: esta llamada viene de una señal de la herramienta.
@@ -1036,7 +1049,7 @@ void MainWindow::updateExportAction()
             action->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane() && !document_.result().bodies.empty());
         }
     }
-    for (QAction* action : {planeAction_, axisAction_}) {
+    for (QAction* action : {planeAction_, axisAction_, parametersAction_}) {
         if (action != nullptr) {
             action->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane());
         }

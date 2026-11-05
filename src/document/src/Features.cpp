@@ -623,6 +623,63 @@ std::vector<FeatureId> ConstructionPlaneFeature::dependencies() const
     return ids;
 }
 
+// --- Campos ligables a parámetros ---------------------------------------------
+
+namespace {
+
+constexpr double kRadiansPerDegree = 3.14159265358979323846 / 180.0;
+
+// Un número de la operación; get devuelve el valor en las unidades del usuario.
+Feature::NumericField field(std::string key, std::string label, double& value, double scale = 1.0)
+{
+    return {std::move(key), std::move(label), scale, [&value, scale] { return value / scale; },
+            [&value, scale](double v) { value = v * scale; }};
+}
+
+} // namespace
+
+std::vector<Feature::NumericField> ExtrudeFeature::numericFields()
+{
+    return {field("distance", "Distancia", spec.side1.distance), field("distance2", "Distancia 2", spec.side2.distance),
+            field("startOffset", "Desfase inicial", spec.startOffset)};
+}
+
+std::vector<Feature::NumericField> RevolveFeature::numericFields()
+{
+    return {field("angle", "Ángulo", spec.angle1, kRadiansPerDegree),
+            field("angle2", "Ángulo 2", spec.angle2, kRadiansPerDegree)};
+}
+
+std::vector<Feature::NumericField> EdgeFeature::numericFields()
+{
+    return {field("size", "Tamaño", size)};
+}
+
+std::vector<Feature::NumericField> ShellFeature::numericFields()
+{
+    return {field("thickness", "Espesor", thickness)};
+}
+
+std::vector<Feature::NumericField> HoleFeature::numericFields()
+{
+    return {field("diameter", "Diámetro", spec.diameter), field("depth", "Profundidad", spec.depth),
+            field("headDiameter", "Diámetro de la cabeza", spec.headDiameter),
+            field("headDepth", "Profundidad de la cabeza", spec.headDepth),
+            field("headAngle", "Ángulo del cono", spec.headAngle, kRadiansPerDegree)};
+}
+
+std::vector<Feature::NumericField> PatternFeature::numericFields()
+{
+    return {field("spacing", "Distancia entre copias", spacing), field("angle", "Ángulo total", angle, kRadiansPerDegree),
+            {"count", "Cantidad", 1.0, [this] { return double(count); },
+             [this](double v) { count = std::max(2, int(std::lround(v))); }}};
+}
+
+std::vector<Feature::NumericField> ConstructionPlaneFeature::numericFields()
+{
+    return {field("offset", "Distancia", offset), field("angle", "Ángulo", angle, kRadiansPerDegree)};
+}
+
 // --- Eje de construcción ------------------------------------------------------
 
 std::optional<std::string> ConstructionAxisFeature::compute(ModelState& state) const

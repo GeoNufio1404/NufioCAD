@@ -22,6 +22,10 @@ add_executable(nuf_app
     src/Theme.hpp
     src/ExportDialog.cpp
     src/ExportDialog.hpp
+    src/ExpressionSpinBox.cpp
+    src/ExpressionSpinBox.hpp
+    src/ParametersDialog.cpp
+    src/ParametersDialog.hpp
     src/Icons.cpp
     src/NavBar.cpp
     src/NavBar.hpp

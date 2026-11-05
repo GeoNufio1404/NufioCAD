@@ -14,6 +14,9 @@
 
 #include <memory>
 #include <optional>
+#include <string>
+#include <utility>
+#include <vector>
 
 class QCheckBox;
 class QComboBox;
@@ -53,6 +56,9 @@ public:
     void start();
     // La operación con los parámetros actuales (nullptr si faltan entradas).
     virtual std::unique_ptr<document::Feature> build() const = 0;
+    // Lo mismo, con las expresiones de los cuadros que usan parámetros: es la
+    // que se debe usar para calcular y aplicar.
+    std::unique_ptr<document::Feature> make() const;
     void accept();
 
 signals:
@@ -74,6 +80,9 @@ protected:
     virtual bool removesMaterial() const = 0;
 
     void updatePreview();
+    // Registra un cuadro numérico como el campo «key» de la operación, para
+    // poder ligarlo a parámetros (se llama al crearlo en createFields).
+    void field(const char* key, QDoubleSpinBox* box) { fields_.emplace_back(key, box); }
     // Perfiles de la selección como referencias del documento.
     std::vector<document::ProfileRef> profilesOf(const render::ModelSelection& selection) const;
     const document::ModelState& before() const { return document_.stateBefore(index_); }
@@ -89,6 +98,9 @@ protected:
     QLabel* statusLabel_ = nullptr;
     QPushButton* okButton_ = nullptr;
     bool updating_ = false;  // al rellenar los campos, sin vista previa
+
+private:
+    std::vector<std::pair<std::string, QDoubleSpinBox*>> fields_;
 };
 
 class ExtrudeTool final : public FeatureTool {

@@ -1,4 +1,5 @@
 #include <nuf/document/Document.hpp>
+#include <nuf/document/Expression.hpp>
 #include <nuf/document/Features.hpp>
 #include <nuf/geometry/Modeling.hpp>
 #include <nuf/io/DocumentFile.hpp>
@@ -721,7 +722,7 @@ TEST_CASE("Un eje de construcción es la intersección de dos planos o la perpen
     REQUIRE_THAT(doc.result().axes.at(normal).point.z, Catch::Matchers::WithinAbs(10.0, 1e-9));
     REQUIRE_THAT(std::abs(doc.result().axes.at(normal).direction.z), Catch::Matchers::WithinAbs(1.0, 1e-9));
 
-    // Dos planos paralelos no tienen una recta en com\u00fan.
+    // Dos planos paralelos no tienen una recta en común.
     const FeatureId parallel = addAxis(doc, originAt(OriginPlane::XY), refAt(raised));
     REQUIRE(doc.status(parallel).health == Health::Error);
 }
@@ -760,4 +761,97 @@ TEST_CASE("Un patrón circular puede girar alrededor de un eje de construcción 
     REQUIRE(reopened.status(pattern).health == Health::Ok);
     REQUIRE(reopened.result().bodies.size() == 2);
     REQUIRE_THAT(reopened.result().bodies[1].shape.bounds().min.x, Catch::Matchers::WithinAbs(40.0, 1e-6));
+}
+
+TEST_CASE("Las expresiones calculan con operadores, funciones, unidades y parámetros", "[params]")
+{
+    const auto lookup = [](std::string_view name) -> std::optional<double> {
+        if (name == "grosor") {
+            return 3.0;
+        }
+        return std::nullopt;
+    };
+    const auto value = [&](const char* text) { return evaluateExpression(text, lookup); };
+    REQUIRE_THAT(value("2 + 3 * 4"), Catch::Matchers::WithinAbs(14.0, 1e-12));
+    REQUIRE_THAT(value("(2 + 3) * 4"), Catch::Matchers::WithinAbs(20.0, 1e-12));
+    REQUIRE_THAT(value("-2^2"), Catch::Matchers::WithinAbs(-4.0, 1e-12));
+    REQUIRE_THAT(value("2^3^2"), Catch::Matchers::WithinAbs(512.0, 1e-12));
+    REQUIRE_THAT(value("1,5 + 1"), Catch::Matchers::WithinAbs(2.5, 1e-12));
+    REQUIRE_THAT(value("grosor * 2 + 1"), Catch::Matchers::WithinAbs(7.0, 1e-12));
+    REQUIRE_THAT(value("sin(30)"), Catch::Matchers::WithinAbs(0.5, 1e-12));
+    REQUIRE_THAT(value("atan(1)"), Catch::Matchers::WithinAbs(45.0, 1e-9));
+    REQUIRE_THAT(value("min(3; 7; 2) + max(1; 4)"), Catch::Matchers::WithinAbs(6.0, 1e-12));
+    REQUIRE_THAT(value("2 in"), Catch::Matchers::WithinAbs(50.8, 1e-12));
+    REQUIRE_THAT(value("1 cm + 5"), Catch::Matchers::WithinAbs(15.0, 1e-12));
+    REQUIRE_THAT(value("pi"), Catch::Matchers::WithinAbs(kPi, 1e-12));
+    REQUIRE_THAT(value("sqrt(16)"), Catch::Matchers::WithinAbs(4.0, 1e-12));
+
+    for (const char* bad : {"", "1 +", "(1 + 2", "foo", "1 / 0", "2 $ 3", "sin()", "min()", "sqrt(1; 2)", "3 3"}) {
+        INFO(bad);
+        REQUIRE_THROWS_AS(value(bad), ExpressionError);
+    }
+    REQUIRE(expressionNames("grosor * largo + sin(30) + grosor") == std::vector<std::string>{"grosor", "largo"});
+    REQUIRE(isValidParameterName("grosor_2"));
+    REQUIRE(isValidParameterName("_x"));
+    for (const char* bad : {"", "2grosor", "a b", "sin", "pi", "mm", "a-b"}) {
+        INFO(bad);
+        REQUIRE_FALSE(isValidParameterName(bad));
+    }
+}
+
+TEST_CASE("Una operación ligada a parámetros se recalcula al cambiar la tabla", "[params]")
+{
+    Document doc = boxDocument(5.0);
+    doc.setParameters({{"grosor", "3"}, {"largo", "grosor * 10"}});
+    REQUIRE_THAT(*doc.parameterValue("largo").value, Catch::Matchers::WithinAbs(30.0, 1e-12));
+
+    auto bound = std::unique_ptr<Feature>(doc.findFeature(2)->clone());
+    bound->expressions["distance"] = "largo / 2";
+    doc.replaceFeature(2, std::move(bound));
+    REQUIRE(doc.status(2).health == Health::Ok);
+    REQUIRE_THAT(doc.result().bodies.front().shape.volume(), WithinRel(20.0 * 10.0 * 15.0, 1e-6));
+
+    doc.setParameters({{"grosor", "4"}, {"largo", "grosor * 10"}});
+    REQUIRE_THAT(doc.result().bodies.front().shape.volume(), WithinRel(20.0 * 10.0 * 20.0, 1e-6));
+
+    // Un parámetro que no existe, o que se refiere a sí mismo, deja la operación en error.
+    doc.setParameters({{"grosor", "4"}});
+    REQUIRE(doc.status(2).health == Health::Error);
+    REQUIRE(doc.result().bodies.empty());
+    doc.setParameters({{"largo", "largo + 1"}});
+    REQUIRE_FALSE(doc.parameterValue("largo").value);
+    REQUIRE(doc.parameterValue("largo").error.find("circular") != std::string::npos);
+    REQUIRE(doc.status(2).health == Health::Error);
+    doc.setParameters({{"largo", "40"}});
+    REQUIRE(doc.status(2).health == Health::Ok);
+    REQUIRE_THAT(doc.result().bodies.front().shape.volume(), WithinRel(20.0 * 10.0 * 20.0, 1e-6));
+}
+
+TEST_CASE("Los parámetros y las expresiones se guardan en el archivo", "[params][io]")
+{
+    Document doc = boxDocument(5.0);
+    doc.setParameters({{"alto", "12 mm"}});
+    auto bound = std::unique_ptr<Feature>(doc.findFeature(2)->clone());
+    bound->expressions["distance"] = "alto";
+    doc.replaceFeature(2, std::move(bound));
+    const FeatureId pattern = addPattern(doc, PatternLayout::Linear, 0, 3, 30.0, 0.0, Operation::Join);
+    auto patternBound = std::unique_ptr<Feature>(doc.findFeature(pattern)->clone());
+    patternBound->expressions["count"] = "alto / 4";  // 3 copias
+    patternBound->expressions["angle"] = "90";
+    doc.replaceFeature(pattern, std::move(patternBound));
+    REQUIRE(doc.status(pattern).health == Health::Ok);
+
+    const auto path = std::filesystem::temp_directory_path() / "nuf_parametros.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    REQUIRE(reopened.parameters() == doc.parameters());
+    REQUIRE(reopened.findFeature(2)->expressions.at("distance") == "alto");
+    REQUIRE(reopened.status(pattern).health == Health::Ok);
+    REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(doc.result().bodies.front().shape.volume(), 1e-9));
+    reopened.setParameters({{"alto", "6"}});
+    REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(2.0 * 20.0 * 10.0 * 6.0, 1e-6));  // 6 / 4 = 1,5 → 2 elementos
 }

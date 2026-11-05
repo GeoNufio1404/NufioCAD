@@ -80,6 +80,7 @@ public:
     Operation operation = Operation::NewBody;
 
     FeatureKind kind() const override { return FeatureKind::Extrude; }
+    std::vector<NumericField> numericFields() override;
     std::unique_ptr<Feature> clone() const override { return std::make_unique<ExtrudeFeature>(*this); }
     std::optional<std::string> compute(ModelState& state) const override;
     std::vector<FeatureId> dependencies() const override;
@@ -106,6 +107,7 @@ public:
     Operation operation = Operation::NewBody;
 
     FeatureKind kind() const override { return FeatureKind::Revolve; }
+    std::vector<NumericField> numericFields() override;
     std::unique_ptr<Feature> clone() const override { return std::make_unique<RevolveFeature>(*this); }
     std::optional<std::string> compute(ModelState& state) const override;
     std::vector<FeatureId> dependencies() const override;
@@ -118,6 +120,7 @@ public:
 // se edita lo anterior. Si alguna ya no existe se avisa y se hace con las demás.
 class EdgeFeature : public Feature {
 public:
+    std::vector<NumericField> numericFields() override;
     std::vector<geometry::ElementRef> edges;
     double size = 1.0;  // radio o distancia, mm
 
@@ -161,6 +164,7 @@ public:
     bool outward = false;                     // las paredes crecen hacia fuera
 
     FeatureKind kind() const override { return FeatureKind::Shell; }
+    std::vector<NumericField> numericFields() override;
     std::unique_ptr<Feature> clone() const override { return std::make_unique<ShellFeature>(*this); }
     std::optional<std::string> compute(ModelState& state) const override;
     std::vector<FeatureId> dependencies() const override;
@@ -193,6 +197,7 @@ public:
     int angleAxis = 0;     // 0 = alrededor del eje X del plano base, 1 = del eje Y
 
     FeatureKind kind() const override { return FeatureKind::ConstructionPlane; }
+    std::vector<NumericField> numericFields() override;
     std::unique_ptr<Feature> clone() const override { return std::make_unique<ConstructionPlaneFeature>(*this); }
     std::optional<std::string> compute(ModelState& state) const override;
     std::vector<FeatureId> dependencies() const override;
@@ -229,6 +234,7 @@ public:
     Operation operation = Operation::Join;
 
     FeatureKind kind() const override { return FeatureKind::Pattern; }
+    std::vector<NumericField> numericFields() override;
     std::unique_ptr<Feature> clone() const override { return std::make_unique<PatternFeature>(*this); }
     std::optional<std::string> compute(ModelState& state) const override;
     std::vector<FeatureId> dependencies() const override;
@@ -243,6 +249,7 @@ public:
     bool flip = false;  // al otro lado del plano
 
     FeatureKind kind() const override { return FeatureKind::Hole; }
+    std::vector<NumericField> numericFields() override;
     std::unique_ptr<Feature> clone() const override { return std::make_unique<HoleFeature>(*this); }
     std::optional<std::string> compute(ModelState& state) const override;
     std::vector<FeatureId> dependencies() const override { return {sketch}; }

@@ -6,6 +6,7 @@
 #include <nuf/sketch/Plane.hpp>
 
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -101,6 +102,21 @@ public:
 
     // Operaciones de las que depende (sketches, caras que referencia…).
     virtual std::vector<FeatureId> dependencies() const = 0;
+
+    // Un número que puede ligarse a una expresión con parámetros. El valor que
+    // se escribe está en las unidades del usuario (mm, grados…): lo guardado es
+    // escrito × scale (p. ej. grados → radianes). get/set apuntan a esta operación.
+    struct NumericField {
+        std::string key;    // estable, para el archivo
+        std::string label;  // para los mensajes
+        double scale = 1.0;
+        std::function<double()> get;
+        std::function<void(double)> set;
+    };
+    virtual std::vector<NumericField> numericFields() { return {}; }
+
+    // clave de un campo → expresión (si está ligado a parámetros).
+    std::map<std::string, std::string> expressions;
 
 protected:
     Feature() = default;

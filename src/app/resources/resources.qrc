@@ -73,6 +73,7 @@
         <file alias="ui/pattern-solid.svg">icons/ui/pattern-solid.svg</file>
         <file alias="ui/plane-solid.svg">icons/ui/plane-solid.svg</file>
         <file alias="ui/axis-solid.svg">icons/ui/axis-solid.svg</file>
+        <file alias="ui/parameters-solid.svg">icons/ui/parameters-solid.svg</file>
         <file alias="ui/redo.svg">icons/ui/redo.svg</file>
         <file alias="ui/rename.svg">icons/ui/rename.svg</file>
         <file alias="ui/revolve.svg">icons/ui/revolve.svg</file>
