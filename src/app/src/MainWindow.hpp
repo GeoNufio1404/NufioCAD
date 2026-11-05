@@ -132,6 +132,7 @@ private:
     QAction* holeAction_ = nullptr;
     QAction* mirrorAction_ = nullptr;
     QAction* patternAction_ = nullptr;
+    QAction* planeAction_ = nullptr;
     QAction* exportAction_ = nullptr;
     QAction* importAction_ = nullptr;
     QMenu* recentMenu_ = nullptr;
@@ -150,6 +151,7 @@ private:
     QWidget* propertiesPlaceholder_ = nullptr;
     // Visibilidad (de la interfaz; el .nuf la guardará en la Fase 4).
     std::set<std::string> hiddenBodies_;
+    std::set<document::FeatureId> hiddenPlanes_;
     std::map<document::FeatureId, bool> sketchVisibility_;  // elegida a mano
     bool originVisible_ = false;
     bool groundVisible_ = true;

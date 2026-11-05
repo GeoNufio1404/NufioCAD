@@ -366,7 +366,8 @@ Todas siguen el patrón de las operaciones actuales: una clase en `document/Feat
 - **Pendiente de 5a:** chaflán con dos distancias o distancia y ángulo; radio variable; elegir una cara para redondear todas sus aristas; en edición las aristas no se marcan en el visor hasta que se cambian (solo se resaltan en azul); sin probar en Linux; la prueba con un STEP real aún no.
 
 ### Fase 6 — Geometría de referencia y parámetros
-- Planos y ejes de construcción.
+- **6a Planos de construcción ✅:** `ConstructionPlaneFeature` (plano base —de origen, una cara plana u otro plano de construcción—, giro alrededor del eje X o Y del plano y desfase a lo largo de su normal; se publica en `ModelState::planes`). Un sitio (`SketchAttachment`) puede apuntar a un plano de construcción (`reference`), así que sirven para sketches y para el plano de simetría del espejo, y siguen al plano si se edita. Se ven como cuadrados translúcidos turquesa (tamaño según la pieza), con carpeta «Planos de construcción» en el navegador (casilla para ocultar) y se eligen en «Crear sketch». Herramienta Sólido › Plano (grupo CONSTRUIR). Se guarda como `plane`. 3 pruebas nuevas.
+- **6b Ejes de construcción:** pendiente.
 - Tabla de parámetros con nombre (ej. `grosor = 3 mm`).
 - Expresiones entre parámetros.
 

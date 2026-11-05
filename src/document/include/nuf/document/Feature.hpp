@@ -34,6 +34,7 @@ struct SketchOutput {
 struct ModelState {
     std::vector<Body> bodies;
     std::map<FeatureId, SketchOutput> sketches;
+    std::map<FeatureId, sketch::Plane> planes;  // planos de construcción
     int bodiesCreated = 0;  // para numerar «Cuerpo N»
 
     std::vector<geometry::Shape> shapes() const;
@@ -50,7 +51,7 @@ struct ModelState {
     std::optional<EdgeHit> findEdge(const geometry::ElementRef& ref) const;
 };
 
-enum class FeatureKind { Sketch, Extrude, Revolve, Import, Fillet, Chamfer, Shell, Hole, Mirror, Pattern };
+enum class FeatureKind { Sketch, Extrude, Revolve, Import, Fillet, Chamfer, Shell, Hole, Mirror, Pattern, ConstructionPlane };
 
 enum class Health {
     Ok,

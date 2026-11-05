@@ -572,3 +572,106 @@ TEST_CASE("El patrón sigue a la pieza, da error si algo falla y se guarda", "[p
     REQUIRE(reopened.status(id).health == Health::Ok);
     REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(doc.result().bodies.front().shape.volume(), 1e-9));
 }
+
+namespace {
+
+FeatureId addPlane(Document& doc, double offset, double angle = 0.0, int angleAxis = 0, OriginPlane base = OriginPlane::XY)
+{
+    auto p = std::make_unique<ConstructionPlaneFeature>();
+    p->base.origin = base;
+    p->offset = offset;
+    p->angle = angle;
+    p->angleAxis = angleAxis;
+    return doc.addFeature(std::move(p));
+}
+
+// Una caja de 20×10 sobre el plano de construcción dado, extruida «depth».
+FeatureId boxOnPlane(Document& doc, FeatureId plane, double depth)
+{
+    sketch::Sketch s;
+    s.addLine({0, 0}, {20, 0});
+    s.addLine({20, 0}, {20, 10});
+    s.addLine({20, 10}, {0, 10});
+    s.addLine({0, 10}, {0, 0});
+    SketchAttachment at;
+    at.origin.reset();
+    at.reference = plane;
+    const FeatureId sk = doc.addFeature(std::make_unique<SketchFeature>(std::move(s), at));
+    auto extrusion = std::make_unique<ExtrudeFeature>();
+    extrusion->profiles.push_back(profileRef(sk, sketch::findProfiles(static_cast<const SketchFeature*>(doc.findFeature(sk))->sketch()).front()));
+    extrusion->spec.side1.distance = depth;
+    return doc.addFeature(std::move(extrusion));
+}
+
+} // namespace
+
+TEST_CASE("Un plano de construcción desfasado sirve de plano de sketch", "[plane]")
+{
+    Document doc;
+    const FeatureId plane = addPlane(doc, 25.0);
+    REQUIRE(doc.status(plane).health == Health::Ok);
+    REQUIRE_THAT(doc.result().planes.at(plane).origin.z, Catch::Matchers::WithinAbs(25.0, 1e-9));
+    REQUIRE_THAT(doc.result().planes.at(plane).normal.z, Catch::Matchers::WithinAbs(1.0, 1e-9));
+
+    const FeatureId extrusion = boxOnPlane(doc, plane, 5.0);
+    REQUIRE(doc.status(extrusion).health == Health::Ok);
+    REQUIRE(doc.result().bodies.size() == 1);
+    const geometry::Box box = doc.result().bodies.front().shape.bounds();
+    REQUIRE_THAT(box.min.z, Catch::Matchers::WithinAbs(25.0, 1e-6));
+    REQUIRE_THAT(box.max.z, Catch::Matchers::WithinAbs(30.0, 1e-6));
+
+    // Cambiar el desfase mueve la pieza que se apoya en el plano.
+    auto moved = std::unique_ptr<Feature>(doc.findFeature(plane)->clone());
+    static_cast<ConstructionPlaneFeature&>(*moved).offset = 40.0;
+    doc.replaceFeature(plane, std::move(moved));
+    REQUIRE_THAT(doc.result().bodies.front().shape.bounds().min.z, Catch::Matchers::WithinAbs(40.0, 1e-6));
+}
+
+TEST_CASE("Un plano de construcción puede girarse y partir de otro plano", "[plane]")
+{
+    Document doc;
+    const FeatureId first = addPlane(doc, 0.0, kPi / 2.0, 0);  // XY girado 90° alrededor de X
+    REQUIRE_THAT(doc.result().planes.at(first).normal.y, Catch::Matchers::WithinAbs(-1.0, 1e-9));
+    REQUIRE_THAT(doc.result().planes.at(first).normal.z, Catch::Matchers::WithinAbs(0.0, 1e-9));
+
+    auto second = std::make_unique<ConstructionPlaneFeature>();
+    second->base.origin.reset();
+    second->base.reference = first;
+    second->offset = 15.0;
+    const FeatureId b = doc.addFeature(std::move(second));
+    REQUIRE(doc.status(b).health == Health::Ok);
+    // 15 mm a lo largo de la normal del primero (hacia -Y).
+    REQUIRE_THAT(doc.result().planes.at(b).origin.y, Catch::Matchers::WithinAbs(-15.0, 1e-9));
+}
+
+TEST_CASE("Se puede reflejar sobre un plano de construcción y se guarda en el archivo", "[plane][mirror][io]")
+{
+    Document doc = boxDocument();  // de x = 0 a 20
+    const FeatureId plane = addPlane(doc, 30.0, 0.0, 0, OriginPlane::YZ);  // x = 30
+    auto m = std::make_unique<MirrorFeature>();
+    m->body = "f2";
+    m->plane.origin.reset();
+    m->plane.reference = plane;
+    m->operation = Operation::NewBody;
+    const FeatureId mirror = doc.addFeature(std::move(m));
+    REQUIRE(doc.status(mirror).health == Health::Ok);
+    REQUIRE(doc.result().bodies.size() == 2);
+    REQUIRE_THAT(doc.result().bodies[1].shape.bounds().min.x, Catch::Matchers::WithinAbs(40.0, 1e-6));
+    REQUIRE_THAT(doc.result().bodies[1].shape.bounds().max.x, Catch::Matchers::WithinAbs(60.0, 1e-6));
+
+    const FeatureId onPlane = boxOnPlane(doc, plane, 5.0);
+    REQUIRE(doc.status(onPlane).health == Health::Ok);
+
+    const auto path = std::filesystem::temp_directory_path() / "nuf_plano.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    REQUIRE(reopened.findFeature(plane)->kind() == FeatureKind::ConstructionPlane);
+    REQUIRE(reopened.status(mirror).health == Health::Ok);
+    REQUIRE(reopened.status(onPlane).health == Health::Ok);
+    REQUIRE(reopened.result().bodies.size() == doc.result().bodies.size());
+    REQUIRE_THAT(reopened.result().planes.at(plane).origin.x, Catch::Matchers::WithinAbs(30.0, 1e-9));
+}

@@ -90,6 +90,7 @@
 
 #include <algorithm>
 #include <array>
+#include <ranges>
 #include <cmath>
 #include <cstring>
 #include <map>
@@ -916,6 +917,9 @@ public:
             context->Display(origin.shape, AIS_Shaded, 0, false);
             context->Activate(origin.shape, 0);
         }
+        for (const ShownPlane& cp : constructionPlanes) {
+            context->Activate(cp.shape, 0);
+        }
         context->AddFilter(planeFilter);
         mode = Mode::PickPlane;
         activateBodies();
@@ -929,6 +933,9 @@ public:
         }
         context->ClearSelected(false);
         showOrigin();
+        for (const ShownPlane& cp : constructionPlanes) {
+            context->Deactivate(cp.shape);
+        }
         context->RemoveFilter(planeFilter);
         mode = Mode::Model;
         activateBodies();
@@ -1638,6 +1645,56 @@ private:
         viewCube->SetBoxSideLabel(V3d_Zneg, "ABAJO");
     }
 
+    struct ShownPlane {
+        document::FeatureId id = 0;
+        QString name;
+        sketch::Plane plane;
+        double half = 0.0;
+        Handle(AIS_Shape) shape;
+    };
+
+    // Los planos de construcción son cuadrados centrados en el origen del plano;
+    // su tamaño sigue al de las piezas (como mínimo 60 mm de lado).
+public:
+    void showConstructionPlanes(const std::vector<Viewport::ConstructionPlaneView>& wanted)
+    {
+        double largest = 0.0;
+        for (const ShownBody& b : bodies) {
+            const geometry::Box box = b.shape.bounds();
+            if (!box.empty) {
+                largest = std::max({largest, box.max.x - box.min.x, box.max.y - box.min.y, box.max.z - box.min.z});
+            }
+        }
+        const double half = std::max(30.0, 0.75 * largest);
+        const auto same = [&](const ShownPlane& a, const Viewport::ConstructionPlaneView& b) {
+            const auto eq = [](const sketch::Vec3& p, const sketch::Vec3& q) { return p.x == q.x && p.y == q.y && p.z == q.z; };
+            return a.id == b.id && a.name == b.name && a.half == half && eq(a.plane.origin, b.plane.origin)
+                   && eq(a.plane.xAxis, b.plane.xAxis) && eq(a.plane.yAxis, b.plane.yAxis);
+        };
+        if (wanted.size() == constructionPlanes.size()
+            && std::ranges::all_of(std::views::iota(std::size_t(0), wanted.size()),
+                                   [&](std::size_t i) { return same(constructionPlanes[i], wanted[i]); })) {
+            return;
+        }
+        for (const ShownPlane& old : constructionPlanes) {
+            context->Remove(old.shape, false);
+        }
+        constructionPlanes.clear();
+        for (const Viewport::ConstructionPlaneView& item : wanted) {
+            Handle(AIS_Shape) shape = new AIS_Shape(
+                TopoDS_Shape(BRepBuilderAPI_MakeFace(gp_Pln(toAx3(item.plane)), -half, half, -half, half)));
+            shape->SetColor(rgb(0x39, 0xB5, 0xC8));
+            shape->SetTransparency(0.75);
+            shape->SetZLayer(Graphic3d_ZLayerId_Topmost);
+            context->Display(shape, AIS_Shaded, 0, false);
+            if (mode != Mode::PickPlane) {
+                context->Deactivate(shape);
+            }
+            constructionPlanes.push_back({item.id, item.name, item.plane, half, shape});
+        }
+    }
+
+private:
     struct OriginPlane {
         Handle(AIS_Shape) shape;
         sketch::Plane plane;
@@ -1740,6 +1797,13 @@ private:
             if (origin.shape == object) {
                 picked.emplace(origin.plane, origin.name);
                 attachment.origin = origin.kind;
+            }
+        }
+        for (const ShownPlane& cp : constructionPlanes) {
+            if (cp.shape == object) {
+                picked.emplace(cp.plane, cp.name);
+                attachment.origin.reset();
+                attachment.reference = cp.id;
             }
         }
         if (!picked && context->HasSelectedShape() && context->SelectedShape().ShapeType() == TopAbs_FACE) {
@@ -1845,6 +1909,7 @@ private:
     bool handlePositive = true;
     AIS_SelectionScheme defaultClickScheme = AIS_SelectionScheme_Replace;
     std::vector<OriginPlane> originPlanes;
+    std::vector<ShownPlane> constructionPlanes;
     Handle(SketchPlaneFilter) planeFilter;
     Handle(SketchGrid) grid;
     Handle(SketchGrid) ground;
@@ -1996,6 +2061,13 @@ void Viewport::setOriginVisible(bool visible)
     if (impl_->mode != Impl::Mode::PickPlane) {
         impl_->showOrigin();
     }
+    impl_->view->Invalidate();
+    update();
+}
+
+void Viewport::showConstructionPlanes(const std::vector<ConstructionPlaneView>& planes)
+{
+    impl_->showConstructionPlanes(planes);
     impl_->view->Invalidate();
     update();
 }

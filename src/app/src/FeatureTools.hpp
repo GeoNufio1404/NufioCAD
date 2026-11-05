@@ -272,9 +272,37 @@ protected:
 private:
     std::string body_;
     geometry::ElementRef face_;
+    std::vector<document::FeatureId> planeIds_;  // los planos de construcción del desplegable (tras los 4 fijos)
     QComboBox* bodyBox_ = nullptr;
     QComboBox* plane_ = nullptr;
     QComboBox* operation_ = nullptr;
+};
+
+// Plano de construcción: parte de un plano de origen, una cara u otro plano,
+// con un desfase y un giro.
+class PlaneTool final : public FeatureTool {
+    Q_OBJECT
+
+public:
+    PlaneTool(document::Document& document, render::Viewport& viewport, std::optional<document::FeatureId> editing);
+
+    std::unique_ptr<document::Feature> build() const override;
+
+protected:
+    QString title() const override { return QStringLiteral("Plano de construcción"); }
+    void createFields(QFormLayout* form) override;
+    void selectionChanged(const render::ModelSelection& selection) override;
+    QString inputsText() const override;
+    bool removesMaterial() const override { return false; }
+
+private:
+    geometry::ElementRef face_;
+    std::vector<document::FeatureId> planeIds_;  // los planos de construcción del desplegable (tras los 4 fijos)
+    document::FeatureId reference_ = 0;
+    QComboBox* base_ = nullptr;
+    QDoubleSpinBox* offset_ = nullptr;
+    QDoubleSpinBox* angle_ = nullptr;
+    QComboBox* angleAxis_ = nullptr;
 };
 
 // Patrón: repite un cuerpo en fila o alrededor de un eje de origen.

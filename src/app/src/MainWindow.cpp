@@ -133,6 +133,14 @@ MainWindow::MainWindow(QWidget* parent)
         setViewDirty(true);
         refreshModel();
     });
+    connect(navigator_, &NavigatorWidget::planeVisibilityChanged, this, [this](document::FeatureId id, bool visible) {
+        if (visible) {
+            hiddenPlanes_.erase(id);
+        } else {
+            hiddenPlanes_.insert(id);
+        }
+        refreshModel();
+    });
     connect(navigator_, &NavigatorWidget::sketchVisibilityChanged, this, [this](document::FeatureId id, bool visible) {
         sketchVisibility_[id] = visible;
         setViewDirty(true);
@@ -321,6 +329,12 @@ void MainWindow::createMenus()
     });
     decorate(patternAction_, QStringLiteral("pattern-solid"),
              QStringLiteral("Repetir un cuerpo en fila o alrededor de un eje"));
+    planeAction_ = solidMenu->addAction(QStringLiteral("Plano de &construcción"), this, [this] {
+        startTool(std::make_unique<PlaneTool>(document_, *viewport_, std::nullopt));
+    });
+    decorate(planeAction_, QStringLiteral("plane-solid"),
+             QStringLiteral("Crear un plano desfasado o girado respecto a un plano de origen, una cara u otro plano"),
+             QStringLiteral("Plano"));
     decorate(shellAction_, QStringLiteral("shell"), QStringLiteral("Vaciar un cuerpo dejando abiertas las caras elegidas"));
 
     // Herramientas de dibujo por familias (como en Fusion 360); la primera
@@ -482,6 +496,8 @@ void MainWindow::createMenus()
     ribbon_->addAction(solidTab_, holeAction_);
     ribbon_->addAction(solidTab_, mirrorAction_);
     ribbon_->addAction(solidTab_, patternAction_);
+    ribbon_->addGroup(solidTab_, QStringLiteral("CONSTRUIR"));
+    ribbon_->addAction(solidTab_, planeAction_);
 
     auto family = [this, &families](const QString& name) {
         const std::size_t i = static_cast<std::size_t>(
@@ -912,6 +928,9 @@ void MainWindow::activateFeature(document::FeatureId id)
     case document::FeatureKind::Pattern:
         startTool(std::make_unique<PatternTool>(document_, *viewport_, id));
         break;
+    case document::FeatureKind::ConstructionPlane:
+        startTool(std::make_unique<PlaneTool>(document_, *viewport_, id));
+        break;
     case document::FeatureKind::Import:
         break;  // no tiene parámetros que editar
     }
@@ -1007,6 +1026,9 @@ void MainWindow::updateExportAction()
         if (action != nullptr) {
             action->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane() && !document_.result().bodies.empty());
         }
+    }
+    if (planeAction_ != nullptr) {
+        planeAction_->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane());
     }
     if (importAction_ != nullptr) {
         importAction_->setEnabled(!sketch_ && !tool_);
@@ -1128,6 +1150,15 @@ void MainWindow::refreshModel()
             }
         }
         viewport_->showBodies(visible);
+        std::vector<render::Viewport::ConstructionPlaneView> planes;
+        for (const auto& [id, plane] : state.planes) {
+            if (hiddenPlanes_.contains(id)) {
+                continue;
+            }
+            const document::Feature* f = document_.findFeature(id);
+            planes.push_back({id, f ? QString::fromStdString(f->name()) : QString(), plane});
+        }
+        viewport_->showConstructionPlanes(planes);
     }
 
     std::map<document::FeatureId, ShownSketch> wanted;
@@ -1172,7 +1203,7 @@ void MainWindow::refreshModel()
             shownSketches_[id] = shown;
         }
     }
-    navigator_->refresh(document_, state, upTo, hiddenBodies_, visibleIds, originVisible_, groundVisible_);
+    navigator_->refresh(document_, state, upTo, hiddenBodies_, visibleIds, originVisible_, groundVisible_, hiddenPlanes_);
 
     // La primera operación con problemas, en la barra de estado.
     QString problem;

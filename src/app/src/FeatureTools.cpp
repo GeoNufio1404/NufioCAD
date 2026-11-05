@@ -212,6 +212,23 @@ std::vector<document::ProfileRef> FeatureTool::profilesOf(const render::ModelSel
     return refs;
 }
 
+namespace {
+
+// Los planos de construcción que hay en el estado, con su nombre (el de la
+// operación en vista previa, si la hay, aunque aún no esté en el documento).
+void showPlanes(render::Viewport& viewport, const document::Document& doc, const document::ModelState& state,
+                const document::Feature* preview)
+{
+    std::vector<render::Viewport::ConstructionPlaneView> planes;
+    for (const auto& [id, plane] : state.planes) {
+        const document::Feature* f = preview != nullptr && preview->id() == id ? preview : doc.findFeature(id);
+        planes.push_back({id, f ? QString::fromStdString(f->name()) : QString(), plane});
+    }
+    viewport.showConstructionPlanes(planes);
+}
+
+} // namespace
+
 void FeatureTool::updatePreview()
 {
     if (updating_ || !panel_) {
@@ -221,6 +238,7 @@ void FeatureTool::updatePreview()
     std::unique_ptr<document::Feature> feature = build();
     if (!feature) {
         viewport_.showBodies(before().bodies);
+        showPlanes(viewport_, document_, before(), nullptr);
         viewport_.clearToolPreview();
         viewport_.hideDistanceHandle();
         statusLabel_->clear();
@@ -230,6 +248,7 @@ void FeatureTool::updatePreview()
     feature->setId(id_);
     const document::Preview result = document::preview(document_, *feature, index_);
     viewport_.showBodies(result.state.bodies);
+    showPlanes(viewport_, document_, result.state, feature.get());
 
     // Lo que se quita, en rojo translúcido encima del resultado.
     viewport_.clearToolPreview();
@@ -1042,9 +1061,19 @@ void MirrorTool::createFields(QFormLayout* form)
     plane_ = combo({QStringLiteral("Plano XY"), QStringLiteral("Plano XZ"), QStringLiteral("Plano YZ"),
                     QStringLiteral("Cara plana elegida")});
     operation_ = combo({QStringLiteral("Unir"), QStringLiteral("Cuerpo nuevo")});
+    for (const auto& [id, plane] : before().planes) {
+        const document::Feature* f = document_.findFeature(id);
+        plane_->addItem(f ? QString::fromStdString(f->name()) : QStringLiteral("Plano"));
+        planeIds_.push_back(id);
+    }
     plane_->setCurrentIndex(2);  // YZ: la simetría más común
     if (const auto* m = dynamic_cast<const document::MirrorFeature*>(original_.get())) {
-        plane_->setCurrentIndex(m->plane.origin ? int(*m->plane.origin) : 3);
+        int at = m->plane.origin ? int(*m->plane.origin) : 3;
+        if (!m->plane.origin && m->plane.reference != 0) {
+            const auto it = std::ranges::find(planeIds_, m->plane.reference);
+            at = it != planeIds_.end() ? 4 + int(it - planeIds_.begin()) : 3;
+        }
+        plane_->setCurrentIndex(at);
         operation_->setCurrentIndex(m->operation == document::Operation::NewBody ? 1 : 0);
     }
     form->addRow(QStringLiteral("Cuerpo"), bodyBox_);
@@ -1087,6 +1116,13 @@ std::unique_ptr<document::Feature> MirrorTool::build() const
         f->plane.origin = document::OriginPlane(plane);
         return f;
     }
+    if (plane >= 4) {
+        const document::FeatureId id = planeIds_[std::size_t(plane - 4)];
+        f->plane.origin.reset();
+        f->plane.reference = id;
+        f->plane.lastPlane = before().planes.at(id);
+        return f;
+    }
     // Cara plana: hace falta que haya una elegida.
     const auto hit = before().findFace(face_);
     if (!hit) {
@@ -1111,6 +1147,108 @@ QString MirrorTool::inputsText() const
         return QStringLiteral("Elige en la vista la cara plana que hace de plano de simetría");
     }
     return QStringLiteral("Reflejar «%1»").arg(bodyBox_->currentText());
+}
+
+// --- Plano de construcción ---------------------------------------------------------
+
+PlaneTool::PlaneTool(document::Document& document, render::Viewport& viewport,
+                     std::optional<document::FeatureId> editing)
+    : FeatureTool(document, viewport, editing)
+{
+    if (const auto* p = dynamic_cast<const document::ConstructionPlaneFeature*>(original_.get())) {
+        face_ = p->base.face;
+        reference_ = p->base.reference;
+    }
+}
+
+void PlaneTool::createFields(QFormLayout* form)
+{
+    base_ = combo({QStringLiteral("Plano XY"), QStringLiteral("Plano XZ"), QStringLiteral("Plano YZ"),
+                   QStringLiteral("Cara plana elegida")});
+    for (const auto& [id, plane] : before().planes) {
+        const document::Feature* f = document_.findFeature(id);
+        base_->addItem(f ? QString::fromStdString(f->name()) : QStringLiteral("Plano"));
+        planeIds_.push_back(id);
+    }
+    offset_ = lengthBox(10.0);
+    angle_ = angleBox(0.0, 180.0);
+    angleAxis_ = combo({QStringLiteral("Eje X del plano"), QStringLiteral("Eje Y del plano")});
+    base_->setCurrentIndex(0);
+    if (const auto* p = dynamic_cast<const document::ConstructionPlaneFeature*>(original_.get())) {
+        int at = p->base.origin ? int(*p->base.origin) : 3;
+        if (!p->base.origin && p->base.reference != 0) {
+            const auto it = std::ranges::find(planeIds_, p->base.reference);
+            at = it != planeIds_.end() ? 4 + int(it - planeIds_.begin()) : 3;
+        }
+        base_->setCurrentIndex(at);
+        offset_->setValue(p->offset);
+        angle_->setValue(p->angle / kDegree);
+        angleAxis_->setCurrentIndex(p->angleAxis);
+    }
+    form->addRow(QStringLiteral("Plano base"), base_);
+    form->addRow(QStringLiteral("Distancia"), offset_);
+    form->addRow(QStringLiteral("Ángulo"), angle_);
+    form->addRow(QStringLiteral("Girar alrededor de"), angleAxis_);
+    for (QComboBox* box : {base_, angleAxis_}) {
+        connect(box, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
+    }
+    for (QDoubleSpinBox* box : {offset_, angle_}) {
+        connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
+    }
+}
+
+void PlaneTool::selectionChanged(const render::ModelSelection& selection)
+{
+    // Una cara plana elegida en la vista es la base.
+    for (const render::ModelSelection::Face& face : selection.faces) {
+        if (const auto hit = before().findFace(face.ref); hit && before().bodies[hit->body].shape.facePlane(hit->face)) {
+            face_ = face.ref;
+            base_->setCurrentIndex(3);
+            break;
+        }
+    }
+}
+
+std::unique_ptr<document::Feature> PlaneTool::build() const
+{
+    auto f = std::make_unique<document::ConstructionPlaneFeature>();
+    if (original_) {
+        f->setName(original_->name());
+    }
+    f->offset = offset_->value();
+    f->angle = angle_->value() * kDegree;
+    f->angleAxis = angleAxis_->currentIndex();
+    const int base = base_->currentIndex();
+    if (base < 3) {
+        f->base.origin = document::OriginPlane(base);
+        return f;
+    }
+    f->base.origin.reset();
+    if (base >= 4) {
+        const document::FeatureId id = planeIds_[std::size_t(base - 4)];
+        f->base.reference = id;
+        f->base.lastPlane = before().planes.at(id);
+        return f;
+    }
+    const auto hit = before().findFace(face_);
+    if (!hit) {
+        return nullptr;
+    }
+    const auto facePlane = before().bodies[hit->body].shape.facePlane(hit->face);
+    if (!facePlane) {
+        return nullptr;
+    }
+    f->base.face = face_;
+    f->base.lastPlane = *facePlane;
+    return f;
+}
+
+QString PlaneTool::inputsText() const
+{
+    if (base_->currentIndex() == 3 && face_.empty()) {
+        return QStringLiteral("Elige en la vista la cara plana de la que parte el plano");
+    }
+    return QStringLiteral("Plano a %1 mm de «%2»").arg(offset_->value()).arg(base_->currentText());
 }
 
 // --- Patrón -----------------------------------------------------------------------

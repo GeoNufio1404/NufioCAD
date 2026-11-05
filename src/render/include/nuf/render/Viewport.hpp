@@ -96,6 +96,15 @@ public:
                             const sketch::Plane& plane);
     void hideFinishedSketch(document::FeatureId id);
 
+    // Planos de construcción a la vista (cuadrados translúcidos). Se pueden
+    // elegir como plano de un sketch al usar pickSketchPlane().
+    struct ConstructionPlaneView {
+        document::FeatureId id = 0;
+        QString name;
+        sketch::Plane plane;
+    };
+    void showConstructionPlanes(const std::vector<ConstructionPlaneView>& planes);
+
     // Planos de origen siempre a la vista (no solo al elegir el plano).
     void setOriginVisible(bool visible);
     // Rotula en el sketch el largo de las líneas y el Ø o R de círculos y arcos

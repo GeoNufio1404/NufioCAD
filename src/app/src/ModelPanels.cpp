@@ -46,6 +46,8 @@ QString glyph(document::FeatureKind kind)
         return QStringLiteral("⇋");
     case document::FeatureKind::Pattern:
         return QStringLiteral("▦");
+    case document::FeatureKind::ConstructionPlane:
+        return QStringLiteral("▱");
     }
     return QStringLiteral("?");
 }
@@ -68,7 +70,7 @@ QString statusText(const document::FeatureStatus& status)
 }
 
 enum Role { KindRole = Qt::UserRole, KeyRole };
-enum ItemKind { OriginItem = 1, BodyItem, SketchItem, GroundItem };
+enum ItemKind { OriginItem = 1, BodyItem, SketchItem, GroundItem, PlaneItem };
 
 } // namespace
 
@@ -340,6 +342,9 @@ NavigatorWidget::NavigatorWidget(QWidget* parent)
         case SketchItem:
             emit sketchVisibilityChanged(item->data(0, KeyRole).toULongLong(), visible);
             break;
+        case PlaneItem:
+            emit planeVisibilityChanged(item->data(0, KeyRole).toULongLong(), visible);
+            break;
         default:
             break;
         }
@@ -354,7 +359,7 @@ NavigatorWidget::NavigatorWidget(QWidget* parent)
 void NavigatorWidget::refresh(const document::Document& document, const document::ModelState& state,
                               std::size_t upTo, const std::set<std::string>& hiddenBodies,
                               const std::set<document::FeatureId>& visibleSketches, bool originVisible,
-                              bool groundVisible)
+                              bool groundVisible, const std::set<document::FeatureId>& hiddenPlanes)
 {
     refreshing_ = true;
     clear();
@@ -369,6 +374,19 @@ void NavigatorWidget::refresh(const document::Document& document, const document
     checkable(origin, originVisible, OriginItem, {});
     auto* ground = new QTreeWidgetItem(this, {QStringLiteral("Rejilla del suelo")});
     checkable(ground, groundVisible, GroundItem, {});
+
+    QTreeWidgetItem* planes = nullptr;
+    for (std::size_t i = 0; i < std::min(upTo, document.featureCount()); ++i) {
+        const document::Feature& f = document.feature(i);
+        if (f.kind() != document::FeatureKind::ConstructionPlane || !state.planes.contains(f.id())) {
+            continue;
+        }
+        if (planes == nullptr) {
+            planes = new QTreeWidgetItem(this, {QStringLiteral("Planos de construcción")});
+        }
+        auto* item = new QTreeWidgetItem(planes, {QString::fromStdString(f.name())});
+        checkable(item, !hiddenPlanes.contains(f.id()), PlaneItem, QVariant::fromValue<qulonglong>(f.id()));
+    }
 
     auto* bodies = new QTreeWidgetItem(this, {QStringLiteral("Cuerpos")});
     for (const document::Body& body : state.bodies) {

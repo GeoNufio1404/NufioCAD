@@ -73,13 +73,14 @@ public:
     // documento antes de «upTo»).
     void refresh(const document::Document& document, const document::ModelState& state, std::size_t upTo,
                  const std::set<std::string>& hiddenBodies, const std::set<document::FeatureId>& visibleSketches,
-                 bool originVisible, bool groundVisible);
+                 bool originVisible, bool groundVisible, const std::set<document::FeatureId>& hiddenPlanes);
 
 signals:
     void bodyVisibilityChanged(const std::string& key, bool visible);
     void sketchVisibilityChanged(nuf::document::FeatureId id, bool visible);
     void originVisibilityChanged(bool visible);
     void groundVisibilityChanged(bool visible);
+    void planeVisibilityChanged(nuf::document::FeatureId id, bool visible);
     void sketchActivated(nuf::document::FeatureId id);
 
 private:

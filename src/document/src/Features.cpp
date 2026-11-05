@@ -95,6 +95,61 @@ void addProfileDependencies(std::vector<FeatureId>& ids, const std::vector<Profi
     }
 }
 
+// Dónde está el plano de un sitio (origen, plano de construcción o cara). Si ya
+// no se encuentra, el último que tuvo, y se avisa.
+sketch::Plane resolvePlane(const ModelState& state, const SketchAttachment& at, const std::string& subject,
+                           const std::string& fallback, std::optional<std::string>& warning)
+{
+    const auto note = [&](const std::string& text) { warning = warning ? *warning + " " + text : text; };
+    if (at.origin) {
+        switch (*at.origin) {
+        case OriginPlane::XY:
+            return sketch::Plane::xy();
+        case OriginPlane::XZ:
+            return sketch::Plane::xz();
+        case OriginPlane::YZ:
+            return sketch::Plane::yz();
+        }
+    }
+    if (at.reference != 0) {
+        if (const auto it = state.planes.find(at.reference); it != state.planes.end()) {
+            return it->second;
+        }
+        note("El plano de construcción " + subject + " ya no existe; " + fallback + ".");
+        return at.lastPlane;
+    }
+    if (const auto hit = state.findFace(at.face)) {
+        if (const auto facePlane = state.bodies[hit->body].shape.facePlane(hit->face)) {
+            return *facePlane;
+        }
+        note("La cara " + subject + " ya no es plana; " + fallback + ".");
+    } else {
+        note("La cara " + subject + " ya no existe; " + fallback + ".");
+    }
+    return at.lastPlane;
+}
+
+void addAttachmentDependencies(std::vector<FeatureId>& ids, const SketchAttachment& at)
+{
+    if (at.origin) {
+        return;
+    }
+    if (at.reference != 0) {
+        ids.push_back(at.reference);
+    } else {
+        addAll(ids, at.face);
+    }
+}
+
+sketch::Vec3 rotateAbout(const sketch::Vec3& v, const sketch::Vec3& axis, double angle)
+{
+    const double c = std::cos(angle);
+    const double s = std::sin(angle);
+    const sketch::Vec3 k{axis.y * v.z - axis.z * v.y, axis.z * v.x - axis.x * v.z, axis.x * v.y - axis.y * v.x};
+    const double d = (axis.x * v.x + axis.y * v.y + axis.z * v.z) * (1.0 - c);
+    return {v.x * c + k.x * s + axis.x * d, v.y * c + k.y * s + axis.y * d, v.z * c + k.z * s + axis.z * d};
+}
+
 } // namespace
 
 // --- Sketch ----------------------------------------------------------------
@@ -113,28 +168,8 @@ void SketchFeature::setSketch(sketch::Sketch sketch)
 std::optional<std::string> SketchFeature::compute(ModelState& state) const
 {
     std::optional<std::string> warning;
-    sketch::Plane plane = attachment_.lastPlane;
-    if (attachment_.origin) {
-        switch (*attachment_.origin) {
-        case OriginPlane::XY:
-            plane = sketch::Plane::xy();
-            break;
-        case OriginPlane::XZ:
-            plane = sketch::Plane::xz();
-            break;
-        case OriginPlane::YZ:
-            plane = sketch::Plane::yz();
-            break;
-        }
-    } else if (const auto hit = state.findFace(attachment_.face)) {
-        if (const auto facePlane = state.bodies[hit->body].shape.facePlane(hit->face)) {
-            plane = *facePlane;
-        } else {
-            warning = "La cara del sketch ya no es plana; se mantiene en su última posición.";
-        }
-    } else {
-        warning = "La cara del sketch ya no existe; se mantiene en su última posición.";
-    }
+    const sketch::Plane plane =
+        resolvePlane(state, attachment_, "del sketch", "se mantiene en su última posición", warning);
     state.sketches[id()] = {updatedSketch(state, plane, warning), plane};
     return warning;
 }
@@ -184,9 +219,7 @@ std::shared_ptr<const sketch::Sketch> SketchFeature::updatedSketch(const ModelSt
 std::vector<FeatureId> SketchFeature::dependencies() const
 {
     std::vector<FeatureId> ids;
-    if (!attachment_.origin) {
-        addAll(ids, attachment_.face);
-    }
+    addAttachmentDependencies(ids, attachment_);
     return ids;
 }
 
@@ -533,28 +566,8 @@ std::optional<std::string> MirrorFeature::compute(ModelState& state) const
     // El plano: de origen, o la cara (si ya no es plana o no existe, el último
     // que tuvo, con un aviso).
     std::optional<std::string> warning;
-    sketch::Plane mirrorPlane = plane.lastPlane;
-    if (plane.origin) {
-        switch (*plane.origin) {
-        case OriginPlane::XY:
-            mirrorPlane = sketch::Plane::xy();
-            break;
-        case OriginPlane::XZ:
-            mirrorPlane = sketch::Plane::xz();
-            break;
-        case OriginPlane::YZ:
-            mirrorPlane = sketch::Plane::yz();
-            break;
-        }
-    } else if (const auto hit = state.findFace(plane.face)) {
-        if (const auto facePlane = state.bodies[hit->body].shape.facePlane(hit->face)) {
-            mirrorPlane = *facePlane;
-        } else {
-            warning = "La cara del plano de simetría ya no es plana; se usa su última posición.";
-        }
-    } else {
-        warning = "La cara del plano de simetría ya no existe; se usa su última posición.";
-    }
+    const sketch::Plane mirrorPlane =
+        resolvePlane(state, plane, "del plano de simetría", "se usa su última posición", warning);
     geometry::Shape mirrored;
     try {
         mirrored = geometry::mirror(tag(), source->shape, mirrorPlane);
@@ -571,9 +584,32 @@ std::vector<FeatureId> MirrorFeature::dependencies() const
 {
     std::vector<FeatureId> ids;
     addAll(ids, geometry::ElementRef{body + ":", 0});  // la operación que creó el cuerpo
-    if (!plane.origin) {
-        addAll(ids, plane.face);
+    addAttachmentDependencies(ids, plane);
+    return ids;
+}
+
+// --- Plano de construcción -----------------------------------------------------
+
+std::optional<std::string> ConstructionPlaneFeature::compute(ModelState& state) const
+{
+    std::optional<std::string> warning;
+    sketch::Plane plane = resolvePlane(state, base, "base del plano", "se usa su última posición", warning);
+    if (std::abs(angle) > 1e-12) {
+        const sketch::Vec3 axis = angleAxis == 0 ? plane.xAxis : plane.yAxis;
+        plane.xAxis = rotateAbout(plane.xAxis, axis, angle);
+        plane.yAxis = rotateAbout(plane.yAxis, axis, angle);
+        plane.normal = rotateAbout(plane.normal, axis, angle);
     }
+    plane.origin = {plane.origin.x + plane.normal.x * offset, plane.origin.y + plane.normal.y * offset,
+                    plane.origin.z + plane.normal.z * offset};
+    state.planes[id()] = plane;
+    return warning;
+}
+
+std::vector<FeatureId> ConstructionPlaneFeature::dependencies() const
+{
+    std::vector<FeatureId> ids;
+    addAttachmentDependencies(ids, base);
     return ids;
 }
 

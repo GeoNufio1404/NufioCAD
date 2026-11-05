@@ -16,7 +16,8 @@ enum class OriginPlane { XY, XZ, YZ };
 // sigue si la pieza cambia).
 struct SketchAttachment {
     std::optional<OriginPlane> origin = OriginPlane::XY;
-    geometry::ElementRef face;  // si no hay origin
+    FeatureId reference = 0;    // si no hay origin: un plano de construcción (0 = no)
+    geometry::ElementRef face;  // si no hay origin ni reference
     // Plano que tenía al crearse: se usa si la cara deja de existir.
     sketch::Plane lastPlane = sketch::Plane::xy();
 };
@@ -175,6 +176,23 @@ public:
 
     FeatureKind kind() const override { return FeatureKind::Mirror; }
     std::unique_ptr<Feature> clone() const override { return std::make_unique<MirrorFeature>(*this); }
+    std::optional<std::string> compute(ModelState& state) const override;
+    std::vector<FeatureId> dependencies() const override;
+};
+
+// Plano de construcción: parte de un plano de origen, una cara plana u otro
+// plano de construcción, se gira un ángulo alrededor de uno de sus ejes y se
+// desplaza a lo largo de su normal. No cambia ningún cuerpo: solo da un plano
+// donde dibujar sketches, reflejar, etc.
+class ConstructionPlaneFeature final : public Feature {
+public:
+    SketchAttachment base;
+    double offset = 10.0;  // mm a lo largo de la normal (tras el giro)
+    double angle = 0.0;    // rad
+    int angleAxis = 0;     // 0 = alrededor del eje X del plano base, 1 = del eje Y
+
+    FeatureKind kind() const override { return FeatureKind::ConstructionPlane; }
+    std::unique_ptr<Feature> clone() const override { return std::make_unique<ConstructionPlaneFeature>(*this); }
     std::optional<std::string> compute(ModelState& state) const override;
     std::vector<FeatureId> dependencies() const override;
 };

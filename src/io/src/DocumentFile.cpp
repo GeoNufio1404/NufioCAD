@@ -404,6 +404,9 @@ geo::ExtrudeSide sideOf(const Json& j)
 Json toJson(const SketchAttachment& a)
 {
     Json j{{"face", toJson(a.face)}, {"lastPlane", toJson(a.lastPlane)}};
+    if (a.reference != 0) {
+        j["reference"] = a.reference;
+    }
     if (a.origin) {
         j["origin"] = nameOf(kOriginPlanes, *a.origin);
     }
@@ -418,7 +421,10 @@ SketchAttachment attachmentOf(const Json& j)
     }
     a.face = elementRef(j.at("face"));
     a.lastPlane = plane(j.at("lastPlane"));
-    if (!a.origin && a.face.empty()) {
+    if (j.contains("reference")) {
+        a.reference = unsignedValue(j, "reference");
+    }
+    if (!a.origin && a.face.empty() && a.reference == 0) {
         throw NufError("Un sketch no dice dónde va");
     }
     return a;
@@ -487,6 +493,12 @@ FeatureRow rowOf(const Feature& f)
         const auto& m = static_cast<const MirrorFeature&>(f);
         row.type = "mirror";
         params = {{"body", m.body}, {"plane", toJson(m.plane)}, {"operation", nameOf(kOperations, m.operation)}};
+        break;
+    }
+    case FeatureKind::ConstructionPlane: {
+        const auto& cp = static_cast<const ConstructionPlaneFeature&>(f);
+        row.type = "plane";
+        params = {{"base", toJson(cp.base)}, {"offset", cp.offset}, {"angle", cp.angle}, {"angleAxis", cp.angleAxis}};
         break;
     }
     case FeatureKind::Pattern: {
@@ -569,6 +581,13 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         m->plane = attachmentOf(p.at("plane"));
         m->operation = parseEnum(kOperations, text(p, "operation"), "operación");
         feature = std::move(m);
+    } else if (row.type == "plane") {
+        auto cp = std::make_unique<ConstructionPlaneFeature>();
+        cp->base = attachmentOf(p.at("base"));
+        cp->offset = number(p, "offset");
+        cp->angle = number(p, "angle");
+        cp->angleAxis = p.at("angleAxis").get<int>();
+        feature = std::move(cp);
     } else if (row.type == "pattern") {
         auto pt = std::make_unique<PatternFeature>();
         pt->body = text(p, "body");

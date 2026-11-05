@@ -35,6 +35,8 @@ std::string kindLabel(FeatureKind kind)
         return "Espejo";
     case FeatureKind::Pattern:
         return "Patrón";
+    case FeatureKind::ConstructionPlane:
+        return "Plano";
     }
     return "Operación";
 }
