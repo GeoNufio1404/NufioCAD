@@ -10,6 +10,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QSpinBox>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -1110,6 +1111,110 @@ QString MirrorTool::inputsText() const
         return QStringLiteral("Elige en la vista la cara plana que hace de plano de simetría");
     }
     return QStringLiteral("Reflejar «%1»").arg(bodyBox_->currentText());
+}
+
+// --- Patrón -----------------------------------------------------------------------
+
+PatternTool::PatternTool(document::Document& document, render::Viewport& viewport,
+                         std::optional<document::FeatureId> editing)
+    : FeatureTool(document, viewport, editing)
+{
+    if (const auto* p = dynamic_cast<const document::PatternFeature*>(original_.get())) {
+        body_ = p->body;
+    }
+}
+
+void PatternTool::createFields(QFormLayout* form)
+{
+    form_ = form;
+    bodyBox_ = new QComboBox();
+    for (const document::Body& b : before().bodies) {
+        bodyBox_->addItem(QString::fromStdString(b.name), QString::fromStdString(b.key));
+    }
+    if (body_.empty() && bodyBox_->count() > 0) {
+        body_ = bodyBox_->itemData(0).toString().toStdString();
+    }
+    if (const int at = bodyBox_->findData(QString::fromStdString(body_)); at >= 0) {
+        bodyBox_->setCurrentIndex(at);
+    }
+    layout_ = combo({QStringLiteral("Lineal"), QStringLiteral("Circular")});
+    axis_ = combo({QStringLiteral("Eje X"), QStringLiteral("Eje Y"), QStringLiteral("Eje Z")});
+    count_ = new QSpinBox();
+    count_->setRange(2, 200);
+    count_->setValue(3);
+    count_->setSuffix(QStringLiteral(" copias en total"));
+    count_->setKeyboardTracking(false);
+    spacing_ = lengthBox(30.0);
+    angle_ = angleBox(360.0, 360.0);
+    operation_ = combo({QStringLiteral("Unir"), QStringLiteral("Cuerpo nuevo")});
+    if (const auto* p = dynamic_cast<const document::PatternFeature*>(original_.get())) {
+        layout_->setCurrentIndex(int(p->layout));
+        axis_->setCurrentIndex(p->axis);
+        count_->setValue(p->count);
+        spacing_->setValue(p->spacing);
+        angle_->setValue(p->angle / kDegree);
+        operation_->setCurrentIndex(p->operation == document::Operation::NewBody ? 1 : 0);
+    }
+    form->addRow(QStringLiteral("Cuerpo"), bodyBox_);
+    form->addRow(QStringLiteral("Tipo"), layout_);
+    form->addRow(QStringLiteral("Eje"), axis_);
+    form->addRow(QStringLiteral("Cantidad"), count_);
+    form->addRow(QStringLiteral("Distancia entre copias"), spacing_);
+    form->addRow(QStringLiteral("Ángulo total"), angle_);
+    form->addRow(QStringLiteral("Operación"), operation_);
+    connect(bodyBox_, &QComboBox::currentIndexChanged, this, [this] {
+        body_ = bodyBox_->currentData().toString().toStdString();
+        updatePreview();
+    });
+    connect(layout_, &QComboBox::currentIndexChanged, this, [this] {
+        updateVisibility();
+        updatePreview();
+    });
+    for (QComboBox* box : {axis_, operation_}) {
+        connect(box, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
+    }
+    connect(count_, &QSpinBox::valueChanged, this, [this] { updatePreview(); });
+    for (QDoubleSpinBox* box : {spacing_, angle_}) {
+        connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
+    }
+    updateVisibility();
+}
+
+void PatternTool::updateVisibility()
+{
+    const bool circular = layout_->currentIndex() == 1;
+    form_->setRowVisible(spacing_, !circular);
+    form_->setRowVisible(angle_, circular);
+}
+
+std::unique_ptr<document::Feature> PatternTool::build() const
+{
+    if (body_.empty()) {
+        return nullptr;
+    }
+    auto f = std::make_unique<document::PatternFeature>();
+    if (original_) {
+        f->setName(original_->name());
+    }
+    f->body = body_;
+    f->layout = layout_->currentIndex() == 1 ? document::PatternLayout::Circular : document::PatternLayout::Linear;
+    f->axis = axis_->currentIndex();
+    f->count = count_->value();
+    f->spacing = spacing_->value();
+    f->angle = angle_->value() * kDegree;
+    f->operation = operation_->currentIndex() == 1 ? document::Operation::NewBody : document::Operation::Join;
+    return f;
+}
+
+QString PatternTool::inputsText() const
+{
+    if (bodyBox_->count() == 0) {
+        return QStringLiteral("No hay cuerpos que repetir");
+    }
+    return QStringLiteral("Patrón %1 de «%2»: %3 en total")
+        .arg(layout_->currentIndex() == 1 ? QStringLiteral("circular") : QStringLiteral("lineal"))
+        .arg(bodyBox_->currentText())
+        .arg(count_->value());
 }
 
 } // namespace nuf::app

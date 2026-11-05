@@ -21,6 +21,7 @@ class QDoubleSpinBox;
 class QFormLayout;
 class QLabel;
 class QPushButton;
+class QSpinBox;
 class QWidget;
 
 namespace nuf::render {
@@ -273,6 +274,36 @@ private:
     geometry::ElementRef face_;
     QComboBox* bodyBox_ = nullptr;
     QComboBox* plane_ = nullptr;
+    QComboBox* operation_ = nullptr;
+};
+
+// Patrón: repite un cuerpo en fila o alrededor de un eje de origen.
+class PatternTool final : public FeatureTool {
+    Q_OBJECT
+
+public:
+    PatternTool(document::Document& document, render::Viewport& viewport, std::optional<document::FeatureId> editing);
+
+    std::unique_ptr<document::Feature> build() const override;
+
+protected:
+    QString title() const override { return QStringLiteral("Patrón"); }
+    void createFields(QFormLayout* form) override;
+    void selectionChanged(const render::ModelSelection&) override {}
+    QString inputsText() const override;
+    bool removesMaterial() const override { return false; }
+
+private:
+    void updateVisibility();
+
+    std::string body_;
+    QFormLayout* form_ = nullptr;
+    QComboBox* bodyBox_ = nullptr;
+    QComboBox* layout_ = nullptr;
+    QComboBox* axis_ = nullptr;
+    QSpinBox* count_ = nullptr;
+    QDoubleSpinBox* spacing_ = nullptr;
+    QDoubleSpinBox* angle_ = nullptr;
     QComboBox* operation_ = nullptr;
 };
 

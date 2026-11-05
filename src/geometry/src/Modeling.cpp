@@ -36,7 +36,9 @@
 #include <TopoDS.hxx>
 #include <TopoDS_Compound.hxx>
 #include <TopoDS_Solid.hxx>
+#include <gp_Ax1.hxx>
 #include <gp_Trsf.hxx>
+#include <gp_Vec.hxx>
 #include <gp_Pln.hxx>
 
 #include <algorithm>
@@ -644,6 +646,60 @@ Shape mirror(std::string_view tag, const Shape& body, const sketch::Plane& plane
         return namer.finish(std::string(tag));
     } catch (const Standard_Failure& e) {
         throw GeometryError(std::string("Error del kernel al reflejar: ") + kernelMessage(e));
+    }
+}
+
+std::vector<Shape> pattern(std::string_view tag, const Shape& body, const PatternSpec& spec)
+{
+    if (body.isNull()) {
+        throw GeometryError("No hay cuerpo que repetir");
+    }
+    if (spec.count < 2) {
+        throw GeometryError("Un patrón necesita al menos 2 elementos");
+    }
+    if (spec.count > 500) {
+        throw GeometryError("Demasiados elementos en el patrón (máximo 500)");
+    }
+    const sketch::Vec3& dir = spec.axis.direction;
+    if (std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z) <= kTiny) {
+        throw GeometryError("La dirección del patrón no es válida");
+    }
+    if (!spec.circular && std::abs(spec.spacing) <= kTiny) {
+        throw GeometryError("La distancia entre copias debe ser distinta de cero");
+    }
+    if (spec.circular && std::abs(spec.angle) <= 1e-9) {
+        throw GeometryError("El ángulo del patrón debe ser distinto de cero");
+    }
+    try {
+        const TopoDS_Shape source = occtShape(body);
+        const Shape::Impl& in = *body.impl();
+        const bool full = std::abs(spec.angle) >= 6.283185307179586 - 1e-6;
+        const double step = full ? spec.angle / spec.count : spec.angle / (spec.count - 1);
+        std::vector<Shape> copies;
+        for (int k = 1; k < spec.count; ++k) {
+            gp_Trsf move;
+            if (spec.circular) {
+                move.SetRotation(gp_Ax1(toPnt(spec.axis.point), toDir(spec.axis.direction)), step * k);
+            } else {
+                move.SetTranslation(gp_Vec(toDir(spec.axis.direction)).Multiplied(spec.spacing * k));
+            }
+            BRepBuilderAPI_Transform transform(source, move, true);
+            if (!transform.IsDone() || transform.Shape().IsNull()) {
+                throw GeometryError("No se pudo copiar el cuerpo");
+            }
+            const std::string label = std::string(tag) + ":patron" + std::to_string(k);
+            Namer namer(transform.Shape());
+            for (int i = 1; i <= in.faces.Extent(); ++i) {
+                for (const TopoDS_Shape& image : transform.Modified(in.faces(i))) {
+                    namer.name(image, label + ":" + in.faceNames[std::size_t(i - 1)]);
+                }
+            }
+            namer.nameUnnamed(label);
+            copies.push_back(namer.finish(std::string(tag)));
+        }
+        return copies;
+    } catch (const Standard_Failure& e) {
+        throw GeometryError(std::string("Error del kernel al repetir el cuerpo: ") + kernelMessage(e));
     }
 }
 

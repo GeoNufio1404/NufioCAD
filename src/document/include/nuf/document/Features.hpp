@@ -179,6 +179,27 @@ public:
     std::vector<FeatureId> dependencies() const override;
 };
 
+enum class PatternLayout { Linear, Circular };
+
+// Patrón: copias de un cuerpo en fila (a lo largo de un eje de origen) o
+// alrededor de un eje de origen. «count» incluye el original. Con «Unir» las
+// copias se funden con el cuerpo; con «Cuerpo nuevo» forman un cuerpo aparte.
+class PatternFeature final : public Feature {
+public:
+    std::string body;                          // clave del cuerpo («f3»)
+    PatternLayout layout = PatternLayout::Linear;
+    int axis = 0;                              // 0 = X, 1 = Y, 2 = Z (por el origen)
+    int count = 3;                             // con el original
+    double spacing = 30.0;                     // mm entre copias (lineal)
+    double angle = 6.283185307179586;          // rad en total (circular; 2π = vuelta completa)
+    Operation operation = Operation::Join;
+
+    FeatureKind kind() const override { return FeatureKind::Pattern; }
+    std::unique_ptr<Feature> clone() const override { return std::make_unique<PatternFeature>(*this); }
+    std::optional<std::string> compute(ModelState& state) const override;
+    std::vector<FeatureId> dependencies() const override;
+};
+
 // Agujeros: un sketch cuyos círculos (su centro) y puntos marcan dónde van; se
 // restan del cuerpo hacia dentro del material, desde el plano del sketch.
 class HoleFeature final : public Feature {

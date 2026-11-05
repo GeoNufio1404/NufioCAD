@@ -131,6 +131,7 @@ private:
     QAction* shellAction_ = nullptr;
     QAction* holeAction_ = nullptr;
     QAction* mirrorAction_ = nullptr;
+    QAction* patternAction_ = nullptr;
     QAction* exportAction_ = nullptr;
     QAction* importAction_ = nullptr;
     QMenu* recentMenu_ = nullptr;

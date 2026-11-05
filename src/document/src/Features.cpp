@@ -577,6 +577,49 @@ std::vector<FeatureId> MirrorFeature::dependencies() const
     return ids;
 }
 
+// --- Patrón ------------------------------------------------------------------
+
+std::optional<std::string> PatternFeature::compute(ModelState& state) const
+{
+    const auto source = std::ranges::find_if(state.bodies, [&](const Body& b) { return b.key == body; });
+    if (source == state.bodies.end()) {
+        throw FeatureError("El cuerpo que se iba a repetir ya no existe");
+    }
+    geometry::PatternSpec spec;
+    spec.circular = layout == PatternLayout::Circular;
+    spec.axis.direction = {axis == 0 ? 1.0 : 0.0, axis == 1 ? 1.0 : 0.0, axis == 2 ? 1.0 : 0.0};
+    spec.spacing = spacing;
+    spec.angle = angle;
+    spec.count = count;
+    try {
+        const std::vector<geometry::Shape> copies = geometry::pattern(tag(), source->shape, spec);
+        // Una a una (no todas juntas): si se solapan entre sí, el kernel las resuelve bien.
+        if (operation == Operation::NewBody) {
+            geometry::Shape all = copies.front();
+            for (std::size_t i = 1; i < copies.size(); ++i) {
+                all = geometry::boolean(geometry::BooleanOp::Fuse, all, copies[i]);
+            }
+            state.bodies.push_back({tag(), "Cuerpo" + std::to_string(++state.bodiesCreated), all});
+        } else {
+            geometry::Shape all = source->shape;
+            for (const geometry::Shape& copy : copies) {
+                all = geometry::boolean(geometry::BooleanOp::Fuse, all, copy);
+            }
+            source->shape = all;
+        }
+    } catch (const geometry::GeometryError& e) {
+        throw FeatureError(e.what());
+    }
+    return std::nullopt;
+}
+
+std::vector<FeatureId> PatternFeature::dependencies() const
+{
+    std::vector<FeatureId> ids;
+    addAll(ids, geometry::ElementRef{body + ":", 0});  // la operación que creó el cuerpo
+    return ids;
+}
+
 // --- Agujeros ----------------------------------------------------------------
 
 geometry::Shape HoleFeature::tool(const ModelState& state) const

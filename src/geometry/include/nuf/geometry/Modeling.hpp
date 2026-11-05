@@ -102,6 +102,20 @@ Shape chamfer(std::string_view tag, const Shape& body, const std::vector<int>& e
 // «tag:espejo:<nombre de la cara original>».
 Shape mirror(std::string_view tag, const Shape& body, const sketch::Plane& plane);
 
+struct PatternSpec {
+    bool circular = false;
+    Axis axis;                         // lineal: dirección de la fila; circular: eje de giro
+    double spacing = 0.0;              // mm entre copias (lineal)
+    double angle = 6.283185307179586;  // rad en total (circular); 2π = vuelta completa
+    int count = 2;                     // con el original
+};
+
+// Las copias del cuerpo (sin el original), una forma por copia. La copia k
+// tiene las caras «tag:patron<k>:<nombre de la cara original>». Con la vuelta
+// completa las copias se reparten en count partes iguales; si no, el ángulo
+// total va del original a la última copia.
+std::vector<Shape> pattern(std::string_view tag, const Shape& body, const PatternSpec& spec);
+
 enum class HoleKind { Simple, Counterbore, Countersink };
 
 struct HoleSpec {

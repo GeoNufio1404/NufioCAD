@@ -476,3 +476,99 @@ TEST_CASE("El espejo sigue a la pieza, da error sin cuerpo y se guarda", "[mirro
     REQUIRE(reopened.status(id).health == Health::Ok);
     REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(doc.result().bodies.front().shape.volume(), 1e-9));
 }
+
+namespace {
+
+FeatureId addPattern(Document& doc, PatternLayout layout, int axis, int count, double spacing, double angle,
+                     Operation operation, const std::string& body = "f2")
+{
+    auto p = std::make_unique<PatternFeature>();
+    p->body = body;
+    p->layout = layout;
+    p->axis = axis;
+    p->count = count;
+    p->spacing = spacing;
+    p->angle = angle;
+    p->operation = operation;
+    return doc.addFeature(std::move(p));
+}
+
+} // namespace
+
+TEST_CASE("Un patrón lineal repite el cuerpo, separado o fundido si se solapan", "[pattern]")
+{
+    // Separadas (cada 30 mm, la caja mide 20): 3 piezas en un solo cuerpo.
+    Document apart = boxDocument();
+    const FeatureId a = addPattern(apart, PatternLayout::Linear, 0, 3, 30.0, 0.0, Operation::Join);
+    REQUIRE(apart.status(a).health == Health::Ok);
+    REQUIRE(apart.result().bodies.size() == 1);
+    REQUIRE_THAT(apart.result().bodies.front().shape.volume(), WithinRel(3.0 * kBox, 1e-6));
+    REQUIRE_THAT(apart.result().bodies.front().shape.bounds().max.x, Catch::Matchers::WithinAbs(80.0, 1e-6));
+
+    // Solapadas (cada 10 mm): se funden en una caja de 40×10×5.
+    Document overlap = boxDocument();
+    const FeatureId b = addPattern(overlap, PatternLayout::Linear, 0, 3, 10.0, 0.0, Operation::Join);
+    REQUIRE(overlap.status(b).health == Health::Ok);
+    REQUIRE_THAT(overlap.result().bodies.front().shape.volume(), WithinRel(2.0 * kBox, 1e-6));
+    REQUIRE(overlap.result().bodies.front().shape.faceCount() == 6);
+
+    // Cuerpo nuevo: el original queda intacto y las copias aparte; hacia atrás con distancia negativa.
+    Document fresh = boxDocument();
+    const FeatureId c = addPattern(fresh, PatternLayout::Linear, 1, 3, -30.0, 0.0, Operation::NewBody);
+    REQUIRE(fresh.status(c).health == Health::Ok);
+    REQUIRE(fresh.result().bodies.size() == 2);
+    REQUIRE_THAT(fresh.result().bodies[0].shape.volume(), WithinRel(kBox, 1e-6));
+    REQUIRE_THAT(fresh.result().bodies[1].shape.volume(), WithinRel(2.0 * kBox, 1e-6));
+    REQUIRE_THAT(fresh.result().bodies[1].shape.bounds().min.y, Catch::Matchers::WithinAbs(-60.0, 1e-6));
+    REQUIRE(fresh.result().bodies[1].shape.faceName(0).find(":patron") != std::string::npos);
+}
+
+TEST_CASE("Un patrón circular reparte las copias alrededor del eje", "[pattern]")
+{
+    // Cuatro cajas a 90° alrededor de Z: se tocan por las caras, sin solaparse.
+    Document doc = boxDocument();
+    const FeatureId id = addPattern(doc, PatternLayout::Circular, 2, 4, 0.0, 2.0 * kPi, Operation::Join);
+    REQUIRE(doc.status(id).health == Health::Ok);
+    REQUIRE(doc.result().bodies.size() == 1);
+    const geometry::Shape& body = doc.result().bodies.front().shape;
+    REQUIRE(body.isValid());
+    REQUIRE_THAT(body.volume(), WithinRel(4.0 * kBox, 1e-6));
+    REQUIRE_THAT(body.bounds().min.x, Catch::Matchers::WithinAbs(-20.0, 1e-6));
+    REQUIRE_THAT(body.bounds().max.x, Catch::Matchers::WithinAbs(20.0, 1e-6));
+    REQUIRE_THAT(body.bounds().min.y, Catch::Matchers::WithinAbs(-20.0, 1e-6));
+    REQUIRE_THAT(body.bounds().max.y, Catch::Matchers::WithinAbs(20.0, 1e-6));
+
+    // Medio giro con dos copias: la última queda a 180° (no a 360° / 2).
+    Document half = boxDocument();
+    addPattern(half, PatternLayout::Circular, 2, 2, 0.0, kPi, Operation::NewBody);
+    REQUIRE(half.result().bodies.size() == 2);
+    REQUIRE_THAT(half.result().bodies[1].shape.bounds().min.x, Catch::Matchers::WithinAbs(-20.0, 1e-6));
+    REQUIRE_THAT(half.result().bodies[1].shape.bounds().max.y, Catch::Matchers::WithinAbs(0.0, 1e-6));
+}
+
+TEST_CASE("El patrón sigue a la pieza, da error si algo falla y se guarda", "[pattern][io]")
+{
+    Document doc = boxDocument(5.0);
+    const FeatureId id = addPattern(doc, PatternLayout::Linear, 0, 3, 30.0, 0.0, Operation::Join);
+    REQUIRE(doc.status(addPattern(doc, PatternLayout::Linear, 0, 3, 30.0, 0.0, Operation::Join, "f99")).health == Health::Error);
+    REQUIRE(doc.status(addPattern(doc, PatternLayout::Linear, 0, 1, 30.0, 0.0, Operation::Join)).health == Health::Error);
+    REQUIRE(doc.status(addPattern(doc, PatternLayout::Linear, 0, 3, 0.0, 0.0, Operation::Join)).health == Health::Error);
+
+    // Más alta la pieza: el patrón se rehace sobre ella.
+    auto taller = std::unique_ptr<Feature>(doc.findFeature(2)->clone());
+    static_cast<ExtrudeFeature&>(*taller).spec.side1.distance = 8.0;
+    doc.replaceFeature(2, std::move(taller));
+    REQUIRE(doc.status(id).health == Health::Ok);
+    REQUIRE_THAT(doc.result().bodies.front().shape.volume(), WithinRel(3.0 * 20.0 * 10.0 * 8.0, 1e-6));
+
+    const auto path = std::filesystem::temp_directory_path() / "nuf_patron.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    REQUIRE(reopened.findFeature(id)->kind() == FeatureKind::Pattern);
+    REQUIRE(reopened.status(id).health == Health::Ok);
+    REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(doc.result().bodies.front().shape.volume(), 1e-9));
+}

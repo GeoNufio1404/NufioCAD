@@ -92,6 +92,10 @@ const Table<geo::HoleKind, 3> kHoleKinds{{
     {geo::HoleKind::Countersink, "countersink"},
 }};
 
+const Table<PatternLayout, 2> kPatternLayouts{{
+    {PatternLayout::Linear, "linear"}, {PatternLayout::Circular, "circular"},
+}};
+
 const Table<AxisRef::Kind, 5> kAxisKinds{{
     {AxisRef::Kind::OriginX, "originX"}, {AxisRef::Kind::OriginY, "originY"}, {AxisRef::Kind::OriginZ, "originZ"},
     {AxisRef::Kind::SketchLine, "sketchLine"}, {AxisRef::Kind::Edge, "edge"},
@@ -485,6 +489,14 @@ FeatureRow rowOf(const Feature& f)
         params = {{"body", m.body}, {"plane", toJson(m.plane)}, {"operation", nameOf(kOperations, m.operation)}};
         break;
     }
+    case FeatureKind::Pattern: {
+        const auto& pt = static_cast<const PatternFeature&>(f);
+        row.type = "pattern";
+        params = {{"body", pt.body}, {"layout", nameOf(kPatternLayouts, pt.layout)}, {"axis", pt.axis},
+                  {"count", pt.count}, {"spacing", pt.spacing}, {"angle", pt.angle},
+                  {"operation", nameOf(kOperations, pt.operation)}};
+        break;
+    }
     case FeatureKind::Hole: {
         const auto& h = static_cast<const HoleFeature&>(f);
         row.type = "hole";
@@ -557,6 +569,16 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         m->plane = attachmentOf(p.at("plane"));
         m->operation = parseEnum(kOperations, text(p, "operation"), "operación");
         feature = std::move(m);
+    } else if (row.type == "pattern") {
+        auto pt = std::make_unique<PatternFeature>();
+        pt->body = text(p, "body");
+        pt->layout = parseEnum(kPatternLayouts, text(p, "layout"), "tipo de patrón");
+        pt->axis = p.at("axis").get<int>();
+        pt->count = p.at("count").get<int>();
+        pt->spacing = number(p, "spacing");
+        pt->angle = number(p, "angle");
+        pt->operation = parseEnum(kOperations, text(p, "operation"), "operación");
+        feature = std::move(pt);
     } else if (row.type == "hole") {
         auto h = std::make_unique<HoleFeature>();
         h->sketch = unsignedValue(p, "sketch");

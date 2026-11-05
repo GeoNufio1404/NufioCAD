@@ -70,6 +70,7 @@
         <file alias="ui/fillet.svg">icons/ui/fillet.svg</file>
         <file alias="ui/hole.svg">icons/ui/hole.svg</file>
         <file alias="ui/mirror-solid.svg">icons/ui/mirror-solid.svg</file>
+        <file alias="ui/pattern-solid.svg">icons/ui/pattern-solid.svg</file>
         <file alias="ui/redo.svg">icons/ui/redo.svg</file>
         <file alias="ui/rename.svg">icons/ui/rename.svg</file>
         <file alias="ui/revolve.svg">icons/ui/revolve.svg</file>
