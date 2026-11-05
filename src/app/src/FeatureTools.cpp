@@ -11,6 +11,7 @@
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QListWidget>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QTimer>
@@ -1671,6 +1672,225 @@ QString LoftTool::inputsText() const
         return QStringLiteral("Elige dos o más perfiles, en orden (%1 elegidos)").arg(profiles_.size());
     }
     return QStringLiteral("%1 perfiles, en el orden en que los elegiste").arg(profiles_.size());
+}
+
+// --- Mover cuerpo ---------------------------------------------------------------------------
+
+MoveTool::MoveTool(document::Document& document, render::Viewport& viewport,
+                   std::optional<document::FeatureId> editing)
+    : FeatureTool(document, viewport, editing)
+{
+    if (const auto* m = dynamic_cast<const document::MoveFeature*>(original_.get())) {
+        body_ = m->body;
+    }
+}
+
+void MoveTool::createFields(QFormLayout* form)
+{
+    bodyBox_ = new QComboBox();
+    for (const document::Body& b : before().bodies) {
+        bodyBox_->addItem(QString::fromStdString(b.name), QString::fromStdString(b.key));
+    }
+    if (body_.empty() && bodyBox_->count() > 0) {
+        body_ = bodyBox_->itemData(0).toString().toStdString();
+    }
+    if (const int at = bodyBox_->findData(QString::fromStdString(body_)); at >= 0) {
+        bodyBox_->setCurrentIndex(at);
+    }
+    x_ = lengthBox(0.0);
+    field("x", x_);
+    y_ = lengthBox(0.0);
+    field("y", y_);
+    z_ = lengthBox(0.0);
+    field("z", z_);
+    axis_ = combo({QStringLiteral("Eje X"), QStringLiteral("Eje Y"), QStringLiteral("Eje Z")});
+    for (const auto& [id, line] : before().axes) {
+        const document::Feature* f = document_.findFeature(id);
+        axis_->addItem(f ? QString::fromStdString(f->name()) : QStringLiteral("Eje"));
+        axisIds_.push_back(id);
+    }
+    axis_->setCurrentIndex(2);
+    around_ = combo({QStringLiteral("Centro del cuerpo"), QStringLiteral("Origen")});
+    angle_ = angleBox(0.0, 360.0);
+    field("angle", angle_);
+    copy_ = new QCheckBox(QStringLiteral("Crear una copia (deja el original)"));
+    if (const auto* m = dynamic_cast<const document::MoveFeature*>(original_.get())) {
+        x_->setValue(m->translation.x);
+        y_->setValue(m->translation.y);
+        z_->setValue(m->translation.z);
+        int at = m->axis;
+        if (m->axisRef != 0) {
+            const auto it = std::ranges::find(axisIds_, m->axisRef);
+            at = it != axisIds_.end() ? 3 + int(it - axisIds_.begin()) : 2;
+        }
+        axis_->setCurrentIndex(at);
+        around_->setCurrentIndex(m->aroundOrigin ? 1 : 0);
+        angle_->setValue(m->angle / kDegree);
+        copy_->setChecked(m->copy);
+    }
+    form->addRow(QStringLiteral("Cuerpo"), bodyBox_);
+    form->addRow(QStringLiteral("Mover en X"), x_);
+    form->addRow(QStringLiteral("Mover en Y"), y_);
+    form->addRow(QStringLiteral("Mover en Z"), z_);
+    form->addRow(QStringLiteral("Girar alrededor de"), axis_);
+    form->addRow(QStringLiteral("El eje pasa por"), around_);
+    form->addRow(QStringLiteral("Ángulo"), angle_);
+    form->addRow(QString(), copy_);
+    connect(bodyBox_, &QComboBox::currentIndexChanged, this, [this] {
+        body_ = bodyBox_->currentData().toString().toStdString();
+        updatePreview();
+    });
+    for (QComboBox* box : {axis_, around_}) {
+        connect(box, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
+    }
+    for (QDoubleSpinBox* box : {x_, y_, z_, angle_}) {
+        connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
+    }
+    connect(copy_, &QCheckBox::toggled, this, [this] { updatePreview(); });
+}
+
+void MoveTool::selectionChanged(const render::ModelSelection& selection)
+{
+    // Un clic en una cara elige su cuerpo.
+    if (!selection.faces.empty()) {
+        const int at = bodyBox_->findData(QString::fromStdString(selection.faces.front().body));
+        if (at >= 0) {
+            bodyBox_->setCurrentIndex(at);
+        }
+    }
+}
+
+std::unique_ptr<document::Feature> MoveTool::build() const
+{
+    if (body_.empty()) {
+        return nullptr;
+    }
+    auto f = std::make_unique<document::MoveFeature>();
+    if (original_) {
+        f->setName(original_->name());
+    }
+    f->body = body_;
+    f->translation = {x_->value(), y_->value(), z_->value()};
+    if (axis_->currentIndex() >= 3) {
+        f->axisRef = axisIds_[std::size_t(axis_->currentIndex() - 3)];
+    } else {
+        f->axis = axis_->currentIndex();
+    }
+    f->aroundOrigin = around_->currentIndex() == 1;
+    f->angle = angle_->value() * kDegree;
+    f->copy = copy_->isChecked();
+    return f;
+}
+
+QString MoveTool::inputsText() const
+{
+    if (bodyBox_->count() == 0) {
+        return QStringLiteral("No hay cuerpos que mover");
+    }
+    return QStringLiteral("Mover «%1» (o haz clic en una de sus caras para elegirlo)").arg(bodyBox_->currentText());
+}
+
+// --- Combinar cuerpos -------------------------------------------------------------------------
+
+CombineTool::CombineTool(document::Document& document, render::Viewport& viewport,
+                         std::optional<document::FeatureId> editing)
+    : FeatureTool(document, viewport, editing)
+{
+    if (const auto* c = dynamic_cast<const document::CombineFeature*>(original_.get())) {
+        checked_ = c->tools;
+    }
+}
+
+void CombineTool::createFields(QFormLayout* form)
+{
+    target_ = new QComboBox();
+    for (const document::Body& b : before().bodies) {
+        target_->addItem(QString::fromStdString(b.name), QString::fromStdString(b.key));
+    }
+    tools_ = new QListWidget();
+    tools_->setMaximumHeight(120);
+    operation_ = combo({QStringLiteral("Unir"), QStringLiteral("Cortar"), QStringLiteral("Intersecar")});
+    keep_ = new QCheckBox(QStringLiteral("Conservar los cuerpos herramienta"));
+    if (const auto* c = dynamic_cast<const document::CombineFeature*>(original_.get())) {
+        if (const int at = target_->findData(QString::fromStdString(c->target)); at >= 0) {
+            target_->setCurrentIndex(at);
+        }
+        operation_->setCurrentIndex(c->operation == document::Operation::Cut ? 1 : c->operation == document::Operation::Intersect ? 2 : 0);
+        keep_->setChecked(c->keepTools);
+    }
+    fillTools();
+    form->addRow(QStringLiteral("Cuerpo destino"), target_);
+    form->addRow(QStringLiteral("Cuerpos herramienta"), tools_);
+    form->addRow(QStringLiteral("Operación"), operation_);
+    form->addRow(QString(), keep_);
+    connect(target_, &QComboBox::currentIndexChanged, this, [this] {
+        fillTools();
+        updatePreview();
+    });
+    connect(operation_, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
+    connect(keep_, &QCheckBox::toggled, this, [this] { updatePreview(); });
+    connect(tools_, &QListWidget::itemChanged, this, [this] { updatePreview(); });
+}
+
+// La lista de herramientas son todos los cuerpos menos el destino.
+void CombineTool::fillTools()
+{
+    std::vector<std::string> marked = checked_;
+    for (int i = 0; i < tools_->count(); ++i) {
+        if (tools_->item(i)->checkState() == Qt::Checked) {
+            marked.push_back(tools_->item(i)->data(Qt::UserRole).toString().toStdString());
+        }
+    }
+    const QSignalBlocker block(tools_);
+    tools_->clear();
+    const QString targetKey = target_->currentData().toString();
+    for (const document::Body& b : before().bodies) {
+        if (QString::fromStdString(b.key) == targetKey) {
+            continue;
+        }
+        auto* item = new QListWidgetItem(QString::fromStdString(b.name), tools_);
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+        item->setCheckState(std::ranges::find(marked, b.key) != marked.end() ? Qt::Checked : Qt::Unchecked);
+        item->setData(Qt::UserRole, QString::fromStdString(b.key));
+    }
+    checked_.clear();
+}
+
+std::unique_ptr<document::Feature> CombineTool::build() const
+{
+    if (target_->count() < 2) {
+        return nullptr;
+    }
+    auto f = std::make_unique<document::CombineFeature>();
+    if (original_) {
+        f->setName(original_->name());
+    }
+    f->target = target_->currentData().toString().toStdString();
+    for (int i = 0; i < tools_->count(); ++i) {
+        if (tools_->item(i)->checkState() == Qt::Checked) {
+            f->tools.push_back(tools_->item(i)->data(Qt::UserRole).toString().toStdString());
+        }
+    }
+    if (f->tools.empty()) {
+        return nullptr;
+    }
+    const int op = operation_->currentIndex();
+    f->operation = op == 1 ? document::Operation::Cut : op == 2 ? document::Operation::Intersect : document::Operation::Join;
+    f->keepTools = keep_->isChecked();
+    return f;
+}
+
+QString CombineTool::inputsText() const
+{
+    if (target_->count() < 2) {
+        return QStringLiteral("Hacen falta al menos dos cuerpos para combinar");
+    }
+    return QStringLiteral("Marca los cuerpos que se unen, cortan o intersecan con el destino");
+}
+
+bool CombineTool::removesMaterial() const
+{
+    return operation_ != nullptr && operation_->currentIndex() != 0;
 }
 
 // --- Rosca ----------------------------------------------------------------------------

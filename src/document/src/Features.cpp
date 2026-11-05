@@ -808,6 +808,113 @@ std::vector<FeatureId> LoftFeature::dependencies() const
     return ids;
 }
 
+// --- Mover y combinar cuerpos --------------------------------------------------------
+
+std::optional<std::string> MoveFeature::compute(ModelState& state) const
+{
+    const auto source = std::ranges::find_if(state.bodies, [&](const Body& b) { return b.key == body; });
+    if (source == state.bodies.end()) {
+        throw FeatureError("El cuerpo que se iba a mover ya no existe");
+    }
+    geometry::Axis rotation;
+    rotation.direction = {axis == 0 ? 1.0 : 0.0, axis == 1 ? 1.0 : 0.0, axis == 2 ? 1.0 : 0.0};
+    if (axisRef != 0) {
+        const auto line = state.axes.find(axisRef);
+        if (line == state.axes.end()) {
+            throw FeatureError("El eje de construcción del giro ya no existe");
+        }
+        rotation.point = line->second.point;
+        rotation.direction = line->second.direction;
+    } else if (!aroundOrigin) {
+        const geometry::Box box = source->shape.bounds();
+        rotation.point = {(box.min.x + box.max.x) / 2.0, (box.min.y + box.max.y) / 2.0, (box.min.z + box.max.z) / 2.0};
+    }
+    try {
+        geometry::Shape moved = geometry::moveBody(tag(), source->shape, translation, rotation, angle, copy);
+        if (copy) {
+            state.bodies.push_back({tag(), "Cuerpo" + std::to_string(++state.bodiesCreated), std::move(moved)});
+        } else {
+            source->shape = std::move(moved);
+        }
+    } catch (const geometry::GeometryError& e) {
+        throw FeatureError(e.what());
+    }
+    return std::nullopt;
+}
+
+std::vector<FeatureId> MoveFeature::dependencies() const
+{
+    std::vector<FeatureId> ids;
+    addAll(ids, geometry::ElementRef{body + ":", 0});
+    if (axisRef != 0) {
+        ids.push_back(axisRef);
+    }
+    return ids;
+}
+
+std::vector<Feature::NumericField> MoveFeature::numericFields()
+{
+    return {field("x", "Desplazamiento X", translation.x), field("y", "Desplazamiento Y", translation.y),
+            field("z", "Desplazamiento Z", translation.z), field("angle", "Ángulo", angle, kRadiansPerDegree)};
+}
+
+std::optional<std::string> CombineFeature::compute(ModelState& state) const
+{
+    if (tools.empty()) {
+        throw FeatureError("Elige al menos un cuerpo herramienta");
+    }
+    const auto find = [&](const std::string& key) {
+        return std::ranges::find_if(state.bodies, [&](const Body& b) { return b.key == key; });
+    };
+    const auto destination = find(target);
+    if (destination == state.bodies.end()) {
+        throw FeatureError("El cuerpo destino ya no existe");
+    }
+    std::vector<std::string> usedKeys;
+    geometry::Shape result = destination->shape;
+    std::optional<std::string> warning;
+    try {
+        const auto op = operation == Operation::Cut         ? geometry::BooleanOp::Cut
+                        : operation == Operation::Intersect ? geometry::BooleanOp::Common
+                                                            : geometry::BooleanOp::Fuse;
+        for (const std::string& key : tools) {
+            if (key == target) {
+                continue;
+            }
+            const auto tool = find(key);
+            if (tool == state.bodies.end()) {
+                warning = "Un cuerpo herramienta ya no existe.";
+                continue;
+            }
+            usedKeys.push_back(key);
+            result = geometry::boolean(op, result, tool->shape);
+            if (result.isNull()) {
+                throw FeatureError("El resultado queda vacío");
+            }
+        }
+    } catch (const geometry::GeometryError& e) {
+        throw FeatureError(e.what());
+    }
+    if (usedKeys.empty()) {
+        throw FeatureError("Faltan los cuerpos herramienta");
+    }
+    find(target)->shape = std::move(result);
+    if (!keepTools) {
+        std::erase_if(state.bodies, [&](const Body& b) { return std::ranges::find(usedKeys, b.key) != usedKeys.end(); });
+    }
+    return warning;
+}
+
+std::vector<FeatureId> CombineFeature::dependencies() const
+{
+    std::vector<FeatureId> ids;
+    addAll(ids, geometry::ElementRef{target + ":", 0});
+    for (const std::string& key : tools) {
+        addAll(ids, geometry::ElementRef{key + ":", 0});
+    }
+    return ids;
+}
+
 // --- Eje de construcción ------------------------------------------------------
 
 std::optional<std::string> ConstructionAxisFeature::compute(ModelState& state) const

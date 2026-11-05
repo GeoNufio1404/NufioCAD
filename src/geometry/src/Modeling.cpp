@@ -1125,6 +1125,39 @@ Shape loft(std::string_view tagView, const std::vector<SketchRegion>& sections, 
     }
 }
 
+Shape moveBody(std::string_view tag, const Shape& body, const sketch::Vec3& translation, const Axis& axis, double angle,
+               bool copy)
+{
+    if (body.isNull()) {
+        throw GeometryError("No hay cuerpo que mover");
+    }
+    try {
+        gp_Trsf total;
+        if (std::abs(angle) > 1e-12) {
+            total.SetRotation(gp_Ax1(toPnt(axis.point), toDir(axis.direction)), angle);
+        }
+        gp_Trsf shift;
+        shift.SetTranslation(gp_Vec(translation.x, translation.y, translation.z));
+        total = shift * total;
+        BRepBuilderAPI_Transform transform(occtShape(body), total, true);
+        if (!transform.IsDone() || transform.Shape().IsNull()) {
+            throw GeometryError("No se pudo mover el cuerpo");
+        }
+        Namer namer(transform.Shape());
+        const Shape::Impl& in = *body.impl();
+        for (int i = 1; i <= in.faces.Extent(); ++i) {
+            const std::string& name = in.faceNames[std::size_t(i - 1)];
+            for (const TopoDS_Shape& image : transform.Modified(in.faces(i))) {
+                namer.name(image, copy ? std::string(tag) + ":copia:" + name : name);
+            }
+        }
+        namer.nameUnnamed(std::string(tag) + ":copia");
+        return namer.finish(std::string(tag));
+    } catch (const Standard_Failure& e) {
+        throw GeometryError(std::string("Error del kernel al mover el cuerpo: ") + kernelMessage(e));
+    }
+}
+
 Shape holeTool(std::string_view tag, const sketch::Plane& plane, const std::vector<sketch::Vec2>& centers,
                const HoleSpec& spec, bool flip, const std::vector<Shape>& context)
 {

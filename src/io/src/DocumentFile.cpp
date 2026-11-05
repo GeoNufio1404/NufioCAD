@@ -509,6 +509,21 @@ FeatureRow rowOf(const Feature& f)
         params = {{"base", toJson(cp.base)}, {"offset", cp.offset}, {"angle", cp.angle}, {"angleAxis", cp.angleAxis}};
         break;
     }
+    case FeatureKind::Move: {
+        const auto& m = static_cast<const MoveFeature&>(f);
+        row.type = "move";
+        params = {{"body", m.body}, {"translation", {m.translation.x, m.translation.y, m.translation.z}},
+                  {"axis", m.axis}, {"axisRef", m.axisRef}, {"aroundOrigin", m.aroundOrigin},
+                  {"angle", m.angle}, {"copy", m.copy}};
+        break;
+    }
+    case FeatureKind::Combine: {
+        const auto& c = static_cast<const CombineFeature&>(f);
+        row.type = "combine";
+        params = {{"target", c.target}, {"tools", c.tools}, {"operation", nameOf(kOperations, c.operation)},
+                  {"keepTools", c.keepTools}};
+        break;
+    }
     case FeatureKind::Loft: {
         const auto& l = static_cast<const LoftFeature&>(f);
         row.type = "loft";
@@ -638,6 +653,26 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         cp->angle = number(p, "angle");
         cp->angleAxis = p.at("angleAxis").get<int>();
         feature = std::move(cp);
+    } else if (row.type == "move") {
+        auto m = std::make_unique<MoveFeature>();
+        m->body = text(p, "body");
+        const Json& t = p.at("translation");
+        m->translation = {t.at(0).get<double>(), t.at(1).get<double>(), t.at(2).get<double>()};
+        m->axis = p.at("axis").get<int>();
+        m->axisRef = unsignedValue(p, "axisRef");
+        m->aroundOrigin = p.at("aroundOrigin").get<bool>();
+        m->angle = number(p, "angle");
+        m->copy = p.at("copy").get<bool>();
+        feature = std::move(m);
+    } else if (row.type == "combine") {
+        auto c = std::make_unique<CombineFeature>();
+        c->target = text(p, "target");
+        for (const Json& key : p.at("tools")) {
+            c->tools.push_back(key.get<std::string>());
+        }
+        c->operation = parseEnum(kOperations, text(p, "operation"), "operación");
+        c->keepTools = p.at("keepTools").get<bool>();
+        feature = std::move(c);
     } else if (row.type == "loft") {
         auto l = std::make_unique<LoftFeature>();
         l->profiles = profilesOf(p.at("profiles"));

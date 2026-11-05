@@ -154,9 +154,23 @@ Necesitas un cuerpo (la caja de 40×25×10 de «Antes de empezar»). Los botones
 
 ---
 
-## Fases 8 y 9
+## Fase 8 — Multi-cuerpo y ensambles
 
-Aún no existen; cuando se implementen agregaré sus pruebas aquí.
+| # | Qué hacer | Qué debería pasar |
+|---|---|---|
+| 8.1 | Con un cuerpo, Sólido › **Mover cuerpo** (grupo MODIFICAR); Mover en X `60` | Vista previa del cuerpo desplazado; Aceptar → ficha «Mover1» |
+| 8.2 | Ángulo `45` con el eje Z «Centro del cuerpo» y luego «Origen» | Gira sobre sí mismo o alrededor del origen |
+| 8.3 | Marcar «Crear una copia» | El original se queda y aparece «Cuerpo2» |
+| 8.4 | Con dos cuerpos, clic en una cara del segundo mientras Mover está abierto | El desplegable «Cuerpo» cambia a ese cuerpo |
+| 8.5 | Sólido › **Combinar cuerpos**; destino Cuerpo1, marcar Cuerpo2, Unir (que se toquen o solapen) | Un solo cuerpo; con «Cortar» queda el destino con el hueco; «Intersecar» deja solo lo común |
+| 8.6 | Combinar con «Conservar los cuerpos herramienta» | Los dos cuerpos siguen en el navegador |
+| 8.7 | Editar la pieza original (cambiar la altura de su extrusión) | Mover y Combinar se rehacen sobre ella |
+
+**Fíjate en:** ¿se entiende qué cuerpo se mueve? ¿Mover con números es suficiente o echas de menos arrastrar con el ratón? (ver «Pendiente de 8a»).
+
+## Fase 9
+
+Aún no existe; cuando se implemente agregaré sus pruebas aquí.
 
 ---
 

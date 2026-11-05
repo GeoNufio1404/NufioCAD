@@ -47,6 +47,10 @@ std::string kindLabel(FeatureKind kind)
         return "Barrido";
     case FeatureKind::Loft:
         return "Loft";
+    case FeatureKind::Move:
+        return "Mover";
+    case FeatureKind::Combine:
+        return "Combinar";
     }
     return "Operación";
 }

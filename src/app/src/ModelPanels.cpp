@@ -58,6 +58,10 @@ QString glyph(document::FeatureKind kind)
         return QStringLiteral("⤳");
     case document::FeatureKind::Loft:
         return QStringLiteral("⬯");
+    case document::FeatureKind::Move:
+        return QStringLiteral("✥");
+    case document::FeatureKind::Combine:
+        return QStringLiteral("⊕");
     }
     return QStringLiteral("?");
 }

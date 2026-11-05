@@ -275,6 +275,40 @@ public:
     std::vector<FeatureId> dependencies() const override;
 };
 
+// Mover o copiar un cuerpo: gira alrededor de un eje (el del origen, uno de
+// construcción o uno que pasa por el centro del propio cuerpo) y se desplaza.
+class MoveFeature final : public Feature {
+public:
+    std::string body;                     // clave del cuerpo
+    sketch::Vec3 translation;             // mm
+    int axis = 2;                         // 0 = X, 1 = Y, 2 = Z
+    FeatureId axisRef = 0;                // si no es 0, un eje de construcción
+    bool aroundOrigin = false;            // eje de origen: por el origen (si no, por el centro del cuerpo)
+    double angle = 0.0;                   // rad
+    bool copy = false;                    // deja el original y crea un cuerpo nuevo
+
+    FeatureKind kind() const override { return FeatureKind::Move; }
+    std::unique_ptr<Feature> clone() const override { return std::make_unique<MoveFeature>(*this); }
+    std::optional<std::string> compute(ModelState& state) const override;
+    std::vector<FeatureId> dependencies() const override;
+    std::vector<NumericField> numericFields() override;
+};
+
+// Combinar cuerpos: el cuerpo destino se une, se corta o se interseca con los
+// cuerpos herramienta, que desaparecen salvo que se conserven.
+class CombineFeature final : public Feature {
+public:
+    std::string target;
+    std::vector<std::string> tools;
+    Operation operation = Operation::Join;  // Join, Cut o Intersect
+    bool keepTools = false;
+
+    FeatureKind kind() const override { return FeatureKind::Combine; }
+    std::unique_ptr<Feature> clone() const override { return std::make_unique<CombineFeature>(*this); }
+    std::optional<std::string> compute(ModelState& state) const override;
+    std::vector<FeatureId> dependencies() const override;
+};
+
 enum class PatternLayout { Linear, Circular };
 
 // Patrón: copias de un cuerpo en fila (a lo largo de un eje de origen) o

@@ -23,6 +23,7 @@ class QComboBox;
 class QDoubleSpinBox;
 class QFormLayout;
 class QLabel;
+class QListWidget;
 class QPushButton;
 class QSpinBox;
 class QWidget;
@@ -414,6 +415,61 @@ private:
     std::vector<document::ProfileRef> profiles_;  // en el orden de elección
     QComboBox* kind_ = nullptr;
     QComboBox* operation_ = nullptr;
+};
+
+// Mover / copiar un cuerpo: desplazamiento en X, Y y Z y giro alrededor de un eje.
+class MoveTool final : public FeatureTool {
+    Q_OBJECT
+
+public:
+    MoveTool(document::Document& document, render::Viewport& viewport, std::optional<document::FeatureId> editing);
+
+    std::unique_ptr<document::Feature> build() const override;
+
+protected:
+    QString title() const override { return QStringLiteral("Mover cuerpo"); }
+    void createFields(QFormLayout* form) override;
+    void selectionChanged(const render::ModelSelection& selection) override;
+    QString inputsText() const override;
+    bool removesMaterial() const override { return false; }
+
+private:
+    std::string body_;
+    std::vector<document::FeatureId> axisIds_;  // ejes de construcción tras X, Y, Z
+    QComboBox* bodyBox_ = nullptr;
+    QDoubleSpinBox* x_ = nullptr;
+    QDoubleSpinBox* y_ = nullptr;
+    QDoubleSpinBox* z_ = nullptr;
+    QComboBox* axis_ = nullptr;
+    QComboBox* around_ = nullptr;
+    QDoubleSpinBox* angle_ = nullptr;
+    QCheckBox* copy_ = nullptr;
+};
+
+// Combinar cuerpos: destino, herramientas (casillas) y operación.
+class CombineTool final : public FeatureTool {
+    Q_OBJECT
+
+public:
+    CombineTool(document::Document& document, render::Viewport& viewport, std::optional<document::FeatureId> editing);
+
+    std::unique_ptr<document::Feature> build() const override;
+
+protected:
+    QString title() const override { return QStringLiteral("Combinar cuerpos"); }
+    void createFields(QFormLayout* form) override;
+    void selectionChanged(const render::ModelSelection&) override {}
+    QString inputsText() const override;
+    bool removesMaterial() const override;
+
+private:
+    void fillTools();
+
+    QComboBox* target_ = nullptr;
+    QListWidget* tools_ = nullptr;
+    QComboBox* operation_ = nullptr;
+    QCheckBox* keep_ = nullptr;
+    std::vector<std::string> checked_;  // herramientas marcadas (al editar)
 };
 
 // Rosca: varilla roscada métrica (con medidas estándar M3…M24 o propias).

@@ -372,6 +372,15 @@ void MainWindow::createMenus()
     });
     decorate(threadAction_, QStringLiteral("thread-solid"),
              QStringLiteral("Generar un tornillo o varilla roscada (rosca métrica)"), QStringLiteral("Rosca"));
+    moveAction_ = solidMenu->addAction(QStringLiteral("&Mover cuerpo"), this, [this] {
+        startTool(std::make_unique<MoveTool>(document_, *viewport_, std::nullopt));
+    });
+    decorate(moveAction_, QStringLiteral("move"), QStringLiteral("Mover, girar o copiar un cuerpo"), QStringLiteral("Mover"));
+    combineAction_ = solidMenu->addAction(QStringLiteral("Co&mbinar cuerpos"), this, [this] {
+        startTool(std::make_unique<CombineTool>(document_, *viewport_, std::nullopt));
+    });
+    decorate(combineAction_, QStringLiteral("combine-solid"),
+             QStringLiteral("Unir, cortar o intersecar cuerpos entre sí"), QStringLiteral("Combinar"));
     decorate(shellAction_, QStringLiteral("shell"), QStringLiteral("Vaciar un cuerpo dejando abiertas las caras elegidas"));
 
     // Herramientas de dibujo por familias (como en Fusion 360); la primera
@@ -535,6 +544,8 @@ void MainWindow::createMenus()
     ribbon_->addAction(solidTab_, holeAction_);
     ribbon_->addAction(solidTab_, mirrorAction_);
     ribbon_->addAction(solidTab_, patternAction_);
+    ribbon_->addAction(solidTab_, moveAction_);
+    ribbon_->addAction(solidTab_, combineAction_);
     ribbon_->addGroup(solidTab_, QStringLiteral("CONSTRUIR"));
     ribbon_->addAction(solidTab_, planeAction_);
     ribbon_->addAction(solidTab_, axisAction_);
@@ -990,6 +1001,12 @@ void MainWindow::activateFeature(document::FeatureId id)
     case document::FeatureKind::Loft:
         startTool(std::make_unique<LoftTool>(document_, *viewport_, id));
         break;
+    case document::FeatureKind::Move:
+        startTool(std::make_unique<MoveTool>(document_, *viewport_, id));
+        break;
+    case document::FeatureKind::Combine:
+        startTool(std::make_unique<CombineTool>(document_, *viewport_, id));
+        break;
     case document::FeatureKind::Import:
         break;  // no tiene parámetros que editar
     }
@@ -1081,7 +1098,7 @@ bool MainWindow::sketchVisible(document::FeatureId id, std::size_t upTo) const
 void MainWindow::updateExportAction()
 {
     updateStartScreen();
-    for (QAction* action : {filletAction_, chamferAction_, shellAction_, holeAction_, mirrorAction_, patternAction_}) {
+    for (QAction* action : {filletAction_, chamferAction_, shellAction_, holeAction_, mirrorAction_, patternAction_, moveAction_, combineAction_}) {
         if (action != nullptr) {
             action->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane() && !document_.result().bodies.empty());
         }

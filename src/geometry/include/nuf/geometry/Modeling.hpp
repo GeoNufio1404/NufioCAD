@@ -168,6 +168,13 @@ Shape sweep(std::string_view tag, const SketchRegion& profile, const sketch::Ske
 // «tag:lado:<origen en el primer perfil>», «tag:inicio» y «tag:fin».
 Shape loft(std::string_view tag, const std::vector<SketchRegion>& sections, bool ruled);
 
+// Mueve un cuerpo: primero lo gira «angle» (rad) alrededor de «axis» y luego lo
+// desplaza «translation» (mm). Con «copy» las caras de la copia se llaman
+// «tag:copia:<nombre original>»; si no, conservan su nombre (es el mismo cuerpo, en
+// otro sitio).
+Shape moveBody(std::string_view tag, const Shape& body, const sketch::Vec3& translation, const Axis& axis, double angle,
+               bool copy);
+
 enum class HoleKind { Simple, Counterbore, Countersink };
 
 struct HoleSpec {

@@ -382,9 +382,9 @@ Todas siguen el patrón de las operaciones actuales: una clase en `document/Feat
 - **Pendiente de 7d:** guías y curvas centrales, condiciones de tangencia en los extremos, perfiles con huecos, elegir el vértice de arranque; sin probar a mano el flujo completo en la interfaz.
 
 ### Fase 8 — Multi-cuerpo y ensambles
-- Varios cuerpos en un mismo diseño.
-- Componentes.
-- Uniones básicas (joints).
+- **8a Mover, copiar y combinar cuerpos ✅:** `geometry::moveBody` (giro alrededor de un eje + desplazamiento; al mover conserva el nombre de las caras, al copiar las llama `f<id>:copia:<nombre>`), `MoveFeature` (cuerpo, X/Y/Z, eje de origen o de construcción, el eje pasa por el centro del cuerpo o por el origen, ángulo, copia sí/no) y `CombineFeature` (cuerpo destino + cuerpos herramienta + unir/cortar/intersecar + conservar herramientas). Herramientas Sólido › Mover cuerpo (un clic en una cara elige su cuerpo) y Combinar cuerpos (grupo MODIFICAR); valores ligables a parámetros. 2 pruebas nuevas.
+- **Pendiente de 8a:** mover con un gizmo/flechas arrastrables en la vista; mover por la distancia entre dos puntos o caras; combinar eligiendo los cuerpos en la vista; dividir un cuerpo en piezas; sin probar a mano el flujo completo (solo que los paneles abren).
+- Componentes (8b) y uniones (8c): pendientes.
 
 ### Fase 9 — Pulido para impresión 3D
 - Herramientas de medición.

@@ -1157,3 +1157,98 @@ TEST_CASE("El loft pide dos perfiles como mínimo, admite tres y se guarda", "[l
     REQUIRE(reopened.findFeature(id)->kind() == FeatureKind::Loft);
     REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(volume, 1e-9));
 }
+
+namespace {
+
+FeatureId addMove(Document& doc, sketch::Vec3 translation, double angle = 0.0, bool copy = false, const std::string& body = "f2")
+{
+    auto m = std::make_unique<MoveFeature>();
+    m->body = body;
+    m->translation = translation;
+    m->angle = angle;
+    m->axis = 2;
+    m->copy = copy;
+    return doc.addFeature(std::move(m));
+}
+
+} // namespace
+
+TEST_CASE("Mover un cuerpo lo desplaza y gira sin cambiar el nombre de sus caras", "[move]")
+{
+    Document doc = boxDocument();  // 20×10×5 desde el origen
+    const FeatureId id = addMove(doc, {30, 5, 0});
+    REQUIRE(doc.status(id).health == Health::Ok);
+    REQUIRE(doc.result().bodies.size() == 1);
+    const geometry::Shape& box = doc.result().bodies.front().shape;
+    REQUIRE_THAT(box.bounds().min.x, Catch::Matchers::WithinAbs(30.0, 1e-6));
+    REQUIRE_THAT(box.bounds().min.y, Catch::Matchers::WithinAbs(5.0, 1e-6));
+    REQUIRE_THAT(box.volume(), WithinRel(kBox, 1e-9));
+    REQUIRE(box.faceName(0).starts_with("f2:"));
+
+    // 90° alrededor de Z por el centro del cuerpo: queda de 10×20 con el mismo centro.
+    Document turned = boxDocument();
+    addMove(turned, {0, 0, 0}, kPi / 2.0);
+    const geometry::Box tb = turned.result().bodies.front().shape.bounds();
+    REQUIRE_THAT(tb.max.x - tb.min.x, Catch::Matchers::WithinAbs(10.0, 1e-6));
+    REQUIRE_THAT(tb.max.y - tb.min.y, Catch::Matchers::WithinAbs(20.0, 1e-6));
+    REQUIRE_THAT((tb.min.x + tb.max.x) / 2.0, Catch::Matchers::WithinAbs(10.0, 1e-6));
+
+    // Una copia deja el original y crea un cuerpo nuevo con otros nombres.
+    Document copy = boxDocument();
+    const FeatureId c = addMove(copy, {0, 20, 0}, 0.0, true);
+    REQUIRE(copy.status(c).health == Health::Ok);
+    REQUIRE(copy.result().bodies.size() == 2);
+    REQUIRE_THAT(copy.result().bodies[0].shape.bounds().min.y, Catch::Matchers::WithinAbs(0.0, 1e-6));
+    REQUIRE_THAT(copy.result().bodies[1].shape.bounds().min.y, Catch::Matchers::WithinAbs(20.0, 1e-6));
+    REQUIRE(copy.result().bodies[1].shape.faceName(0).find(":copia:") != std::string::npos);
+
+    REQUIRE(doc.status(addMove(doc, {1, 0, 0}, 0.0, false, "f99")).health == Health::Error);
+}
+
+TEST_CASE("Combinar cuerpos une, corta o interseca, y se guarda", "[combine][io]")
+{
+    const auto overlapping = [](Document& doc) {
+        addMove(doc, {15, 0, 0}, 0.0, true);  // segunda caja de x = 15 a 35
+    };
+    const auto combine = [](Document& doc, Operation op, bool keep) {
+        auto c = std::make_unique<CombineFeature>();
+        c->target = "f2";
+        c->tools = {"f3"};
+        c->operation = op;
+        c->keepTools = keep;
+        return doc.addFeature(std::move(c));
+    };
+    Document join = boxDocument();
+    overlapping(join);
+    const FeatureId j = combine(join, Operation::Join, false);
+    REQUIRE(join.status(j).health == Health::Ok);
+    REQUIRE(join.result().bodies.size() == 1);
+    REQUIRE_THAT(join.result().bodies.front().shape.volume(), WithinRel(2.0 * kBox - 5.0 * 10.0 * 5.0, 1e-6));
+
+    Document cut = boxDocument();
+    overlapping(cut);
+    REQUIRE(cut.status(combine(cut, Operation::Cut, true)).health == Health::Ok);
+    REQUIRE(cut.result().bodies.size() == 2);  // la herramienta se conserva
+    REQUIRE_THAT(cut.result().bodies.front().shape.volume(), WithinRel(kBox - 250.0, 1e-6));
+
+    Document common = boxDocument();
+    overlapping(common);
+    REQUIRE(common.status(combine(common, Operation::Intersect, false)).health == Health::Ok);
+    REQUIRE_THAT(common.result().bodies.front().shape.volume(), WithinRel(250.0, 1e-6));
+
+    Document none = boxDocument();
+    auto empty = std::make_unique<CombineFeature>();
+    empty->target = "f2";
+    REQUIRE(none.status(none.addFeature(std::move(empty))).health == Health::Error);
+
+    const auto path = std::filesystem::temp_directory_path() / "nuf_combinar.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, join, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    REQUIRE(reopened.findFeature(j)->kind() == FeatureKind::Combine);
+    REQUIRE(reopened.status(j).health == Health::Ok);
+    REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(join.result().bodies.front().shape.volume(), 1e-9));
+}
