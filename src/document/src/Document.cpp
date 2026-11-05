@@ -31,6 +31,8 @@ std::string kindLabel(FeatureKind kind)
         return "Vaciado";
     case FeatureKind::Hole:
         return "Agujero";
+    case FeatureKind::Mirror:
+        return "Espejo";
     }
     return "Operación";
 }

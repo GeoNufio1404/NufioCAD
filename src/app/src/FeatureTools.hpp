@@ -251,4 +251,29 @@ private:
     QFormLayout* form_ = nullptr;
 };
 
+// Espejo: elige el cuerpo, el plano de simetría (de origen o una cara plana en
+// la vista) y si se une o queda como cuerpo nuevo.
+class MirrorTool final : public FeatureTool {
+    Q_OBJECT
+
+public:
+    MirrorTool(document::Document& document, render::Viewport& viewport, std::optional<document::FeatureId> editing);
+
+    std::unique_ptr<document::Feature> build() const override;
+
+protected:
+    QString title() const override { return QStringLiteral("Espejo"); }
+    void createFields(QFormLayout* form) override;
+    void selectionChanged(const render::ModelSelection& selection) override;
+    QString inputsText() const override;
+    bool removesMaterial() const override { return false; }
+
+private:
+    std::string body_;
+    geometry::ElementRef face_;
+    QComboBox* bodyBox_ = nullptr;
+    QComboBox* plane_ = nullptr;
+    QComboBox* operation_ = nullptr;
+};
+
 } // namespace nuf::app

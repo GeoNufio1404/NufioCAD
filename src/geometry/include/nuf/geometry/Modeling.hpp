@@ -98,6 +98,10 @@ bool touches(const Shape& a, const Shape& b);
 Shape fillet(std::string_view tag, const Shape& body, const std::vector<int>& edges, double radius);
 Shape chamfer(std::string_view tag, const Shape& body, const std::vector<int>& edges, double distance);
 
+// Copia del cuerpo reflejada sobre el plano. Las caras se llaman
+// «tag:espejo:<nombre de la cara original>».
+Shape mirror(std::string_view tag, const Shape& body, const sketch::Plane& plane);
+
 enum class HoleKind { Simple, Counterbore, Countersink };
 
 struct HoleSpec {

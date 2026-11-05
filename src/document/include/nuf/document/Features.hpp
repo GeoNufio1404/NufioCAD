@@ -164,6 +164,21 @@ public:
     std::vector<FeatureId> dependencies() const override;
 };
 
+// Espejo: una copia de un cuerpo reflejada sobre un plano (de origen o una
+// cara plana). Con «Unir» se junta con lo que toca (el propio cuerpo si toca
+// el plano), con «Cuerpo nuevo» queda aparte.
+class MirrorFeature final : public Feature {
+public:
+    std::string body;            // clave del cuerpo («f3»)
+    SketchAttachment plane;      // dónde está el plano de simetría
+    Operation operation = Operation::Join;
+
+    FeatureKind kind() const override { return FeatureKind::Mirror; }
+    std::unique_ptr<Feature> clone() const override { return std::make_unique<MirrorFeature>(*this); }
+    std::optional<std::string> compute(ModelState& state) const override;
+    std::vector<FeatureId> dependencies() const override;
+};
+
 // Agujeros: un sketch cuyos círculos (su centro) y puntos marcan dónde van; se
 // restan del cuerpo hacia dentro del material, desde el plano del sketch.
 class HoleFeature final : public Feature {

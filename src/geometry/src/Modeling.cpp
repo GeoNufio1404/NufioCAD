@@ -22,6 +22,7 @@
 #include <BRepOffsetAPI_MakeThickSolid.hxx>
 #include <NCollection_List.hxx>
 #include <GProp_GProps.hxx>
+#include <BRepLib.hxx>
 #include <BRepPrimAPI_MakeCone.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
 #include <BRepPrimAPI_MakeHalfSpace.hxx>
@@ -34,6 +35,8 @@
 #include <TopExp_Explorer.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Compound.hxx>
+#include <TopoDS_Solid.hxx>
+#include <gp_Trsf.hxx>
 #include <gp_Pln.hxx>
 
 #include <algorithm>
@@ -597,6 +600,51 @@ Shape chamfer(std::string_view tag, const Shape& body, const std::vector<int>& e
 {
     return edgeOperation<BRepFilletAPI_MakeChamfer>(tag, "chaflan", body, edges, distance,
                                                      "No se pudo achaflanar: prueba con una distancia menor");
+}
+
+Shape mirror(std::string_view tag, const Shape& body, const sketch::Plane& plane)
+{
+    if (body.isNull()) {
+        throw GeometryError("No hay cuerpo que reflejar");
+    }
+    try {
+        gp_Trsf reflection;
+        reflection.SetMirror(gp_Ax2(toPnt(plane.origin), toDir(plane.normal)));
+        BRepBuilderAPI_Transform transform(occtShape(body), reflection, true);
+        if (!transform.IsDone() || transform.Shape().IsNull()) {
+            throw GeometryError("No se pudo reflejar el cuerpo");
+        }
+        // Un espejo invierte la orientación de los sólidos (quedarían «del
+        // revés», con volumen negativo): se vuelven a orientar hacia fuera.
+        const TopoDS_Shape reflected = transform.Shape();
+        TopoDS_Shape result = reflected;
+        if (reflected.ShapeType() == TopAbs_SOLID) {
+            TopoDS_Solid solid = TopoDS::Solid(reflected);
+            BRepLib::OrientClosedSolid(solid);
+            result = solid;
+        } else {
+            BRep_Builder builder;
+            TopoDS_Compound compound;
+            builder.MakeCompound(compound);
+            for (TopExp_Explorer ex(reflected, TopAbs_SOLID); ex.More(); ex.Next()) {
+                TopoDS_Solid solid = TopoDS::Solid(ex.Current());
+                BRepLib::OrientClosedSolid(solid);
+                builder.Add(compound, solid);
+            }
+            result = compound;
+        }
+        Namer namer(result);
+        const Shape::Impl& in = *body.impl();
+        for (int i = 1; i <= in.faces.Extent(); ++i) {
+            for (const TopoDS_Shape& image : transform.Modified(in.faces(i))) {
+                namer.name(image, std::string(tag) + ":espejo:" + in.faceNames[std::size_t(i - 1)]);
+            }
+        }
+        namer.nameUnnamed(std::string(tag) + ":espejo");
+        return namer.finish(std::string(tag));
+    } catch (const Standard_Failure& e) {
+        throw GeometryError(std::string("Error del kernel al reflejar: ") + kernelMessage(e));
+    }
 }
 
 Shape holeTool(std::string_view tag, const sketch::Plane& plane, const std::vector<sketch::Vec2>& centers,

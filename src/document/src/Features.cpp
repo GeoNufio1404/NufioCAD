@@ -522,6 +522,61 @@ std::vector<FeatureId> ShellFeature::dependencies() const
     return ids;
 }
 
+// --- Espejo --------------------------------------------------------------------
+
+std::optional<std::string> MirrorFeature::compute(ModelState& state) const
+{
+    const auto source = std::ranges::find_if(state.bodies, [&](const Body& b) { return b.key == body; });
+    if (source == state.bodies.end()) {
+        throw FeatureError("El cuerpo que se iba a reflejar ya no existe");
+    }
+    // El plano: de origen, o la cara (si ya no es plana o no existe, el último
+    // que tuvo, con un aviso).
+    std::optional<std::string> warning;
+    sketch::Plane mirrorPlane = plane.lastPlane;
+    if (plane.origin) {
+        switch (*plane.origin) {
+        case OriginPlane::XY:
+            mirrorPlane = sketch::Plane::xy();
+            break;
+        case OriginPlane::XZ:
+            mirrorPlane = sketch::Plane::xz();
+            break;
+        case OriginPlane::YZ:
+            mirrorPlane = sketch::Plane::yz();
+            break;
+        }
+    } else if (const auto hit = state.findFace(plane.face)) {
+        if (const auto facePlane = state.bodies[hit->body].shape.facePlane(hit->face)) {
+            mirrorPlane = *facePlane;
+        } else {
+            warning = "La cara del plano de simetría ya no es plana; se usa su última posición.";
+        }
+    } else {
+        warning = "La cara del plano de simetría ya no existe; se usa su última posición.";
+    }
+    geometry::Shape mirrored;
+    try {
+        mirrored = geometry::mirror(tag(), source->shape, mirrorPlane);
+        if (auto extra = applyOperation(state, *this, operation, mirrored)) {
+            warning = warning ? *warning + " " + *extra : *extra;
+        }
+    } catch (const geometry::GeometryError& e) {
+        throw FeatureError(e.what());
+    }
+    return warning;
+}
+
+std::vector<FeatureId> MirrorFeature::dependencies() const
+{
+    std::vector<FeatureId> ids;
+    addAll(ids, geometry::ElementRef{body + ":", 0});  // la operación que creó el cuerpo
+    if (!plane.origin) {
+        addAll(ids, plane.face);
+    }
+    return ids;
+}
+
 // --- Agujeros ----------------------------------------------------------------
 
 geometry::Shape HoleFeature::tool(const ModelState& state) const

@@ -1014,4 +1014,102 @@ QString HoleTool::inputsText() const
     return QStringLiteral("Agujeros en los círculos de «%1»").arg(sketchBox_->currentText());
 }
 
+// --- Espejo ------------------------------------------------------------------------
+
+MirrorTool::MirrorTool(document::Document& document, render::Viewport& viewport,
+                       std::optional<document::FeatureId> editing)
+    : FeatureTool(document, viewport, editing)
+{
+    if (const auto* m = dynamic_cast<const document::MirrorFeature*>(original_.get())) {
+        body_ = m->body;
+        face_ = m->plane.face;
+    }
+}
+
+void MirrorTool::createFields(QFormLayout* form)
+{
+    bodyBox_ = new QComboBox();
+    for (const document::Body& b : before().bodies) {
+        bodyBox_->addItem(QString::fromStdString(b.name), QString::fromStdString(b.key));
+    }
+    if (body_.empty() && bodyBox_->count() > 0) {
+        body_ = bodyBox_->itemData(0).toString().toStdString();
+    }
+    if (const int at = bodyBox_->findData(QString::fromStdString(body_)); at >= 0) {
+        bodyBox_->setCurrentIndex(at);
+    }
+    plane_ = combo({QStringLiteral("Plano XY"), QStringLiteral("Plano XZ"), QStringLiteral("Plano YZ"),
+                    QStringLiteral("Cara plana elegida")});
+    operation_ = combo({QStringLiteral("Unir"), QStringLiteral("Cuerpo nuevo")});
+    plane_->setCurrentIndex(2);  // YZ: la simetría más común
+    if (const auto* m = dynamic_cast<const document::MirrorFeature*>(original_.get())) {
+        plane_->setCurrentIndex(m->plane.origin ? int(*m->plane.origin) : 3);
+        operation_->setCurrentIndex(m->operation == document::Operation::NewBody ? 1 : 0);
+    }
+    form->addRow(QStringLiteral("Cuerpo"), bodyBox_);
+    form->addRow(QStringLiteral("Plano de simetría"), plane_);
+    form->addRow(QStringLiteral("Operación"), operation_);
+    connect(bodyBox_, &QComboBox::currentIndexChanged, this, [this] {
+        body_ = bodyBox_->currentData().toString().toStdString();
+        updatePreview();
+    });
+    for (QComboBox* box : {plane_, operation_}) {
+        connect(box, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
+    }
+}
+
+void MirrorTool::selectionChanged(const render::ModelSelection& selection)
+{
+    // Una cara plana elegida en la vista es el plano de simetría.
+    for (const render::ModelSelection::Face& face : selection.faces) {
+        if (const auto hit = before().findFace(face.ref); hit && before().bodies[hit->body].shape.facePlane(hit->face)) {
+            face_ = face.ref;
+            plane_->setCurrentIndex(3);
+            break;
+        }
+    }
+}
+
+std::unique_ptr<document::Feature> MirrorTool::build() const
+{
+    if (body_.empty()) {
+        return nullptr;
+    }
+    auto f = std::make_unique<document::MirrorFeature>();
+    if (original_) {
+        f->setName(original_->name());
+    }
+    f->body = body_;
+    f->operation = operation_->currentIndex() == 1 ? document::Operation::NewBody : document::Operation::Join;
+    const int plane = plane_->currentIndex();
+    if (plane < 3) {
+        f->plane.origin = document::OriginPlane(plane);
+        return f;
+    }
+    // Cara plana: hace falta que haya una elegida.
+    const auto hit = before().findFace(face_);
+    if (!hit) {
+        return nullptr;
+    }
+    const auto facePlane = before().bodies[hit->body].shape.facePlane(hit->face);
+    if (!facePlane) {
+        return nullptr;
+    }
+    f->plane.origin.reset();
+    f->plane.face = face_;
+    f->plane.lastPlane = *facePlane;
+    return f;
+}
+
+QString MirrorTool::inputsText() const
+{
+    if (bodyBox_->count() == 0) {
+        return QStringLiteral("No hay cuerpos que reflejar");
+    }
+    if (plane_->currentIndex() == 3 && face_.empty()) {
+        return QStringLiteral("Elige en la vista la cara plana que hace de plano de simetría");
+    }
+    return QStringLiteral("Reflejar «%1»").arg(bodyBox_->currentText());
+}
+
 } // namespace nuf::app

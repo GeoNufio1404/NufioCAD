@@ -42,6 +42,8 @@ QString glyph(document::FeatureKind kind)
         return QStringLiteral("▢");
     case document::FeatureKind::Hole:
         return QStringLiteral("◎");
+    case document::FeatureKind::Mirror:
+        return QStringLiteral("⇋");
     }
     return QStringLiteral("?");
 }

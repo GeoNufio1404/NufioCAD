@@ -479,6 +479,12 @@ FeatureRow rowOf(const Feature& f)
         params = {{"edges", toJson(e.edges)}, {"size", e.size}};
         break;
     }
+    case FeatureKind::Mirror: {
+        const auto& m = static_cast<const MirrorFeature&>(f);
+        row.type = "mirror";
+        params = {{"body", m.body}, {"plane", toJson(m.plane)}, {"operation", nameOf(kOperations, m.operation)}};
+        break;
+    }
     case FeatureKind::Hole: {
         const auto& h = static_cast<const HoleFeature&>(f);
         row.type = "hole";
@@ -545,6 +551,12 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         }
         e->size = number(p, "size");
         feature = std::move(e);
+    } else if (row.type == "mirror") {
+        auto m = std::make_unique<MirrorFeature>();
+        m->body = text(p, "body");
+        m->plane = attachmentOf(p.at("plane"));
+        m->operation = parseEnum(kOperations, text(p, "operation"), "operación");
+        feature = std::move(m);
     } else if (row.type == "hole") {
         auto h = std::make_unique<HoleFeature>();
         h->sketch = unsignedValue(p, "sketch");

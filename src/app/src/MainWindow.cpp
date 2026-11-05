@@ -311,6 +311,11 @@ void MainWindow::createMenus()
     });
     decorate(holeAction_, QStringLiteral("hole"),
              QStringLiteral("Hacer agujeros en los círculos de un sketch (simple, abocardado o avellanado)"));
+    mirrorAction_ = solidMenu->addAction(QStringLiteral("&Espejo"), this, [this] {
+        startTool(std::make_unique<MirrorTool>(document_, *viewport_, std::nullopt));
+    });
+    decorate(mirrorAction_, QStringLiteral("mirror-solid"),
+             QStringLiteral("Reflejar un cuerpo sobre un plano de origen o una cara plana"));
     decorate(shellAction_, QStringLiteral("shell"), QStringLiteral("Vaciar un cuerpo dejando abiertas las caras elegidas"));
 
     // Herramientas de dibujo por familias (como en Fusion 360); la primera
@@ -470,6 +475,7 @@ void MainWindow::createMenus()
     ribbon_->addAction(solidTab_, chamferAction_);
     ribbon_->addAction(solidTab_, shellAction_);
     ribbon_->addAction(solidTab_, holeAction_);
+    ribbon_->addAction(solidTab_, mirrorAction_);
 
     auto family = [this, &families](const QString& name) {
         const std::size_t i = static_cast<std::size_t>(
@@ -894,6 +900,9 @@ void MainWindow::activateFeature(document::FeatureId id)
     case document::FeatureKind::Hole:
         startTool(std::make_unique<HoleTool>(document_, *viewport_, id));
         break;
+    case document::FeatureKind::Mirror:
+        startTool(std::make_unique<MirrorTool>(document_, *viewport_, id));
+        break;
     case document::FeatureKind::Import:
         break;  // no tiene parámetros que editar
     }
@@ -985,7 +994,7 @@ bool MainWindow::sketchVisible(document::FeatureId id, std::size_t upTo) const
 void MainWindow::updateExportAction()
 {
     updateStartScreen();
-    for (QAction* action : {filletAction_, chamferAction_, shellAction_, holeAction_}) {
+    for (QAction* action : {filletAction_, chamferAction_, shellAction_, holeAction_, mirrorAction_}) {
         if (action != nullptr) {
             action->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane() && !document_.result().bodies.empty());
         }

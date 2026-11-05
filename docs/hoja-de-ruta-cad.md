@@ -327,7 +327,14 @@ Todas siguen el patrón de las operaciones actuales: una clase en `document/Feat
 | **5b** Shell | Vaciar un cuerpo quitando caras, con espesor | Mediano | ✅ |
 | **5c** Agujeros | Sketch de puntos + diámetro, profundidad, avellanado/abocardado | Mediano | ✅ |
 | **5d** Patrones | Lineal y circular de una operación o cuerpo | **Grande** | pendiente |
-| **5e** Espejo | Reflejar un cuerpo o una operación sobre un plano | Pequeño | pendiente |
+| **5e** Espejo | Reflejar un cuerpo o una operación sobre un plano | Pequeño | ✅ (cuerpos) |
+
+**5e — Espejo ✅ (de cuerpos)**
+- `geometry::mirror`: copia del cuerpo reflejada sobre un plano; se reorienta el sólido (un espejo lo deja «del revés») y las caras se llaman `f<id>:espejo:<nombre original>`.
+- `MirrorFeature`: clave del cuerpo + plano (de origen XY/XZ/YZ o una cara plana, con la misma estructura que el sitio de un sketch, que sigue a la cara si la pieza cambia) + operación. **Unir** lo junta con lo que toca (el propio cuerpo si toca el plano; las caras coplanares se funden) y **Cuerpo nuevo** deja la copia aparte. Se guarda como `mirror`.
+- Herramienta `MirrorTool`: Sólido › Espejo en la cinta; elige cuerpo, plano (o una cara plana en la vista) y operación, con vista previa en vivo.
+- **Hecho:** 3 pruebas nuevas (unir → caja de 40×10×5 con 6 caras y el doble de volumen; cuerpo nuevo; cara como plano; seguir a la pieza al hacerla más alta; error si el cuerpo no existe; guardar y abrir). Comprobado a mano: el botón, el panel y la vista previa.
+- **Pendiente de 5e:** reflejar **operaciones** (no solo cuerpos) y varios cuerpos a la vez; planos de construcción (llegan en la Fase 6).
 
 **5c — Agujeros ✅**
 - `geometry::holeTool`: un cilindro por centro, hacia dentro del material, que empieza 1 mm fuera de la superficie para un corte limpio; **simple**, **abocardado** (cabeza cilíndrica) y **avellanado** (cono con ángulo), con profundidad o «atravesar todo». Las paredes se llaman `f<id>:pared`.
@@ -391,5 +398,5 @@ Todas siguen el patrón de las operaciones actuales: una clase en `document/Feat
 | Fase 2 | 🚧 Implementada (2a–2d) — sketch completo: dibujo con variantes, elipse, spline y cónica; restricciones (incluida G2), cotas y valores junto al cursor; selección (también por rectángulo), deshacer, arrastre y perfiles; edición (recortar, extender, partir, empalme, chaflán, desfase, simetría, patrones, mover/copiar/girar/escalar); proyectar aristas, intersección, texto, imagen de referencia e importar DXF; los sketches terminados se guardan, sus perfiles y curvas se seleccionan en la vista 3D y se reabren con doble clic. Pendiente: las pruebas manuales de abajo y probar en Windows. Limitaciones: lo proyectado y el texto quedan bloqueados (no se actualizan con la pieza ni se editan como texto hasta la Fase 3); recortar/extender/partir y desfase trabajan con líneas, arcos y círculos; los patrones son copias independientes |
 | Fase 3 | 🚧 Implementada (3a–3c) — núcleo paramétrico con nombres estables de caras y aristas; sketches en el historial (sobre planos de origen o caras que siguen a la pieza); Extruir (todas sus variantes, empujar una cara) y Revolución con vista previa y flecha; timeline editable (editar, marcador, reordenar, suprimir, borrar, renombrar), navegador y deshacer/rehacer; lo proyectado sigue a su arista. Pendiente: las pruebas manuales 20–30 y probar en Windows. Limitaciones: los cuerpos que participan en unir/cortar son todos los que toca (sin elegirlos); «hasta una cara» solo con caras planas; el ángulo de la revolución se escribe en el panel (sin flecha) |
 | Fase 4 | 🚧 4a (Exportar), 4b (serialización), 4c (Nuevo/Abrir/Guardar/Guardar como con aviso de cambios), 4d (importar STEP), 4e (pantalla de inicio con recientes) y 4f (recuperación) implementadas: **Fase 4 completa**. Pendiente: probar a mano las pruebas 31–38 y compilar en Fedora/CI |
-| Fase 5 | 🚧 5a (redondeo y chaflán), 5b (shell) y 5c (agujeros) implementadas; 5d patrones y 5e espejo pendientes. Siguiente paso: 5e |
+| Fase 5 | 🚧 5a (redondeo y chaflán), 5b (shell), 5c (agujeros) y 5e (espejo de cuerpos) implementadas; 5d patrones pendiente. Siguiente paso: 5d |
 | Fases 6–9 | Pendientes (parámetros, generadores, ensambles, medición) |

@@ -390,3 +390,89 @@ TEST_CASE("Los agujeros dan errores claros, se guardan y se abren", "[hole][io]"
     REQUIRE(h.flip);
     REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(doc.result().bodies.front().shape.volume(), 1e-9));
 }
+
+// --- Espejo ----------------------------------------------------------------------
+
+namespace {
+
+FeatureId addMirror(Document& doc, OriginPlane plane, Operation operation, const std::string& body = "f2")
+{
+    auto m = std::make_unique<MirrorFeature>();
+    m->body = body;
+    m->plane.origin = plane;
+    m->operation = operation;
+    return doc.addFeature(std::move(m));
+}
+
+} // namespace
+
+TEST_CASE("Reflejar un cuerpo que toca el plano lo une en una sola pieza simétrica", "[mirror]")
+{
+    Document doc = boxDocument();  // 20×10×5, de x = 0 a 20
+    const FeatureId id = addMirror(doc, OriginPlane::YZ, Operation::Join);
+    REQUIRE(doc.status(id).health == Health::Ok);
+    REQUIRE(doc.result().bodies.size() == 1);
+    const geometry::Shape& body = doc.result().bodies.front().shape;
+    REQUIRE(body.isValid());
+    REQUIRE_THAT(body.volume(), WithinRel(2.0 * kBox, 1e-6));
+    // Una caja de 40×10×5 (x de -20 a 20): las caras coplanares se unen.
+    REQUIRE(body.faceCount() == 6);
+    REQUIRE_THAT(body.bounds().min.x, Catch::Matchers::WithinAbs(-20.0, 1e-6));
+    REQUIRE_THAT(body.bounds().max.x, Catch::Matchers::WithinAbs(20.0, 1e-6));
+}
+
+TEST_CASE("Reflejar como cuerpo nuevo deja dos cuerpos, y una cara puede ser el plano", "[mirror]")
+{
+    Document copy = boxDocument();
+    const FeatureId a = addMirror(copy, OriginPlane::YZ, Operation::NewBody);
+    REQUIRE(copy.status(a).health == Health::Ok);
+    REQUIRE(copy.result().bodies.size() == 2);
+    REQUIRE_THAT(copy.result().bodies[1].shape.volume(), WithinRel(kBox, 1e-6));
+    REQUIRE_THAT(copy.result().bodies[1].shape.bounds().min.x, Catch::Matchers::WithinAbs(-20.0, 1e-6));
+    REQUIRE(copy.result().bodies[1].shape.faceName(0).find(":espejo:") != std::string::npos);
+
+    // Reflejar sobre la cara derecha de la caja (x = 20).
+    Document byFace = boxDocument();
+    const geometry::Shape& body = byFace.result().bodies.front().shape;
+    std::optional<int> right;
+    for (int i = 0; i < body.faceCount(); ++i) {
+        if (const auto plane = body.facePlane(i); plane && plane->normal.x > 0.9) {
+            right = i;
+        }
+    }
+    REQUIRE(right);
+    auto m = std::make_unique<MirrorFeature>();
+    m->body = "f2";
+    m->plane.origin.reset();
+    m->plane.face = body.faceRef(*right);
+    m->plane.lastPlane = *body.facePlane(*right);
+    const FeatureId b = byFace.addFeature(std::move(m));
+    REQUIRE(byFace.status(b).health == Health::Ok);
+    REQUIRE_THAT(byFace.result().bodies.front().shape.volume(), WithinRel(2.0 * kBox, 1e-6));
+    REQUIRE_THAT(byFace.result().bodies.front().shape.bounds().max.x, Catch::Matchers::WithinAbs(40.0, 1e-6));
+}
+
+TEST_CASE("El espejo sigue a la pieza, da error sin cuerpo y se guarda", "[mirror][io]")
+{
+    Document doc = boxDocument(5.0);
+    const FeatureId id = addMirror(doc, OriginPlane::YZ, Operation::Join);
+    REQUIRE(doc.status(addMirror(doc, OriginPlane::XY, Operation::Join, "f99")).health == Health::Error);
+
+    // Más alta la pieza: el espejo se rehace sobre ella.
+    auto taller = std::unique_ptr<Feature>(doc.findFeature(2)->clone());
+    static_cast<ExtrudeFeature&>(*taller).spec.side1.distance = 8.0;
+    doc.replaceFeature(2, std::move(taller));
+    REQUIRE(doc.status(id).health == Health::Ok);
+    REQUIRE_THAT(doc.result().bodies.front().shape.volume(), WithinRel(2.0 * 20.0 * 10.0 * 8.0, 1e-6));
+
+    const auto path = std::filesystem::temp_directory_path() / "nuf_espejo.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    REQUIRE(reopened.findFeature(id)->kind() == FeatureKind::Mirror);
+    REQUIRE(reopened.status(id).health == Health::Ok);
+    REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(doc.result().bodies.front().shape.volume(), 1e-9));
+}
