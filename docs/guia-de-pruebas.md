@@ -198,6 +198,11 @@ Necesitas un cuerpo (la caja de 40×25×10 de «Antes de empezar»). Los botones
 | 9.8 | Cambiar el formato a STEP | La revisión y «Mi impresora» se ocultan (no es malla) |
 | 9.9 | Pieza con muchos detalles (engranaje de 60 dientes) | La revisión no se queda colgada (puede tardar un poco) |
 
+| 9.10 | Archivo › **Imprimir…** (Ctrl+P) | Diálogo «Imprimir» con la misma revisión; el botón «Imprimir» está desactivado y dice «Elige el programa de tu slicer» |
+| 9.11 | «Elegir…» y señalar el `.exe` de tu slicer (Bambu Studio, Orca…) | El botón se activa; se recuerda la próxima vez |
+| 9.12 | Pulsar «Imprimir» | Tu slicer se abre con la pieza ya cargada (el STL queda en `%TEMP%\NufioCAD`) |
+| 9.13 | Imprimir con un cuerpo oculto desmarcado | Solo se manda lo marcado |
+
 **Fíjate en:** ¿los avisos se entienden sin explicación? ¿Hay falsos avisos (te avisa de una pared que no existe)? ¿Echas de menos que señale dónde está el problema en la vista? ¿Los valores de tu impresora son los correctos (anota tu modelo)?
 
 Medición, análisis de sección y el botón «Imprimir» (abrir el slicer): se agregan aquí cuando se implementen.
