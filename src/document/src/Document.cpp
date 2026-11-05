@@ -45,6 +45,8 @@ std::string kindLabel(FeatureKind kind)
         return "Rosca";
     case FeatureKind::Sweep:
         return "Barrido";
+    case FeatureKind::Loft:
+        return "Loft";
     }
     return "Operación";
 }

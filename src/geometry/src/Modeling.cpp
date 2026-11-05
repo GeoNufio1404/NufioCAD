@@ -1084,6 +1084,47 @@ Shape sweep(std::string_view tagView, const SketchRegion& profile, const sketch:
     }
 }
 
+Shape loft(std::string_view tagView, const std::vector<SketchRegion>& sections, bool ruled)
+{
+    const std::string tag(tagView);
+    if (sections.size() < 2) {
+        throw GeometryError("Un loft necesita al menos dos perfiles");
+    }
+    try {
+        BRepOffsetAPI_ThruSections maker(true, ruled, 1e-6);
+        std::vector<std::pair<TopoDS_Edge, std::string>> firstEdges;
+        for (std::size_t i = 0; i < sections.size(); ++i) {
+            const std::vector<ProfileFace> faces = regionFaces(sections[i]);
+            if (faces.size() != 1) {
+                throw GeometryError("Cada sección del loft debe ser un solo perfil");
+            }
+            const TopoDS_Wire outer = BRepTools::OuterWire(faces.front().face);
+            maker.AddWire(outer);
+            if (i == 0) {
+                firstEdges = faces.front().sources;
+            }
+        }
+        maker.Build();
+        if (!maker.IsDone()) {
+            throw GeometryError("No se pudo hacer el loft (¿los perfiles tienen una forma muy distinta?)");
+        }
+        Namer namer(maker.Shape());
+        namer.name(maker.FirstShape(), tag + ":inicio");
+        namer.name(maker.LastShape(), tag + ":fin");
+        for (const auto& [edge, source] : firstEdges) {
+            namer.name(maker.GeneratedFace(edge), tag + ":lado:" + source);
+        }
+        namer.nameUnnamed(tag + ":lado");
+        Shape result = namer.finish(tag);
+        if (!result.isValid()) {
+            throw GeometryError("El loft no es un sólido válido");
+        }
+        return result;
+    } catch (const Standard_Failure& e) {
+        throw GeometryError(std::string("Error del kernel en el loft: ") + kernelMessage(e));
+    }
+}
+
 Shape holeTool(std::string_view tag, const sketch::Plane& plane, const std::vector<sketch::Vec2>& centers,
                const HoleSpec& spec, bool flip, const std::vector<Shape>& context)
 {

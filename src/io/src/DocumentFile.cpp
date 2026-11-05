@@ -509,6 +509,12 @@ FeatureRow rowOf(const Feature& f)
         params = {{"base", toJson(cp.base)}, {"offset", cp.offset}, {"angle", cp.angle}, {"angleAxis", cp.angleAxis}};
         break;
     }
+    case FeatureKind::Loft: {
+        const auto& l = static_cast<const LoftFeature&>(f);
+        row.type = "loft";
+        params = {{"profiles", toJson(l.profiles)}, {"ruled", l.ruled}, {"operation", nameOf(kOperations, l.operation)}};
+        break;
+    }
     case FeatureKind::Sweep: {
         const auto& s = static_cast<const SweepFeature&>(f);
         row.type = "sweep";
@@ -632,6 +638,12 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         cp->angle = number(p, "angle");
         cp->angleAxis = p.at("angleAxis").get<int>();
         feature = std::move(cp);
+    } else if (row.type == "loft") {
+        auto l = std::make_unique<LoftFeature>();
+        l->profiles = profilesOf(p.at("profiles"));
+        l->ruled = p.at("ruled").get<bool>();
+        l->operation = parseEnum(kOperations, text(p, "operation"), "operación");
+        feature = std::move(l);
     } else if (row.type == "sweep") {
         auto s = std::make_unique<SweepFeature>();
         s->profiles = profilesOf(p.at("profiles"));

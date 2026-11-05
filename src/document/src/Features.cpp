@@ -775,6 +775,39 @@ std::vector<FeatureId> SweepFeature::dependencies() const
     return ids;
 }
 
+// --- Loft ------------------------------------------------------------------------
+
+std::optional<std::string> LoftFeature::compute(ModelState& state) const
+{
+    std::vector<std::string> warnings;
+    try {
+        std::vector<geometry::SketchRegion> sections;
+        for (const ProfileRef& ref : profiles) {
+            // Uno por uno, para conservar el orden.
+            for (geometry::SketchRegion& region : regionsOf(state, {ref}, warnings)) {
+                sections.push_back(std::move(region));
+            }
+        }
+        if (sections.size() < profiles.size()) {
+            throw FeatureError("Falta algún perfil del loft");
+        }
+        const geometry::Shape solid = geometry::loft(tag(), sections, ruled);
+        if (auto w = applyOperation(state, *this, operation, solid)) {
+            warnings.push_back(*w);
+        }
+    } catch (const geometry::GeometryError& e) {
+        throw FeatureError(e.what());
+    }
+    return joinWarnings(warnings);
+}
+
+std::vector<FeatureId> LoftFeature::dependencies() const
+{
+    std::vector<FeatureId> ids;
+    addProfileDependencies(ids, profiles);
+    return ids;
+}
+
 // --- Eje de construcción ------------------------------------------------------
 
 std::optional<std::string> ConstructionAxisFeature::compute(ModelState& state) const

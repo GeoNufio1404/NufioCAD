@@ -378,7 +378,8 @@ Todas siguen el patrón de las operaciones actuales: una clase en `document/Feat
 - **Pendiente de 7b:** el cálculo es lento en Debug (unos 2 s por rosca de 10 mm; la vista previa de una de 20 mm tarda ~10 s) — medir en Release; rosca sobre una cara cilíndrica existente, perfiles no métricos (trapezoidal, UNC) y chaflán de entrada.
 - **7c Barrido (sweep) ✅:** `geometry::sweep` (contornos del perfil con `BRepOffsetAPI_MakePipeShell`; trayectoria = curvas de otro sketch que formen un camino continuo; esquinas redondeadas; orientación que sigue la trayectoria o fija; huecos del perfil restados) y `SweepFeature` (perfiles + sketch y curvas de la trayectoria + operación). Caras `f<id>:lado:<origen>`, `:inicio:<perfil>`, `:fin:<perfil>`. Herramienta Sólido › Barrido (grupo CREAR): se eligen en la vista las regiones del perfil y las curvas de la trayectoria. Errores claros si el camino está roto. 2 pruebas nuevas (recto, en L, camino roto, guardar).
 - **Pendiente de 7c:** guías/secciones intermedias, torsión y escala a lo largo del camino, trayectoria con aristas de un cuerpo; probado a mano solo que el botón aparece (el flujo completo con dos sketches está cubierto por las pruebas).
-- Loft: pendiente (7d).
+- **7d Loft ✅:** `geometry::loft` (`BRepOffsetAPI_ThruSections` por el contorno exterior de cada perfil, en orden; superficie suave o recta entre perfiles) y `LoftFeature` (lista ordenada de perfiles + tipo + operación). Caras `f<id>:lado:<origen en el primer perfil>`, `:inicio`, `:fin`. Herramienta Sólido › Loft (grupo CREAR): el orden es el de elección en la vista. Pide al menos dos perfiles. 2 pruebas nuevas (tronco de pirámide con volumen exacto, tres perfiles, guardar).
+- **Pendiente de 7d:** guías y curvas centrales, condiciones de tangencia en los extremos, perfiles con huecos, elegir el vértice de arranque; sin probar a mano el flujo completo en la interfaz.
 
 ### Fase 8 — Multi-cuerpo y ensambles
 - Varios cuerpos en un mismo diseño.
@@ -412,4 +413,5 @@ Todas siguen el patrón de las operaciones actuales: una clase en `document/Feat
 | Fase 4 | 🚧 4a (Exportar), 4b (serialización), 4c (Nuevo/Abrir/Guardar/Guardar como con aviso de cambios), 4d (importar STEP), 4e (pantalla de inicio con recientes) y 4f (recuperación) implementadas: **Fase 4 completa**. Pendiente: probar a mano las pruebas 31–38 y compilar en Fedora/CI |
 | Fase 5 | 🚧 5a (redondeo y chaflán), 5b (shell), 5c (agujeros), 5d (patrones de cuerpos) y 5e (espejo de cuerpos) implementadas: **Fase 5 completa** salvo repetir/reflejar operaciones. Siguiente paso: Fase 6 |
 | Fase 6 | ✅ 6a (planos de construcción), 6b (ejes de construcción) y 6c (parámetros con nombre y expresiones) implementadas. Pendiente: cotas del sketch ligadas a parámetros. Siguiente paso: Fase 7 |
-| Fases 7–9 | Pendientes (generadores, ensambles, medición) |
+| Fase 7 | ✅ 7a (engranajes), 7b (roscas), 7c (barrido) y 7d (loft) implementadas. Siguiente paso: Fase 8 |
+| Fases 8–9 | Pendientes (ensambles, medición) |

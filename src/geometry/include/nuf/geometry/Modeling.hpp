@@ -162,6 +162,12 @@ struct SweepSpec {
 Shape sweep(std::string_view tag, const SketchRegion& profile, const sketch::Sketch& pathSketch,
             const sketch::Plane& pathPlane, const std::vector<sketch::EntityId>& pathEntities, const SweepSpec& spec);
 
+// Loft: un sólido que pasa por varios perfiles (cada región con un solo perfil),
+// en el orden dado. Con «ruled» los tramos son rectos; si no, la superficie es
+// suave por todos los perfiles. Las caras laterales se llaman
+// «tag:lado:<origen en el primer perfil>», «tag:inicio» y «tag:fin».
+Shape loft(std::string_view tag, const std::vector<SketchRegion>& sections, bool ruled);
+
 enum class HoleKind { Simple, Counterbore, Countersink };
 
 struct HoleSpec {

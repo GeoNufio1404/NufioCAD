@@ -394,6 +394,28 @@ private:
     QComboBox* operation_ = nullptr;
 };
 
+// Loft: perfiles de uno o varios sketches, en el orden en que se eligen.
+class LoftTool final : public FeatureTool {
+    Q_OBJECT
+
+public:
+    LoftTool(document::Document& document, render::Viewport& viewport, std::optional<document::FeatureId> editing);
+
+    std::unique_ptr<document::Feature> build() const override;
+
+protected:
+    QString title() const override { return QStringLiteral("Loft"); }
+    void createFields(QFormLayout* form) override;
+    void selectionChanged(const render::ModelSelection& selection) override;
+    QString inputsText() const override;
+    bool removesMaterial() const override { return false; }
+
+private:
+    std::vector<document::ProfileRef> profiles_;  // en el orden de elección
+    QComboBox* kind_ = nullptr;
+    QComboBox* operation_ = nullptr;
+};
+
 // Rosca: varilla roscada métrica (con medidas estándar M3…M24 o propias).
 class ThreadTool final : public FeatureTool {
     Q_OBJECT

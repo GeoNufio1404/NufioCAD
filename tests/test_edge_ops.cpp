@@ -1085,3 +1085,75 @@ TEST_CASE("El barrido da error con una trayectoria rota y se guarda en el archiv
     REQUIRE(reopened.status(id).health == Health::Ok);
     REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(16.0 * 20.0, 1e-6));
 }
+
+namespace {
+
+// Un cuadrado de lado «lado» centrado en (c, c) sobre el plano de construcción dado (0 = XY).
+ProfileRef squareOn(Document& doc, FeatureId plane, double side, double center)
+{
+    sketch::Sketch s;
+    const double lo = center - side / 2.0;
+    const double hi = center + side / 2.0;
+    s.addLine({lo, lo}, {hi, lo});
+    s.addLine({hi, lo}, {hi, hi});
+    s.addLine({hi, hi}, {lo, hi});
+    s.addLine({lo, hi}, {lo, lo});
+    SketchAttachment at;
+    if (plane == 0) {
+        at.origin = OriginPlane::XY;
+    } else {
+        at.origin.reset();
+        at.reference = plane;
+    }
+    const FeatureId sk = doc.addFeature(std::make_unique<SketchFeature>(std::move(s), at));
+    return profileRef(sk, sketch::findProfiles(static_cast<const SketchFeature*>(doc.findFeature(sk))->sketch()).front());
+}
+
+} // namespace
+
+TEST_CASE("Un loft une dos perfiles como un tronco de pirámide", "[loft]")
+{
+    Document doc;
+    const FeatureId top = addPlane(doc, 20.0);
+    auto loft = std::make_unique<LoftFeature>();
+    loft->profiles = {squareOn(doc, 0, 10.0, 5.0), squareOn(doc, top, 4.0, 5.0)};
+    loft->ruled = true;
+    const FeatureId id = doc.addFeature(std::move(loft));
+    REQUIRE(doc.status(id).health == Health::Ok);
+    REQUIRE(doc.result().bodies.size() == 1);
+    const geometry::Shape& solid = doc.result().bodies.front().shape;
+    REQUIRE(solid.isValid());
+    // h/3 · (A1 + A2 + √(A1·A2)) con h = 20, A1 = 100, A2 = 16.
+    REQUIRE_THAT(solid.volume(), WithinRel(20.0 / 3.0 * (100.0 + 16.0 + 40.0), 0.01));
+    REQUIRE_THAT(solid.bounds().max.z, Catch::Matchers::WithinAbs(20.0, 1e-6));
+    REQUIRE(solid.faceCount() == 6);
+}
+
+TEST_CASE("El loft pide dos perfiles como mínimo, admite tres y se guarda", "[loft][io]")
+{
+    Document one;
+    auto single = std::make_unique<LoftFeature>();
+    single->profiles = {squareOn(one, 0, 10.0, 5.0)};
+    REQUIRE(one.status(one.addFeature(std::move(single))).health == Health::Error);
+
+    Document doc;
+    const FeatureId mid = addPlane(doc, 10.0);
+    const FeatureId top = addPlane(doc, 20.0);
+    auto loft = std::make_unique<LoftFeature>();
+    loft->profiles = {squareOn(doc, 0, 10.0, 5.0), squareOn(doc, mid, 6.0, 5.0), squareOn(doc, top, 10.0, 5.0)};
+    const FeatureId id = doc.addFeature(std::move(loft));
+    REQUIRE(doc.status(id).health == Health::Ok);
+    const double volume = doc.result().bodies.front().shape.volume();
+    REQUIRE(volume > 0.5 * 100.0 * 20.0);  // más que un tronco muy estrecho, menos que el prisma
+    REQUIRE(volume < 100.0 * 20.0);
+
+    const auto path = std::filesystem::temp_directory_path() / "nuf_loft.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    REQUIRE(reopened.findFeature(id)->kind() == FeatureKind::Loft);
+    REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(volume, 1e-9));
+}

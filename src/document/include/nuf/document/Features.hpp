@@ -262,6 +262,19 @@ public:
     std::vector<FeatureId> dependencies() const override;
 };
 
+// Loft: un sólido por varios perfiles, en el orden de la lista.
+class LoftFeature final : public Feature {
+public:
+    std::vector<ProfileRef> profiles;  // en orden
+    bool ruled = false;
+    Operation operation = Operation::NewBody;
+
+    FeatureKind kind() const override { return FeatureKind::Loft; }
+    std::unique_ptr<Feature> clone() const override { return std::make_unique<LoftFeature>(*this); }
+    std::optional<std::string> compute(ModelState& state) const override;
+    std::vector<FeatureId> dependencies() const override;
+};
+
 enum class PatternLayout { Linear, Circular };
 
 // Patrón: copias de un cuerpo en fila (a lo largo de un eje de origen) o

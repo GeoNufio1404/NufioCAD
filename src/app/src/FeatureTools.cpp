@@ -1598,6 +1598,81 @@ QString SweepTool::inputsText() const
     return QStringLiteral("%1 perfil(es), trayectoria de %2 curva(s)").arg(profiles_.size()).arg(path_.size());
 }
 
+// --- Loft -------------------------------------------------------------------------------
+
+LoftTool::LoftTool(document::Document& document, render::Viewport& viewport,
+                   std::optional<document::FeatureId> editing)
+    : FeatureTool(document, viewport, editing)
+{
+    if (const auto* l = dynamic_cast<const document::LoftFeature*>(original_.get())) {
+        profiles_ = l->profiles;
+    }
+}
+
+void LoftTool::createFields(QFormLayout* form)
+{
+    kind_ = combo({QStringLiteral("Suave"), QStringLiteral("Recto (entre perfiles)")});
+    operation_ = combo({QStringLiteral("Unir"), QStringLiteral("Cortar"), QStringLiteral("Intersecar"),
+                        QStringLiteral("Cuerpo nuevo")});
+    if (const auto* l = dynamic_cast<const document::LoftFeature*>(original_.get())) {
+        kind_->setCurrentIndex(l->ruled ? 1 : 0);
+        operation_->setCurrentIndex(operationIndex(l->operation));
+    } else {
+        operation_->setCurrentIndex(operationIndex(before().bodies.empty() ? document::Operation::NewBody
+                                                                           : document::Operation::Join));
+    }
+    form->addRow(QStringLiteral("Superficie"), kind_);
+    form->addRow(QStringLiteral("Operación"), operation_);
+    for (QComboBox* box : {kind_, operation_}) {
+        connect(box, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
+    }
+}
+
+void LoftTool::selectionChanged(const render::ModelSelection& selection)
+{
+    // Se conserva el orden en que se eligieron: los que siguen elegidos mantienen su sitio
+    // y los nuevos van al final.
+    const std::vector<document::ProfileRef> current = profilesOf(selection);
+    if (current.empty()) {
+        return;
+    }
+    std::vector<document::ProfileRef> next;
+    for (const document::ProfileRef& p : profiles_) {
+        if (std::ranges::find(current, p) != current.end()) {
+            next.push_back(p);
+        }
+    }
+    for (const document::ProfileRef& p : current) {
+        if (std::ranges::find(next, p) == next.end()) {
+            next.push_back(p);
+        }
+    }
+    profiles_ = std::move(next);
+}
+
+std::unique_ptr<document::Feature> LoftTool::build() const
+{
+    if (profiles_.size() < 2) {
+        return nullptr;
+    }
+    auto f = std::make_unique<document::LoftFeature>();
+    if (original_) {
+        f->setName(original_->name());
+    }
+    f->profiles = profiles_;
+    f->ruled = kind_->currentIndex() == 1;
+    f->operation = operationAt(operation_->currentIndex());
+    return f;
+}
+
+QString LoftTool::inputsText() const
+{
+    if (profiles_.size() < 2) {
+        return QStringLiteral("Elige dos o más perfiles, en orden (%1 elegidos)").arg(profiles_.size());
+    }
+    return QStringLiteral("%1 perfiles, en el orden en que los elegiste").arg(profiles_.size());
+}
+
 // --- Rosca ----------------------------------------------------------------------------
 
 namespace {
