@@ -901,6 +901,105 @@ Shape gear(std::string_view tagView, const sketch::Plane& plane, const GearSpec&
     }
 }
 
+double threadMinorDiameter(const ThreadSpec& spec)
+{
+    return spec.diameter - 2.0 * 0.6134 * spec.pitch;
+}
+
+Shape thread(std::string_view tagView, const sketch::Plane& plane, const ThreadSpec& spec)
+{
+    const std::string tag(tagView);
+    constexpr double kPi = std::numbers::pi;
+    if (spec.pitch <= kTiny) {
+        throw GeometryError("El paso de la rosca debe ser mayor que cero");
+    }
+    if (spec.diameter <= 4.0 * spec.pitch * 0.6134 * 0.5 + kTiny || threadMinorDiameter(spec) <= 0.2) {
+        throw GeometryError("El diámetro es demasiado pequeño para ese paso");
+    }
+    if (std::abs(spec.length) < spec.pitch) {
+        throw GeometryError("La rosca debe medir al menos un paso de largo");
+    }
+    const double rMax = spec.diameter / 2.0;
+    const double rMin = threadMinorDiameter(spec) / 2.0;
+    const double pitch = spec.pitch;
+    // Radio de la rosca a lo largo de un paso: cresta, flanco, fondo, flanco.
+    const auto profile = [&](double s) {
+        s -= pitch * std::floor(s / pitch);
+        const double crest = pitch / 8.0;
+        const double root = pitch / 4.0;
+        const double flank = (pitch - crest - root) / 2.0;
+        if (s < crest) {
+            return rMax;
+        }
+        if (s < crest + flank) {
+            return rMax - (rMax - rMin) * (s - crest) / flank;
+        }
+        if (s < crest + flank + root) {
+            return rMin;
+        }
+        return rMin + (rMax - rMin) * (s - crest - flank - root) / flank;
+    };
+    try {
+        const gp_Pnt origin = toPnt(plane.origin);
+        const gp_Dir normal = toDir(plane.normal);
+        // Corte transversal: r(φ) = perfil(−paso·φ/2π), una curva cerrada; a cada altura es la misma
+        // curva girada, así que la rosca es un sólido por secciones giradas.
+        constexpr int kPoints = 64;
+        const double hand = spec.leftHanded ? -1.0 : 1.0;
+        occ::handle<NCollection_HArray1<gp_Pnt>> array = new NCollection_HArray1<gp_Pnt>(1, kPoints + 1);
+        for (int i = 0; i <= kPoints; ++i) {
+            const double phi = 2.0 * kPi * i / kPoints;
+            const double r = profile(-hand * pitch * phi / (2.0 * kPi));
+            array->SetValue(i + 1, toPnt(plane.toWorld({r * std::cos(phi), r * std::sin(phi)})));
+        }
+        GeomAPI_Interpolate interpolation(array, false, 1e-7);  // cerrada: el último punto es el primero
+        interpolation.Perform();
+        if (!interpolation.IsDone()) {
+            throw GeometryError("No se pudo trazar el perfil de la rosca");
+        }
+        const TopoDS_Wire section = BRepBuilderAPI_MakeWire(BRepBuilderAPI_MakeEdge(interpolation.Curve()).Edge()).Wire();
+        TopoDS_Edge sectionEdge;
+        for (TopoDS_Iterator it(section); it.More(); it.Next()) {
+            sectionEdge = TopoDS::Edge(it.Value());
+        }
+
+        const double turns = std::abs(spec.length) / pitch;
+        // Secciones unidas por superficies regladas (las suaves tardan minutos): con 16 por
+        // vuelta el giro entre dos es de 22° y la hélice sale lisa a la vista.
+        const int sections = std::clamp(int(std::ceil(turns * 16.0)), 8, 400);
+        BRepOffsetAPI_ThruSections loft(true, true, 1e-6);
+        for (int k = 0; k <= sections; ++k) {
+            const double t = double(k) / sections;
+            if (k == 0) {
+                loft.AddWire(section);
+                continue;
+            }
+            gp_Trsf turn;
+            turn.SetRotation(gp_Ax1(origin, normal), hand * 2.0 * kPi * turns * t * (spec.length < 0 ? -1.0 : 1.0));
+            gp_Trsf slide;
+            slide.SetTranslation(gp_Vec(normal).Multiplied(spec.length * t));
+            BRepBuilderAPI_Transform moved(section, slide * turn, true);
+            loft.AddWire(TopoDS::Wire(moved.Shape()));
+        }
+        loft.Build();
+        if (!loft.IsDone()) {
+            throw GeometryError("No se pudo generar la rosca");
+        }
+        Namer namer(loft.Shape());
+        namer.name(loft.FirstShape(), tag + ":inicio");
+        namer.name(loft.LastShape(), tag + ":fin");
+        namer.name(loft.GeneratedFace(sectionEdge), tag + ":rosca");
+        namer.nameUnnamed(tag + ":rosca");
+        Shape result = namer.finish(tag);
+        if (!result.isValid()) {
+            throw GeometryError("La rosca no es un sólido válido");
+        }
+        return result;
+    } catch (const Standard_Failure& e) {
+        throw GeometryError(std::string("Error del kernel al generar la rosca: ") + kernelMessage(e));
+    }
+}
+
 Shape holeTool(std::string_view tag, const sketch::Plane& plane, const std::vector<sketch::Vec2>& centers,
                const HoleSpec& spec, bool flip, const std::vector<Shape>& context)
 {

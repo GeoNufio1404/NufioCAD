@@ -232,6 +232,21 @@ public:
     std::vector<NumericField> numericFields() override;
 };
 
+// Rosca (varilla roscada o tornillo) desde el origen de un plano. Con «Cortar»
+// sobre un agujero del diámetro menor da una rosca interior.
+class ThreadFeature final : public Feature {
+public:
+    SketchAttachment base;
+    geometry::ThreadSpec spec;
+    Operation operation = Operation::NewBody;
+
+    FeatureKind kind() const override { return FeatureKind::Thread; }
+    std::unique_ptr<Feature> clone() const override { return std::make_unique<ThreadFeature>(*this); }
+    std::optional<std::string> compute(ModelState& state) const override;
+    std::vector<FeatureId> dependencies() const override;
+    std::vector<NumericField> numericFields() override;
+};
+
 enum class PatternLayout { Linear, Circular };
 
 // Patrón: copias de un cuerpo en fila (a lo largo de un eje de origen) o

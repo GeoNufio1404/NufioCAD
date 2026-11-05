@@ -133,6 +133,23 @@ struct GearSpec {
 // los datos no dan un engranaje (dientes puntiagudos o solapados…).
 Shape gear(std::string_view tag, const sketch::Plane& plane, const GearSpec& spec);
 
+struct ThreadSpec {
+    double diameter = 8.0;     // mm, diámetro exterior (mayor)
+    double pitch = 1.25;       // mm de avance por vuelta
+    double length = 20.0;      // mm a lo largo de la normal (el signo da el sentido)
+    bool leftHanded = false;   // rosca a izquierdas
+};
+
+// Varilla roscada (rosca métrica ISO aproximada: cresta P/8, fondo P/4,
+// profundidad 0,6134 P) con su eje a lo largo de la normal del plano, desde el
+// origen. Sirve de tornillo (nuevo cuerpo, unir) o, restada de un cuerpo con un
+// agujero del diámetro menor, de rosca interior. Caras: «tag:rosca»,
+// «tag:inicio» y «tag:fin». Lanza GeometryError si los datos no valen.
+Shape thread(std::string_view tag, const sketch::Plane& plane, const ThreadSpec& spec);
+
+// Diámetro menor de la rosca (el del agujero que se roscará).
+double threadMinorDiameter(const ThreadSpec& spec);
+
 enum class HoleKind { Simple, Counterbore, Countersink };
 
 struct HoleSpec {

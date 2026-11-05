@@ -714,6 +714,36 @@ std::vector<Feature::NumericField> GearFeature::numericFields()
              [this](double v) { spec.teeth = int(std::lround(v)); }}};
 }
 
+// --- Rosca ----------------------------------------------------------------------
+
+std::optional<std::string> ThreadFeature::compute(ModelState& state) const
+{
+    std::optional<std::string> warning;
+    const sketch::Plane plane = resolvePlane(state, base, "de la rosca", "se usa su última posición", warning);
+    try {
+        const geometry::Shape rod = geometry::thread(tag(), plane, spec);
+        if (auto extra = applyOperation(state, *this, operation, rod)) {
+            warning = warning ? *warning + " " + *extra : *extra;
+        }
+    } catch (const geometry::GeometryError& e) {
+        throw FeatureError(e.what());
+    }
+    return warning;
+}
+
+std::vector<FeatureId> ThreadFeature::dependencies() const
+{
+    std::vector<FeatureId> ids;
+    addAttachmentDependencies(ids, base);
+    return ids;
+}
+
+std::vector<Feature::NumericField> ThreadFeature::numericFields()
+{
+    return {field("diameter", "Diámetro", spec.diameter), field("pitch", "Paso", spec.pitch),
+            field("length", "Largo", spec.length)};
+}
+
 // --- Eje de construcción ------------------------------------------------------
 
 std::optional<std::string> ConstructionAxisFeature::compute(ModelState& state) const

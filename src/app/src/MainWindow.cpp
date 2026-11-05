@@ -357,6 +357,11 @@ void MainWindow::createMenus()
     });
     decorate(gearAction_, QStringLiteral("gear-solid"),
              QStringLiteral("Generar un engranaje recto o helicoidal (perfil de involuta)"), QStringLiteral("Engranaje"));
+    threadAction_ = solidMenu->addAction(QStringLiteral("&Rosca"), this, [this] {
+        startTool(std::make_unique<ThreadTool>(document_, *viewport_, std::nullopt));
+    });
+    decorate(threadAction_, QStringLiteral("thread-solid"),
+             QStringLiteral("Generar un tornillo o varilla roscada (rosca métrica)"), QStringLiteral("Rosca"));
     decorate(shellAction_, QStringLiteral("shell"), QStringLiteral("Vaciar un cuerpo dejando abiertas las caras elegidas"));
 
     // Herramientas de dibujo por familias (como en Fusion 360); la primera
@@ -524,6 +529,7 @@ void MainWindow::createMenus()
     ribbon_->addAction(solidTab_, parametersAction_);
     ribbon_->addGroup(solidTab_, QStringLiteral("GENERAR"));
     ribbon_->addAction(solidTab_, gearAction_);
+    ribbon_->addAction(solidTab_, threadAction_);
 
     auto family = [this, &families](const QString& name) {
         const std::size_t i = static_cast<std::size_t>(
@@ -963,6 +969,9 @@ void MainWindow::activateFeature(document::FeatureId id)
     case document::FeatureKind::Gear:
         startTool(std::make_unique<GearTool>(document_, *viewport_, id));
         break;
+    case document::FeatureKind::Thread:
+        startTool(std::make_unique<ThreadTool>(document_, *viewport_, id));
+        break;
     case document::FeatureKind::Import:
         break;  // no tiene parámetros que editar
     }
@@ -1059,7 +1068,7 @@ void MainWindow::updateExportAction()
             action->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane() && !document_.result().bodies.empty());
         }
     }
-    for (QAction* action : {planeAction_, axisAction_, parametersAction_, gearAction_}) {
+    for (QAction* action : {planeAction_, axisAction_, parametersAction_, gearAction_, threadAction_}) {
         if (action != nullptr) {
             action->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane());
         }

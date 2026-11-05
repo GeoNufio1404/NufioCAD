@@ -41,6 +41,8 @@ std::string kindLabel(FeatureKind kind)
         return "Eje";
     case FeatureKind::Gear:
         return "Engranaje";
+    case FeatureKind::Thread:
+        return "Rosca";
     }
     return "Operación";
 }

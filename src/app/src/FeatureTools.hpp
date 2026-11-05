@@ -370,6 +370,33 @@ private:
     QComboBox* operation_ = nullptr;
 };
 
+// Rosca: varilla roscada métrica (con medidas estándar M3…M24 o propias).
+class ThreadTool final : public FeatureTool {
+    Q_OBJECT
+
+public:
+    ThreadTool(document::Document& document, render::Viewport& viewport, std::optional<document::FeatureId> editing);
+
+    std::unique_ptr<document::Feature> build() const override;
+
+protected:
+    QString title() const override { return QStringLiteral("Rosca"); }
+    void createFields(QFormLayout* form) override;
+    void selectionChanged(const render::ModelSelection&) override {}
+    QString inputsText() const override;
+    bool removesMaterial() const override;
+
+private:
+    std::vector<document::FeatureId> planeIds_;
+    QComboBox* base_ = nullptr;
+    QComboBox* standard_ = nullptr;
+    QDoubleSpinBox* diameter_ = nullptr;
+    QDoubleSpinBox* pitch_ = nullptr;
+    QDoubleSpinBox* length_ = nullptr;
+    QCheckBox* left_ = nullptr;
+    QComboBox* operation_ = nullptr;
+};
+
 // Patrón: repite un cuerpo en fila o alrededor de un eje de origen.
 class PatternTool final : public FeatureTool {
     Q_OBJECT

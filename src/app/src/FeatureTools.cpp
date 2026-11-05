@@ -1520,6 +1520,137 @@ QString GearTool::inputsText() const
         .arg(module_->value() * teeth_->value());
 }
 
+// --- Rosca ----------------------------------------------------------------------------
+
+namespace {
+
+struct MetricThread {
+    const char* name;
+    double diameter;
+    double pitch;
+};
+// Roscas métricas de paso normal.
+constexpr MetricThread kMetric[] = {{"M3", 3.0, 0.5},   {"M4", 4.0, 0.7},   {"M5", 5.0, 0.8},   {"M6", 6.0, 1.0},
+                                    {"M8", 8.0, 1.25},  {"M10", 10.0, 1.5}, {"M12", 12.0, 1.75}, {"M16", 16.0, 2.0},
+                                    {"M20", 20.0, 2.5}, {"M24", 24.0, 3.0}};
+
+} // namespace
+
+ThreadTool::ThreadTool(document::Document& document, render::Viewport& viewport,
+                       std::optional<document::FeatureId> editing)
+    : FeatureTool(document, viewport, editing)
+{
+}
+
+void ThreadTool::createFields(QFormLayout* form)
+{
+    base_ = combo({QStringLiteral("Plano XY"), QStringLiteral("Plano XZ"), QStringLiteral("Plano YZ")});
+    for (const auto& [id, plane] : before().planes) {
+        const document::Feature* f = document_.findFeature(id);
+        base_->addItem(f ? QString::fromStdString(f->name()) : QStringLiteral("Plano"));
+        planeIds_.push_back(id);
+    }
+    standard_ = combo({QStringLiteral("Personalizada")});
+    for (const MetricThread& m : kMetric) {
+        standard_->addItem(QStringLiteral("%1 × %2").arg(QLatin1String(m.name)).arg(m.pitch));
+    }
+    standard_->setCurrentIndex(5);  // M8
+    diameter_ = lengthBox(8.0);
+    diameter_->setMinimum(1.0);
+    field("diameter", diameter_);
+    pitch_ = lengthBox(1.25);
+    pitch_->setMinimum(0.1);
+    pitch_->setDecimals(3);
+    field("pitch", pitch_);
+    length_ = lengthBox(10.0);
+    field("length", length_);
+    left_ = new QCheckBox(QStringLiteral("Rosca a izquierdas"));
+    operation_ = combo({QStringLiteral("Cuerpo nuevo"), QStringLiteral("Unir"), QStringLiteral("Cortar")});
+    if (const auto* t = dynamic_cast<const document::ThreadFeature*>(original_.get())) {
+        int at = t->base.origin ? int(*t->base.origin) : 0;
+        if (!t->base.origin && t->base.reference != 0) {
+            const auto it = std::ranges::find(planeIds_, t->base.reference);
+            at = it != planeIds_.end() ? 3 + int(it - planeIds_.begin()) : 0;
+        }
+        base_->setCurrentIndex(at);
+        diameter_->setValue(t->spec.diameter);
+        pitch_->setValue(t->spec.pitch);
+        length_->setValue(t->spec.length);
+        left_->setChecked(t->spec.leftHanded);
+        operation_->setCurrentIndex(t->operation == document::Operation::Join ? 1 : t->operation == document::Operation::Cut ? 2 : 0);
+        standard_->setCurrentIndex(0);
+    }
+    form->addRow(QStringLiteral("Plano"), base_);
+    form->addRow(QStringLiteral("Medida"), standard_);
+    form->addRow(QStringLiteral("Diámetro"), diameter_);
+    form->addRow(QStringLiteral("Paso"), pitch_);
+    form->addRow(QStringLiteral("Largo"), length_);
+    form->addRow(QString(), left_);
+    form->addRow(QStringLiteral("Operación"), operation_);
+    connect(standard_, &QComboBox::currentIndexChanged, this, [this](int index) {
+        if (index > 0) {
+            diameter_->setValue(kMetric[index - 1].diameter);
+            pitch_->setValue(kMetric[index - 1].pitch);
+        }
+    });
+    for (QDoubleSpinBox* box : {diameter_, pitch_}) {
+        connect(box, &QDoubleSpinBox::valueChanged, this, [this] {
+            // A mano deja de ser una medida estándar (solo si ya no coincide).
+            const int index = standard_->currentIndex();
+            if (index > 0 && (diameter_->value() != kMetric[index - 1].diameter || pitch_->value() != kMetric[index - 1].pitch)) {
+                const QSignalBlocker block(standard_);
+                standard_->setCurrentIndex(0);
+            }
+        });
+    }
+    for (QComboBox* box : {base_, operation_}) {
+        connect(box, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
+    }
+    connect(left_, &QCheckBox::toggled, this, [this] { updatePreview(); });
+    for (QDoubleSpinBox* box : {diameter_, pitch_, length_}) {
+        connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
+    }
+}
+
+std::unique_ptr<document::Feature> ThreadTool::build() const
+{
+    auto f = std::make_unique<document::ThreadFeature>();
+    if (original_) {
+        f->setName(original_->name());
+    }
+    const int base = base_->currentIndex();
+    if (base < 3) {
+        f->base.origin = document::OriginPlane(base);
+    } else {
+        const document::FeatureId id = planeIds_[std::size_t(base - 3)];
+        f->base.origin.reset();
+        f->base.reference = id;
+        f->base.lastPlane = before().planes.at(id);
+    }
+    f->spec.diameter = diameter_->value();
+    f->spec.pitch = pitch_->value();
+    f->spec.length = length_->value();
+    f->spec.leftHanded = left_->isChecked();
+    const int op = operation_->currentIndex();
+    f->operation = op == 1 ? document::Operation::Join : op == 2 ? document::Operation::Cut : document::Operation::NewBody;
+    return f;
+}
+
+QString ThreadTool::inputsText() const
+{
+    geometry::ThreadSpec spec;
+    spec.diameter = diameter_->value();
+    spec.pitch = pitch_->value();
+    return QStringLiteral("Ø mayor %1 mm, Ø menor %2 mm (agujero para roscar)")
+        .arg(spec.diameter, 0, 'f', 2)
+        .arg(geometry::threadMinorDiameter(spec), 0, 'f', 2);
+}
+
+bool ThreadTool::removesMaterial() const
+{
+    return operation_ != nullptr && operation_->currentIndex() == 2;
+}
+
 // --- Patrón -----------------------------------------------------------------------
 
 PatternTool::PatternTool(document::Document& document, render::Viewport& viewport,

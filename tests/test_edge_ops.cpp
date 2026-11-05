@@ -940,3 +940,67 @@ TEST_CASE("Un engranaje ligado a parámetros se rehace al cambiarlos y se guarda
     reopened.setParameters({{"dientes", "24"}});
     REQUIRE_THAT(reopened.result().bodies.front().shape.bounds().max.x, Catch::Matchers::WithinAbs(26.0, 1e-3));
 }
+
+namespace {
+
+FeatureId addThread(Document& doc, double diameter, double pitch, double length, bool left = false)
+{
+    auto t = std::make_unique<ThreadFeature>();
+    t->base.origin = OriginPlane::XY;
+    t->spec.diameter = diameter;
+    t->spec.pitch = pitch;
+    t->spec.length = length;
+    t->spec.leftHanded = left;
+    return doc.addFeature(std::move(t));
+}
+
+} // namespace
+
+TEST_CASE("Una rosca métrica es una varilla con el diámetro y el largo pedidos", "[thread]")
+{
+    Document doc;
+    const FeatureId id = addThread(doc, 8.0, 1.25, 10.0);
+    INFO(doc.status(id).message);
+    REQUIRE(doc.status(id).health == Health::Ok);
+    REQUIRE(doc.result().bodies.size() == 1);
+    const geometry::Shape& rod = doc.result().bodies.front().shape;
+    REQUIRE(rod.isValid());
+    REQUIRE_THAT(rod.bounds().min.z, Catch::Matchers::WithinAbs(0.0, 1e-6));
+    REQUIRE_THAT(rod.bounds().max.z, Catch::Matchers::WithinAbs(10.0, 1e-6));
+    REQUIRE(rod.bounds().max.x < 4.2);  // radio mayor 4 mm (con el redondeo de la curva)
+    REQUIRE(rod.bounds().max.x > 3.8);
+    geometry::ThreadSpec spec;
+    spec.diameter = 8.0;
+    spec.pitch = 1.25;
+    const double rMin = geometry::threadMinorDiameter(spec) / 2.0;
+    REQUIRE(rod.volume() > kPi * rMin * rMin * 10.0);
+    REQUIRE(rod.volume() < kPi * 4.0 * 4.0 * 10.0);
+
+    // A izquierdas ocupa lo mismo; al revés (largo negativo) va hacia abajo.
+    Document left;
+    addThread(left, 8.0, 1.25, 10.0, true);
+    REQUIRE_THAT(left.result().bodies.front().shape.volume(), WithinRel(rod.volume(), 0.01));
+    Document down;
+    addThread(down, 8.0, 1.25, -10.0);
+    REQUIRE_THAT(down.result().bodies.front().shape.bounds().min.z, Catch::Matchers::WithinAbs(-10.0, 1e-6));
+}
+
+TEST_CASE("Una rosca da error con datos imposibles y se guarda en el archivo", "[thread][io]")
+{
+    Document bad;
+    REQUIRE(bad.status(addThread(bad, 8.0, 0.0, 10.0)).health == Health::Error);
+    REQUIRE(bad.status(addThread(bad, 1.0, 1.25, 10.0)).health == Health::Error);
+    REQUIRE(bad.status(addThread(bad, 8.0, 1.25, 0.5)).health == Health::Error);
+
+    Document doc;
+    const FeatureId id = addThread(doc, 6.0, 1.0, 6.0);
+    const auto path = std::filesystem::temp_directory_path() / "nuf_rosca.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    REQUIRE(reopened.findFeature(id)->kind() == FeatureKind::Thread);
+    REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(doc.result().bodies.front().shape.volume(), 1e-9));
+}

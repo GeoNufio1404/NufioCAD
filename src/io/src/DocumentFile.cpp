@@ -509,6 +509,14 @@ FeatureRow rowOf(const Feature& f)
         params = {{"base", toJson(cp.base)}, {"offset", cp.offset}, {"angle", cp.angle}, {"angleAxis", cp.angleAxis}};
         break;
     }
+    case FeatureKind::Thread: {
+        const auto& t = static_cast<const ThreadFeature&>(f);
+        row.type = "thread";
+        params = {{"base", toJson(t.base)}, {"diameter", t.spec.diameter}, {"pitch", t.spec.pitch},
+                  {"length", t.spec.length}, {"leftHanded", t.spec.leftHanded},
+                  {"operation", nameOf(kOperations, t.operation)}};
+        break;
+    }
     case FeatureKind::Gear: {
         const auto& g = static_cast<const GearFeature&>(f);
         row.type = "gear";
@@ -613,6 +621,15 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         cp->angle = number(p, "angle");
         cp->angleAxis = p.at("angleAxis").get<int>();
         feature = std::move(cp);
+    } else if (row.type == "thread") {
+        auto t = std::make_unique<ThreadFeature>();
+        t->base = attachmentOf(p.at("base"));
+        t->spec.diameter = number(p, "diameter");
+        t->spec.pitch = number(p, "pitch");
+        t->spec.length = number(p, "length");
+        t->spec.leftHanded = p.at("leftHanded").get<bool>();
+        t->operation = parseEnum(kOperations, text(p, "operation"), "operación");
+        feature = std::move(t);
     } else if (row.type == "gear") {
         auto g = std::make_unique<GearFeature>();
         g->base = attachmentOf(p.at("base"));
