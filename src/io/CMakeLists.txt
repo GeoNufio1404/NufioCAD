@@ -1,4 +1,4 @@
-# io: archivo nativo .nuf (SQLite, parámetros en JSON) y, más adelante, importar STEP.
+# io: archivo nativo .nuf (SQLite, parámetros en JSON, sólidos importados y miniatura).
 nuf_add_library(io SOURCES src/NufFile.cpp src/DocumentFile.cpp)
 target_link_libraries(nuf_io PUBLIC nuf::document)
 target_link_libraries(nuf_io PRIVATE nlohmann_json::nlohmann_json)

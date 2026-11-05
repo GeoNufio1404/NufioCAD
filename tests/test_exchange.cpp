@@ -6,6 +6,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -176,4 +177,75 @@ TEST_CASE("Exportar sin cuerpos o a una ruta imposible da error claro", "[exchan
     REQUIRE_THROWS_AS(writeStep(tempFile("nada.step"), {Shape()}), GeometryError);
     const auto missing = std::filesystem::temp_directory_path() / "no_existe_carpeta_nuf" / "x.stl";
     REQUIRE_THROWS_AS(writeStl(missing, {extrudedRectangle(1, 1, 1)}, MeshQuality::medium()), GeometryError);
+}
+
+TEST_CASE("Importar un STEP da el mismo sólido, con caras nombradas y estables", "[exchange][import]")
+{
+    const auto path = tempFile("importar.step");
+    writeStep(path, {extrudedRectangle(20, 10, 5)});
+    const StepImport imported = readStep(path);
+    std::filesystem::remove(path);
+
+    REQUIRE(imported.solids == 1);
+    REQUIRE_FALSE(imported.brep.empty());
+    const std::vector<Shape> shapes = shapesFromBrep(imported.brep, "f7");
+    REQUIRE(shapes.size() == 1);
+    REQUIRE(shapes[0].isValid());
+    REQUIRE(shapes[0].faceCount() == 6);
+    REQUIRE_THAT(shapes[0].volume(), WithinRel(1000.0, 1e-6));
+    for (int i = 0; i < shapes[0].faceCount(); ++i) {
+        REQUIRE(shapes[0].faceName(i).starts_with("f7:?"));
+    }
+    // Los mismos datos dan siempre los mismos nombres y el mismo orden.
+    const std::vector<Shape> again = shapesFromBrep(imported.brep, "f7");
+    for (int i = 0; i < shapes[0].faceCount(); ++i) {
+        REQUIRE(again[0].faceName(i) == shapes[0].faceName(i));
+        REQUIRE(again[0].faceCenter(i).x == shapes[0].faceCenter(i).x);
+    }
+}
+
+TEST_CASE("Un STEP con varios sólidos da un cuerpo por sólido, sin nombres repetidos", "[exchange][import]")
+{
+    const auto path = tempFile("varios.step");
+    writeStep(path, {extrudedRectangle(20, 10, 5), cylinder(3, 8)});
+    const StepImport imported = readStep(path);
+    std::filesystem::remove(path);
+
+    REQUIRE(imported.solids == 2);
+    const std::vector<Shape> shapes = shapesFromBrep(imported.brep, "f4");
+    REQUIRE(shapes.size() == 2);
+    for (const Shape& shape : shapes) {
+        REQUIRE(shape.isValid());
+    }
+    REQUIRE(shapes[0].faceName(0).starts_with("f4:c1:?"));
+    REQUIRE(shapes[1].faceName(0).starts_with("f4:c2:?"));
+    // Entre los dos no hay ni un nombre en común.
+    for (int i = 0; i < shapes[0].faceCount(); ++i) {
+        REQUIRE_FALSE(shapes[1].findFace(shapes[0].faceRef(i)));
+    }
+}
+
+TEST_CASE("Importar un archivo que no sirve da un error claro", "[exchange][import]")
+{
+    const auto garbage = tempFile("basura.step");
+    {
+        std::ofstream out(garbage, std::ios::binary);
+        out << "esto no es un STEP";
+    }
+    REQUIRE_THROWS_AS(readStep(garbage), GeometryError);
+    std::filesystem::remove(garbage);
+
+    const auto missing = std::filesystem::temp_directory_path() / "no_existe_carpeta_nuf" / "x.step";
+    REQUIRE_THROWS_AS(readStep(missing), GeometryError);
+    REQUIRE_THROWS_AS(shapesFromBrep("datos dañados", "f1"), GeometryError);
+    REQUIRE_THROWS_AS(shapesFromBrep("", "f1"), GeometryError);
+}
+
+// Genera un STEP de muestra para probar a mano «Importar STEP»; no se ejecuta
+// con el resto: NUF_SAMPLE_STEP=ruta nuf_tests "[sample]"
+TEST_CASE("Escribir un STEP de muestra", "[.][sample]")
+{
+    const char* target = std::getenv("NUF_SAMPLE_STEP");
+    REQUIRE(target != nullptr);
+    writeStep(std::filesystem::path(target), {extrudedRectangle(40, 25, 12)});
 }

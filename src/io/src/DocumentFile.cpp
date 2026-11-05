@@ -421,6 +421,12 @@ AxisRef axisOf(const Json& j)
     return a;
 }
 
+// Dónde va el sólido de una importación dentro de la tabla de datos.
+std::string blobKey(FeatureId id)
+{
+    return "import:" + std::to_string(id);
+}
+
 FeatureRow rowOf(const Feature& f)
 {
     FeatureRow row;
@@ -453,12 +459,18 @@ FeatureRow rowOf(const Feature& f)
                   {"angle2", r.spec.angle2}, {"operation", nameOf(kOperations, r.operation)}};
         break;
     }
+    case FeatureKind::Import: {
+        const auto& i = static_cast<const ImportFeature&>(f);
+        row.type = "import";
+        params = {{"source", i.source}, {"notes", i.notes}, {"blob", blobKey(f.id())}};
+        break;
+    }
     }
     row.params = params.dump();
     return row;
 }
 
-std::unique_ptr<Feature> featureOf(const FeatureRow& row)
+std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
 {
     if (row.id <= 0) {
         throw NufError("Operación con id no válido");
@@ -487,6 +499,18 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row)
         r->spec.angle2 = number(p, "angle2");
         r->operation = parseEnum(kOperations, text(p, "operation"), "operación");
         feature = std::move(r);
+    } else if (row.type == "import") {
+        auto i = std::make_unique<ImportFeature>();
+        i->source = text(p, "source");
+        for (const Json& note : p.at("notes")) {
+            i->notes.push_back(note.get<std::string>());
+        }
+        const auto data = file.readBlob(blobKey(static_cast<FeatureId>(row.id)));
+        if (!data || data->empty()) {
+            throw NufError("Falta el sólido importado de «" + row.name + "» en el archivo");
+        }
+        i->brep = std::make_shared<const std::string>(*data);
+        feature = std::move(i);
     } else {
         throw NufError("Tipo de operación desconocido: " + row.type + " (¿archivo de una versión más reciente?)");
     }
@@ -549,7 +573,8 @@ void replaceFile(const std::filesystem::path& from, const std::filesystem::path&
 
 } // namespace
 
-void saveDocument(const std::filesystem::path& path, const Document& document, const ViewState& view)
+void saveDocument(const std::filesystem::path& path, const Document& document, const ViewState& view,
+                  const std::string& thumbnailPng)
 {
     std::filesystem::path temp = path;
     temp += ".guardando";
@@ -571,6 +596,17 @@ void saveDocument(const std::filesystem::path& path, const Document& document, c
                     rows.push_back(rowOf(document.feature(i)));
                 }
                 file.writeFeatures(rows);
+                for (std::size_t i = 0; i < document.featureCount(); ++i) {
+                    if (document.feature(i).kind() == FeatureKind::Import) {
+                        const auto& imported = static_cast<const ImportFeature&>(document.feature(i));
+                        if (imported.brep) {
+                            file.writeBlob(blobKey(imported.id()), "import", *imported.brep);
+                        }
+                    }
+                }
+                if (!thumbnailPng.empty()) {
+                    file.writeBlob("thumbnail", "thumbnail", thumbnailPng);
+                }
                 file.commit();
             } catch (...) {
                 file.rollback();
@@ -581,6 +617,15 @@ void saveDocument(const std::filesystem::path& path, const Document& document, c
     } catch (...) {
         std::filesystem::remove(temp, ignored);
         throw;
+    }
+}
+
+std::optional<std::string> readThumbnail(const std::filesystem::path& path) noexcept
+{
+    try {
+        return NufFile::open(path).readBlob("thumbnail");
+    } catch (...) {
+        return std::nullopt;
     }
 }
 
@@ -602,7 +647,7 @@ void loadDocument(const std::filesystem::path& path, Document& document, ViewSta
         nextId = std::stoull(metaOrThrow(file, "siguiente_id"));
         loadedView = viewOf(Json::parse(metaOrThrow(file, "vista")));
         for (const FeatureRow& row : file.readFeatures()) {
-            features.push_back(featureOf(row));
+            features.push_back(featureOf(row, file));
         }
         if (marker > features.size()) {
             throw NufError("El marcador está fuera del historial");

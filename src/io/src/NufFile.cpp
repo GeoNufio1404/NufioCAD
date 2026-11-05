@@ -282,6 +282,35 @@ std::vector<FeatureRow> NufFile::readFeatures() const
     return rows;
 }
 
+void NufFile::writeBlob(std::string_view key, std::string_view kind, std::string_view data)
+{
+    Stmt stmt = prepare(db_,
+                        "INSERT INTO blobs(key, kind, data) VALUES(?1, ?2, ?3) "
+                        "ON CONFLICT(key) DO UPDATE SET kind = excluded.kind, data = excluded.data;",
+                        "No se pudo escribir los datos");
+    sqlite3_bind_text(stmt.get(), 1, key.data(), static_cast<int>(key.size()), SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt.get(), 2, kind.data(), static_cast<int>(kind.size()), SQLITE_TRANSIENT);
+    sqlite3_bind_blob64(stmt.get(), 3, data.data(), data.size(), SQLITE_TRANSIENT);
+    if (sqlite3_step(stmt.get()) != SQLITE_DONE) {
+        fail(db_, "No se pudo escribir los datos");
+    }
+}
+
+std::optional<std::string> NufFile::readBlob(std::string_view key) const
+{
+    Stmt stmt = prepare(db_, "SELECT data FROM blobs WHERE key = ?1;", "No se pudo leer los datos");
+    sqlite3_bind_text(stmt.get(), 1, key.data(), static_cast<int>(key.size()), SQLITE_TRANSIENT);
+    const int rc = sqlite3_step(stmt.get());
+    if (rc == SQLITE_DONE) {
+        return std::nullopt;
+    }
+    if (rc != SQLITE_ROW) {
+        fail(db_, "No se pudo leer los datos");
+    }
+    const auto* data = static_cast<const char*>(sqlite3_column_blob(stmt.get(), 0));
+    return std::string(data != nullptr ? data : "", std::size_t(sqlite3_column_bytes(stmt.get(), 0)));
+}
+
 std::vector<std::pair<std::string, std::string>> NufFile::allMeta() const
 {
     Stmt stmt = prepare(db_, "SELECT key, value FROM meta ORDER BY key;", "No se pudo leer meta");

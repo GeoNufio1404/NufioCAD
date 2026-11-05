@@ -32,6 +32,8 @@ QString glyph(document::FeatureKind kind)
         return QStringLiteral("⬆");
     case document::FeatureKind::Revolve:
         return QStringLiteral("⟳");
+    case document::FeatureKind::Import:
+        return QStringLiteral("⇩");
     }
     return QStringLiteral("?");
 }

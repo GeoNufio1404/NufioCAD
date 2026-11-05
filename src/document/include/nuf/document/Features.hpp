@@ -1,6 +1,6 @@
 #pragma once
 
-// Operaciones concretas: sketch, extruir y revolución.
+// Operaciones concretas: sketch, extruir, revolución e importar.
 
 #include <nuf/document/Feature.hpp>
 #include <nuf/geometry/Modeling.hpp>
@@ -107,6 +107,21 @@ public:
     std::vector<FeatureId> dependencies() const override;
 
     geometry::Shape tool(const ModelState& state, std::vector<std::string>* warnings = nullptr) const;
+};
+
+// Sólidos que vienen de otro programa (STEP). Guarda el BREP ya reparado, no el
+// archivo original: se puede mover o borrar el STEP sin afectar al diseño.
+// Cada sólido es un cuerpo; si hay varios, sus claves son «f<id>:c<n>».
+class ImportFeature final : public Feature {
+public:
+    std::string source;                       // nombre del archivo, para mostrar
+    std::shared_ptr<const std::string> brep;  // compartido: las copias no lo duplican
+    std::vector<std::string> notes;           // avisos de la importación
+
+    FeatureKind kind() const override { return FeatureKind::Import; }
+    std::unique_ptr<Feature> clone() const override { return std::make_unique<ImportFeature>(*this); }
+    std::optional<std::string> compute(ModelState& state) const override;
+    std::vector<FeatureId> dependencies() const override { return {}; }
 };
 
 } // namespace nuf::document

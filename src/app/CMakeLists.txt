@@ -26,6 +26,8 @@ add_executable(nuf_app
     src/NavBar.cpp
     src/NavBar.hpp
     src/Ribbon.cpp
+    src/StartScreen.cpp
+    src/StartScreen.hpp
     src/Ribbon.hpp
     src/Icons.hpp
     resources/resources.qrc)

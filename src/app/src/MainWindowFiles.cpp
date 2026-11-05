@@ -2,11 +2,18 @@
 
 #include "MainWindow.hpp"
 #include "ModelPanels.hpp"
+#include "StartScreen.hpp"
 
+#include <nuf/commands/FeatureCommands.hpp>
+#include <nuf/document/Features.hpp>
+#include <nuf/geometry/Exchange.hpp>
 #include <nuf/io/DocumentFile.hpp>
 #include <nuf/render/Viewport.hpp>
 
 #include <QApplication>
+#include <QBuffer>
+#include <QImage>
+#include <QMenu>
 #include <QCloseEvent>
 #include <QDir>
 #include <QDragEnterEvent>
@@ -52,6 +59,17 @@ QString lastDirectory()
 void rememberDirectory(const QString& file)
 {
     QSettings().setValue(QStringLiteral("files/lastDirectory"), QFileInfo(file).absolutePath());
+}
+
+bool isDesign(const QString& file)
+{
+    return file.endsWith(QLatin1String(".nuf"), Qt::CaseInsensitive);
+}
+
+bool isStep(const QString& file)
+{
+    return file.endsWith(QLatin1String(".step"), Qt::CaseInsensitive)
+        || file.endsWith(QLatin1String(".stp"), Qt::CaseInsensitive);
 }
 
 } // namespace
@@ -149,6 +167,7 @@ void MainWindow::newDocument()
         return;
     }
     abandonEditing();
+    startDismissed_ = true;
     document_.restore("Sin título", {}, 0, 1);
     applyView(io::ViewState{});
     commands_.clear();
@@ -195,6 +214,7 @@ bool MainWindow::openPath(const std::filesystem::path& path)
     path_ = path;
     viewDirty_ = false;
     rememberDirectory(fromPath(path));
+    RecentFiles::add(fromPath(path));
     updateTitle();
     refreshModel();
     viewport_->fitAll();
@@ -230,12 +250,66 @@ bool MainWindow::saveDocumentAs()
     return writeTo(toPath(file));
 }
 
+// Imagen del visor para la lista de recientes (PNG); vacía si no se pudo.
+std::string MainWindow::thumbnailPng()
+{
+    if (document_.result().bodies.empty()) {
+        return {};
+    }
+    QImage image = viewport_->grabFramebuffer();
+    if (image.isNull()) {
+        return {};
+    }
+    image = image.scaled(QSize(400, 250), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    QByteArray bytes;
+    QBuffer buffer(&bytes);
+    buffer.open(QIODevice::WriteOnly);
+    if (!image.save(&buffer, "PNG")) {
+        return {};
+    }
+    return bytes.toStdString();
+}
+
+void MainWindow::rebuildRecentMenu()
+{
+    recentMenu_->clear();
+    const QStringList paths = RecentFiles::list();
+    for (const QString& path : paths) {
+        QAction* action = recentMenu_->addAction(QFileInfo(path).fileName());
+        action->setStatusTip(QDir::toNativeSeparators(path));
+        connect(action, &QAction::triggered, this, [this, path] { openRecent(path); });
+    }
+    if (paths.isEmpty()) {
+        recentMenu_->addAction(QStringLiteral("(vacío)"))->setEnabled(false);
+    } else {
+        recentMenu_->addSeparator();
+        recentMenu_->addAction(QStringLiteral("Borrar la lista"), this, [] { RecentFiles::clear(); });
+    }
+}
+
+void MainWindow::openRecent(const QString& path)
+{
+    if (!QFileInfo::exists(path)) {
+        QMessageBox::warning(this, QStringLiteral("Abrir"),
+                             QStringLiteral("«%1» ya no existe en esa ubicación. Se quita de la lista.")
+                                 .arg(QDir::toNativeSeparators(path)));
+        RecentFiles::remove(path);
+        if (startScreen_ != nullptr && startScreen_->isVisible()) {
+            startScreen_->reload();
+        }
+        return;
+    }
+    if (maybeSave()) {
+        openPath(toPath(path));
+    }
+}
+
 bool MainWindow::writeTo(const std::filesystem::path& path)
 {
     QApplication::setOverrideCursor(Qt::WaitCursor);
     QString error;
     try {
-        io::saveDocument(path, document_, currentView());
+        io::saveDocument(path, document_, currentView(), thumbnailPng());
     } catch (const std::exception& e) {
         error = QString::fromUtf8(e.what());
     }
@@ -250,6 +324,7 @@ bool MainWindow::writeTo(const std::filesystem::path& path)
     commands_.markSaved();
     viewDirty_ = false;
     rememberDirectory(fromPath(path));
+    RecentFiles::add(fromPath(path));
     updateTitle();
     statusBar()->showMessage(isEditing() ? QStringLiteral("Guardado; lo que estás editando sin terminar no se incluyó")
                                          : QStringLiteral("Guardado en %1").arg(QDir::toNativeSeparators(fromPath(path))),
@@ -257,11 +332,73 @@ bool MainWindow::writeTo(const std::filesystem::path& path)
     return true;
 }
 
+void MainWindow::importStep()
+{
+    if (isEditing()) {
+        return;
+    }
+    const QString file = QFileDialog::getOpenFileName(this, QStringLiteral("Importar STEP"), lastDirectory(),
+                                                      QStringLiteral("Archivos STEP (*.step *.stp);;Todos los archivos (*)"));
+    if (!file.isEmpty()) {
+        importStepFile(toPath(file));
+    }
+}
+
+// Agrega el sólido del STEP como una operación más del historial (se puede
+// deshacer). El diseño guarda el sólido ya reparado, no la ruta del archivo.
+bool MainWindow::importStepFile(const std::filesystem::path& path)
+{
+    if (isEditing()) {
+        return false;
+    }
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    QString error;
+    geometry::StepImport imported;
+    try {
+        imported = geometry::readStep(path);
+    } catch (const std::exception& e) {
+        error = QString::fromUtf8(e.what());
+    }
+    QApplication::restoreOverrideCursor();
+    if (!error.isEmpty()) {
+        QMessageBox::warning(this, QStringLiteral("Importar STEP"),
+                             QStringLiteral("No se pudo importar «%1».\n\n%2").arg(fromPath(path.filename()), error));
+        return false;
+    }
+
+    auto feature = std::make_unique<document::ImportFeature>();
+    feature->source = QString(fromPath(path.filename())).toStdString();
+    feature->setName(QString(fromPath(path.stem())).toStdString());
+    feature->brep = std::make_shared<const std::string>(std::move(imported.brep));
+    feature->notes = std::move(imported.warnings);
+    const bool wasEmpty = document_.result().bodies.empty();
+    auto command = std::make_unique<commands::AddFeature>(std::move(feature));
+    const commands::AddFeature* raw = command.get();
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    commands_.push(std::move(command));
+    QApplication::restoreOverrideCursor();
+    rememberDirectory(fromPath(path));
+
+    const document::FeatureStatus status = document_.status(raw->id());
+    if (status.health == document::Health::Error) {
+        statusBar()->showMessage(QStringLiteral("La importación falló: %1").arg(QString::fromStdString(status.message)), 15000);
+        return true;
+    }
+    if (wasEmpty) {
+        viewport_->fitAll();
+    }
+    statusBar()->showMessage(QStringLiteral("Importado %1 (%2 cuerpo(s))")
+                                 .arg(fromPath(path.filename()))
+                                 .arg(document_.result().bodies.size()),
+                             8000);
+    return true;
+}
+
 void MainWindow::dragEnterEvent(QDragEnterEvent* event)
 {
     if (event->mimeData()->hasUrls()) {
         for (const QUrl& url : event->mimeData()->urls()) {
-            if (url.isLocalFile() && url.toLocalFile().endsWith(QLatin1String(".nuf"), Qt::CaseInsensitive)) {
+            if (url.isLocalFile() && (isDesign(url.toLocalFile()) || isStep(url.toLocalFile()))) {
                 event->acceptProposedAction();
                 return;
             }
@@ -272,12 +409,14 @@ void MainWindow::dragEnterEvent(QDragEnterEvent* event)
 void MainWindow::dropEvent(QDropEvent* event)
 {
     for (const QUrl& url : event->mimeData()->urls()) {
-        if (url.isLocalFile() && url.toLocalFile().endsWith(QLatin1String(".nuf"), Qt::CaseInsensitive)) {
+        if (url.isLocalFile() && (isDesign(url.toLocalFile()) || isStep(url.toLocalFile()))) {
             event->acceptProposedAction();
-            // Fuera del evento: el diálogo de guardar no debe abrirse dentro de un drop.
+            // Fuera del evento: los diálogos no deben abrirse dentro de un drop.
             const QString file = url.toLocalFile();
             QMetaObject::invokeMethod(this, [this, file] {
-                if (maybeSave()) {
+                if (isStep(file)) {
+                    importStepFile(toPath(file));
+                } else if (maybeSave()) {
                     openPath(toPath(file));
                 }
             }, Qt::QueuedConnection);

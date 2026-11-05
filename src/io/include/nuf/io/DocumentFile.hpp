@@ -9,6 +9,7 @@
 
 #include <filesystem>
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
 
@@ -26,8 +27,14 @@ struct ViewState {
 
 // Escribe el diseño. Nunca deja un archivo a medias: se escribe en uno
 // temporal junto al destino y luego lo reemplaza; si algo falla, el destino
-// queda como estaba. Lanza NufError.
-void saveDocument(const std::filesystem::path& path, const document::Document& document, const ViewState& view);
+// queda como estaba. `thumbnailPng` (opcional) es la miniatura que verá la
+// lista de recientes. Lanza NufError.
+void saveDocument(const std::filesystem::path& path, const document::Document& document, const ViewState& view,
+                  const std::string& thumbnailPng = {});
+
+// La miniatura guardada en el archivo, sin abrir el diseño ni recalcularlo.
+// nullopt si no tiene o el archivo no se puede leer.
+std::optional<std::string> readThumbnail(const std::filesystem::path& path) noexcept;
 
 // Abre un diseño en `document` (con un solo recálculo, conservando el objeto).
 // Si el archivo está dañado lanza NufError y el documento no cambia. Las

@@ -22,6 +22,11 @@ else()
     target_link_libraries(nuf_geometry PRIVATE TKSTEP TKXSBase)
 endif()
 
+# BREP binario (BinTools) para guardar los sólidos importados.
+if(TARGET TKBinL)
+    target_link_libraries(nuf_geometry PRIVATE TKBinL)
+endif()
+
 if(WIN32)
     target_compile_definitions(nuf_geometry PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 endif()

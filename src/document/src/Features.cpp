@@ -1,5 +1,6 @@
 #include <nuf/document/Features.hpp>
 
+#include <nuf/geometry/Exchange.hpp>
 #include <nuf/sketch/Solver.hpp>
 
 #include <algorithm>
@@ -424,6 +425,33 @@ std::vector<FeatureId> RevolveFeature::dependencies() const
         addAll(ids, axis.edge);
     }
     return ids;
+}
+
+// --- Importar ----------------------------------------------------------------
+
+std::optional<std::string> ImportFeature::compute(ModelState& state) const
+{
+    if (!brep || brep->empty()) {
+        throw FeatureError("La operación no tiene sólido guardado");
+    }
+    std::vector<geometry::Shape> shapes;
+    try {
+        shapes = geometry::shapesFromBrep(*brep, tag());
+    } catch (const geometry::GeometryError& e) {
+        throw FeatureError(e.what());
+    }
+    std::vector<std::string> warnings = notes;
+    for (std::size_t i = 0; i < shapes.size(); ++i) {
+        if (!shapes[i].isValid()) {
+            warnings.push_back("Un sólido importado tiene errores topológicos; puede fallar al modelar con él.");
+            break;
+        }
+    }
+    for (std::size_t i = 0; i < shapes.size(); ++i) {
+        const std::string key = shapes.size() == 1 ? tag() : tag() + ":c" + std::to_string(i + 1);
+        state.bodies.push_back({key, "Cuerpo" + std::to_string(++state.bodiesCreated), shapes[i]});
+    }
+    return joinWarnings(warnings);
 }
 
 } // namespace nuf::document

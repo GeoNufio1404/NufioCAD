@@ -35,6 +35,7 @@ namespace nuf::app {
 
 class FeatureTool;
 class Ribbon;
+class StartScreen;
 class NavigatorWidget;
 class TimelineWidget;
 
@@ -89,6 +90,12 @@ private:
     void updateSketchActions();
     void updateExportAction();
     void exportBodies();
+    void importStep();
+    void openRecent(const QString& path);
+    std::string thumbnailPng();
+    void rebuildRecentMenu();
+    void updateStartScreen();
+    bool importStepFile(const std::filesystem::path& path);
 
     // Operaciones sólidas.
     void startTool(std::unique_ptr<FeatureTool> tool);
@@ -114,6 +121,10 @@ private:
     QAction* undoAction_ = nullptr;
     QAction* redoAction_ = nullptr;
     QAction* exportAction_ = nullptr;
+    QAction* importAction_ = nullptr;
+    QMenu* recentMenu_ = nullptr;
+    StartScreen* startScreen_ = nullptr;
+    bool startDismissed_ = false;  // la pantalla de inicio solo sale al arrancar
 
     // Sketch en edición (nuevo o una operación del historial).
     std::unique_ptr<SketchSession> sketch_;

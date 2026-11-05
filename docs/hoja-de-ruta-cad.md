@@ -243,7 +243,7 @@ Parece mucho, pero son seis bloques que se pueden hacer y probar por separado. L
 - Desactivado mientras se edita un sketch o si no hay cuerpos.
 - Pruebas: el volumen de la malla coincide con el del sólido (dentro de la tolerancia); la malla es cerrada; STEP exportado y releído mantiene el volumen; rutas con acentos; el visor no cambia tras exportar.
 - **Hecho:** `geometry/Exchange` (`writeStl` binario y `writeObj` propios sobre la malla, `writeStep` con `STEPControl_Writer::WriteStream`, `countTriangles`, `meshVolume`), diálogo `ExportDialog` (formato, cuerpos, calidad Baja/Media/Alta, triángulos estimados, un archivo por cuerpo) y Archivo › Exportar activado cuando hay cuerpos y no se edita un sketch o herramienta. 7 pruebas nuevas (`tests/test_exchange.cpp`) pasan en Windows; el STEP solo se comprueba por su texto (no se relee).
-- **Pendiente de 4a:** calidad «Personalizada»; releer el STEP y comparar volumen (llega con la importación, 4d); compilar en Fedora y en el CI de Ubuntu (el enlace de STEP elige `TKDESTEP` o `TKSTEP` según la versión de OCCT, sin probar con la antigua); probar el diálogo a mano (pruebas 31–32).
+- **Pendiente de 4a:** calidad «Personalizada»; compilar en Fedora y en el CI de Ubuntu (el enlace de STEP elige `TKDESTEP` o `TKSTEP` según la versión de OCCT, sin probar con la antigua); probar el diálogo a mano (pruebas 31–32).
 
 **4b — Serialización** ✅ implementado (sin interfaz: se usa desde 4c)
 
@@ -274,16 +274,20 @@ Después, el formato:
 - **Decisión:** si hay un sketch o herramienta sin terminar, guardar guarda solo lo confirmado y lo avisa; al cerrar o abrir otro, el aviso dice que esa edición no se guardará (no se «termina y guarda» sola).
 - **Pendiente de 4c:** Guardar como con el diálogo y Nuevo no se han probado a mano; el diálogo de Abrir tampoco (solo el argumento de línea de comandos); no se recuerda ni se restaura la cámara.
 
-**4d — Importar STEP**
+**4d — Importar STEP ✅**
 - `geometry::readStep` con reparación (`ShapeFix`). Las caras se nombran `f<id>:?<n>` con el `Namer` que ya existe.
-- Nueva operación `ImportFeature`: una ficha más en el timeline, sin historial propio. Cada sólido es un cuerpo, así que la clave de cuerpo pasa de «f<id>» a admitir varios por operación.
-- La forma se guarda en `blobs` como BREP binario (`BinTools`), no como STEP: el archivo se analiza una sola vez y abrir es rápido.
+- Nueva operación `ImportFeature`: una ficha más en el timeline, sin historial propio. Cada sólido es un cuerpo; con varios, la clave de cuerpo es `f<id>:c<n>` (y las caras `f<id>:c<n>:?<k>`, para que no se repitan entre cuerpos y `featuresIn` siga reconociendo la operación).
+- La forma se guarda en `blobs` como BREP binario (`BinTools`), no como STEP: el archivo se analiza una sola vez y abrir es rápido. El STEP original se puede mover o borrar sin afectar al diseño.
 - Un cuerpo importado se usa como cualquier otro: sketches sobre sus caras, extruir, cortar y unir.
+- **Hecho:** Archivo › Importar STEP… (Ctrl+I) y arrastrar un `.step`/`.stp` a la ventana; se puede deshacer; solo se importan sólidos (las superficies sueltas se ignoran y se avisa); el error de un archivo ilegible se explica sin tocar el diseño. 4 pruebas nuevas: ida y vuelta de STEP (volumen y 6 caras nombradas igual cada vez), varios sólidos sin nombres repetidos, archivos inservibles, y diseño completo (importar → sketch en cara → corte → guardar → borrar el STEP → abrir: mismo modelo). El STEP exportado en 4a ya se relee con el mismo volumen.
+- **Pendiente de 4d:** unidades distintas de mm (se confía en la conversión de OCCT, sin probar con un STEP en pulgadas); ensamblajes, colores y nombres del STEP (requiere XDE); no se puede reimportar/actualizar desde el archivo original; probado a mano solo con la pieza de muestra de las pruebas (`NUF_SAMPLE_STEP=ruta nuf_tests "[sample]"` la genera), no con STEP de otros programas reales.
 
-**4e — Pantalla de inicio**
+**4e — Pantalla de inicio ✅**
 - Panel superpuesto al visor vacío al arrancar (mismo mecanismo que la barra de navegación, para no recrear el contexto OpenGL), que desaparece con la primera acción.
-- Recientes con miniatura, nombre y fecha; también en Archivo › Recientes. Lista en `QSettings`; los archivos que ya no existen aparecen marcados y se pueden quitar.
+- Recientes con miniatura, nombre y fecha; también en Archivo › Abrir reciente. Lista en `QSettings` (máximo 10); los archivos que ya no existen aparecen marcados y se pueden quitar (clic derecho › Quitar de la lista, o se quitan solos al intentar abrirlos).
 - Miniatura: `Viewport` renderiza una imagen al guardar y va en `blobs`. Se lee sin recalcular el modelo, así que la lista carga al instante.
+- **Hecho:** pantalla con Nuevo diseño / Abrir / Importar STEP y la lista de recientes; se oculta con cualquier primera acción (Nuevo, abrir, importar, crear sketch…) y no vuelve a salir sola; `io::readThumbnail`; la miniatura (400×250 PNG) se guarda en cada Guardar si hay cuerpos. Comprobado a mano en Windows: importar, guardar, reiniciar → el reciente aparece con su miniatura, nombre y fecha; abrirlo desde la lista; Nuevo y Crear sketch ocultan la pantalla; menú Abrir reciente. Prueba nueva de la miniatura en el archivo.
+- **Pendiente de 4e:** no se han probado a mano «Quitar de la lista», «Borrar la lista» ni un reciente cuyo archivo ya no existe; el nombre del diseño no cambia al guardar con otro nombre (el recientes muestra el nombre del archivo); la miniatura es una captura del visor tal cual está (con el cubo de vista), no una vista limpia; sin tema claro comprobado.
 
 **4f — Recuperación**
 - Cada minuto, si hay cambios, una copia en `QStandardPaths::AppDataLocation/recuperacion/`. Nunca se toca el archivo del usuario.
@@ -302,6 +306,8 @@ Después, el formato:
 34. **Cambios sin guardar**: editar → aparece `*` y avisa al cerrar; Ctrl+Z hasta el punto guardado → desaparece.
 35. **Archivo entre sistemas**: un `.nuf` guardado en Windows abre igual en Fedora, y al revés.
 36. **Recuperación**: editar, esperar más de un minuto, matar el proceso, abrir → ofrece restaurar.
+37. **Importar un STEP real**: uno de otro programa (con varios sólidos y en pulgadas, si se puede) → Ctrl+I: aparece la ficha «Importación», cada sólido es un cuerpo, y se puede hacer un sketch en una cara y cortar. Guardar, mover el STEP, abrir: igual.
+38. **Recientes**: guardar varios diseños → cerrar → la pantalla de inicio los lista con miniatura; borrar uno desde el explorador → aparece «ya no existe» y se quita; clic derecho › Quitar de la lista.
 
 ### Fase 5 — Operaciones de acabado
 - Chaflán y fillet.
@@ -349,5 +355,5 @@ Después, el formato:
 | Windows | 🚧 Compila (MSVC), las pruebas pasan y la app abre y funciona en Debug. Pendiente: pasar las pruebas manuales 1–30 en Windows y el build Release (Smart App Control bloquea las DLL sin firmar de OCCT en esta PC) |
 | Fase 2 | 🚧 Implementada (2a–2d) — sketch completo: dibujo con variantes, elipse, spline y cónica; restricciones (incluida G2), cotas y valores junto al cursor; selección (también por rectángulo), deshacer, arrastre y perfiles; edición (recortar, extender, partir, empalme, chaflán, desfase, simetría, patrones, mover/copiar/girar/escalar); proyectar aristas, intersección, texto, imagen de referencia e importar DXF; los sketches terminados se guardan, sus perfiles y curvas se seleccionan en la vista 3D y se reabren con doble clic. Pendiente: las pruebas manuales de abajo y probar en Windows. Limitaciones: lo proyectado y el texto quedan bloqueados (no se actualizan con la pieza ni se editan como texto hasta la Fase 3); recortar/extender/partir y desfase trabajan con líneas, arcos y círculos; los patrones son copias independientes |
 | Fase 3 | 🚧 Implementada (3a–3c) — núcleo paramétrico con nombres estables de caras y aristas; sketches en el historial (sobre planos de origen o caras que siguen a la pieza); Extruir (todas sus variantes, empujar una cara) y Revolución con vista previa y flecha; timeline editable (editar, marcador, reordenar, suprimir, borrar, renombrar), navegador y deshacer/rehacer; lo proyectado sigue a su arista. Pendiente: las pruebas manuales 20–30 y probar en Windows. Limitaciones: los cuerpos que participan en unir/cortar son todos los que toca (sin elegirlos); «hasta una cara» solo con caras planas; el ángulo de la revolución se escribe en el panel (sin flecha) |
-| Fase 4 | 🚧 4a (Exportar), 4b (serialización) y 4c (Nuevo/Abrir/Guardar/Guardar como con aviso de cambios) implementadas; 4d–4f sin empezar. Siguiente paso: 4d (importar STEP) o 4e (pantalla de inicio) |
+| Fase 4 | 🚧 4a (Exportar), 4b (serialización), 4c (Nuevo/Abrir/Guardar/Guardar como con aviso de cambios), 4d (importar STEP) y 4e (pantalla de inicio con recientes) implementadas; 4f (recuperación) sin empezar. Siguiente paso: 4f |
 | Fases 5–9 | Pendientes (chaflán/fillet, shell, agujeros, patrones y espejo de sólidos, parámetros, generadores, ensambles, medición) |

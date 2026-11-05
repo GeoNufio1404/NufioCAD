@@ -2,13 +2,21 @@
 
 #include <nuf/geometry/Occt.hpp>
 
+#include "Naming.hpp"
+
 #include <BRepBuilderAPI_Copy.hxx>
+#include <BinTools.hxx>
+#include <BinTools_FormatVersion.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRep_Tool.hxx>
 #include <IFSelect_ReturnStatus.hxx>
 #include <Poly_Triangulation.hxx>
 #include <STEPControl_StepModelType.hxx>
+#include <STEPControl_Reader.hxx>
+#include <Standard_Failure.hxx>
 #include <STEPControl_Writer.hxx>
+#include <ShapeFix_Shape.hxx>
+#include <TopoDS_Solid.hxx>
 #include <TopAbs_Orientation.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopLoc_Location.hxx>
@@ -24,6 +32,7 @@
 #include <cstring>
 #include <fstream>
 #include <locale>
+#include <sstream>
 
 namespace nuf::geometry {
 
@@ -233,6 +242,82 @@ void writeStep(const std::filesystem::path& path, const std::vector<Shape>& shap
         throw GeometryError("No se pudo escribir el archivo STEP");
     }
     finish(out, path);
+}
+
+StepImport readStep(const std::filesystem::path& path)
+{
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        throw GeometryError("No se pudo abrir el archivo " + utf8(path));
+    }
+    STEPControl_Reader reader;
+    if (reader.ReadStream(utf8(path).c_str(), in) != IFSelect_RetDone) {
+        throw GeometryError("No se pudo leer el archivo STEP: no es válido o está dañado");
+    }
+    if (reader.TransferRoots() <= 0) {
+        throw GeometryError("El archivo STEP no contiene geometría que se pueda importar");
+    }
+    TopoDS_Shape whole = reader.OneShape();
+    if (whole.IsNull()) {
+        throw GeometryError("El archivo STEP no contiene geometría que se pueda importar");
+    }
+
+    StepImport result;
+    ShapeFix_Shape fixer(whole);
+    fixer.Perform();
+    if (!fixer.Shape().IsNull()) {
+        whole = fixer.Shape();
+    }
+
+    // Solo los sólidos: las superficies sueltas no sirven para modelar.
+    TopoDS_Compound solids;
+    BRep_Builder builder;
+    builder.MakeCompound(solids);
+    for (TopExp_Explorer ex(whole, TopAbs_SOLID); ex.More(); ex.Next()) {
+        builder.Add(solids, ex.Current());
+        ++result.solids;
+    }
+    if (result.solids == 0) {
+        throw GeometryError("El archivo STEP no contiene sólidos (solo superficies o curvas)");
+    }
+    if (TopExp_Explorer(whole, TopAbs_SHELL, TopAbs_SOLID).More() || TopExp_Explorer(whole, TopAbs_FACE, TopAbs_SHELL).More()) {
+        result.warnings.push_back("Se ignoraron superficies sueltas que no forman un sólido.");
+    }
+
+    std::ostringstream out(std::ios::binary);
+    BinTools::Write(solids, out, false, false, BinTools_FormatVersion_CURRENT);
+    result.brep = out.str();
+    if (result.brep.empty()) {
+        throw GeometryError("No se pudo preparar el sólido importado");
+    }
+    return result;
+}
+
+std::vector<Shape> shapesFromBrep(const std::string& brep, const std::string& tag)
+{
+    TopoDS_Shape compound;
+    try {
+        std::istringstream in(brep, std::ios::binary);
+        BinTools::Read(compound, in);
+    } catch (const Standard_Failure&) {
+        throw GeometryError("Los datos del sólido importado están dañados");
+    }
+    if (compound.IsNull()) {
+        throw GeometryError("Los datos del sólido importado están dañados");
+    }
+    std::vector<TopoDS_Shape> solids;
+    for (TopExp_Explorer ex(compound, TopAbs_SOLID); ex.More(); ex.Next()) {
+        solids.push_back(ex.Current());
+    }
+    if (solids.empty()) {
+        throw GeometryError("El sólido importado no tiene cuerpos");
+    }
+    std::vector<Shape> shapes;
+    for (std::size_t i = 0; i < solids.size(); ++i) {
+        const std::string name = solids.size() == 1 ? tag : tag + ":c" + std::to_string(i + 1);
+        shapes.push_back(Namer(solids[i]).finish(name));
+    }
+    return shapes;
 }
 
 } // namespace nuf::geometry

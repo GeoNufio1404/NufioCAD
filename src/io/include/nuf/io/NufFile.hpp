@@ -66,6 +66,11 @@ public:
     void writeFeatures(const std::vector<FeatureRow>& rows);
     std::vector<FeatureRow> readFeatures() const;
 
+    // Datos binarios (sólidos importados, miniatura). writeBlob reemplaza el
+    // que tenga esa clave; readBlob devuelve nullopt si no existe.
+    void writeBlob(std::string_view key, std::string_view kind, std::string_view data);
+    std::optional<std::string> readBlob(std::string_view key) const;
+
     // Todas las entradas de meta.
     std::vector<std::pair<std::string, std::string>> allMeta() const;
 

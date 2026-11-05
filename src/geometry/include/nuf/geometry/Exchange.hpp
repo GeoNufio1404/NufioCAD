@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <filesystem>
+#include <string>
 #include <vector>
 
 namespace nuf::geometry {
@@ -34,5 +35,21 @@ double meshVolume(const std::vector<Shape>& shapes, const MeshQuality& quality);
 void writeStl(const std::filesystem::path& path, const std::vector<Shape>& shapes, const MeshQuality& quality);
 void writeObj(const std::filesystem::path& path, const std::vector<Shape>& shapes, const MeshQuality& quality);
 void writeStep(const std::filesystem::path& path, const std::vector<Shape>& shapes);
+
+// Un STEP leído y reparado, listo para guardarse: solo los sólidos, en BREP
+// binario (así abrir el diseño no vuelve a analizar el STEP).
+struct StepImport {
+    std::string brep;
+    int solids = 0;
+    std::vector<std::string> warnings;  // reparos o cosas que se dejaron fuera
+};
+
+// Lanza GeometryError si no se puede leer o no hay ningún sólido.
+StepImport readStep(const std::filesystem::path& path);
+
+// Los cuerpos de un BREP guardado, uno por sólido, con sus caras nombradas
+// «<tag>:?<n>» (o «<tag>:c<k>:?<n>» si son varios sólidos, para que no se
+// repitan). Mismos nombres cada vez que se llama con los mismos datos.
+std::vector<Shape> shapesFromBrep(const std::string& brep, const std::string& tag);
 
 } // namespace nuf::geometry

@@ -5,6 +5,7 @@
 #include "Icons.hpp"
 #include "ModelPanels.hpp"
 #include "NavBar.hpp"
+#include "StartScreen.hpp"
 #include "Ribbon.hpp"
 #include "Theme.hpp"
 
@@ -207,12 +208,16 @@ void MainWindow::createMenus()
             &MainWindow::newDocument);
     addFile(QStringLiteral("&Abrir…"), QKeySequence(QKeySequence::Open), QStringLiteral("file-open"),
             &MainWindow::openDocument);
+    recentMenu_ = file->addMenu(QStringLiteral("Abrir &reciente"));
+    connect(recentMenu_, &QMenu::aboutToShow, this, &MainWindow::rebuildRecentMenu);
     file->addSeparator();
     addFile(QStringLiteral("&Guardar"), QKeySequence(QKeySequence::Save), QStringLiteral("file-save"),
             [this] { saveDocument(); });
     addFile(QStringLiteral("Guardar &como…"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_S),
             QStringLiteral("file-save"), [this] { saveDocumentAs(); });
     file->addSeparator();
+    importAction_ = addFile(QStringLiteral("&Importar STEP…"), QKeySequence(Qt::CTRL | Qt::Key_I),
+                            QStringLiteral("file-open"), &MainWindow::importStep);
     exportAction_ = addFile(QStringLiteral("&Exportar…"), QKeySequence(), QStringLiteral("file-export"),
                             &MainWindow::exportBodies);
     exportAction_->setEnabled(false);
@@ -513,6 +518,12 @@ void MainWindow::createMenus()
     navActions.push_back(fitAction);
     navActions.push_back(lookAtSketchAction_);
     new NavBar(viewport_, navActions);
+    // Encima de todo lo que flota sobre el visor.
+    startScreen_ = new StartScreen(viewport_);
+    connect(startScreen_, &StartScreen::newRequested, this, &MainWindow::newDocument);
+    connect(startScreen_, &StartScreen::openRequested, this, &MainWindow::openDocument);
+    connect(startScreen_, &StartScreen::importRequested, this, &MainWindow::importStep);
+    connect(startScreen_, &StartScreen::recentRequested, this, &MainWindow::openRecent);
     updateSketchActions();
     view->addSeparator();
     QMenu* panels = view->addMenu(QStringLiteral("&Paneles"));
@@ -598,6 +609,21 @@ void MainWindow::updateTitle()
 {
     setWindowTitle(QString::fromStdString(document_.name()) + QStringLiteral("[*]"));
     setWindowModified(hasUnsavedWork());
+    updateStartScreen();
+}
+
+// Aparece al arrancar y se va con la primera acción: no vuelve a salir sola.
+void MainWindow::updateStartScreen()
+{
+    if (startScreen_ == nullptr) {
+        return;
+    }
+    const bool show = !startDismissed_ && document_.featureCount() == 0 && path_.empty() && !isEditing()
+                      && !viewport_->isPickingSketchPlane();
+    if (!show) {
+        startDismissed_ = true;
+    }
+    startScreen_->setVisible(show);
 }
 
 void MainWindow::createSketch()
@@ -767,6 +793,8 @@ void MainWindow::activateFeature(document::FeatureId id)
     case document::FeatureKind::Revolve:
         startTool(std::make_unique<RevolveTool>(document_, *viewport_, id));
         break;
+    case document::FeatureKind::Import:
+        break;  // no tiene parámetros que editar
     }
 }
 
@@ -855,6 +883,10 @@ bool MainWindow::sketchVisible(document::FeatureId id, std::size_t upTo) const
 
 void MainWindow::updateExportAction()
 {
+    updateStartScreen();
+    if (importAction_ != nullptr) {
+        importAction_->setEnabled(!sketch_ && !tool_);
+    }
     if (exportAction_ != nullptr) {
         exportAction_->setEnabled(!sketch_ && !tool_ && !document_.result().bodies.empty());
     }

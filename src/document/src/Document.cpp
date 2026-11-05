@@ -21,6 +21,8 @@ std::string kindLabel(FeatureKind kind)
         return "Extrusión";
     case FeatureKind::Revolve:
         return "Revolución";
+    case FeatureKind::Import:
+        return "Importación";
     }
     return "Operación";
 }

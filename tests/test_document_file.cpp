@@ -1,5 +1,6 @@
 #include <nuf/document/Document.hpp>
 #include <nuf/document/Features.hpp>
+#include <nuf/geometry/Exchange.hpp>
 #include <nuf/io/DocumentFile.hpp>
 
 #include <catch2/catch_test_macros.hpp>
@@ -415,4 +416,100 @@ TEST_CASE("El volcado a JSON es legible", "[io][document]")
     const std::string dump = io::dumpDocument(path);
     REQUIRE(dump.find("\"type\": \"extrude\"") != std::string::npos);
     REQUIRE(dump.find("\"operation\": \"newBody\"") != std::string::npos);
+}
+
+TEST_CASE("Un diseño con un STEP importado se guarda, se abre y se sigue modelando sobre él", "[io][document][import]")
+{
+    const auto step = tempFile("pieza.step");
+    Cleanup cleanupStep{step};
+    {
+        Document source;
+        const FeatureId sk = source.addFeature(sketchOn(rectangleSketch(0, 0, 30, 20)));
+        source.addFeature(extrudeAll(source, sk, 6, Operation::NewBody));
+        geometry::writeStep(step, source.result().shapes());
+    }
+
+    Document doc;
+    doc.setName("Con importación");
+    auto imported = std::make_unique<ImportFeature>();
+    const geometry::StepImport data = geometry::readStep(step);
+    imported->source = "pieza.step";
+    imported->setName("pieza");
+    imported->brep = std::make_shared<const std::string>(data.brep);
+    const FeatureId importId = doc.addFeature(std::move(imported));
+    REQUIRE(doc.status(importId).health == Health::Ok);
+    REQUIRE(doc.result().bodies.size() == 1);
+    REQUIRE(doc.result().bodies[0].key == "f" + std::to_string(importId));
+
+    // Un sketch sobre la cara de arriba del sólido importado y un agujero.
+    const geometry::Shape& body = doc.result().bodies[0].shape;
+    std::optional<int> top;
+    for (int i = 0; i < body.faceCount(); ++i) {
+        if (const auto plane = body.facePlane(i); plane && plane->normal.z > 0.9) {
+            top = i;
+        }
+    }
+    REQUIRE(top);
+    SketchAttachment on;
+    on.origin.reset();
+    on.face = body.faceRef(*top);
+    on.lastPlane = *body.facePlane(*top);
+    sketch::Sketch hole;
+    hole.addCircle({10, 10}, 3);
+    const FeatureId sk = doc.addFeature(std::make_unique<SketchFeature>(std::move(hole), on));
+    REQUIRE(doc.status(sk).health == Health::Ok);
+    doc.addFeature(extrudeAll(doc, sk, -3, Operation::Cut));
+    const double expected = 30.0 * 20.0 * 6.0 - 3.14159265358979 * 9.0 * 3.0;
+    REQUIRE_THAT(doc.result().bodies[0].shape.volume(), WithinRel(expected, 1e-3));
+
+    // El STEP original ya no hace falta: el diseño lleva el sólido dentro.
+    std::filesystem::remove(step);
+    const auto path = tempFile("importado.nuf");
+    Cleanup cleanup{path};
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    REQUIRE(fingerprint(reopened) == fingerprint(doc));
+    REQUIRE(reopened.status(sk).health == Health::Ok);
+    REQUIRE_THAT(reopened.result().bodies[0].shape.volume(), WithinRel(expected, 1e-3));
+    const auto* again = static_cast<const ImportFeature*>(reopened.findFeature(importId));
+    REQUIRE(again->source == "pieza.step");
+    REQUIRE(io::dumpDocument(path).find("pieza.step") != std::string::npos);
+
+    // Sin el sólido guardado, el archivo está dañado y se dice.
+    const auto broken = tempFile("sin_solido.nuf");
+    Cleanup cleanupBroken{broken};
+    std::filesystem::copy_file(path, broken);
+    writeSql(broken, "DELETE FROM blobs;");
+    Document untouched;
+    io::ViewState untouchedView;
+    REQUIRE_THROWS_AS(io::loadDocument(broken, untouched, untouchedView), io::NufError);
+    REQUIRE(untouched.featureCount() == 0);
+}
+
+TEST_CASE("La miniatura va en el archivo y se lee sin abrir el diseño", "[io][document]")
+{
+    const Document original = buildRichDocument();
+    const auto path = tempFile("miniatura.nuf");
+    Cleanup cleanup{path};
+    const std::string png = std::string("PNG datos de prueba") + std::string(1, '\0') + std::string(1, 'x') + "fin";
+    io::saveDocument(path, original, {}, png);
+    REQUIRE(io::readThumbnail(path) == png);
+
+    // Sin miniatura: nullopt. Archivo inexistente o que no es .nuf: también.
+    const auto plain = tempFile("sin_miniatura.nuf");
+    Cleanup cleanupPlain{plain};
+    io::saveDocument(plain, original, {});
+    REQUIRE_FALSE(io::readThumbnail(plain));
+    REQUIRE_FALSE(io::readThumbnail(tempFile("no_existe.nuf")));
+    const auto text = tempFile("texto.nuf");
+    Cleanup cleanupText{text};
+    std::ofstream(text) << "no soy una base de datos";
+    REQUIRE_FALSE(io::readThumbnail(text));
+    // Y el diseño se abre igual con o sin ella.
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    REQUIRE(fingerprint(reopened) == fingerprint(original));
 }
