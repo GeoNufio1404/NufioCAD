@@ -261,6 +261,104 @@ void showPlanes(render::Viewport& viewport, const document::Document& doc, const
 
 } // namespace
 
+void FeatureTool::createPlacement(QFormLayout* form, Placement& p, const document::SketchAttachment* original, double x,
+                                  double y)
+{
+    p.base = combo({QStringLiteral("Plano XY"), QStringLiteral("Plano XZ"), QStringLiteral("Plano YZ")});
+    for (const auto& [id, plane] : before().planes) {
+        const document::Feature* f = document_.findFeature(id);
+        p.base->addItem(f ? QString::fromStdString(f->name()) : QStringLiteral("Plano"));
+        p.planeIds.push_back(id);
+    }
+    p.x = lengthBox(x);
+    field("x", p.x);
+    p.y = lengthBox(y);
+    field("y", p.y);
+    int at = 0;
+    if (original != nullptr) {
+        if (original->origin) {
+            at = int(*original->origin);
+        } else if (original->reference != 0) {
+            const auto it = std::ranges::find(p.planeIds, original->reference);
+            at = it != p.planeIds.end() ? 3 + int(it - p.planeIds.begin()) : 0;
+        } else if (!original->face.empty()) {
+            p.face = original->face;
+            p.base->addItem(QStringLiteral("Cara elegida"));
+            at = p.base->count() - 1;
+        }
+    }
+    p.base->setCurrentIndex(at);
+    form->addRow(QStringLiteral("Plano o cara"), p.base);
+    form->addRow(QStringLiteral("Posición X"), p.x);
+    form->addRow(QStringLiteral("Posición Y"), p.y);
+    connect(p.base, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
+    for (QDoubleSpinBox* box : {p.x, p.y}) {
+        connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
+    }
+}
+
+bool FeatureTool::placementSelection(Placement& p, const render::ModelSelection& selection)
+{
+    for (const render::ModelSelection::Face& f : selection.faces) {
+        const auto hit = before().findFace(f.ref);
+        if (!hit) {
+            continue;  // una cara de la vista previa que no existe antes
+        }
+        const geometry::Shape& shape = before().bodies[hit->body].shape;
+        const auto plane = shape.facePlane(hit->face);
+        if (!plane) {
+            emit message(QStringLiteral("Elige una cara plana"));
+            continue;
+        }
+        p.face = f.ref;
+        if (p.base->count() == 3 + int(p.planeIds.size())) {
+            p.base->addItem(QStringLiteral("Cara elegida"));
+        }
+        // Se pone en el centro de la cara; la posición se puede cambiar después.
+        const sketch::Vec2 center = plane->toLocal(shape.faceCenter(hit->face));
+        updating_ = true;
+        p.base->setCurrentIndex(p.base->count() - 1);
+        p.x->setValue(center.x);
+        p.y->setValue(center.y);
+        updating_ = false;
+        viewport_.clearModelSelection();
+        return true;
+    }
+    if (!selection.empty()) {
+        viewport_.clearModelSelection();
+    }
+    return false;
+}
+
+bool FeatureTool::placementOnFace(const Placement& p) const
+{
+    return p.base != nullptr && p.base->currentIndex() >= 3 + int(p.planeIds.size());
+}
+
+document::SketchAttachment FeatureTool::placementAttachment(const Placement& p) const
+{
+    document::SketchAttachment at;
+    const int index = p.base->currentIndex();
+    if (index < 3) {
+        at.origin = document::OriginPlane(index);
+    } else if (index < 3 + int(p.planeIds.size())) {
+        const document::FeatureId id = p.planeIds[std::size_t(index - 3)];
+        at.origin.reset();
+        at.reference = id;
+        at.lastPlane = before().planes.at(id);
+    } else {
+        at.origin.reset();
+        at.reference = 0;
+        at.face = p.face;
+        if (const auto hit = before().findFace(p.face)) {
+            if (const auto plane = before().bodies[hit->body].shape.facePlane(hit->face)) {
+                at.lastPlane = *plane;
+            }
+        }
+    }
+    return at;
+}
+
 void FeatureTool::updatePreview()
 {
     if (updating_ || !panel_) {
@@ -1452,12 +1550,9 @@ GearTool::GearTool(document::Document& document, render::Viewport& viewport,
 
 void GearTool::createFields(QFormLayout* form)
 {
-    base_ = combo({QStringLiteral("Plano XY"), QStringLiteral("Plano XZ"), QStringLiteral("Plano YZ")});
-    for (const auto& [id, plane] : before().planes) {
-        const document::Feature* f = document_.findFeature(id);
-        base_->addItem(f ? QString::fromStdString(f->name()) : QStringLiteral("Plano"));
-        planeIds_.push_back(id);
-    }
+    const auto* original = dynamic_cast<const document::GearFeature*>(original_.get());
+    createPlacement(form, placement_, original != nullptr ? &original->base : nullptr, original != nullptr ? original->x : 0.0,
+                    original != nullptr ? original->y : 0.0);
     module_ = lengthBox(2.0);
     module_->setMinimum(0.1);
     field("module", module_);
@@ -1475,37 +1570,51 @@ void GearTool::createFields(QFormLayout* form)
     field("bore", bore_);
     helix_ = angleBox(0.0, 45.0);
     field("helixAngle", helix_);
-    operation_ = combo({QStringLiteral("Cuerpo nuevo"), QStringLiteral("Unir")});
-    if (const auto* g = dynamic_cast<const document::GearFeature*>(original_.get())) {
-        int at = g->base.origin ? int(*g->base.origin) : 0;
-        if (!g->base.origin && g->base.reference != 0) {
-            const auto it = std::ranges::find(planeIds_, g->base.reference);
-            at = it != planeIds_.end() ? 3 + int(it - planeIds_.begin()) : 0;
-        }
-        base_->setCurrentIndex(at);
-        module_->setValue(g->spec.module);
-        teeth_->setValue(g->spec.teeth);
-        pressure_->setValue(g->spec.pressureAngle / kDegree);
-        thickness_->setValue(g->spec.thickness);
-        bore_->setValue(g->spec.bore);
-        helix_->setValue(g->spec.helixAngle / kDegree);
-        operation_->setCurrentIndex(g->operation == document::Operation::Join ? 1 : 0);
+    operation_ = combo({QStringLiteral("Cuerpo nuevo"), QStringLiteral("Unir"), QStringLiteral("Cortar")});
+    if (original != nullptr) {
+        module_->setValue(original->spec.module);
+        teeth_->setValue(original->spec.teeth);
+        pressure_->setValue(original->spec.pressureAngle / kDegree);
+        thickness_->setValue(original->spec.thickness);
+        bore_->setValue(original->spec.bore);
+        helix_->setValue(original->spec.helixAngle / kDegree);
+        operation_->setCurrentIndex(original->operation == document::Operation::Join  ? 1
+                                    : original->operation == document::Operation::Cut ? 2
+                                                                                      : 0);
     }
-    form->addRow(QStringLiteral("Plano"), base_);
     form->addRow(QStringLiteral("Módulo"), module_);
     form->addRow(QStringLiteral("Dientes"), teeth_);
     form->addRow(QStringLiteral("Ángulo de presión"), pressure_);
-    form->addRow(QStringLiteral("Ancho"), thickness_);
+    form->addRow(QStringLiteral("Ancho (±)"), thickness_);
     form->addRow(QStringLiteral("Agujero central"), bore_);
     form->addRow(QStringLiteral("Ángulo de hélice"), helix_);
     form->addRow(QStringLiteral("Operación"), operation_);
-    for (QComboBox* box : {base_, operation_}) {
-        connect(box, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
-    }
+    connect(operation_, &QComboBox::currentIndexChanged, this, [this] {
+        adjustDirection();
+        updatePreview();
+    });
     connect(teeth_, &QSpinBox::valueChanged, this, [this] { updatePreview(); });
     for (QDoubleSpinBox* box : {module_, pressure_, thickness_, bore_, helix_}) {
         connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
     }
+}
+
+void GearTool::selectionChanged(const render::ModelSelection& selection)
+{
+    if (placementSelection(placement_, selection)) {
+        adjustDirection();
+        updatePreview();
+    }
+}
+
+void GearTool::adjustDirection()
+{
+    if (!placementOnFace(placement_)) {
+        return;
+    }
+    const double width = std::abs(thickness_->value());
+    const bool cut = operation_->currentIndex() == 2;
+    thickness_->setValue(cut ? -width : width);
 }
 
 std::unique_ptr<document::Feature> GearTool::build() const
@@ -1514,31 +1623,27 @@ std::unique_ptr<document::Feature> GearTool::build() const
     if (original_) {
         f->setName(original_->name());
     }
-    const int base = base_->currentIndex();
-    if (base < 3) {
-        f->base.origin = document::OriginPlane(base);
-    } else {
-        const document::FeatureId id = planeIds_[std::size_t(base - 3)];
-        f->base.origin.reset();
-        f->base.reference = id;
-        f->base.lastPlane = before().planes.at(id);
-    }
+    f->base = placementAttachment(placement_);
+    f->x = placement_.x->value();
+    f->y = placement_.y->value();
     f->spec.module = module_->value();
     f->spec.teeth = teeth_->value();
     f->spec.pressureAngle = pressure_->value() * kDegree;
     f->spec.thickness = thickness_->value();
     f->spec.bore = bore_->value();
     f->spec.helixAngle = helix_->value() * kDegree;
-    f->operation = operation_->currentIndex() == 1 ? document::Operation::Join : document::Operation::NewBody;
+    const int op = operation_->currentIndex();
+    f->operation = op == 1 ? document::Operation::Join : op == 2 ? document::Operation::Cut : document::Operation::NewBody;
     return f;
 }
 
 QString GearTool::inputsText() const
 {
-    return QStringLiteral("%1 dientes, módulo %2: Ø primitivo %3 mm")
+    return QStringLiteral("%1 dientes, módulo %2: Ø primitivo %3%4")
         .arg(teeth_->value())
-        .arg(module_->value())
-        .arg(module_->value() * teeth_->value());
+        .arg(Units::instance().format(module_->value()))
+        .arg(Units::instance().formatWithUnit(module_->value() * teeth_->value()),
+             placementOnFace(placement_) ? QStringLiteral(" · en la cara elegida") : QString());
 }
 
 // --- Barrido ----------------------------------------------------------------------------
@@ -2060,12 +2165,10 @@ ThreadTool::ThreadTool(document::Document& document, render::Viewport& viewport,
 
 void ThreadTool::createFields(QFormLayout* form)
 {
-    base_ = combo({QStringLiteral("Plano XY"), QStringLiteral("Plano XZ"), QStringLiteral("Plano YZ")});
-    for (const auto& [id, plane] : before().planes) {
-        const document::Feature* f = document_.findFeature(id);
-        base_->addItem(f ? QString::fromStdString(f->name()) : QStringLiteral("Plano"));
-        planeIds_.push_back(id);
-    }
+    form_ = form;
+    const auto* original = dynamic_cast<const document::ThreadFeature*>(original_.get());
+    createPlacement(form, placement_, original != nullptr ? &original->base : nullptr, original != nullptr ? original->x : 0.0,
+                    original != nullptr ? original->y : 0.0);
     standard_ = combo({QStringLiteral("Personalizada")});
     for (const MetricThread& m : kMetric) {
         standard_->addItem(QStringLiteral("%1 × %2").arg(QLatin1String(m.name)).arg(m.pitch));
@@ -2080,29 +2183,30 @@ void ThreadTool::createFields(QFormLayout* form)
     field("pitch", pitch_);
     length_ = lengthBox(10.0);
     field("length", length_);
+    clearance_ = lengthBox(0.15);
+    clearance_->setMinimum(0.0);
+    field("clearance", clearance_);
     left_ = new QCheckBox(QStringLiteral("Rosca a izquierdas"));
-    operation_ = combo({QStringLiteral("Cuerpo nuevo"), QStringLiteral("Unir"), QStringLiteral("Cortar")});
-    if (const auto* t = dynamic_cast<const document::ThreadFeature*>(original_.get())) {
-        int at = t->base.origin ? int(*t->base.origin) : 0;
-        if (!t->base.origin && t->base.reference != 0) {
-            const auto it = std::ranges::find(planeIds_, t->base.reference);
-            at = it != planeIds_.end() ? 3 + int(it - planeIds_.begin()) : 0;
-        }
-        base_->setCurrentIndex(at);
-        diameter_->setValue(t->spec.diameter);
-        pitch_->setValue(t->spec.pitch);
-        length_->setValue(t->spec.length);
-        left_->setChecked(t->spec.leftHanded);
-        operation_->setCurrentIndex(t->operation == document::Operation::Join ? 1 : t->operation == document::Operation::Cut ? 2 : 0);
+    operation_ = combo({QStringLiteral("Cuerpo nuevo"), QStringLiteral("Unir"), QStringLiteral("Cortar (rosca interior)")});
+    if (original != nullptr) {
+        diameter_->setValue(original->spec.diameter);
+        pitch_->setValue(original->spec.pitch);
+        length_->setValue(original->spec.length);
+        clearance_->setValue(original->clearance);
+        left_->setChecked(original->spec.leftHanded);
+        operation_->setCurrentIndex(original->operation == document::Operation::Join  ? 1
+                                    : original->operation == document::Operation::Cut ? 2
+                                                                                      : 0);
         standard_->setCurrentIndex(0);
     }
-    form->addRow(QStringLiteral("Plano"), base_);
     form->addRow(QStringLiteral("Medida"), standard_);
     form->addRow(QStringLiteral("Diámetro"), diameter_);
     form->addRow(QStringLiteral("Paso"), pitch_);
-    form->addRow(QStringLiteral("Largo"), length_);
+    form->addRow(QStringLiteral("Largo (±)"), length_);
     form->addRow(QString(), left_);
     form->addRow(QStringLiteral("Operación"), operation_);
+    form->addRow(QStringLiteral("Holgura"), clearance_);
+    form->setRowVisible(clearance_, operation_->currentIndex() == 2);
     connect(standard_, &QComboBox::currentIndexChanged, this, [this](int index) {
         if (index > 0) {
             diameter_->setValue(kMetric[index - 1].diameter);
@@ -2119,13 +2223,33 @@ void ThreadTool::createFields(QFormLayout* form)
             }
         });
     }
-    for (QComboBox* box : {base_, operation_}) {
-        connect(box, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
-    }
+    connect(operation_, &QComboBox::currentIndexChanged, this, [this] {
+        form_->setRowVisible(clearance_, operation_->currentIndex() == 2);
+        adjustDirection();
+        updatePreview();
+    });
     connect(left_, &QCheckBox::toggled, this, [this] { updatePreview(); });
-    for (QDoubleSpinBox* box : {diameter_, pitch_, length_}) {
+    for (QDoubleSpinBox* box : {diameter_, pitch_, length_, clearance_}) {
         connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
     }
+}
+
+void ThreadTool::selectionChanged(const render::ModelSelection& selection)
+{
+    if (placementSelection(placement_, selection)) {
+        adjustDirection();
+        updatePreview();
+    }
+}
+
+void ThreadTool::adjustDirection()
+{
+    if (!placementOnFace(placement_)) {
+        return;
+    }
+    const double length = std::abs(length_->value());
+    const bool cut = operation_->currentIndex() == 2;
+    length_->setValue(cut ? -length : length);
 }
 
 std::unique_ptr<document::Feature> ThreadTool::build() const
@@ -2134,15 +2258,10 @@ std::unique_ptr<document::Feature> ThreadTool::build() const
     if (original_) {
         f->setName(original_->name());
     }
-    const int base = base_->currentIndex();
-    if (base < 3) {
-        f->base.origin = document::OriginPlane(base);
-    } else {
-        const document::FeatureId id = planeIds_[std::size_t(base - 3)];
-        f->base.origin.reset();
-        f->base.reference = id;
-        f->base.lastPlane = before().planes.at(id);
-    }
+    f->base = placementAttachment(placement_);
+    f->x = placement_.x->value();
+    f->y = placement_.y->value();
+    f->clearance = clearance_->value();
     f->spec.diameter = diameter_->value();
     f->spec.pitch = pitch_->value();
     f->spec.length = length_->value();
@@ -2157,8 +2276,13 @@ QString ThreadTool::inputsText() const
     geometry::ThreadSpec spec;
     spec.diameter = diameter_->value();
     spec.pitch = pitch_->value();
-    return QStringLiteral("Ø mayor %1, Ø menor %2 (agujero para roscar)")
-        .arg(Units::instance().formatWithUnit(spec.diameter), Units::instance().formatWithUnit(geometry::threadMinorDiameter(spec)));
+    const Units& units = Units::instance();
+    if (operation_->currentIndex() == 2) {
+        return QStringLiteral("Rosca interior: agujero de Ø %1 (tornillo Ø %2 + holgura) · «Largo» negativo entra en la pieza")
+            .arg(units.formatWithUnit(spec.diameter + 2.0 * clearance_->value()), units.formatWithUnit(spec.diameter));
+    }
+    return QStringLiteral("Ø mayor %1, Ø menor %2")
+        .arg(units.formatWithUnit(spec.diameter), units.formatWithUnit(geometry::threadMinorDiameter(spec)));
 }
 
 bool ThreadTool::removesMaterial() const

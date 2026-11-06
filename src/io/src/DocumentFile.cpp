@@ -555,7 +555,8 @@ FeatureRow rowOf(const Feature& f)
     case FeatureKind::Thread: {
         const auto& t = static_cast<const ThreadFeature&>(f);
         row.type = "thread";
-        params = {{"base", toJson(t.base)}, {"diameter", t.spec.diameter}, {"pitch", t.spec.pitch},
+        params = {{"base", toJson(t.base)}, {"x", t.x}, {"y", t.y}, {"clearance", t.clearance},
+                  {"diameter", t.spec.diameter}, {"pitch", t.spec.pitch},
                   {"length", t.spec.length}, {"leftHanded", t.spec.leftHanded},
                   {"operation", nameOf(kOperations, t.operation)}};
         break;
@@ -563,7 +564,7 @@ FeatureRow rowOf(const Feature& f)
     case FeatureKind::Gear: {
         const auto& g = static_cast<const GearFeature&>(f);
         row.type = "gear";
-        params = {{"base", toJson(g.base)}, {"module", g.spec.module}, {"teeth", g.spec.teeth},
+        params = {{"base", toJson(g.base)}, {"x", g.x}, {"y", g.y}, {"module", g.spec.module}, {"teeth", g.spec.teeth},
                   {"pressureAngle", g.spec.pressureAngle}, {"thickness", g.spec.thickness}, {"bore", g.spec.bore},
                   {"helixAngle", g.spec.helixAngle}, {"operation", nameOf(kOperations, g.operation)}};
         break;
@@ -713,6 +714,9 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
     } else if (row.type == "thread") {
         auto t = std::make_unique<ThreadFeature>();
         t->base = attachmentOf(p.at("base"));
+        t->x = p.value("x", 0.0);  // los archivos anteriores no lo traen
+        t->y = p.value("y", 0.0);
+        t->clearance = p.value("clearance", 0.0);
         t->spec.diameter = number(p, "diameter");
         t->spec.pitch = number(p, "pitch");
         t->spec.length = number(p, "length");
@@ -722,6 +726,8 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
     } else if (row.type == "gear") {
         auto g = std::make_unique<GearFeature>();
         g->base = attachmentOf(p.at("base"));
+        g->x = p.value("x", 0.0);
+        g->y = p.value("y", 0.0);
         g->spec.module = number(p, "module");
         g->spec.teeth = p.at("teeth").get<int>();
         g->spec.pressureAngle = number(p, "pressureAngle");

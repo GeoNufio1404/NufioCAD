@@ -221,7 +221,9 @@ public:
 // un plano, con su eje a lo largo de la normal.
 class GearFeature final : public Feature {
 public:
-    SketchAttachment base;   // plano donde se coloca
+    SketchAttachment base;   // plano o cara donde se coloca
+    double x = 0.0;          // posición del centro en ese plano (mm, desde su origen)
+    double y = 0.0;
     geometry::GearSpec spec;
     Operation operation = Operation::NewBody;
 
@@ -232,11 +234,16 @@ public:
     std::vector<NumericField> numericFields() override;
 };
 
-// Rosca (varilla roscada o tornillo) desde el origen de un plano. Con «Cortar»
-// sobre un agujero del diámetro menor da una rosca interior.
+// Rosca (varilla roscada o tornillo) en un punto de un plano o de una cara. Con «Cortar» da una rosca
+// interior (tuerca): el agujero tiene el perfil del tornillo más la holgura.
 class ThreadFeature final : public Feature {
 public:
-    SketchAttachment base;
+    SketchAttachment base;   // plano o cara donde se coloca
+    double x = 0.0;          // posición del eje en ese plano (mm, desde su origen)
+    double y = 0.0;
+    // Holgura radial (mm) con «Cortar»: el agujero sale más ancho que el tornillo para que éste entre
+    // (impreso, un agujero exacto no deja pasar el tornillo).
+    double clearance = 0.0;
     geometry::ThreadSpec spec;
     Operation operation = Operation::NewBody;
 

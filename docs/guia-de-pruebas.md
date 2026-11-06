@@ -272,3 +272,15 @@ Con una captura de pantalla y los pasos suele bastar. Si algo se cierra, no hace
 | U.7 | En un sketch, mira las cotas y el cursor (X/Y); pon una cota nueva | Todo en la unidad elegida; el cuadro de la cota dice «Valor (cm)» |
 | U.8 | Cierra y abre la app | La unidad se recuerda |
 | U.9 | Vuelve a «Milímetros» | Todo vuelve a mm; el archivo guardado no cambia |
+
+### Rosca interior y colocación
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| R.1 | Con una pieza hecha, Sólido › Rosca y haz clic en una cara plana de la pieza | «Plano o cara» pasa a «Cara elegida» y X/Y se ponen en el centro de la cara; la rosca aparece sobre la cara |
+| R.2 | Cambia Posición X o Y | La rosca se mueve en el plano de esa cara |
+| R.3 | Cambia la operación a «Cortar (rosca interior)» | Aparece «Holgura»; el largo pasa a negativo y la rosca se corta hacia dentro de la pieza |
+| R.4 | Sube la holgura (0,3 – 0,5) | El agujero sale más ancho (el texto dice el Ø del agujero) |
+| R.5 | Haz un tornillo M8 con «Cuerpo nuevo» y pruébalo (impreso) en esa tuerca | Entra sin forzar con holgura ≈ 0,15–0,2 mm |
+| R.6 | Haz lo mismo con Sólido › Engranaje (clic en una cara, X/Y, «Cortar») | Se coloca en la cara; con «Cortar» deja un hueco con la forma del engranaje |
+| R.7 | Guarda, cierra y abre el diseño | Posición, cara y holgura se conservan |

@@ -1677,3 +1677,81 @@ TEST_CASE("La malla de una rosca se prepara en otro hilo y se pasa al cuerpo ori
     std::atomic<bool> stop{true};
     REQUIRE_FALSE(geometry::prepareMesh(other, geometry::kHeavyDeviation, geometry::kHeavyAngle, stop).valid());
 }
+
+TEST_CASE("Una rosca y un engranaje se colocan en una posición X/Y del plano", "[thread][gear]")
+{
+    Document doc;
+    auto thread = std::make_unique<ThreadFeature>();
+    thread->base.origin = OriginPlane::XY;
+    thread->x = 10.0;
+    thread->y = 5.0;
+    thread->spec.length = 10.0;
+    const FeatureId t = doc.addFeature(std::move(thread));
+    REQUIRE(doc.status(t).health == Health::Ok);
+    const geometry::Box tb = doc.result().bodies.back().shape.bounds();
+    REQUIRE_THAT(0.5 * (tb.min.x + tb.max.x), Catch::Matchers::WithinAbs(10.0, 0.05));
+    REQUIRE_THAT(0.5 * (tb.min.y + tb.max.y), Catch::Matchers::WithinAbs(5.0, 0.05));
+
+    auto gear = std::make_unique<GearFeature>();
+    gear->base.origin = OriginPlane::XY;
+    gear->x = -30.0;
+    gear->y = 12.0;
+    const FeatureId g = doc.addFeature(std::move(gear));
+    REQUIRE(doc.status(g).health == Health::Ok);
+    const geometry::Box gb = doc.result().bodies.back().shape.bounds();
+    REQUIRE_THAT(0.5 * (gb.min.x + gb.max.x), Catch::Matchers::WithinAbs(-30.0, 0.05));
+    REQUIRE_THAT(0.5 * (gb.min.y + gb.max.y), Catch::Matchers::WithinAbs(12.0, 0.05));
+
+    // La posición y la holgura se guardan en el archivo.
+    auto edited = std::make_unique<ThreadFeature>(*static_cast<const ThreadFeature*>(doc.findFeature(t)));
+    edited->clearance = 0.3;
+    doc.replaceFeature(t, std::move(edited));
+    const auto path = std::filesystem::temp_directory_path() / "nuf_posicion.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    const auto* rt = static_cast<const ThreadFeature*>(reopened.findFeature(t));
+    REQUIRE_THAT(rt->x, Catch::Matchers::WithinAbs(10.0, 1e-9));
+    REQUIRE_THAT(rt->y, Catch::Matchers::WithinAbs(5.0, 1e-9));
+    REQUIRE_THAT(rt->clearance, Catch::Matchers::WithinAbs(0.3, 1e-9));
+    const auto* rg = static_cast<const GearFeature*>(reopened.findFeature(g));
+    REQUIRE_THAT(rg->x, Catch::Matchers::WithinAbs(-30.0, 1e-9));
+}
+
+TEST_CASE("Una rosca interior corta en una cara hacia dentro, con el agujero más ancho si hay holgura", "[thread]")
+{
+    Document doc = boxDocument(8.0);  // 20×10×8
+    const geometry::Shape& block = doc.result().bodies.front().shape;
+    int top = -1;
+    for (int i = 0; i < block.faceCount(); ++i) {
+        if (const auto plane = block.facePlane(i); plane && plane->normal.z > 0.99) {
+            top = i;
+        }
+    }
+    REQUIRE(top >= 0);
+    const auto facePlane = *block.facePlane(top);
+    const sketch::Vec2 center = facePlane.toLocal(block.faceCenter(top));
+
+    const auto cutWith = [&](double clearance) {
+        Document copy = boxDocument(8.0);
+        auto t = std::make_unique<ThreadFeature>();
+        t->base.origin.reset();
+        t->base.face = copy.result().bodies.front().shape.faceRef(top);
+        t->x = center.x;
+        t->y = center.y;
+        t->spec.length = -6.0;  // hacia dentro de la pieza
+        t->clearance = clearance;
+        t->operation = Operation::Cut;
+        const FeatureId id = copy.addFeature(std::move(t));
+        REQUIRE(copy.status(id).health == Health::Ok);
+        REQUIRE(copy.result().bodies.size() == 1);
+        return copy.result().bodies.front().shape.volume();
+    };
+    const double tight = cutWith(0.0);
+    const double loose = cutWith(0.5);
+    REQUIRE_THAT(tight, Catch::Matchers::WithinAbs(1600.0 - 243.0, 40.0));  // ≈ 6 mm de una rosca M8
+    REQUIRE(loose < tight - 30.0);                                         // más holgura, más material fuera
+}

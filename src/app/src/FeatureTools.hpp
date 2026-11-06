@@ -84,6 +84,22 @@ protected:
     virtual int previewDelayMs() const { return 0; }
 
     void updatePreview();
+
+    // Dónde va un cuerpo generado (rosca, engranaje): un plano de origen, un plano de construcción o una cara
+    // plana elegida en la vista, y una posición X/Y en ese plano (al elegir una cara, el centro de la cara).
+    struct Placement {
+        QComboBox* base = nullptr;  // 3 de origen, los de construcción y, si hay, «Cara elegida»
+        QDoubleSpinBox* x = nullptr;
+        QDoubleSpinBox* y = nullptr;
+        std::vector<document::FeatureId> planeIds;
+        geometry::ElementRef face;
+    };
+    void createPlacement(QFormLayout* form, Placement& placement, const document::SketchAttachment* original, double x,
+                         double y);
+    // Toma la cara plana de la selección, si la hay; true si cambió algo.
+    bool placementSelection(Placement& placement, const render::ModelSelection& selection);
+    document::SketchAttachment placementAttachment(const Placement& placement) const;
+    bool placementOnFace(const Placement& placement) const;
     // Registra un cuadro numérico como el campo «key» de la operación, para
     // poder ligarlo a parámetros (se llama al crearlo en createFields).
     void field(const char* key, QDoubleSpinBox* box) { fields_.emplace_back(key, box); }
@@ -362,13 +378,15 @@ protected:
     QString title() const override { return QStringLiteral("Engranaje"); }
     int previewDelayMs() const override { return 250; }
     void createFields(QFormLayout* form) override;
-    void selectionChanged(const render::ModelSelection&) override {}
+    void selectionChanged(const render::ModelSelection& selection) override;
     QString inputsText() const override;
     bool removesMaterial() const override { return false; }
 
 private:
-    std::vector<document::FeatureId> planeIds_;
-    QComboBox* base_ = nullptr;
+    // En una cara, «Cortar» va hacia dentro de la pieza y lo demás hacia fuera (el signo del ancho).
+    void adjustDirection();
+
+    Placement placement_;
     QDoubleSpinBox* module_ = nullptr;
     QSpinBox* teeth_ = nullptr;
     QDoubleSpinBox* pressure_ = nullptr;
@@ -522,13 +540,16 @@ protected:
     QString title() const override { return QStringLiteral("Rosca"); }
     int previewDelayMs() const override { return 250; }
     void createFields(QFormLayout* form) override;
-    void selectionChanged(const render::ModelSelection&) override {}
+    void selectionChanged(const render::ModelSelection& selection) override;
     QString inputsText() const override;
     bool removesMaterial() const override;
 
 private:
-    std::vector<document::FeatureId> planeIds_;
-    QComboBox* base_ = nullptr;
+    void adjustDirection();
+
+    QFormLayout* form_ = nullptr;
+    Placement placement_;
+    QDoubleSpinBox* clearance_ = nullptr;
     QComboBox* standard_ = nullptr;
     QDoubleSpinBox* diameter_ = nullptr;
     QDoubleSpinBox* pitch_ = nullptr;

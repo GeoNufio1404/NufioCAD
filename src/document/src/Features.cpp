@@ -685,7 +685,8 @@ std::vector<Feature::NumericField> ConstructionPlaneFeature::numericFields()
 std::optional<std::string> GearFeature::compute(ModelState& state) const
 {
     std::optional<std::string> warning;
-    const sketch::Plane plane = resolvePlane(state, base, "del engranaje", "se usa su última posición", warning);
+    sketch::Plane plane = resolvePlane(state, base, "del engranaje", "se usa su última posición", warning);
+    plane.origin = plane.toWorld({x, y});
     try {
         const geometry::Shape gear = geometry::gear(tag(), plane, spec);
         if (auto extra = applyOperation(state, *this, operation, gear)) {
@@ -706,7 +707,8 @@ std::vector<FeatureId> GearFeature::dependencies() const
 
 std::vector<Feature::NumericField> GearFeature::numericFields()
 {
-    return {field("module", "Módulo", spec.module), field("thickness", "Ancho", spec.thickness),
+    return {field("x", "Posición X", x), field("y", "Posición Y", y), field("module", "Módulo", spec.module),
+            field("thickness", "Ancho", spec.thickness),
             field("bore", "Agujero central", spec.bore),
             field("pressureAngle", "Ángulo de presión", spec.pressureAngle, kRadiansPerDegree),
             field("helixAngle", "Ángulo de hélice", spec.helixAngle, kRadiansPerDegree),
@@ -719,9 +721,14 @@ std::vector<Feature::NumericField> GearFeature::numericFields()
 std::optional<std::string> ThreadFeature::compute(ModelState& state) const
 {
     std::optional<std::string> warning;
-    const sketch::Plane plane = resolvePlane(state, base, "de la rosca", "se usa su última posición", warning);
+    sketch::Plane plane = resolvePlane(state, base, "de la rosca", "se usa su última posición", warning);
+    plane.origin = plane.toWorld({x, y});
     try {
-        const geometry::Shape rod = geometry::thread(tag(), plane, spec);
+        geometry::ThreadSpec used = spec;
+        if (operation == Operation::Cut) {
+            used.diameter += 2.0 * clearance;
+        }
+        const geometry::Shape rod = geometry::thread(tag(), plane, used);
         if (auto extra = applyOperation(state, *this, operation, rod)) {
             warning = warning ? *warning + " " + *extra : *extra;
         }
@@ -740,8 +747,9 @@ std::vector<FeatureId> ThreadFeature::dependencies() const
 
 std::vector<Feature::NumericField> ThreadFeature::numericFields()
 {
-    return {field("diameter", "Diámetro", spec.diameter), field("pitch", "Paso", spec.pitch),
-            field("length", "Largo", spec.length)};
+    return {field("x", "Posición X", x), field("y", "Posición Y", y), field("diameter", "Diámetro", spec.diameter),
+            field("pitch", "Paso", spec.pitch), field("length", "Largo", spec.length),
+            field("clearance", "Holgura", clearance)};
 }
 
 // --- Barrido ---------------------------------------------------------------------
