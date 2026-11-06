@@ -284,3 +284,18 @@ Con una captura de pantalla y los pasos suele bastar. Si algo se cierra, no hace
 | R.5 | Haz un tornillo M8 con «Cuerpo nuevo» y pruébalo (impreso) en esa tuerca | Entra sin forzar con holgura ≈ 0,15–0,2 mm |
 | R.6 | Haz lo mismo con Sólido › Engranaje (clic en una cara, X/Y, «Cortar») | Se coloca en la cara; con «Cortar» deja un hueco con la forma del engranaje |
 | R.7 | Guarda, cierra y abre el diseño | Posición, cara y holgura se conservan |
+
+### Herramientas generadoras (Lightbox)
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| G.1 | Pestaña HERRAMIENTAS (o menú Herramientas) › **Lightbox** | Se abre el formulario a la derecha y se ve una caja con su tapa al lado |
+| G.2 | Cambia Ancho, Alto, Pared… | La vista previa se actualiza (con «Calculando…» un momento) |
+| G.3 | Cambia «Forma» a Redonda | Desaparecen Ancho y Alto, aparece Diámetro, y la caja es redonda |
+| G.4 | Pon Ancho 20 y Pared 20 (un hueco imposible) | Avisa en rojo de la operación que falla y no deja aceptar, sin cerrar la herramienta |
+| G.5 | Aceptar | Navegador: componente «Lightbox» con «Caja» y «Tapa»; el historial muestra las 5 operaciones «Lightbox: …» |
+| G.6 | Sólido › Parámetros | Aparecen ancho, alto, profundidad, pared, frente, tapa, labio, holgura y cable; al cambiar uno, todo se recalcula |
+| G.7 | Ctrl+Z | Desaparece todo de una vez (operaciones, parámetros y componente) |
+| G.8 | Genera un segundo Lightbox | Sus parámetros salen como ancho_2, alto_2… y no pisan los del primero |
+| G.9 | Exporta o imprime la caja y la tapa | La revisión no avisa de paredes finas con los valores por defecto |
+| G.10 | Sólido › Caja / Cilindro | Primitivas con posición, centradas o no, con alto ± y operación; doble clic en una operación «Lightbox: …» del historial abre su panel |
