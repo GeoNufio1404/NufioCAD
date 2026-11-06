@@ -865,9 +865,12 @@ Shape gear(std::string_view tagView, const sketch::Plane& plane, const GearSpec&
             return result;
         }
 
-        // Helicoidal: secciones giradas a lo largo del ancho, unidas en un solo sólido.
+        // Helicoidal: secciones giradas a lo largo del ancho, unidas en una superficie lateral. Las tapas
+        // (con el agujero) y la pared del agujero se hacen aparte y se cosen: así no hace falta ninguna
+        // booleana contra la superficie lateral (que era casi la mitad del tiempo).
         const int sections = std::clamp(int(std::ceil(std::abs(twist) / (15.0 * kDeg))) + 1, 3, 24);
-        BRepOffsetAPI_ThruSections loft(true, false, 1e-6);
+        BRepOffsetAPI_ThruSections loft(false, false, 1e-6);
+        TopoDS_Wire lastWire = outline.Wire();
         for (int k = 0; k <= sections; ++k) {
             const double t = double(k) / sections;
             if (k == 0) {
@@ -879,30 +882,103 @@ Shape gear(std::string_view tagView, const sketch::Plane& plane, const GearSpec&
             gp_Trsf slide;
             slide.SetTranslation(gp_Vec(normal).Multiplied(spec.thickness * t));
             BRepBuilderAPI_Transform moved(outline.Wire(), slide * turn, true);
-            loft.AddWire(TopoDS::Wire(moved.Shape()));
+            lastWire = TopoDS::Wire(moved.Shape());
+            loft.AddWire(lastWire);
         }
         loft.Build();
         if (!loft.IsDone()) {
             throw GeometryError("No se pudo generar el engranaje helicoidal");
         }
-        Namer namer(loft.Shape());
-        namer.name(loft.FirstShape(), tag + ":inicio");
-        namer.name(loft.LastShape(), tag + ":fin");
+        const double sign = spec.thickness > 0 ? 1.0 : -1.0;
+        const gp_Pnt endPoint(origin.XYZ() + normal.XYZ() * spec.thickness);
+        // Tapa: cara plana con el contorno y, si hay agujero, su círculo; hacia fuera del sólido.
+        const auto cap = [&](const gp_Pnt& where, const TopoDS_Wire& wire, bool end) {
+            BRepBuilderAPI_MakeFace face(gp_Pln(where, normal), wire, true);
+            if (spec.bore > 0.0) {
+                const TopoDS_Edge ring = BRepBuilderAPI_MakeEdge(gp_Circ(gp_Ax2(where, normal, toDir(plane.xAxis)), spec.bore / 2.0)).Edge();
+                face.Add(TopoDS::Wire(BRepBuilderAPI_MakeWire(ring).Wire().Reversed()));
+            }
+            TopoDS_Face result = face.Face();
+            if ((sign > 0) != end) {
+                result.Reverse();  // el principio mira hacia atrás y el final hacia delante
+            }
+            return result;
+        };
+        const TopoDS_Face startCap = cap(origin, outline.Wire(), false);
+        const TopoDS_Face endCap = cap(endPoint, lastWire, true);
+        TopoDS_Face boreWall;
+        if (spec.bore > 0.0) {
+            const gp_Pnt base(spec.thickness > 0 ? origin : endPoint);
+            BRepPrimAPI_MakeCylinder bore(gp_Ax2(base, normal, toDir(plane.xAxis)), spec.bore / 2.0, std::abs(spec.thickness));
+            for (TopExp_Explorer ex(bore.Shape(), TopAbs_FACE); ex.More(); ex.Next()) {
+                if (BRepAdaptor_Surface(TopoDS::Face(ex.Current())).GetType() == GeomAbs_Cylinder) {
+                    boreWall = TopoDS::Face(ex.Current());
+                    boreWall.Reverse();  // la pared del agujero mira hacia el eje
+                }
+            }
+        }
+        BRepBuilderAPI_Sewing sewing(1e-6);
+        for (TopExp_Explorer ex(loft.Shape(), TopAbs_FACE); ex.More(); ex.Next()) {
+            sewing.Add(ex.Current());
+        }
+        sewing.Add(startCap);
+        sewing.Add(endCap);
+        if (!boreWall.IsNull()) {
+            sewing.Add(boreWall);
+        }
+        sewing.Perform();
+        TopoDS_Shell shell;
+        if (const TopExp_Explorer ex(sewing.SewedShape(), TopAbs_SHELL); ex.More()) {
+            shell = TopoDS::Shell(ex.Current());
+        }
+        if (shell.IsNull()) {
+            throw GeometryError("No se pudo cerrar el engranaje helicoidal");
+        }
+        TopoDS_Solid solid = BRepBuilderAPI_MakeSolid(shell).Solid();
+        // La costura deja las caras coherentes entre sí pero no siempre hacia fuera. Se mira una cara
+        // de la cabeza de un diente (su normal debe apuntar lejos del eje): mucho más barato que clasificar
+        // puntos o integrar el volumen contra las superficies.
         for (const auto& [edge, name] : edges) {
-            namer.name(loft.GeneratedFace(edge), tag + ":lado:" + name);
+            if (name.ends_with(":cabeza")) {
+                for (const TopoDS_Shape& side : loft.Generated(edge)) {
+                    const TopoDS_Shape modified = sewing.Modified(side);
+                    const TopoDS_Face face = TopoDS::Face(modified.IsNull() ? side : modified);
+                    const BRepAdaptor_Surface probe(face);
+                    gp_Pnt tip;
+                    gp_Vec du;
+                    gp_Vec dv;
+                    probe.D1(0.5 * (probe.FirstUParameter() + probe.LastUParameter()),
+                             0.5 * (probe.FirstVParameter() + probe.LastVParameter()), tip, du, dv);
+                    gp_Vec outward = du.Crossed(dv);
+                    if (face.Orientation() == TopAbs_REVERSED) {
+                        outward.Reverse();
+                    }
+                    const gp_Vec radial = gp_Vec(origin, tip) - gp_Vec(normal) * gp_Vec(origin, tip).Dot(gp_Vec(normal));
+                    if (outward.Dot(radial) < 0.0) {
+                        solid.Reverse();
+                    }
+                }
+                break;
+            }
+        }
+        Namer namer(solid);
+        const auto sewnShape = [&](const TopoDS_Shape& shape) {
+            const TopoDS_Shape modified = sewing.Modified(shape);
+            return modified.IsNull() ? shape : modified;
+        };
+        namer.name(sewnShape(startCap), tag + ":inicio");
+        namer.name(sewnShape(endCap), tag + ":fin");
+        if (!boreWall.IsNull()) {
+            namer.name(sewnShape(boreWall), tag + ":lado:agujero");
+        }
+        for (const auto& [edge, name] : edges) {
+            for (const TopoDS_Shape& side : loft.Generated(edge)) {
+                namer.name(sewnShape(side), tag + ":lado:" + name);
+            }
         }
         Shape result = namer.finish(tag);
         if (!result.isValid()) {
             throw GeometryError("El engranaje helicoidal no es un sólido válido");
-        }
-        if (spec.bore > 0.0) {
-            const double margin = 1.0;
-            const gp_Pnt start(origin.XYZ() - normal.XYZ() * (spec.thickness > 0 ? margin : -margin));
-            BRepPrimAPI_MakeCylinder cylinder(gp_Ax2(start, spec.thickness > 0 ? normal : normal.Reversed()), spec.bore / 2.0,
-                                              std::abs(spec.thickness) + 2.0 * margin);
-            Namer tool(cylinder.Shape());
-            tool.nameUnnamed(tag + ":lado:agujero");
-            result = boolean(BooleanOp::Cut, result, tool.finish(tag));
         }
         return result;
     } catch (const Standard_Failure& e) {

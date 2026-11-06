@@ -1580,3 +1580,49 @@ TEST_CASE("Una rosca se une y se corta bien con un bloque (y sus caras salen ent
     REQUIRE_THAT(down.volume(), Catch::Matchers::WithinRel(rod.volume(), 0.01));
     REQUIRE(down.bounds().max.z < -0.9);
 }
+
+TEST_CASE("Medida de tiempo del engranaje", "[.perf]")
+{
+    using Clock = std::chrono::steady_clock;
+    const auto plane = sketch::Plane::fromPointAndNormal({0, 0, 0}, {0, 0, 1});
+    for (const auto& [teeth, helix, bore] : std::vector<std::tuple<int, double, double>>{
+             {12, 0, 0}, {20, 0, 5}, {40, 0, 5}, {12, 15, 0}, {20, 15, 5}, {40, 15, 5}, {20, 30, 5}}) {
+        geometry::GearSpec spec;
+        spec.teeth = teeth;
+        spec.helixAngle = helix * 3.14159265358979 / 180.0;
+        spec.bore = bore;
+        spec.thickness = 10.0;
+        const auto t0 = Clock::now();
+        const geometry::Shape s = geometry::gear("g", plane, spec);
+        const double dt = std::chrono::duration<double>(Clock::now() - t0).count();
+        std::cout << "dientes=" << teeth << " helice=" << helix << " agujero=" << bore << " gear(): " << dt << " s, caras=" << s.faceCount()
+                  << " valido=" << s.isValid() << std::endl;
+    }
+}
+
+TEST_CASE("Un engranaje helicoidal con agujero sale hueco y hacia el lado pedido, y su volumen no cambia con el sentido", "[gear]")
+{
+    const auto plane = sketch::Plane::fromPointAndNormal({0, 0, 0}, {0, 0, 1});
+    geometry::GearSpec spec;
+    spec.teeth = 16;
+    spec.bore = 5.0;
+    spec.thickness = 8.0;
+    spec.helixAngle = 20.0 * std::numbers::pi / 180.0;
+    const geometry::Shape up = geometry::gear("g", plane, spec);
+    REQUIRE(up.isValid());
+    REQUIRE(up.bounds().min.z > -1e-3);
+    REQUIRE(up.bounds().max.z < 8.001);
+    spec.thickness = -8.0;
+    spec.helixAngle = -spec.helixAngle;
+    const geometry::Shape down = geometry::gear("g", plane, spec);
+    REQUIRE(down.isValid());
+    REQUIRE(down.bounds().max.z < 1e-3);
+    REQUIRE(down.bounds().min.z > -8.001);
+    REQUIRE_THAT(down.volume(), Catch::Matchers::WithinRel(up.volume(), 0.01));
+    // Con el agujero pasante pierde el volumen del cilindro central (pi · 2,5² · 8) respecto al macizo.
+    spec.thickness = 8.0;
+    spec.helixAngle = 20.0 * std::numbers::pi / 180.0;
+    spec.bore = 0.0;
+    const geometry::Shape solid = geometry::gear("g", plane, spec);
+    REQUIRE_THAT(solid.volume() - up.volume(), Catch::Matchers::WithinRel(std::numbers::pi * 2.5 * 2.5 * 8.0, 0.03));
+}
