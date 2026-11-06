@@ -24,6 +24,8 @@
 #include <Aspect_NeutralWindow.hxx>
 #include <BRepAdaptor_Curve.hxx>
 #include <BRepAdaptor_Surface.hxx>
+#include <Aspect_TypeOfDeflection.hxx>
+#include <Prs3d_Drawer.hxx>
 #include <BRepAlgoAPI_Section.hxx>
 #include <BRep_Tool.hxx>
 #include <StdPrs_BRepFont.hxx>
@@ -624,6 +626,21 @@ public:
         Handle(AIS_Shape) ais;
     };
 
+    // ¿Tiene alguna cara spline con muchísimos puntos de control?
+    static bool hasHeavySurface(const geometry::Shape& shape)
+    {
+        constexpr int kHeavyPoles = 1500;
+        const TopoDS_Shape& whole = geometry::occtShape(shape);
+        for (TopExp_Explorer ex(whole, TopAbs_FACE); ex.More(); ex.Next()) {
+            const BRepAdaptor_Surface surface(TopoDS::Face(ex.Current()));
+            if (surface.GetType() == GeomAbs_BSplineSurface &&
+                surface.NbUPoles() * surface.NbVPoles() > kHeavyPoles) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     void showBodies(const std::vector<document::Body>& list)
     {
         std::vector<ShownBody> next;
@@ -640,6 +657,14 @@ public:
             Handle(AIS_Shape) ais = new AIS_Shape(geometry::occtShape(body.shape));
             ais->SetMaterial(Graphic3d_MaterialAspect(Graphic3d_NameOfMaterial_Plastified));
             ais->SetColor(rgb(0xB7, 0xBE, 0xC7));
+            if (hasHeavySurface(body.shape)) {
+                // Una superficie spline con miles de puntos de control (una rosca) con el mallado normal
+                // (relativo, 0,001 del tamaño) daba cientos de miles de triángulos y minutos de espera:
+                // se malla con una desviación absoluta de 0,1 mm, que se ve lisa con el sombreado.
+                ais->Attributes()->SetTypeOfDeflection(Aspect_TOD_ABSOLUTE);
+                ais->Attributes()->SetMaximalChordialDeviation(0.1);
+                ais->SetOwnDeviationAngle(0.5);
+            }
             // El modo de selección va en Display: con -1 el cuerpo queda como
             // no seleccionable y un Activate posterior no lo revierte.
             if (!clipSection.IsNull()) {

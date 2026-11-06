@@ -1626,3 +1626,23 @@ TEST_CASE("Un engranaje helicoidal con agujero sale hueco y hacia el lado pedido
     const geometry::Shape solid = geometry::gear("g", plane, spec);
     REQUIRE_THAT(solid.volume() - up.volume(), Catch::Matchers::WithinRel(std::numbers::pi * 2.5 * 2.5 * 8.0, 0.03));
 }
+
+#include <nuf/geometry/Exchange.hpp>
+
+TEST_CASE("Medida de tiempo del mallado de la rosca (como lo dibuja el visor)", "[.perf]")
+{
+    using Clock = std::chrono::steady_clock;
+    const auto plane = sketch::Plane::fromPointAndNormal({0, 0, 0}, {0, 0, 1});
+    for (const auto& [d, p, len, defl] : std::vector<std::tuple<double, double, double, double>>{
+             {8, 1.25, 10, 0.014}}) {
+        geometry::ThreadSpec spec;
+        spec.diameter = d;
+        spec.pitch = p;
+        spec.length = len;
+        const geometry::Shape s = geometry::thread("t", plane, spec);
+        const auto t0 = Clock::now();
+        const auto triangles = geometry::countTriangles({s}, {defl, 0.35});
+        std::cout << "d=" << d << " L=" << len << " desviacion=" << defl << ": " << triangles << " triangulos en "
+                  << std::chrono::duration<double>(Clock::now() - t0).count() << " s" << std::endl;
+    }
+}
