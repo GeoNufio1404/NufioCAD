@@ -117,6 +117,13 @@ MainWindow::MainWindow(QWidget* parent)
     statusBar()->addPermanentWidget(versions);
     connect(viewport_, &render::Viewport::selectionChanged, this,
             [this](const QString& description) { statusBar()->showMessage(description); });
+    connect(viewport_, &render::Viewport::busyChanged, this, [this](bool busy) {
+        if (busy) {
+            statusBar()->showMessage(QStringLiteral("Preparando el dibujo de la pieza…"));
+        } else {
+            statusBar()->clearMessage();
+        }
+    });
     connect(viewport_, &render::Viewport::sketchPlanePicked, this, &MainWindow::startSketch);
     connect(viewport_, &render::Viewport::finishedSketchActivated, this, &MainWindow::editSketch);
     connect(timeline_, &TimelineWidget::featureActivated, this, &MainWindow::activateFeature);

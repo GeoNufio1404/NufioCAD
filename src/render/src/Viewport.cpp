@@ -6,6 +6,7 @@
 #include <windows.h>
 #endif
 
+#include <nuf/geometry/DisplayMesh.hpp>
 #include <nuf/geometry/Occt.hpp>
 #include <nuf/sketch/Annotations.hpp>
 #include <nuf/sketch/Profiles.hpp>
@@ -92,6 +93,8 @@
 #include <QWheelEvent>
 
 #include <algorithm>
+#include <atomic>
+#include <thread>
 #include <array>
 #include <ranges>
 #include <cmath>
@@ -626,23 +629,133 @@ public:
         Handle(AIS_Shape) ais;
     };
 
-    // ¿Tiene alguna cara spline con muchísimos puntos de control?
-    static bool hasHeavySurface(const geometry::Shape& shape)
+    // --- Mallado en segundo plano ---------------------------------------------
+    // Los cuerpos pesados (una rosca) tardan segundos en mallarse y en calcular sus normales: se hace en
+    // un hilo de trabajo sobre una copia, y mientras tanto se sigue viendo lo anterior.
+
+    struct MeshTask {
+        geometry::Shape shape;
+        std::atomic<bool> cancel{false};
+        std::atomic<bool> finished{false};
+        geometry::PreparedMesh mesh;
+        std::thread thread;
+    };
+    std::vector<std::unique_ptr<MeshTask>> meshTasks;
+    std::vector<std::unique_ptr<MeshTask>> cancelledTasks;  // canceladas que aún no han terminado
+    std::vector<document::Body> wantedBodies;               // la última lista pedida
+    std::vector<const void*> unmeshable;                    // su malla en segundo plano falló: se dibujan como siempre
+    bool busy = false;
+
+    void setBusy(bool on)
     {
-        constexpr int kHeavyPoles = 1500;
-        const TopoDS_Shape& whole = geometry::occtShape(shape);
-        for (TopExp_Explorer ex(whole, TopAbs_FACE); ex.More(); ex.Next()) {
-            const BRepAdaptor_Surface surface(TopoDS::Face(ex.Current()));
-            if (surface.GetType() == GeomAbs_BSplineSurface &&
-                surface.NbUPoles() * surface.NbVPoles() > kHeavyPoles) {
-                return true;
+        if (busy != on) {
+            busy = on;
+            emit widget_.busyChanged(on);
+        }
+    }
+
+    void startMeshTask(const geometry::Shape& shape)
+    {
+        auto task = std::make_unique<MeshTask>();
+        task->shape = shape;
+        MeshTask* raw = task.get();
+        Impl* self = this;
+        task->thread = std::thread([raw, self] {
+            raw->mesh = geometry::prepareMesh(raw->shape, geometry::kHeavyDeviation, geometry::kHeavyAngle, raw->cancel);
+            raw->finished = true;
+            QMetaObject::invokeMethod(&self->widget_, [self, raw] { self->meshTaskFinished(raw); }, Qt::QueuedConnection);
+        });
+        meshTasks.push_back(std::move(task));
+    }
+
+    // En el hilo de la interfaz: la malla ya está; se pasa al cuerpo y se vuelve a pintar.
+    void meshTaskFinished(MeshTask* raw)
+    {
+        const auto it = std::ranges::find_if(meshTasks, [&](const auto& t) { return t.get() == raw; });
+        if (it == meshTasks.end()) {
+            return;  // cancelada y retirada
+        }
+        (*it)->thread.join();
+        if (!(*it)->cancel.load()) {
+            if ((*it)->mesh.valid()) {
+                geometry::applyMesh((*it)->shape, (*it)->mesh);
+            } else {
+                unmeshable.push_back((*it)->shape.impl());
             }
         }
-        return false;
+        meshTasks.erase(it);
+        const std::vector<document::Body> again = wantedBodies;
+        showBodies(again);
+        view->Invalidate();
+        widget_.update();
+    }
+
+    void reapCancelled()
+    {
+        std::erase_if(cancelledTasks, [](const std::unique_ptr<MeshTask>& t) {
+            if (!t->finished.load()) {
+                return false;
+            }
+            if (t->thread.joinable()) {
+                t->thread.join();
+            }
+            return true;
+        });
+    }
+
+    void cancelMeshTasks()
+    {
+        for (auto* list : {&meshTasks, &cancelledTasks}) {
+            for (auto& t : *list) {
+                t->cancel = true;
+            }
+        }
+        for (auto* list : {&meshTasks, &cancelledTasks}) {
+            for (auto& t : *list) {
+                if (t->thread.joinable()) {
+                    t->thread.join();
+                }
+            }
+            list->clear();
+        }
     }
 
     void showBodies(const std::vector<document::Body>& list)
     {
+        wantedBodies = list;
+        // ¿Hay cuerpos pesados sin malla? Se preparan en segundo plano y, hasta que acaben, se deja lo que había.
+        bool waiting = false;
+        for (const document::Body& body : list) {
+            const bool shown = std::ranges::any_of(bodies, [&](const ShownBody& b) {
+                return b.key == body.key && b.shape.impl() == body.shape.impl();
+            });
+            if (shown || !geometry::hasHeavySurface(body.shape) || geometry::hasMesh(body.shape) ||
+                std::ranges::find(unmeshable, static_cast<const void*>(body.shape.impl())) != unmeshable.end()) {
+                continue;
+            }
+            waiting = true;
+            if (std::ranges::none_of(meshTasks, [&](const auto& t) { return t->shape.impl() == body.shape.impl(); })) {
+                startMeshTask(body.shape);
+            }
+        }
+        // Lo que ya no se pide se cancela (el hilo se recoge cuando termine, o al cerrar).
+        for (auto it = meshTasks.begin(); it != meshTasks.end();) {
+            const bool wanted = std::ranges::any_of(list, [&](const document::Body& body) {
+                return body.shape.impl() == (*it)->shape.impl();
+            });
+            if (!wanted) {
+                (*it)->cancel = true;
+                cancelledTasks.push_back(std::move(*it));
+                it = meshTasks.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        reapCancelled();
+        setBusy(waiting);
+        if (waiting) {
+            return;
+        }
         std::vector<ShownBody> next;
         std::vector<Handle(AIS_Shape)> created;
         for (const document::Body& body : list) {
@@ -657,13 +770,17 @@ public:
             Handle(AIS_Shape) ais = new AIS_Shape(geometry::occtShape(body.shape));
             ais->SetMaterial(Graphic3d_MaterialAspect(Graphic3d_NameOfMaterial_Plastified));
             ais->SetColor(rgb(0xB7, 0xBE, 0xC7));
-            if (hasHeavySurface(body.shape)) {
+            if (geometry::hasHeavySurface(body.shape)) {
                 // Una superficie spline con miles de puntos de control (una rosca) con el mallado normal
                 // (relativo, 0,001 del tamaño) daba cientos de miles de triángulos y minutos de espera:
-                // se malla con una desviación absoluta de 0,1 mm, que se ve lisa con el sombreado.
+                // se malla (en segundo plano) con una desviación absoluta de 0,1 mm, que se ve lisa con el
+                // sombreado, y aquí ya no se vuelve a mallar.
                 ais->Attributes()->SetTypeOfDeflection(Aspect_TOD_ABSOLUTE);
-                ais->Attributes()->SetMaximalChordialDeviation(0.1);
-                ais->SetOwnDeviationAngle(0.5);
+                ais->Attributes()->SetMaximalChordialDeviation(geometry::kHeavyDeviation);
+                ais->SetOwnDeviationAngle(geometry::kHeavyAngle);
+                if (geometry::hasMesh(body.shape)) {
+                    ais->Attributes()->SetAutoTriangulation(false);
+                }
             }
             // El modo de selección va en Display: con -1 el cuerpo queda como
             // no seleccionable y un Activate posterior no lo revierte.
@@ -2052,6 +2169,7 @@ QSurfaceFormat Viewport::defaultFormat()
 
 Viewport::~Viewport()
 {
+    impl_->cancelMeshTasks();
     // Los recursos de OpenGL se liberan con el contexto activo.
     makeCurrent();
     Handle(Aspect_DisplayConnection) display = impl_->viewer->Driver()->GetDisplayConnection();

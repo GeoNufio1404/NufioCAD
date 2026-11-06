@@ -2,6 +2,7 @@
 #include <nuf/document/Expression.hpp>
 #include <nuf/document/Features.hpp>
 #include <nuf/geometry/Modeling.hpp>
+#include <nuf/geometry/DisplayMesh.hpp>
 #include <nuf/geometry/Measure.hpp>
 #include <nuf/geometry/Printability.hpp>
 #include <nuf/io/DocumentFile.hpp>
@@ -1518,8 +1519,10 @@ TEST_CASE("Medir una cara, una arista y la relación entre dos caras", "[measure
     REQUIRE(geometry::measure({{box, true, 999}}).lines.empty());
 }
 
+#include <atomic>
 #include <chrono>
 #include <iostream>
+#include <thread>
 
 TEST_CASE("Medida de tiempo de la rosca", "[.perf]")
 {
@@ -1646,4 +1649,31 @@ TEST_CASE("Medida de tiempo del mallado de la rosca (como lo dibuja el visor)", 
         std::cout << "d=" << d << " L=" << len << " desviacion=" << defl << ": " << triangles << " triangulos en "
                   << std::chrono::duration<double>(Clock::now() - t0).count() << " s" << std::endl;
     }
+}
+
+TEST_CASE("La malla de una rosca se prepara en otro hilo y se pasa al cuerpo original", "[thread]")
+{
+    const auto plane = sketch::Plane::fromPointAndNormal({0, 0, 0}, {0, 0, 1});
+    geometry::ThreadSpec spec;
+    spec.diameter = 8.0;
+    spec.pitch = 1.25;
+    spec.length = 10.0;
+    const geometry::Shape rod = geometry::thread("t", plane, spec);
+    REQUIRE(geometry::hasHeavySurface(rod));
+    REQUIRE_FALSE(geometry::hasHeavySurface(boxDocument().result().bodies.front().shape));
+    REQUIRE_FALSE(geometry::hasMesh(rod));
+
+    std::atomic<bool> cancel{false};
+    geometry::PreparedMesh mesh;
+    std::thread worker([&] { mesh = geometry::prepareMesh(rod, geometry::kHeavyDeviation, geometry::kHeavyAngle, cancel); });
+    worker.join();
+    REQUIRE(mesh.valid());
+    REQUIRE_FALSE(geometry::hasMesh(rod));  // el original no se toca hasta aplicar
+    geometry::applyMesh(rod, mesh);
+    REQUIRE(geometry::hasMesh(rod));
+
+    // Cancelada, no da malla.
+    const geometry::Shape other = geometry::thread("t", plane, spec);
+    std::atomic<bool> stop{true};
+    REQUIRE_FALSE(geometry::prepareMesh(other, geometry::kHeavyDeviation, geometry::kHeavyAngle, stop).valid());
 }

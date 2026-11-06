@@ -194,6 +194,9 @@ public:
 
 signals:
     // Texto breve para la barra de estado ("Cara seleccionada", "2 aristas"…).
+    // Se está preparando en segundo plano el dibujo de un cuerpo pesado (una rosca): mientras tanto se
+    // sigue viendo lo anterior.
+    void busyChanged(bool busy);
     void selectionChanged(const QString& description);
     // Cambió la selección del modelo (ver modelSelection()).
     void modelSelectionChanged();
