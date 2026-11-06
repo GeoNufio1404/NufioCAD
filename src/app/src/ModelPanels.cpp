@@ -51,6 +51,10 @@ QString glyph(document::FeatureKind kind)
         return QStringLiteral("▱");
     case document::FeatureKind::ConstructionAxis:
         return QStringLiteral("╱");
+    case document::FeatureKind::Box:
+        return QStringLiteral("▭");
+    case document::FeatureKind::Cylinder:
+        return QStringLiteral("◯");
     case document::FeatureKind::Gear:
         return QStringLiteral("⚙");
     case document::FeatureKind::Thread:

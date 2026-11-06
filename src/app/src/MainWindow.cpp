@@ -3,6 +3,7 @@
 #include "ExportDialog.hpp"
 #include "BodiesDialog.hpp"
 #include "ExpressionSpinBox.hpp"
+#include "GeneratorTool.hpp"
 #include "SettingsDialog.hpp"
 #include "Units.hpp"
 #include "ParametersDialog.hpp"
@@ -21,6 +22,8 @@
 #include <nuf/commands/SetParameters.hpp>
 #include <nuf/geometry/Exchange.hpp>
 #include <nuf/geometry/Kernel.hpp>
+#include <nuf/commands/AddRecipe.hpp>
+#include <nuf/document/Generators.hpp>
 #include <nuf/sketch/Annotations.hpp>
 #include <nuf/geometry/Measure.hpp>
 #include <nuf/io/NufFile.hpp>
@@ -413,6 +416,16 @@ void MainWindow::createMenus()
     });
     decorate(parametersAction_, QStringLiteral("parameters-solid"),
              QStringLiteral("Nombrar valores (grosor = 3) y usarlos en las operaciones"), QStringLiteral("Parámetros"));
+    boxAction_ = solidMenu->addAction(QStringLiteral("&Caja"), this, [this] {
+        startTool(std::make_unique<BoxTool>(document_, *viewport_, std::nullopt));
+    });
+    decorate(boxAction_, QStringLiteral("box-solid"), QStringLiteral("Una caja con medidas y posición, ligable a parámetros"),
+             QStringLiteral("Caja"));
+    cylinderAction_ = solidMenu->addAction(QStringLiteral("Cili&ndro"), this, [this] {
+        startTool(std::make_unique<CylinderTool>(document_, *viewport_, std::nullopt));
+    });
+    decorate(cylinderAction_, QStringLiteral("cylinder-solid"),
+             QStringLiteral("Un cilindro con diámetro y posición, ligable a parámetros"), QStringLiteral("Cilindro"));
     gearAction_ = solidMenu->addAction(QStringLiteral("&Engranaje"), this, [this] {
         startTool(std::make_unique<GearTool>(document_, *viewport_, std::nullopt));
     });
@@ -455,6 +468,16 @@ void MainWindow::createMenus()
     decorate(sectionAction_, QStringLiteral("section-solid"),
              QStringLiteral("Cortar la vista con un plano para ver el interior (no cambia el modelo)"), QStringLiteral("Sección"));
     decorate(shellAction_, QStringLiteral("shell"), QStringLiteral("Vaciar un cuerpo dejando abiertas las caras elegidas"));
+
+    // Herramientas generadoras: hacen unas preguntas y crean un diseño normal en el historial.
+    QMenu* toolsMenu = menuBar()->addMenu(QStringLiteral("&Herramientas"));
+    for (const document::Generator* generator : document::generators()) {
+        QAction* action = toolsMenu->addAction(QString::fromStdString(generator->title()), this,
+                                               [this, generator] { startGenerator(*generator); });
+        decorate(action, QStringLiteral("lightbox-solid"), QString::fromStdString(generator->description()),
+                 QString::fromStdString(generator->title()));
+        generatorActions_.push_back(action);
+    }
 
     // Herramientas de dibujo por familias (como en Fusion 360); la primera
     // de cada familia lleva su tecla.
@@ -610,6 +633,8 @@ void MainWindow::createMenus()
     ribbon_->addAction(solidTab_, revolveAction_);
     ribbon_->addAction(solidTab_, sweepAction_);
     ribbon_->addAction(solidTab_, loftAction_);
+    ribbon_->addAction(solidTab_, boxAction_);
+    ribbon_->addAction(solidTab_, cylinderAction_);
     ribbon_->addGroup(solidTab_, QStringLiteral("MODIFICAR"));
     ribbon_->addAction(solidTab_, filletAction_);
     ribbon_->addAction(solidTab_, chamferAction_);
@@ -632,6 +657,11 @@ void MainWindow::createMenus()
     ribbon_->addGroup(solidTab_, QStringLiteral("INSPECCIONAR"));
     ribbon_->addAction(solidTab_, measureAction_);
     ribbon_->addAction(solidTab_, sectionAction_);
+    toolsTab_ = ribbon_->addTab(QStringLiteral("HERRAMIENTAS"));
+    ribbon_->addGroup(toolsTab_, QStringLiteral("GENERADORES"));
+    for (QAction* action : generatorActions_) {
+        ribbon_->addAction(toolsTab_, action);
+    }
 
     auto family = [this, &families](const QString& name) {
         const std::size_t i = static_cast<std::size_t>(
@@ -999,12 +1029,25 @@ void MainWindow::startTool(std::unique_ptr<FeatureTool> tool)
     updateUndoActions();
 }
 
+void MainWindow::startGenerator(const document::Generator& generator)
+{
+    if (sketch_ || tool_ || viewport_->isPickingSketchPlane()) {
+        return;
+    }
+    startTool(std::make_unique<GeneratorTool>(document_, *viewport_, generator));
+}
+
 void MainWindow::finishTool(bool accepted)
 {
     if (!tool_) {
         return;
     }
-    std::unique_ptr<document::Feature> feature = accepted ? tool_->make() : nullptr;
+    // Un generador no da una operación sino una receta (parámetros, operaciones y nombres) que se aplica de una vez.
+    std::optional<commands::AddRecipe> recipe;
+    if (const auto* generator = dynamic_cast<const GeneratorTool*>(tool_.get()); generator != nullptr && accepted) {
+        recipe.emplace(generator->recipe(), generator->generator().title());
+    }
+    std::unique_ptr<document::Feature> feature = accepted && !recipe ? tool_->make() : nullptr;
     const std::optional<document::FeatureId> editing = tool_->editing();
     const document::FeatureId id = tool_->featureId();
     // Se destruye después: esta llamada viene de una señal de la herramienta.
@@ -1017,7 +1060,9 @@ void MainWindow::finishTool(bool accepted)
     viewport_->clearToolPreview();
     viewport_->hideDistanceHandle();
     viewport_->setAdditiveSelection(false);
-    if (feature) {
+    if (recipe) {
+        commands_.push(std::make_unique<commands::AddRecipe>(std::move(*recipe)));
+    } else if (feature) {
         if (editing) {
             commands_.push(std::make_unique<commands::EditFeature>(*editing, std::move(feature)));
         } else {
@@ -1067,6 +1112,12 @@ void MainWindow::activateFeature(document::FeatureId id)
         break;
     case document::FeatureKind::ConstructionAxis:
         startTool(std::make_unique<AxisTool>(document_, *viewport_, id));
+        break;
+    case document::FeatureKind::Box:
+        startTool(std::make_unique<BoxTool>(document_, *viewport_, id));
+        break;
+    case document::FeatureKind::Cylinder:
+        startTool(std::make_unique<CylinderTool>(document_, *viewport_, id));
         break;
     case document::FeatureKind::Gear:
         startTool(std::make_unique<GearTool>(document_, *viewport_, id));
@@ -1185,6 +1236,9 @@ void MainWindow::updateExportAction()
             action->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane() && !document_.result().bodies.empty());
         }
     }
+    for (QAction* action : generatorActions_) {
+        action->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane());
+    }
     if (sectionAction_ != nullptr) {
         if ((sketch_ || tool_) && sectionAction_->isChecked()) {
             sectionAction_->setChecked(false);
@@ -1201,7 +1255,7 @@ void MainWindow::updateExportAction()
         measureAction_->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane() &&
                                    !document_.result().bodies.empty());
     }
-    for (QAction* action : {planeAction_, axisAction_, parametersAction_, gearAction_, threadAction_}) {
+    for (QAction* action : {planeAction_, axisAction_, parametersAction_, gearAction_, threadAction_, boxAction_, cylinderAction_}) {
         if (action != nullptr) {
             action->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane());
         }

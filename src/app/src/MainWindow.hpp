@@ -35,6 +35,10 @@ namespace nuf::render {
 class Viewport;
 }
 
+namespace nuf::document {
+class Generator;
+}
+
 namespace nuf::app {
 
 class FeatureTool;
@@ -101,6 +105,7 @@ private:
     void exportBodies();
     void printBodies();
     void toggleMeasure(bool on);
+    void startGenerator(const document::Generator& generator);
     void updateMeasure();
     void toggleSection(bool on);
     void updateSection();
@@ -153,6 +158,10 @@ private:
     QAction* organizeAction_ = nullptr;
     QAction* jointAction_ = nullptr;
     QAction* measureAction_ = nullptr;
+    QAction* boxAction_ = nullptr;
+    QAction* cylinderAction_ = nullptr;
+    std::vector<QAction*> generatorActions_;
+    int toolsTab_ = -1;
     QAction* sectionAction_ = nullptr;
     QFrame* sectionPanel_ = nullptr;
     QComboBox* sectionPlane_ = nullptr;

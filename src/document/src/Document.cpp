@@ -39,6 +39,10 @@ std::string kindLabel(FeatureKind kind)
         return "Plano";
     case FeatureKind::ConstructionAxis:
         return "Eje";
+    case FeatureKind::Box:
+        return "Caja";
+    case FeatureKind::Cylinder:
+        return "Cilindro";
     case FeatureKind::Gear:
         return "Engranaje";
     case FeatureKind::Thread:

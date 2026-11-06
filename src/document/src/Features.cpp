@@ -680,6 +680,81 @@ std::vector<Feature::NumericField> ConstructionPlaneFeature::numericFields()
     return {field("offset", "Distancia", offset), field("angle", "Ángulo", angle, kRadiansPerDegree)};
 }
 
+// --- Caja y cilindro --------------------------------------------------------------
+
+namespace {
+
+// Dónde empieza una primitiva: el plano, movido x/y en él y z a lo largo de la normal (y, si es simétrica,
+// la mitad del alto hacia atrás).
+sketch::Plane primitivePlane(sketch::Plane plane, double x, double y, double z, bool symmetric, double height)
+{
+    plane.origin = plane.toWorld({x, y});
+    const double along = z - (symmetric ? height / 2.0 : 0.0);
+    plane.origin = {plane.origin.x + plane.normal.x * along, plane.origin.y + plane.normal.y * along,
+                    plane.origin.z + plane.normal.z * along};
+    return plane;
+}
+
+} // namespace
+
+std::optional<std::string> BoxFeature::compute(ModelState& state) const
+{
+    std::optional<std::string> warning;
+    const sketch::Plane plane = resolvePlane(state, base, "de la caja", "se usa su última posición", warning);
+    try {
+        const geometry::Shape box =
+            geometry::box(tag(), primitivePlane(plane, x, y, z, symmetric, height), width, depth, height, centered);
+        if (auto extra = applyOperation(state, *this, operation, box)) {
+            warning = warning ? *warning + " " + *extra : *extra;
+        }
+    } catch (const geometry::GeometryError& e) {
+        throw FeatureError(e.what());
+    }
+    return warning;
+}
+
+std::vector<FeatureId> BoxFeature::dependencies() const
+{
+    std::vector<FeatureId> ids;
+    addAttachmentDependencies(ids, base);
+    return ids;
+}
+
+std::vector<Feature::NumericField> BoxFeature::numericFields()
+{
+    return {field("x", "Posición X", x), field("y", "Posición Y", y), field("z", "Posición Z", z),
+            field("width", "Ancho", width), field("depth", "Fondo", depth), field("height", "Alto", height)};
+}
+
+std::optional<std::string> CylinderFeature::compute(ModelState& state) const
+{
+    std::optional<std::string> warning;
+    const sketch::Plane plane = resolvePlane(state, base, "del cilindro", "se usa su última posición", warning);
+    try {
+        const geometry::Shape cylinder =
+            geometry::cylinder(tag(), primitivePlane(plane, x, y, z, symmetric, height), diameter, height);
+        if (auto extra = applyOperation(state, *this, operation, cylinder)) {
+            warning = warning ? *warning + " " + *extra : *extra;
+        }
+    } catch (const geometry::GeometryError& e) {
+        throw FeatureError(e.what());
+    }
+    return warning;
+}
+
+std::vector<FeatureId> CylinderFeature::dependencies() const
+{
+    std::vector<FeatureId> ids;
+    addAttachmentDependencies(ids, base);
+    return ids;
+}
+
+std::vector<Feature::NumericField> CylinderFeature::numericFields()
+{
+    return {field("x", "Posición X", x), field("y", "Posición Y", y), field("z", "Posición Z", z),
+            field("diameter", "Diámetro", diameter), field("height", "Alto", height)};
+}
+
 // --- Engranaje -----------------------------------------------------------------
 
 std::optional<std::string> GearFeature::compute(ModelState& state) const

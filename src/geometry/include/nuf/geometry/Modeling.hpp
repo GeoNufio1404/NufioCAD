@@ -133,6 +133,15 @@ struct GearSpec {
 // los datos no dan un engranaje (dientes puntiagudos o solapados…).
 Shape gear(std::string_view tag, const sketch::Plane& plane, const GearSpec& spec);
 
+// Caja con una esquina (o su centro, «centered») en el origen del plano: ancho a lo largo de su X, fondo a lo
+// largo de su Y y alto a lo largo de la normal (el signo da el sentido). Caras: «tag:cara:+x», «-x», «+y», «-y»,
+// «+z» y «-z» (según los ejes del plano; +z es la que mira hacia donde apunta la normal).
+Shape box(std::string_view tag, const sketch::Plane& plane, double width, double depth, double height, bool centered);
+
+// Cilindro con el centro de su base en el origen del plano y el eje a lo largo de la normal (el signo del alto
+// da el sentido). Caras: «tag:cara:lado», «+z» y «-z».
+Shape cylinder(std::string_view tag, const sketch::Plane& plane, double diameter, double height);
+
 struct ThreadSpec {
     double diameter = 8.0;     // mm, diámetro exterior (mayor)
     double pitch = 1.25;       // mm de avance por vuelta

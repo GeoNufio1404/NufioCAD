@@ -1,4 +1,6 @@
+#include <nuf/commands/AddRecipe.hpp>
 #include <nuf/document/Document.hpp>
+#include <nuf/document/Generators.hpp>
 #include <nuf/document/Expression.hpp>
 #include <nuf/document/Features.hpp>
 #include <nuf/geometry/Modeling.hpp>
@@ -9,6 +11,7 @@
 #include <nuf/sketch/Profiles.hpp>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <cmath>
@@ -1754,4 +1757,141 @@ TEST_CASE("Una rosca interior corta en una cara hacia dentro, con el agujero má
     const double loose = cutWith(0.5);
     REQUIRE_THAT(tight, Catch::Matchers::WithinAbs(1600.0 - 243.0, 40.0));  // ≈ 6 mm de una rosca M8
     REQUIRE(loose < tight - 30.0);                                         // más holgura, más material fuera
+}
+
+TEST_CASE("Una caja y un cilindro se colocan, se cortan y se ligan a parámetros", "[box]")
+{
+    Document doc;
+    doc.setParameters({{"ancho", "30"}, {"pared", "2"}});
+    auto box = std::make_unique<BoxFeature>();
+    box->base.origin = OriginPlane::XY;
+    box->width = 99.0;  // el valor de la expresión manda
+    box->expressions["width"] = "ancho";
+    box->depth = 20.0;
+    box->height = 10.0;
+    box->centered = true;
+    const FeatureId b = doc.addFeature(std::move(box));
+    REQUIRE(doc.status(b).health == Health::Ok);
+    const geometry::Shape& shape = doc.result().bodies.front().shape;
+    REQUIRE_THAT(shape.volume(), Catch::Matchers::WithinAbs(30.0 * 20.0 * 10.0, 1e-6));
+    REQUIRE_THAT(shape.bounds().min.x, Catch::Matchers::WithinAbs(-15.0, 1e-6));
+    REQUIRE_THAT(shape.bounds().max.z, Catch::Matchers::WithinAbs(10.0, 1e-6));
+
+    // Las caras se llaman por su orientación.
+    bool found = false;
+    for (int i = 0; i < shape.faceCount(); ++i) {
+        if (shape.faceName(i) == "f" + std::to_string(b) + ":cara:+x") {
+            REQUIRE(shape.facePlane(i)->normal.x > 0.99);
+            found = true;
+        }
+    }
+    REQUIRE(found);
+
+    // Un cilindro que corta un agujero pasante, centrado en el alto de la caja y repartido a los dos lados.
+    auto hole = std::make_unique<CylinderFeature>();
+    hole->base.origin = OriginPlane::XY;
+    hole->diameter = 4.0;
+    hole->height = 20.0;
+    hole->z = 5.0;
+    hole->symmetric = true;
+    hole->operation = Operation::Cut;
+    REQUIRE(doc.status(doc.addFeature(std::move(hole))).health == Health::Ok);
+    const double expected = 30.0 * 20.0 * 10.0 - std::numbers::pi * 2.0 * 2.0 * 10.0;
+    REQUIRE_THAT(doc.result().bodies.front().shape.volume(), Catch::Matchers::WithinAbs(expected, 0.5));
+
+    // Al cambiar el parámetro, la caja se recalcula.
+    doc.setParameters({{"ancho", "40"}, {"pared", "2"}});
+    REQUIRE_THAT(doc.result().bodies.front().shape.bounds().max.x, Catch::Matchers::WithinAbs(20.0, 1e-6));
+
+    // Hacia el otro lado con alto negativo, y se guarda.
+    auto below = std::make_unique<BoxFeature>();
+    below->base.origin = OriginPlane::XY;
+    below->x = 100.0;
+    below->height = -5.0;
+    const FeatureId d = doc.addFeature(std::move(below));
+    REQUIRE_THAT(doc.result().bodies.back().shape.bounds().max.z, Catch::Matchers::WithinAbs(0.0, 1e-6));
+    REQUIRE_THAT(doc.result().bodies.back().shape.bounds().min.z, Catch::Matchers::WithinAbs(-5.0, 1e-6));
+
+    const auto path = std::filesystem::temp_directory_path() / "nuf_caja.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    const auto* rb = static_cast<const BoxFeature*>(reopened.findFeature(b));
+    REQUIRE(rb->centered);
+    REQUIRE(rb->expressions.at("width") == "ancho");
+    REQUIRE(reopened.findFeature(d)->kind() == FeatureKind::Box);
+    REQUIRE_THAT(reopened.result().bodies.front().shape.bounds().max.x, Catch::Matchers::WithinAbs(20.0, 1e-6));
+}
+
+TEST_CASE("El generador de lightbox hace caja y tapa ligadas a parámetros, con nombres y componente", "[generator]")
+{
+    const document::Generator* lightbox = document::findGenerator("lightbox");
+    REQUIRE(lightbox != nullptr);
+    document::GeneratorValues values = lightbox->defaults();
+    values["cable"] = 0.0;  // sin agujero: el volumen se calcula a mano
+
+    Document doc;
+    commands::AddRecipe command(lightbox->make(values, ""), "Lightbox");
+    command.execute(doc);
+    REQUIRE(doc.result().bodies.size() == 2);
+    for (std::size_t i = 0; i < doc.featureCount(); ++i) {
+        INFO(doc.feature(i).name());
+        REQUIRE(doc.status(doc.feature(i).id()).health != Health::Error);
+    }
+    REQUIRE(doc.bodyInfo().at(doc.result().bodies[0].key).name == "Caja");
+    REQUIRE(doc.bodyInfo().at(doc.result().bodies[0].key).component == "Lightbox");
+    REQUIRE(doc.bodyInfo().at(doc.result().bodies[1].key).name == "Tapa");
+
+    // Caja 150×100×40 con pared 2,4 y frente 1,2: el hueco es 145,2 × 95,2 × 38,8.
+    const double box = 150.0 * 100.0 * 40.0 - 145.2 * 95.2 * 38.8;
+    REQUIRE_THAT(doc.result().bodies[0].shape.volume(), Catch::Matchers::WithinAbs(box, 1.0));
+    REQUIRE(doc.result().bodies[0].shape.bounds().max.z == Catch::Approx(40.0).margin(1e-6));
+    // La tapa va al lado, con el labio entrando 0,2 mm más estrecho que el hueco por cada lado.
+    const geometry::Box cover = doc.result().bodies[1].shape.bounds();
+    REQUIRE(cover.min.x > 75.0);
+    const double plate = 150.0 * 100.0 * 2.4;
+    const double lip = (145.2 - 0.4) * (95.2 - 0.4) * 3.0;
+    REQUIRE_THAT(doc.result().bodies[1].shape.volume(), Catch::Matchers::WithinAbs(plate + lip, 1.0));
+
+    // Los parámetros mandan: con más pared, menos hueco.
+    auto params = doc.parameters();
+    for (document::Parameter& p : params) {
+        if (p.name == "pared") {
+            p.expression = "4";
+        }
+    }
+    doc.setParameters(params);
+    REQUIRE(doc.result().bodies[0].shape.volume() > box + 1000.0);
+
+    // Deshacer lo deja todo como estaba, y rehacer lo vuelve a poner.
+    command.undo(doc);
+    REQUIRE(doc.featureCount() == 0);
+    REQUIRE(doc.parameters().empty());
+    REQUIRE(doc.bodyInfo().empty());
+    command.execute(doc);
+    REQUIRE(doc.result().bodies.size() == 2);
+
+    // Una segunda vez usa otros nombres de parámetros.
+    const std::string second = document::freeSuffix(doc, *lightbox, values);
+    REQUIRE(second == "_2");
+}
+
+TEST_CASE("El lightbox redondo y el agujero del cable", "[generator]")
+{
+    const document::Generator* lightbox = document::findGenerator("lightbox");
+    document::GeneratorValues values = lightbox->defaults();
+    values["forma"] = 1.0;
+    Document doc;
+    document::applyRecipe(doc, lightbox->make(values, ""));
+    REQUIRE(doc.result().bodies.size() == 2);
+    const double pi = std::numbers::pi;
+    const double hollow = pi * 60.0 * 60.0 * 40.0 - pi * 57.6 * 57.6 * 38.8;
+    // El agujero del cable (Ø6 por una pared de 2,4) le quita algo de material.
+    const double volume = doc.result().bodies[0].shape.volume();
+    REQUIRE(volume < hollow - 20.0);
+    REQUIRE(volume > hollow - 200.0);
+    REQUIRE(doc.result().bodies[0].shape.bounds().max.z == Catch::Approx(40.0).margin(1e-6));
 }

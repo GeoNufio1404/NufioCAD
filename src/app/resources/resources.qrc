@@ -82,6 +82,9 @@
         <file alias="ui/components-solid.svg">icons/ui/components-solid.svg</file>
         <file alias="ui/joint-solid.svg">icons/ui/joint-solid.svg</file>
         <file alias="ui/measure-solid.svg">icons/ui/measure-solid.svg</file>
+        <file alias="ui/box-solid.svg">icons/ui/box-solid.svg</file>
+        <file alias="ui/cylinder-solid.svg">icons/ui/cylinder-solid.svg</file>
+        <file alias="ui/lightbox-solid.svg">icons/ui/lightbox-solid.svg</file>
         <file alias="ui/section-solid.svg">icons/ui/section-solid.svg</file>
         <file alias="ui/redo.svg">icons/ui/redo.svg</file>
         <file alias="ui/rename.svg">icons/ui/rename.svg</file>

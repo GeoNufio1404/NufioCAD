@@ -39,6 +39,7 @@
 #include <NCollection_List.hxx>
 #include <GProp_GProps.hxx>
 #include <BRepLib.hxx>
+#include <BRepPrimAPI_MakeBox.hxx>
 #include <BRepPrimAPI_MakeCone.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
 #include <BRepPrimAPI_MakeHalfSpace.hxx>
@@ -983,6 +984,71 @@ Shape gear(std::string_view tagView, const sketch::Plane& plane, const GearSpec&
         return result;
     } catch (const Standard_Failure& e) {
         throw GeometryError(std::string("Error del kernel al generar el engranaje: ") + kernelMessage(e));
+    }
+}
+
+Shape box(std::string_view tagView, const sketch::Plane& plane, double width, double depth, double height, bool centered)
+{
+    const std::string tag(tagView);
+    if (!(width > kTiny) || !(depth > kTiny) || std::abs(height) <= kTiny) {
+        throw GeometryError("Las medidas de la caja deben ser mayores que cero");
+    }
+    try {
+        const gp_Dir normal = toDir(plane.normal);
+        const gp_Dir xAxis = toDir(plane.xAxis);
+        const gp_Dir yAxis = normal.Crossed(xAxis);
+        gp_Pnt corner = toPnt(plane.origin);
+        if (centered) {
+            corner.Translate(gp_Vec(xAxis) * (-width / 2.0) + gp_Vec(yAxis) * (-depth / 2.0));
+        }
+        if (height < 0.0) {
+            corner.Translate(gp_Vec(normal) * height);
+        }
+        BRepPrimAPI_MakeBox maker(gp_Ax2(corner, normal, xAxis), width, depth, std::abs(height));
+        Namer namer(maker.Shape());
+        namer.name(maker.LeftFace(), tag + ":cara:-y");
+        namer.name(maker.RightFace(), tag + ":cara:+y");
+        namer.name(maker.FrontFace(), tag + ":cara:+x");
+        namer.name(maker.BackFace(), tag + ":cara:-x");
+        namer.name(maker.BottomFace(), tag + ":cara:-z");
+        namer.name(maker.TopFace(), tag + ":cara:+z");
+        return namer.finish(tag);
+    } catch (const Standard_Failure& e) {
+        throw GeometryError(std::string("Error del kernel al generar la caja: ") + kernelMessage(e));
+    }
+}
+
+Shape cylinder(std::string_view tagView, const sketch::Plane& plane, double diameter, double height)
+{
+    const std::string tag(tagView);
+    if (!(diameter > kTiny) || std::abs(height) <= kTiny) {
+        throw GeometryError("Las medidas del cilindro deben ser mayores que cero");
+    }
+    try {
+        const gp_Dir normal = toDir(plane.normal);
+        gp_Pnt base = toPnt(plane.origin);
+        if (height < 0.0) {
+            base.Translate(gp_Vec(normal) * height);
+        }
+        BRepPrimAPI_MakeCylinder maker(gp_Ax2(base, normal, toDir(plane.xAxis)), diameter / 2.0, std::abs(height));
+        Namer namer(maker.Shape());
+        // Las caras se reconocen por su forma y hacia dónde miran.
+        for (TopExp_Explorer ex(maker.Shape(), TopAbs_FACE); ex.More(); ex.Next()) {
+            const TopoDS_Face& face = TopoDS::Face(ex.Current());
+            const BRepAdaptor_Surface surface(face);
+            if (surface.GetType() == GeomAbs_Plane) {
+                gp_Dir outward = surface.Plane().Axis().Direction();
+                if (face.Orientation() == TopAbs_REVERSED) {
+                    outward.Reverse();
+                }
+                namer.name(face, tag + (outward.Dot(normal) > 0.0 ? ":cara:+z" : ":cara:-z"));
+            } else {
+                namer.name(face, tag + ":cara:lado");
+            }
+        }
+        return namer.finish(tag);
+    } catch (const Standard_Failure& e) {
+        throw GeometryError(std::string("Error del kernel al generar el cilindro: ") + kernelMessage(e));
     }
 }
 

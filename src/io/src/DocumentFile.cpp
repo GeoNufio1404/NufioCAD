@@ -552,6 +552,22 @@ FeatureRow rowOf(const Feature& f)
                   {"followPath", s.spec.followPath}, {"operation", nameOf(kOperations, s.operation)}};
         break;
     }
+    case FeatureKind::Box: {
+        const auto& b = static_cast<const BoxFeature&>(f);
+        row.type = "box";
+        params = {{"base", toJson(b.base)}, {"x", b.x}, {"y", b.y}, {"z", b.z}, {"width", b.width},
+                  {"depth", b.depth}, {"height", b.height}, {"centered", b.centered},
+                  {"symmetric", b.symmetric}, {"operation", nameOf(kOperations, b.operation)}};
+        break;
+    }
+    case FeatureKind::Cylinder: {
+        const auto& c = static_cast<const CylinderFeature&>(f);
+        row.type = "cylinder";
+        params = {{"base", toJson(c.base)}, {"x", c.x}, {"y", c.y}, {"z", c.z}, {"diameter", c.diameter},
+                  {"height", c.height}, {"symmetric", c.symmetric},
+                  {"operation", nameOf(kOperations, c.operation)}};
+        break;
+    }
     case FeatureKind::Thread: {
         const auto& t = static_cast<const ThreadFeature&>(f);
         row.type = "thread";
@@ -711,6 +727,30 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         s->spec.followPath = p.at("followPath").get<bool>();
         s->operation = parseEnum(kOperations, text(p, "operation"), "operación");
         feature = std::move(s);
+    } else if (row.type == "box") {
+        auto b = std::make_unique<BoxFeature>();
+        b->base = attachmentOf(p.at("base"));
+        b->x = number(p, "x");
+        b->y = number(p, "y");
+        b->z = number(p, "z");
+        b->width = number(p, "width");
+        b->depth = number(p, "depth");
+        b->height = number(p, "height");
+        b->centered = p.at("centered").get<bool>();
+        b->symmetric = p.at("symmetric").get<bool>();
+        b->operation = parseEnum(kOperations, text(p, "operation"), "operación");
+        feature = std::move(b);
+    } else if (row.type == "cylinder") {
+        auto c = std::make_unique<CylinderFeature>();
+        c->base = attachmentOf(p.at("base"));
+        c->x = number(p, "x");
+        c->y = number(p, "y");
+        c->z = number(p, "z");
+        c->diameter = number(p, "diameter");
+        c->height = number(p, "height");
+        c->symmetric = p.at("symmetric").get<bool>();
+        c->operation = parseEnum(kOperations, text(p, "operation"), "operación");
+        feature = std::move(c);
     } else if (row.type == "thread") {
         auto t = std::make_unique<ThreadFeature>();
         t->base = attachmentOf(p.at("base"));

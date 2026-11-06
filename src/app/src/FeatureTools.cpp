@@ -1646,6 +1646,182 @@ QString GearTool::inputsText() const
              placementOnFace(placement_) ? QStringLiteral(" · en la cara elegida") : QString());
 }
 
+// --- Caja y cilindro --------------------------------------------------------------------
+
+namespace {
+
+document::Operation primitiveOperation(int index)
+{
+    switch (index) {
+    case 1: return document::Operation::Join;
+    case 2: return document::Operation::Cut;
+    case 3: return document::Operation::Intersect;
+    default: return document::Operation::NewBody;
+    }
+}
+
+int primitiveIndex(document::Operation operation)
+{
+    switch (operation) {
+    case document::Operation::Join: return 1;
+    case document::Operation::Cut: return 2;
+    case document::Operation::Intersect: return 3;
+    case document::Operation::NewBody: return 0;
+    }
+    return 0;
+}
+
+} // namespace
+
+BoxTool::BoxTool(document::Document& document, render::Viewport& viewport, std::optional<document::FeatureId> editing)
+    : FeatureTool(document, viewport, editing)
+{
+}
+
+void BoxTool::createFields(QFormLayout* form)
+{
+    const auto* original = dynamic_cast<const document::BoxFeature*>(original_.get());
+    createPlacement(form, placement_, original != nullptr ? &original->base : nullptr, original != nullptr ? original->x : 0.0,
+                    original != nullptr ? original->y : 0.0);
+    z_ = lengthBox(original != nullptr ? original->z : 0.0);
+    field("z", z_);
+    width_ = lengthBox(original != nullptr ? original->width : 20.0);
+    width_->setMinimum(0.01);
+    field("width", width_);
+    depth_ = lengthBox(original != nullptr ? original->depth : 20.0);
+    depth_->setMinimum(0.01);
+    field("depth", depth_);
+    height_ = lengthBox(original != nullptr ? original->height : 10.0);
+    field("height", height_);
+    centered_ = new QCheckBox(QStringLiteral("Centrada en el punto (ancho y fondo)"));
+    centered_->setChecked(original != nullptr && original->centered);
+    symmetric_ = new QCheckBox(QStringLiteral("Alto repartido a los dos lados del plano"));
+    symmetric_->setChecked(original != nullptr && original->symmetric);
+    operation_ = combo({QStringLiteral("Cuerpo nuevo"), QStringLiteral("Unir"), QStringLiteral("Cortar"), QStringLiteral("Intersecar")});
+    operation_->setCurrentIndex(original != nullptr ? primitiveIndex(original->operation) : before().bodies.empty() ? 0 : 1);
+    form->addRow(QStringLiteral("Posición Z"), z_);
+    form->addRow(QStringLiteral("Ancho"), width_);
+    form->addRow(QStringLiteral("Fondo"), depth_);
+    form->addRow(QStringLiteral("Alto (±)"), height_);
+    form->addRow(QString(), centered_);
+    form->addRow(QString(), symmetric_);
+    form->addRow(QStringLiteral("Operación"), operation_);
+    for (QDoubleSpinBox* box : {z_, width_, depth_, height_}) {
+        connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
+    }
+    for (QCheckBox* box : {centered_, symmetric_}) {
+        connect(box, &QCheckBox::toggled, this, [this] { updatePreview(); });
+    }
+    connect(operation_, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
+}
+
+void BoxTool::selectionChanged(const render::ModelSelection& selection)
+{
+    if (placementSelection(placement_, selection)) {
+        updatePreview();
+    }
+}
+
+std::unique_ptr<document::Feature> BoxTool::build() const
+{
+    auto f = std::make_unique<document::BoxFeature>();
+    if (original_) {
+        f->setName(original_->name());
+    }
+    f->base = placementAttachment(placement_);
+    f->x = placement_.x->value();
+    f->y = placement_.y->value();
+    f->z = z_->value();
+    f->width = width_->value();
+    f->depth = depth_->value();
+    f->height = height_->value();
+    f->centered = centered_->isChecked();
+    f->symmetric = symmetric_->isChecked();
+    f->operation = primitiveOperation(operation_->currentIndex());
+    return f;
+}
+
+bool BoxTool::removesMaterial() const
+{
+    return operation_ != nullptr && operation_->currentIndex() == 2;
+}
+
+QString BoxTool::inputsText() const
+{
+    const Units& units = Units::instance();
+    return QStringLiteral("%1 × %2 × %3").arg(units.format(width_->value()), units.format(depth_->value()),
+                                              units.formatWithUnit(height_->value()));
+}
+
+CylinderTool::CylinderTool(document::Document& document, render::Viewport& viewport,
+                           std::optional<document::FeatureId> editing)
+    : FeatureTool(document, viewport, editing)
+{
+}
+
+void CylinderTool::createFields(QFormLayout* form)
+{
+    const auto* original = dynamic_cast<const document::CylinderFeature*>(original_.get());
+    createPlacement(form, placement_, original != nullptr ? &original->base : nullptr, original != nullptr ? original->x : 0.0,
+                    original != nullptr ? original->y : 0.0);
+    z_ = lengthBox(original != nullptr ? original->z : 0.0);
+    field("z", z_);
+    diameter_ = lengthBox(original != nullptr ? original->diameter : 20.0);
+    diameter_->setMinimum(0.01);
+    field("diameter", diameter_);
+    height_ = lengthBox(original != nullptr ? original->height : 10.0);
+    field("height", height_);
+    symmetric_ = new QCheckBox(QStringLiteral("Alto repartido a los dos lados del plano"));
+    symmetric_->setChecked(original != nullptr && original->symmetric);
+    operation_ = combo({QStringLiteral("Cuerpo nuevo"), QStringLiteral("Unir"), QStringLiteral("Cortar"), QStringLiteral("Intersecar")});
+    operation_->setCurrentIndex(original != nullptr ? primitiveIndex(original->operation) : before().bodies.empty() ? 0 : 1);
+    form->addRow(QStringLiteral("Posición Z"), z_);
+    form->addRow(QStringLiteral("Diámetro"), diameter_);
+    form->addRow(QStringLiteral("Alto (±)"), height_);
+    form->addRow(QString(), symmetric_);
+    form->addRow(QStringLiteral("Operación"), operation_);
+    for (QDoubleSpinBox* box : {z_, diameter_, height_}) {
+        connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
+    }
+    connect(symmetric_, &QCheckBox::toggled, this, [this] { updatePreview(); });
+    connect(operation_, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
+}
+
+void CylinderTool::selectionChanged(const render::ModelSelection& selection)
+{
+    if (placementSelection(placement_, selection)) {
+        updatePreview();
+    }
+}
+
+std::unique_ptr<document::Feature> CylinderTool::build() const
+{
+    auto f = std::make_unique<document::CylinderFeature>();
+    if (original_) {
+        f->setName(original_->name());
+    }
+    f->base = placementAttachment(placement_);
+    f->x = placement_.x->value();
+    f->y = placement_.y->value();
+    f->z = z_->value();
+    f->diameter = diameter_->value();
+    f->height = height_->value();
+    f->symmetric = symmetric_->isChecked();
+    f->operation = primitiveOperation(operation_->currentIndex());
+    return f;
+}
+
+bool CylinderTool::removesMaterial() const
+{
+    return operation_ != nullptr && operation_->currentIndex() == 2;
+}
+
+QString CylinderTool::inputsText() const
+{
+    const Units& units = Units::instance();
+    return QStringLiteral("Ø %1 × %2").arg(units.format(diameter_->value()), units.formatWithUnit(height_->value()));
+}
+
 // --- Barrido ----------------------------------------------------------------------------
 
 SweepTool::SweepTool(document::Document& document, render::Viewport& viewport,

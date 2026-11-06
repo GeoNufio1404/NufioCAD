@@ -60,7 +60,7 @@ public:
     // Lo mismo, con las expresiones de los cuadros que usan parámetros: es la
     // que se debe usar para calcular y aplicar.
     std::unique_ptr<document::Feature> make() const;
-    void accept();
+    virtual void accept();
 
 signals:
     void accepted();
@@ -83,7 +83,7 @@ protected:
     // pesadas (rosca, engranaje) lo usan para no recalcular a cada tecla; 0 = al instante.
     virtual int previewDelayMs() const { return 0; }
 
-    void updatePreview();
+    virtual void updatePreview();
 
     // Dónde va un cuerpo generado (rosca, engranaje): un plano de origen, un plano de construcción o una cara
     // plana elegida en la vista, y una posición X/Y en ese plano (al elegir una cara, el centro de la cara).
@@ -393,6 +393,57 @@ private:
     QDoubleSpinBox* thickness_ = nullptr;
     QDoubleSpinBox* bore_ = nullptr;
     QDoubleSpinBox* helix_ = nullptr;
+    QComboBox* operation_ = nullptr;
+};
+
+// Caja y cilindro: primitivas con posición en un plano o cara, ligables a parámetros.
+class BoxTool final : public FeatureTool {
+    Q_OBJECT
+
+public:
+    BoxTool(document::Document& document, render::Viewport& viewport, std::optional<document::FeatureId> editing);
+
+    std::unique_ptr<document::Feature> build() const override;
+
+protected:
+    QString title() const override { return QStringLiteral("Caja"); }
+    void createFields(QFormLayout* form) override;
+    void selectionChanged(const render::ModelSelection& selection) override;
+    QString inputsText() const override;
+    bool removesMaterial() const override;
+
+private:
+    Placement placement_;
+    QDoubleSpinBox* z_ = nullptr;
+    QDoubleSpinBox* width_ = nullptr;
+    QDoubleSpinBox* depth_ = nullptr;
+    QDoubleSpinBox* height_ = nullptr;
+    QCheckBox* centered_ = nullptr;
+    QCheckBox* symmetric_ = nullptr;
+    QComboBox* operation_ = nullptr;
+};
+
+class CylinderTool final : public FeatureTool {
+    Q_OBJECT
+
+public:
+    CylinderTool(document::Document& document, render::Viewport& viewport, std::optional<document::FeatureId> editing);
+
+    std::unique_ptr<document::Feature> build() const override;
+
+protected:
+    QString title() const override { return QStringLiteral("Cilindro"); }
+    void createFields(QFormLayout* form) override;
+    void selectionChanged(const render::ModelSelection& selection) override;
+    QString inputsText() const override;
+    bool removesMaterial() const override;
+
+private:
+    Placement placement_;
+    QDoubleSpinBox* z_ = nullptr;
+    QDoubleSpinBox* diameter_ = nullptr;
+    QDoubleSpinBox* height_ = nullptr;
+    QCheckBox* symmetric_ = nullptr;
     QComboBox* operation_ = nullptr;
 };
 

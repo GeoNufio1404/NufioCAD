@@ -217,6 +217,49 @@ public:
     std::vector<FeatureId> dependencies() const override;
 };
 
+// Caja: ancho (a lo largo de X del plano), fondo (Y) y alto (la normal; el signo da el sentido), con la
+// esquina o el centro en un punto del plano o de una cara. «z» la separa del plano a lo largo de la normal;
+// «symmetric» reparte el alto a los dos lados del plano. Todo ligable a parámetros: es la base de las
+// piezas que generan las herramientas.
+class BoxFeature final : public Feature {
+public:
+    SketchAttachment base;
+    double x = 0.0;
+    double y = 0.0;
+    double z = 0.0;
+    double width = 10.0;
+    double depth = 10.0;
+    double height = 10.0;
+    bool centered = false;   // el punto es el centro del ancho y del fondo
+    bool symmetric = false;  // el alto va mitad a cada lado del plano
+    Operation operation = Operation::NewBody;
+
+    FeatureKind kind() const override { return FeatureKind::Box; }
+    std::unique_ptr<Feature> clone() const override { return std::make_unique<BoxFeature>(*this); }
+    std::optional<std::string> compute(ModelState& state) const override;
+    std::vector<FeatureId> dependencies() const override;
+    std::vector<NumericField> numericFields() override;
+};
+
+// Cilindro: diámetro y alto a lo largo de la normal, con el centro de la base en un punto del plano o de una cara.
+class CylinderFeature final : public Feature {
+public:
+    SketchAttachment base;
+    double x = 0.0;
+    double y = 0.0;
+    double z = 0.0;
+    double diameter = 10.0;
+    double height = 10.0;
+    bool symmetric = false;
+    Operation operation = Operation::NewBody;
+
+    FeatureKind kind() const override { return FeatureKind::Cylinder; }
+    std::unique_ptr<Feature> clone() const override { return std::make_unique<CylinderFeature>(*this); }
+    std::optional<std::string> compute(ModelState& state) const override;
+    std::vector<FeatureId> dependencies() const override;
+    std::vector<NumericField> numericFields() override;
+};
+
 // Engranaje cilíndrico de involuta (recto o helicoidal) centrado en el origen de
 // un plano, con su eje a lo largo de la normal.
 class GearFeature final : public Feature {
