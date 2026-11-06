@@ -6,7 +6,9 @@
 #include <nuf/render/Viewport.hpp>
 
 #include <QComboBox>
+#include <QFontComboBox>
 #include <QFormLayout>
+#include <QLineEdit>
 #include <QLabel>
 #include <QPushButton>
 #include <QTimer>
@@ -25,7 +27,19 @@ void GeneratorTool::createFields(QFormLayout* form)
     form_ = form;
     for (const document::GeneratorField& f : generator_.fields()) {
         QWidget* widget = nullptr;
-        if (f.kind == document::GeneratorField::Kind::Choice) {
+        if (f.kind == document::GeneratorField::Kind::Text) {
+            auto* edit = new QLineEdit(QString::fromStdString(f.text));
+            connect(edit, &QLineEdit::textChanged, this, [this] { updatePreview(); });
+            widget = edit;
+        } else if (f.kind == document::GeneratorField::Kind::Font) {
+            auto* box = new QFontComboBox();
+            box->setFontFilters(QFontComboBox::ScalableFonts);
+            if (!f.text.empty()) {
+                box->setCurrentFont(QFont(QString::fromStdString(f.text)));
+            }
+            connect(box, &QFontComboBox::currentFontChanged, this, [this] { updatePreview(); });
+            widget = box;
+        } else if (f.kind == document::GeneratorField::Kind::Choice) {
             auto* box = new QComboBox();
             for (const std::string& choice : f.choices) {
                 box->addItem(QString::fromStdString(choice));
@@ -74,7 +88,11 @@ document::GeneratorValues GeneratorTool::values() const
 {
     document::GeneratorValues result;
     for (const Row& row : rows_) {
-        if (row.field.kind == document::GeneratorField::Kind::Choice) {
+        if (row.field.kind == document::GeneratorField::Kind::Text) {
+            result.texts[row.field.key] = static_cast<QLineEdit*>(row.widget)->text().toStdString();
+        } else if (row.field.kind == document::GeneratorField::Kind::Font) {
+            result.texts[row.field.key] = static_cast<QFontComboBox*>(row.widget)->currentFont().family().toStdString();
+        } else if (row.field.kind == document::GeneratorField::Kind::Choice) {
             result[row.field.key] = double(static_cast<QComboBox*>(row.widget)->currentIndex());
         } else {
             result[row.field.key] = static_cast<QDoubleSpinBox*>(row.widget)->value();

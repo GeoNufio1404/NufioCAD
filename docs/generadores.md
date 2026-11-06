@@ -176,6 +176,45 @@ Con labio: «Tapa: labio» y «Tapa: hueco del labio». Con tornillos: «Caja: p
 «Tapa: agujero 1–4». Cuerpos **Caja** y **Tapa**, en el componente «Caja con tapa». Todas las medidas son
 parámetros (`ancho`, `alto`…), así que se pueden cambiar después en Sólido › Parámetros.
 
+## Letrero o llavero (con texto)
+
+Una placa con tu texto, que puede ir **en relieve** (en un cuerpo aparte, para imprimirlo en otro color), **grabado** en la
+placa o como **letras sueltas**, y con una **anilla** opcional para convertirlo en llavero. Las letras salen del contorno
+de la fuente elegida (las del sistema) y quedan en un sketch editable dentro del historial.
+
+### Preguntas y medidas
+
+| Pregunta | Parámetro | Por defecto | Mín. – máx. | Para qué sirve |
+|---|---|---|---|---|
+| Tipo | — | Letrero | Letrero / Llavero | Con el llavero se añade la anilla a la izquierda |
+| Texto | — | Nufio | cualquier texto | Lo que se escribe |
+| Fuente | — | la de la interfaz | las fuentes escalables del sistema | La forma de las letras |
+| Tamaño del texto | — | 20 mm | 3 – 300 | Tamaño de la fuente (las mayúsculas miden ~70 %); no es un parámetro: cambia el sketch |
+| Texto | — | En relieve (otro cuerpo) | En relieve / Grabado (hundido) / Solo letras | Cómo va el texto |
+| Margen de la placa | — | 5 mm | 1 – 100 | Entre el texto y el borde; solo sirve para calcular el tamaño de la placa |
+| Grosor de la placa | `grosor` | 3 mm | 0,8 – 50 | Grosor de la placa |
+| Relieve o profundidad | `relieve` | 1,2 mm | 0,2 – 50 | Cuánto sobresale (o se hunde) el texto; con «Solo letras», su altura |
+| Radio de esquinas | `esquina` | 3 mm | 0 – 50 | Esquinas redondeadas de la placa |
+| Diámetro de la anilla | `anilla` | 12 mm | 5 – 60 | El disco que rodea el agujero (solo llavero) |
+| Agujero de la anilla | `agujero` | 5 mm | 2 – 40 | Para pasar el aro del llavero (solo llavero) |
+
+La placa mide el texto más dos márgenes: `placa_ancho` y `placa_alto` se calculan al crear el diseño y quedan como
+parámetros (si cambias el texto después hay que editar el sketch y esas dos medidas).
+
+### Operaciones que crea
+
+| # | Nombre | Tipo | Medidas | Operación |
+|---|---|---|---|---|
+| 1 | «Letrero/Llavero: letras» | Sketch en XY | El contorno del texto, centrado en el origen y bloqueado | — |
+| 2 | «…: placa» | Caja centrada, radio `esquina` | `placa_ancho` × `placa_alto` × `grosor` | Cuerpo nuevo |
+| 3 | «Llavero: anilla» | Cilindro Ø `anilla`, a la izquierda de la placa (2 mm metidos en ella) | grosor de la placa | Unir |
+| 4 | «Llavero: agujero» | Cilindro Ø `agujero` en el centro de la anilla | atraviesa la anilla | Cortar |
+| 5 | «…: texto» | Extrusión de las letras | En relieve: de `grosor` a `grosor + relieve`, cuerpo nuevo. Grabado: de `grosor − relieve` hacia arriba, cortando la placa. Solo letras: desde Z = 0, `relieve` de alto | Cuerpo nuevo / Cortar |
+
+Cuerpos: **Placa** y **Texto** (en relieve), solo **Placa** (grabado) o solo **Texto** (letras sueltas). Componente:
+«Letrero» o «Llavero». Las regiones que rellenan el hueco de una letra (el interior de una «O», una «A»…) no se
+extruyen.
+
 ## Primitivas: Caja y Cilindro
 
 Son las piezas con las que se construyen los generadores; también se pueden usar solas (Sólido › Caja / Cilindro).

@@ -310,3 +310,15 @@ Con una captura de pantalla y los pasos suele bastar. Si algo se cierra, no hace
 | C.3 | Aceptar y abrir Sólido › Parámetros | Ancho, fondo, alto, pared… como parámetros; al cambiar «alto» la caja y los postes crecen |
 | C.4 | Imprime la tapa con labio sobre la caja | Entra a presión sin forzar con holgura 0,2 (subir a 0,3 si queda dura) |
 | C.5 | Prueba un tornillo M3 en un poste y en la tapa | Se enrosca en el poste (Ø2,5) y pasa libre por la tapa (Ø3,4) |
+
+### Letrero o llavero
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| T.1 | Herramientas › **Letrero o llavero** | Se ve una placa con «Nufio» en relieve |
+| T.2 | Escribe otro texto, cambia la fuente y el tamaño | Las letras y la placa se actualizan (la placa se ajusta al texto) |
+| T.3 | Cambia «Tipo» a Llavero | Aparece la anilla con su agujero a la izquierda y los campos de la anilla |
+| T.4 | Cambia «Texto» a Grabado | Las letras quedan hundidas en la placa (un solo cuerpo) |
+| T.5 | Prueba letras con hueco (O, A, B, 8) | El hueco queda libre, no se rellena |
+| T.6 | Aceptar | Navegador: «Placa» y «Texto» en el componente; el historial tiene el sketch «…: letras» y sus operaciones |
+| T.7 | Imprime con relieve en otro color | El cuerpo «Texto» se asigna a otro filamento sin tocar la placa |

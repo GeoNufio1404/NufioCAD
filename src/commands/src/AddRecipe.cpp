@@ -25,8 +25,12 @@ void AddRecipe::execute(document::Document& doc)
         before.push_back(body.key);
     }
     ids_.clear();
+    document::FeatureId recipeSketch = 0;
     for (const auto& feature : recipe_.features) {
-        const document::FeatureId id = doc.insertFeature(feature->clone(), doc.marker());
+        const document::FeatureId id = doc.insertFeature(document::instantiate(*feature, recipeSketch), doc.marker());
+        if (feature->kind() == document::FeatureKind::Sketch) {
+            recipeSketch = id;
+        }
         // Rehacer usa los mismos ids y nombres.
         feature->setId(id);
         feature->setName(doc.findFeature(id)->name());

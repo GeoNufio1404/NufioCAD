@@ -2004,3 +2004,92 @@ TEST_CASE("La caja con tapa cierra con labio a presión o con tornillos en las e
     REQUIRE(screws.result().bodies[0].shape.volume() > boxScrews + 5000.0);
     REQUIRE(screws.result().bodies[0].shape.bounds().max.z == Catch::Approx(60.0).margin(1e-6));
 }
+
+namespace {
+
+// Un «texto» de mentira para las pruebas: cada letra es un cuadrado de 10 × 14 con un hueco de 4 × 8 (como una «O»).
+std::vector<sketch::Geometry> fakeLetters(const std::string& text, double, const std::string&)
+{
+    std::vector<sketch::Geometry> out;
+    const auto rectangle = [&](double x0, double y0, double x1, double y1) {
+        out.push_back(sketch::Line{{x0, y0}, {x1, y0}});
+        out.push_back(sketch::Line{{x1, y0}, {x1, y1}});
+        out.push_back(sketch::Line{{x1, y1}, {x0, y1}});
+        out.push_back(sketch::Line{{x0, y1}, {x0, y0}});
+    };
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        const double x = double(i) * 12.0;
+        rectangle(x, 0.0, x + 10.0, 14.0);
+        rectangle(x + 3.0, 3.0, x + 7.0, 11.0);
+    }
+    return out;
+}
+
+} // namespace
+
+TEST_CASE("El generador de letreros pone las letras en relieve, grabadas o sueltas, y hace llaveros", "[generator]")
+{
+    document::setTextOutliner(fakeLetters);
+    const document::Generator* generator = document::findGenerator("letrero");
+    REQUIRE(generator != nullptr);
+    const double pi = std::numbers::pi;
+    const auto make = [&](double type, double mode, Document& doc) {
+        document::GeneratorValues values = generator->defaults();
+        values["tipo"] = type;
+        values["modo"] = mode;
+        values.texts["texto"] = "OO";  // dos letras de 10 × 14 con hueco de 4 × 8, a 12 mm una de otra
+        REQUIRE(doc.parameters().empty());
+        commands::AddRecipe command(generator->make(values, ""), "Letrero");
+        command.execute(doc);
+        for (std::size_t i = 0; i < doc.featureCount(); ++i) {
+            INFO(doc.feature(i).name());
+            REQUIRE(doc.status(doc.feature(i).id()).health != Health::Error);
+        }
+    };
+    // El texto mide 22 × 14; con 5 mm de margen la placa es de 32 × 24 × 3 y esquinas de radio 3.
+    const double plateArea = 32.0 * 24.0 - (4.0 - pi) * 9.0;
+    const double letterArea = 2.0 * (10.0 * 14.0 - 4.0 * 8.0);
+
+    Document relief;
+    make(0.0, 0.0, relief);
+    REQUIRE(relief.result().bodies.size() == 2);
+    REQUIRE_THAT(relief.result().bodies[0].shape.volume(), Catch::Matchers::WithinAbs(plateArea * 3.0, 1e-3));
+    REQUIRE_THAT(relief.result().bodies[1].shape.volume(), Catch::Matchers::WithinAbs(letterArea * 1.2, 1e-3));
+    REQUIRE(relief.result().bodies[1].shape.bounds().min.z == Catch::Approx(3.0).margin(1e-6));  // sobre la placa
+    REQUIRE(relief.result().bodies[1].shape.bounds().max.z == Catch::Approx(4.2).margin(1e-6));
+    REQUIRE(relief.bodyInfo().at(relief.result().bodies[1].key).name == "Texto");
+    REQUIRE(relief.bodyInfo().at(relief.result().bodies[0].key).component == "Letrero");
+    // Letras centradas en la placa.
+    const geometry::Box text = relief.result().bodies[1].shape.bounds();
+    REQUIRE_THAT(0.5 * (text.min.x + text.max.x), Catch::Matchers::WithinAbs(0.0, 1e-6));
+
+    Document engraved;
+    make(0.0, 1.0, engraved);
+    REQUIRE(engraved.result().bodies.size() == 1);
+    REQUIRE_THAT(engraved.result().bodies[0].shape.volume(),
+                 Catch::Matchers::WithinAbs(plateArea * 3.0 - letterArea * 1.2, 1e-3));
+
+    Document loose;
+    make(0.0, 2.0, loose);
+    REQUIRE(loose.result().bodies.size() == 1);
+    REQUIRE_THAT(loose.result().bodies[0].shape.volume(), Catch::Matchers::WithinAbs(letterArea * 1.2, 1e-3));
+
+    // El llavero suma el disco de la anilla (Ø12, metido 2 mm en la placa) y le resta el agujero (Ø5).
+    Document keychain;
+    make(1.0, 0.0, keychain);
+    REQUIRE(keychain.result().bodies.size() == 2);
+    REQUIRE(keychain.result().bodies[0].shape.volume() > plateArea * 3.0 + 100.0);
+    REQUIRE(keychain.result().bodies[0].shape.bounds().min.x < -16.0 - 9.0);  // la anilla asoma por la izquierda
+    REQUIRE(keychain.bodyInfo().at(keychain.result().bodies[0].key).component == "Llavero");
+
+    // Todo se recalcula al cambiar un parámetro (el grosor de la placa) y se deshace de una vez.
+    auto params = relief.parameters();
+    for (document::Parameter& p : params) {
+        if (p.name == "grosor") {
+            p.expression = "5";
+        }
+    }
+    relief.setParameters(params);
+    REQUIRE(relief.result().bodies[1].shape.bounds().min.z == Catch::Approx(5.0).margin(1e-6));
+    document::setTextOutliner({});
+}

@@ -152,6 +152,10 @@ MainWindow::MainWindow(QWidget* parent)
         commands_.push(std::make_unique<commands::MoveFeature>(id, index));
     });
     ExpressionSpinBox::setDocument(&document_);
+    // Los generadores con texto piden el contorno de las letras a la vista (que es la que conoce las fuentes).
+    document::setTextOutliner([this](const std::string& text, double height, const std::string& family) {
+        return viewport_->textOutline(QString::fromStdString(text), height, QString::fromStdString(family));
+    });
     // Las cotas del sketch se escriben en la unidad elegida.
     const auto applyUnits = [this] {
         sketch::setDimensionLengthScale(Units::instance().factor(), 3 + Units::instance().extraDecimals());

@@ -1,10 +1,13 @@
 #include <nuf/document/Generators.hpp>
 
 #include <nuf/document/Features.hpp>
+#include <nuf/sketch/Dxf.hpp>
+#include <nuf/sketch/Profiles.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <stdexcept>
 
 namespace nuf::document {
 
@@ -365,22 +368,249 @@ public:
     }
 };
 
+// --- Letrero y llavero con texto -----------------------------------------------------------
+// Una placa con el texto en relieve (cuerpo aparte, para otro color) o grabado, con o sin anilla para llavero. Las
+// letras salen del contorno de la fuente elegida y quedan en un sketch editable.
+
+class Sign final : public Generator {
+public:
+    std::string id() const override { return "letrero"; }
+    std::string title() const override { return "Letrero o llavero"; }
+    std::string icon() const override { return "box-solid"; }
+    std::string description() const override
+    {
+        return "Placa con tu texto en relieve (en otro cuerpo, para otro color) o grabado, con una anilla opcional "
+               "para llavero.";
+    }
+
+    std::vector<GeneratorField> fields() const override
+    {
+        using K = GeneratorField::Kind;
+        const auto length = [](std::string key, std::string label, double value, double min, double max,
+                               std::string hint = {}, std::string showKey = {}, int showIndex = 0) {
+            GeneratorField f;
+            f.key = std::move(key);
+            f.label = std::move(label);
+            f.kind = K::Length;
+            f.value = value;
+            f.min = min;
+            f.max = max;
+            f.hint = std::move(hint);
+            f.showKey = std::move(showKey);
+            f.showIndex = showIndex;
+            return f;
+        };
+        const auto choice = [](std::string key, std::string label, std::vector<std::string> choices) {
+            GeneratorField f;
+            f.key = std::move(key);
+            f.label = std::move(label);
+            f.kind = K::Choice;
+            f.choices = std::move(choices);
+            return f;
+        };
+        GeneratorField text;
+        text.key = "texto";
+        text.label = "Texto";
+        text.kind = K::Text;
+        text.text = "Nufio";
+        GeneratorField font;
+        font.key = "fuente";
+        font.label = "Fuente";
+        font.kind = K::Font;
+        return {choice("tipo", "Tipo", {"Letrero", "Llavero"}),
+                text,
+                font,
+                length("altura_texto", "Tamaño del texto", 20.0, 3.0, 300.0, "Tamaño de la fuente; las letras mayúsculas miden ~70 %"),
+                choice("modo", "Texto", {"En relieve (otro cuerpo)", "Grabado (hundido)", "Solo letras"}),
+                length("margen", "Margen de la placa", 5.0, 1.0, 100.0, "Entre el texto y el borde"),
+                length("grosor", "Grosor de la placa", 3.0, 0.8, 50.0),
+                length("relieve", "Relieve o profundidad", 1.2, 0.2, 50.0, "Cuánto sobresale (o se hunde) el texto"),
+                length("esquina", "Radio de esquinas", 3.0, 0.0, 50.0),
+                length("anilla", "Diámetro de la anilla", 12.0, 5.0, 60.0, "El círculo que rodea el agujero", "tipo", 1),
+                length("agujero", "Agujero de la anilla", 5.0, 2.0, 40.0, {}, "tipo", 1)};
+    }
+
+    Recipe make(const GeneratorValues& values, const std::string& suffix) const override
+    {
+        const auto v = [&](const char* key) { return values.at(key); };
+        const bool keychain = v("tipo") >= 0.5;
+        const int mode = int(v("modo"));  // 0 relieve, 1 grabado, 2 solo letras
+        const auto p = [&](const char* name) { return std::string(name) + suffix; };
+        const std::string textKey = values.texts.count("texto") ? values.texts.at("texto") : std::string();
+        const std::string family = values.texts.count("fuente") ? values.texts.at("fuente") : std::string();
+
+        // El contorno de las letras, centrado en el origen.
+        const std::vector<sketch::Geometry> outline = textOutline(textKey, v("altura_texto"), family);
+        if (outline.empty()) {
+            throw std::runtime_error("No se pudo crear el texto (¿está vacío o la fuente no existe?)");
+        }
+        double minX = 1e300, minY = 1e300, maxX = -1e300, maxY = -1e300;
+        for (const sketch::Geometry& g : outline) {
+            for (const sketch::Vec2& point : sketch::polyline(g)) {
+                minX = std::min(minX, point.x);
+                maxX = std::max(maxX, point.x);
+                minY = std::min(minY, point.y);
+                maxY = std::max(maxY, point.y);
+            }
+        }
+        const sketch::Vec2 shift{-(minX + maxX) / 2.0, -(minY + maxY) / 2.0};
+        sketch::Sketch lettering;
+        for (const sketch::EntityId id : sketch::importDrawing(lettering, {outline, {}}, shift)) {
+            lettering.entity(id)->locked = true;
+        }
+        // Las regiones que rellenan el hueco de una letra (el interior de una «O») no son letra: se descartan.
+        const std::vector<sketch::Profile> found = sketch::findProfiles(lettering);
+        const auto idsOf = [](const sketch::Loop& loop) {
+            std::vector<sketch::EntityId> ids;
+            for (const sketch::ProfileEdge& edge : loop.edges) {
+                ids.push_back(edge.entity);
+            }
+            std::sort(ids.begin(), ids.end());
+            return ids;
+        };
+        std::vector<std::vector<sketch::EntityId>> holeLoops;
+        for (const sketch::Profile& profile : found) {
+            for (const sketch::Loop& hole : profile.holes) {
+                holeLoops.push_back(idsOf(hole));
+            }
+        }
+        std::vector<sketch::Profile> profiles;
+        for (const sketch::Profile& profile : found) {
+            if (std::find(holeLoops.begin(), holeLoops.end(), idsOf(profile.outer)) == holeLoops.end()) {
+                profiles.push_back(profile);
+            }
+        }
+        if (profiles.empty()) {
+            throw std::runtime_error("El texto no forma letras cerradas con esa fuente");
+        }
+
+        const std::string plateW = p("placa_ancho"), plateH = p("placa_alto"), thick = p("grosor"), relief = p("relieve"),
+                          corner = p("esquina"), ring = p("anilla"), hole = p("agujero");
+        const double width = maxX - minX + 2.0 * v("margen");
+        const double height = maxY - minY + 2.0 * v("margen");
+
+        Recipe recipe;
+        recipe.component = keychain ? "Llavero" : "Letrero";
+        recipe.bodyNames = mode == 2 ? std::vector<std::string>{"Texto"} : std::vector<std::string>{"Placa", "Texto"};
+        const auto param = [&](const std::string& name, double value) {
+            recipe.parameters.push_back({name, number(value)});
+        };
+        if (mode != 2) {
+            param(plateW, width);
+            param(plateH, height);
+            param(thick, v("grosor"));
+            param(corner, v("esquina"));
+        }
+        param(relief, v("relieve"));
+        if (keychain && mode != 2) {
+            param(ring, v("anilla"));
+            param(hole, v("agujero"));
+        }
+
+        // El sketch de las letras.
+        auto sketchFeature = std::make_unique<SketchFeature>(lettering, SketchAttachment{});
+        sketchFeature->setName(std::string(keychain ? "Llavero" : "Letrero") + ": letras");
+        recipe.features.push_back(std::move(sketchFeature));
+
+        if (mode != 2) {
+            auto plate = std::make_unique<BoxFeature>();
+            plate->setName(std::string(keychain ? "Llavero" : "Letrero") + ": placa");
+            plate->base.origin = OriginPlane::XY;
+            plate->centered = true;
+            plate->expressions = {{"width", plateW}, {"depth", plateH}, {"height", thick}, {"radius", corner}};
+            recipe.features.push_back(std::move(plate));
+            if (keychain) {
+                // La anilla: un disco que sale por la izquierda (metido 2 mm en la placa) con su agujero.
+                const std::string cx = "-(" + plateW + "/2 + " + ring + "/2 - 2)";
+                auto boss = std::make_unique<CylinderFeature>();
+                boss->setName("Llavero: anilla");
+                boss->base.origin = OriginPlane::XY;
+                boss->operation = Operation::Join;
+                boss->expressions = {{"diameter", ring}, {"x", cx}, {"height", thick}};
+                recipe.features.push_back(std::move(boss));
+                auto cut = std::make_unique<CylinderFeature>();
+                cut->setName("Llavero: agujero");
+                cut->base.origin = OriginPlane::XY;
+                cut->operation = Operation::Cut;
+                cut->expressions = {{"diameter", hole}, {"x", cx}, {"z", "-1"}, {"height", thick + " + 2"}};
+                recipe.features.push_back(std::move(cut));
+            }
+        }
+
+        // Las letras: en relieve sobre la placa, grabadas en ella o sueltas.
+        auto letters = std::make_unique<ExtrudeFeature>();
+        letters->setName(std::string(keychain ? "Llavero" : "Letrero") + ": texto");
+        for (const sketch::Profile& profile : profiles) {
+            letters->profiles.push_back(profileRef(kRecipeSketch, profile));
+        }
+        if (mode == 0) {
+            letters->operation = Operation::NewBody;
+            letters->spec.startOffset = v("grosor");
+            letters->spec.side1.distance = v("relieve");
+            letters->expressions = {{"startOffset", thick}, {"distance", relief}};
+        } else if (mode == 1) {
+            letters->operation = Operation::Cut;
+            letters->spec.startOffset = v("grosor") - v("relieve");
+            letters->spec.side1.distance = v("relieve") + 1.0;
+            letters->expressions = {{"startOffset", thick + " - " + relief}, {"distance", relief + " + 1"}};
+        } else {
+            letters->operation = Operation::NewBody;
+            letters->spec.side1.distance = v("relieve");
+            letters->expressions = {{"distance", relief}};
+        }
+        recipe.features.push_back(std::move(letters));
+        return recipe;
+    }
+};
+
 } // namespace
 
 GeneratorValues Generator::defaults() const
 {
     GeneratorValues values;
     for (const GeneratorField& f : fields()) {
-        values[f.key] = f.value;
+        if (f.kind == GeneratorField::Kind::Text || f.kind == GeneratorField::Kind::Font) {
+            values.texts[f.key] = f.text;
+        } else {
+            values[f.key] = f.value;
+        }
     }
     return values;
+}
+
+namespace {
+TextOutliner gOutliner;
+}
+
+void setTextOutliner(TextOutliner outliner)
+{
+    gOutliner = std::move(outliner);
+}
+
+std::vector<sketch::Geometry> textOutline(const std::string& text, double height, const std::string& family)
+{
+    return gOutliner && !text.empty() ? gOutliner(text, height, family) : std::vector<sketch::Geometry>{};
+}
+
+std::unique_ptr<Feature> instantiate(const Feature& feature, FeatureId recipeSketch)
+{
+    std::unique_ptr<Feature> copy = feature.clone();
+    if (auto* extrude = dynamic_cast<ExtrudeFeature*>(copy.get())) {
+        for (ProfileRef& profile : extrude->profiles) {
+            if (profile.sketch == kRecipeSketch) {
+                profile.sketch = recipeSketch;
+            }
+        }
+    }
+    return copy;
 }
 
 const std::vector<const Generator*>& generators()
 {
     static const Lightbox lightbox;
     static const BoxWithLid boxWithLid;
-    static const std::vector<const Generator*> all = {&lightbox, &boxWithLid};
+    static const Sign sign;
+    static const std::vector<const Generator*> all = {&lightbox, &boxWithLid, &sign};
     return all;
 }
 
@@ -420,8 +650,12 @@ void applyRecipe(Document& doc, const Recipe& recipe)
     for (const Body& body : doc.result().bodies) {
         before.push_back(body.key);
     }
+    FeatureId recipeSketch = 0;
     for (const auto& feature : recipe.features) {
-        doc.insertFeature(feature->clone(), doc.marker());
+        const FeatureId id = doc.insertFeature(instantiate(*feature, recipeSketch), doc.marker());
+        if (feature->kind() == FeatureKind::Sketch) {
+            recipeSketch = id;
+        }
     }
     std::map<std::string, BodyInfo> info = doc.bodyInfo();
     std::size_t next = 0;

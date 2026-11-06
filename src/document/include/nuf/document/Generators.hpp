@@ -7,6 +7,9 @@
 #include <nuf/document/Document.hpp>
 #include <nuf/document/Feature.hpp>
 
+#include <nuf/sketch/Sketch.hpp>
+
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
@@ -16,7 +19,7 @@ namespace nuf::document {
 
 // Una pregunta del formulario del generador.
 struct GeneratorField {
-    enum class Kind { Length, Choice };
+    enum class Kind { Length, Choice, Text, Font };
     std::string key;
     std::string label;
     std::string hint;                  // ayuda breve bajo el campo
@@ -25,12 +28,29 @@ struct GeneratorField {
     double min = 0.0;                  // mm (Length)
     double max = 100000.0;
     std::vector<std::string> choices;  // Choice
+    std::string text;                  // valor por defecto de Text y Font (la fuente vacía = la de la interfaz)
     // Solo se muestra si la pregunta «showKey» (de opciones) vale «showIndex» (vacía: siempre).
     std::string showKey;
     int showIndex = 0;
 };
 
-using GeneratorValues = std::map<std::string, double>;
+// Lo elegido en el formulario: números (longitudes en mm, opciones como índice) y textos.
+struct GeneratorValues : std::map<std::string, double> {
+    std::map<std::string, std::string> texts;
+};
+
+// El contorno de un texto como curvas del sketch (letras en el plano XY, la base del texto en Y = 0, empezando
+// en X = 0): lo pone la interfaz, que es la que sabe de fuentes.
+using TextOutliner =
+    std::function<std::vector<sketch::Geometry>(const std::string& text, double height, const std::string& family)>;
+void setTextOutliner(TextOutliner outliner);
+std::vector<sketch::Geometry> textOutline(const std::string& text, double height, const std::string& family);
+
+// Las operaciones de una receta que usan el sketch hecho en la misma receta lo nombran con este id; al aplicarla
+// se cambia por el real.
+constexpr FeatureId kRecipeSketch = 0x7FFFFFF0;
+// Una copia de la operación con el sketch de la receta ya resuelto.
+std::unique_ptr<Feature> instantiate(const Feature& feature, FeatureId recipeSketch);
 
 // Lo que hace un generador: parámetros, operaciones y cómo llamar a los cuerpos que salgan.
 struct Recipe {
