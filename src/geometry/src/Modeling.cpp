@@ -1061,58 +1061,61 @@ Shape thread(std::string_view tagView, const sketch::Plane& plane, const ThreadS
         // aristas vivas entre secciones no encontraban la intersección con los planos del bloque).
         const int sections = std::clamp(int(std::ceil(turns * 8.0)), 6, 1600);
         const int nPoles = curve->NbPoles();
-        const auto moveAt = [&](int k) {
+        std::vector<gp_Trsf> moves;
+        for (int k = 0; k <= sections; ++k) {
             const double t = double(k) / sections;
             gp_Trsf turn;
             turn.SetRotation(gp_Ax1(origin, normal), hand * 2.0 * kPi * turns * t * (spec.length < 0 ? -1.0 : 1.0));
             gp_Trsf slide;
             slide.SetTranslation(gp_Vec(normal).Multiplied(spec.length * t));
-            return slide * turn;
-        };
-        occ::handle<NCollection_HArray1<double>> parameters = new NCollection_HArray1<double>(1, sections + 1);
-        for (int k = 0; k <= sections; ++k) {
-            parameters->SetValue(k + 1, double(k) / sections);
+            moves.push_back(slide * turn);
         }
-        std::vector<gp_Trsf> moves;
-        for (int k = 0; k <= sections; ++k) {
-            moves.push_back(moveAt(k));
-        }
-        occ::handle<Geom_BSplineCurve> first;
-        std::vector<occ::handle<Geom_BSplineCurve>> helices;
-        for (int j = 1; j <= nPoles; ++j) {
-            occ::handle<NCollection_HArray1<gp_Pnt>> path = new NCollection_HArray1<gp_Pnt>(1, sections + 1);
-            for (int k = 0; k <= sections; ++k) {
-                path->SetValue(k + 1, curve->Pole(j).Transformed(moves[std::size_t(k)]));
+        // Una cara por cada vuelta y media: el mallado (lo más caro de dibujar la rosca) crece más que
+        // linealmente con el tamaño de cada cara (una sola de 8 vueltas: 17 s; en tramos de 1,5 vueltas: 3 s).
+        const int chunks = std::max(1, int(std::ceil(turns / 1.5)));
+        std::vector<TopoDS_Face> sides;
+        for (int c = 0; c < chunks; ++c) {
+            const int k0 = int(std::lround(double(c) * sections / chunks));
+            const int k1 = int(std::lround(double(c + 1) * sections / chunks));
+            const int count = k1 - k0;
+            occ::handle<NCollection_HArray1<double>> parameters = new NCollection_HArray1<double>(1, count + 1);
+            for (int k = 0; k <= count; ++k) {
+                parameters->SetValue(k + 1, double(k) / count);
             }
-            GeomAPI_Interpolate along(path, parameters, false, 1e-9);
-            along.Perform();
-            if (!along.IsDone()) {
-                throw GeometryError("No se pudo trazar la hélice de la rosca");
+            std::vector<occ::handle<Geom_BSplineCurve>> helices;
+            for (int j = 1; j <= nPoles; ++j) {
+                occ::handle<NCollection_HArray1<gp_Pnt>> path = new NCollection_HArray1<gp_Pnt>(1, count + 1);
+                for (int k = 0; k <= count; ++k) {
+                    path->SetValue(k + 1, curve->Pole(j).Transformed(moves[std::size_t(k0 + k)]));
+                }
+                GeomAPI_Interpolate along(path, parameters, false, 1e-9);
+                along.Perform();
+                if (!along.IsDone()) {
+                    throw GeometryError("No se pudo trazar la hélice de la rosca");
+                }
+                helices.push_back(along.Curve());
             }
-            helices.push_back(along.Curve());
-        }
-        first = helices.front();
-        const int nU = first->NbPoles();
-        NCollection_Array2<gp_Pnt> poles(1, nU, 1, nPoles);
-        for (int j = 1; j <= nPoles; ++j) {
-            for (int i = 1; i <= nU; ++i) {
-                poles.SetValue(i, j, helices[std::size_t(j - 1)]->Pole(i));
+            const occ::handle<Geom_BSplineCurve>& first = helices.front();
+            const int nU = first->NbPoles();
+            NCollection_Array2<gp_Pnt> poles(1, nU, 1, nPoles);
+            for (int j = 1; j <= nPoles; ++j) {
+                for (int i = 1; i <= nU; ++i) {
+                    poles.SetValue(i, j, helices[std::size_t(j - 1)]->Pole(i));
+                }
             }
+            const occ::handle<Geom_BSplineSurface> surface = new Geom_BSplineSurface(
+                poles, first->Knots(), curve->Knots(), first->Multiplicities(), curve->Multiplicities(), first->Degree(),
+                curve->Degree(), false, curve->IsPeriodic());
+            sides.push_back(BRepBuilderAPI_MakeFace(surface, 1e-6).Face());
         }
-        const NCollection_Array1<double>& uKnots = first->Knots();
-        const NCollection_Array1<int>& uMults = first->Multiplicities();
-        const NCollection_Array1<double>& vKnots = curve->Knots();
-        const NCollection_Array1<int>& vMults = curve->Multiplicities();
-        const occ::handle<Geom_BSplineSurface> surface = new Geom_BSplineSurface(
-            poles, uKnots, vKnots, uMults, vMults, first->Degree(), curve->Degree(), false, curve->IsPeriodic());
-        const TopoDS_Face side = BRepBuilderAPI_MakeFace(surface, 1e-6).Face();
+        const TopoDS_Face& side = sides.front();
 
-        // Las tapas: el plano de la primera y de la última sección, con el borde de la superficie.
+        // Las tapas: el plano de la primera y de la última sección, con el borde de la primera y de la
+        // última cara.
         TopoDS_Face startCap;
         TopoDS_Face endCap;
-        for (TopExp_Explorer ex(side, TopAbs_WIRE); ex.More(); ex.Next()) {
-            // Los bordes de la superficie en u = 0 y u = 1 son los círculos cerrados; el costado es la costura.
-            for (TopExp_Explorer ee(ex.Current(), TopAbs_EDGE); ee.More(); ee.Next()) {
+        for (const TopoDS_Face* lateral : {&sides.front(), &sides.back()}) {
+            for (TopExp_Explorer ee(*lateral, TopAbs_EDGE); ee.More(); ee.Next()) {
                 const TopoDS_Edge edge = TopoDS::Edge(ee.Current());
                 if (BRep_Tool::Degenerated(edge)) {
                     continue;
@@ -1122,19 +1125,20 @@ Shape thread(std::string_view tagView, const sketch::Plane& plane, const ThreadS
                 const double along = gp_Vec(origin, mid).Dot(gp_Vec(normal));
                 const bool atStart = std::abs(along) < 1e-6;
                 const bool atEnd = std::abs(along - spec.length) < 1e-6;
-                if (!atStart && !atEnd) {
+                if ((!atStart && !atEnd) || (atStart && lateral != &sides.front()) || (atEnd && lateral != &sides.back())) {
                     continue;
                 }
                 const TopoDS_Wire wire = BRepBuilderAPI_MakeWire(edge).Wire();
-                TopoDS_Face cap = BRepBuilderAPI_MakeFace(wire, true).Face();
-                (atStart ? startCap : endCap) = cap;
+                (atStart ? startCap : endCap) = BRepBuilderAPI_MakeFace(wire, true).Face();
             }
         }
         if (startCap.IsNull() || endCap.IsNull()) {
             throw GeometryError("No se pudo cerrar la rosca");
         }
         BRepBuilderAPI_Sewing sewing(1e-6);
-        sewing.Add(side);
+        for (const TopoDS_Face& lateral : sides) {
+            sewing.Add(lateral);
+        }
         sewing.Add(startCap);
         sewing.Add(endCap);
         sewing.Perform();
