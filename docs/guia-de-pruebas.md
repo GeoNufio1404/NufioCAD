@@ -215,6 +215,17 @@ Necesitas un cuerpo (la caja de 40×25×10 de «Antes de empezar»). Los botones
 | 9.18 | Clic en dos agujeros del mismo tipo | «Distancia entre ejes/centros» |
 | 9.19 | Esc, o iniciar un sketch o una herramienta | El panel desaparece y Medir se apaga |
 
+
+### 9d. Sección
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| 9.20 | Con un cuerpo, Sólido › **Sección** | Aparece un panel con el plano, la posición y «Ver el otro lado»; la pieza se corta por la mitad y el corte se ve tapado en azul |
+| 9.21 | Cambiar la posición | El corte se mueve a lo largo del eje |
+| 9.22 | Cambiar de plano XY / XZ / YZ | El corte vuelve al centro de la pieza en ese eje |
+| 9.23 | «Ver el otro lado» | Se ve la mitad contraria |
+| 9.24 | Esc, o iniciar un sketch | La pieza vuelve entera; el modelo no cambió |
+
 **Fíjate en:** ¿los avisos se entienden sin explicación? ¿Hay falsos avisos (te avisa de una pared que no existe)? ¿Echas de menos que señale dónde está el problema en la vista? ¿Los valores de tu impresora son los correctos (anota tu modelo)?
 
 Medición, análisis de sección y el botón «Imprimir» (abrir el slicer): se agregan aquí cuando se implementen.

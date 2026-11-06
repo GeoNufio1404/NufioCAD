@@ -396,7 +396,8 @@ Todas siguen el patrón de las operaciones actuales: una clase en `document/Feat
 - **Pendiente de 9b:** no manda el trabajo al laminador con perfil o filamento (solo abre el archivo); no hay formato 3MF; probado con el Bloc de notas, no con Bambu Studio u Orca reales; en Linux/Fedora la elección del programa usa el filtro `*.exe` (hay que escoger «Todos los archivos»).
 - **9c Medir ✅:** botón **Medir** (grupo INSPECCIONAR). Con una cara o arista da área, longitud, radio, diámetro, centro o normal; con dos, distancia mínima, diferencia en X/Y/Z, ángulo, paralelismo y distancia entre ejes o centros de agujeros. El resultado sale en un panel sobre la vista; Esc termina.
 - **Pendiente de 9c:** no dibuja la línea de la medida sobre el modelo; mide solo caras y aristas (no vértices ni puntos libres); con más de dos elementos usa los dos últimos de la lista, no por orden de clic; los números usan punto decimal; no copia el resultado al portapapeles.
-- Análisis de sección.
+- **9d Sección ✅:** botón **Sección** (INSPECCIONAR). Corta la vista de los cuerpos con un plano XY, XZ o YZ a la posición elegida, tapa el corte en azul y permite ver el otro lado. Solo cambia la vista: el modelo, el timeline y la exportación no se tocan. Esc termina.
+- **Pendiente de 9d:** no se probó a ojo en la app (solo compila y pasan las pruebas), así que la dirección del corte, el color de la tapa y el rendimiento con piezas grandes están por verificar; solo planos de origen (no caras ni planos de construcción); un solo corte a la vez; no se guarda en el archivo; no hay análisis de calidad de malla (se deja para más adelante).
 - Control de calidad de malla al exportar.
 - Posible envío directo al slicer.
 
@@ -437,7 +438,7 @@ Guía paso a paso para probar cada fase y dar feedback: [`guia-de-pruebas.md`](g
 | Fase 6 | ✅ 6a (planos de construcción), 6b (ejes de construcción) y 6c (parámetros con nombre y expresiones) implementadas. Pendiente: cotas del sketch ligadas a parámetros. Siguiente paso: Fase 7 |
 | Fase 7 | ✅ 7a (engranajes), 7b (roscas), 7c (barrido) y 7d (loft) implementadas. Siguiente paso: Fase 8 |
 | Fase 8 | ✅ 8a (mover/copiar/combinar cuerpos), 8b (nombres y componentes) y 8c (uniones entre caras planas) implementadas |
-| Fase 9 | 🚧 9a (revisión para imprimir antes de exportar) y 9b (Imprimir: abre el slicer) implementadas. Pendiente: herramientas de medición y análisis de sección. Siguiente paso: terminar la Fase 9 |
+| Fase 9 | ✅ 9a (revisión antes de exportar), 9b (Imprimir), 9c (Medir) y 9d (Sección) implementadas; sin calidad de malla ni línea de medida dibujada |
 | Fase 10 | Pendiente (herramientas generadoras tipo MakerLab: lightbox, caja con tapa, letreros) |
 | Pruebas manuales | ⏳ Guía en [`guia-de-pruebas.md`](guia-de-pruebas.md) (fases 1 a 9b); el usuario irá probando fase por fase y dando feedback |
 | Auditoría de código | ⏳ Segunda auditoría (incluye usabilidad) después de terminar las fases; repasar todos los «Pendiente de …» |

@@ -127,6 +127,10 @@ public:
 
     // Cuerpos del modelo. Solo se rehacen los que cambiaron.
     void showBodies(const std::vector<document::Body>& bodies);
+    // Sección: corta la vista de los cuerpos con un plano (la parte que cae del lado de la normal se
+    // oculta) y tapa el corte. No cambia el modelo.
+    void setSectionPlane(const sketch::Vec3& origin, const sketch::Vec3& normal);
+    void clearSectionPlane();
     // Sólido de la operación en curso, translúcido (rojo si quita material).
     void showToolPreview(const geometry::Shape& tool, bool removes);
     // Resalta aristas de un cuerpo (por índice) en azul; clearToolPreview() las quita.

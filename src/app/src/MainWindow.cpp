@@ -33,7 +33,13 @@
 #include <QFileDialog>
 #include <QInputDialog>
 #include <QKeySequence>
+#include <QCheckBox>
+#include <QComboBox>
+#include <QDoubleSpinBox>
+#include <QFormLayout>
+#include <QFrame>
 #include <QLabel>
+#include <QSignalBlocker>
 #include <QLineEdit>
 #include <QLocale>
 #include <QMenuBar>
@@ -420,6 +426,10 @@ void MainWindow::createMenus()
     decorate(measureAction_, QStringLiteral("measure-solid"),
              QStringLiteral("Medir caras y aristas: área, longitud, radio, distancia y ángulo (Mayús o clic para añadir otra)"),
              QStringLiteral("Medir"));
+    sectionAction_ = solidMenu->addAction(QStringLiteral("&Sección"), this, [this](bool on) { toggleSection(on); });
+    sectionAction_->setCheckable(true);
+    decorate(sectionAction_, QStringLiteral("section-solid"),
+             QStringLiteral("Cortar la vista con un plano para ver el interior (no cambia el modelo)"), QStringLiteral("Sección"));
     decorate(shellAction_, QStringLiteral("shell"), QStringLiteral("Vaciar un cuerpo dejando abiertas las caras elegidas"));
 
     // Herramientas de dibujo por familias (como en Fusion 360); la primera
@@ -597,6 +607,7 @@ void MainWindow::createMenus()
     ribbon_->addAction(solidTab_, threadAction_);
     ribbon_->addGroup(solidTab_, QStringLiteral("INSPECCIONAR"));
     ribbon_->addAction(solidTab_, measureAction_);
+    ribbon_->addAction(solidTab_, sectionAction_);
 
     auto family = [this, &families](const QString& name) {
         const std::size_t i = static_cast<std::size_t>(
@@ -1150,6 +1161,14 @@ void MainWindow::updateExportAction()
             action->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane() && !document_.result().bodies.empty());
         }
     }
+    if (sectionAction_ != nullptr) {
+        if ((sketch_ || tool_) && sectionAction_->isChecked()) {
+            sectionAction_->setChecked(false);
+            toggleSection(false);
+        }
+        sectionAction_->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane() &&
+                                   !document_.result().bodies.empty());
+    }
     if (measureAction_ != nullptr) {
         if ((sketch_ || tool_) && measureAction_->isChecked()) {
             measureAction_->setChecked(false);
@@ -1172,6 +1191,95 @@ void MainWindow::updateExportAction()
     if (printAction_ != nullptr) {
         printAction_->setEnabled(!sketch_ && !tool_ && !document_.result().bodies.empty());
     }
+}
+
+// Sección: corta la vista con un plano de origen (XY, XZ o YZ) a la posición elegida; solo se ve,
+// el modelo no cambia.
+void MainWindow::toggleSection(bool on)
+{
+    if (sectionPanel_ == nullptr) {
+        sectionPanel_ = new QFrame(viewport_);
+        sectionPanel_->setObjectName(QStringLiteral("sectionPanel"));
+        sectionPanel_->setStyleSheet(QStringLiteral(
+            "QFrame#sectionPanel { background: rgba(32, 36, 42, 225); border: 1px solid #4A515B; border-radius: 6px; } "
+            "QFrame#sectionPanel QLabel, QFrame#sectionPanel QCheckBox { color: #E8EBEF; }"));
+        auto* form = new QFormLayout(sectionPanel_);
+        form->setContentsMargins(12, 8, 12, 8);
+        auto* title = new QLabel(QStringLiteral("<b>Sección</b>"), sectionPanel_);
+        form->addRow(title);
+        sectionPlane_ = new QComboBox(sectionPanel_);
+        sectionPlane_->addItems({QStringLiteral("Plano XY (horizontal)"), QStringLiteral("Plano XZ (frontal)"),
+                                 QStringLiteral("Plano YZ (lateral)")});
+        form->addRow(QStringLiteral("Corte"), sectionPlane_);
+        sectionOffset_ = new QDoubleSpinBox(sectionPanel_);
+        sectionOffset_->setRange(-100000.0, 100000.0);
+        sectionOffset_->setDecimals(2);
+        sectionOffset_->setSuffix(QStringLiteral(" mm"));
+        form->addRow(QStringLiteral("Posición"), sectionOffset_);
+        sectionFlip_ = new QCheckBox(QStringLiteral("Ver el otro lado"), sectionPanel_);
+        form->addRow(QString(), sectionFlip_);
+        connect(sectionPlane_, &QComboBox::currentIndexChanged, this, [this] {
+            // Al cambiar de plano, el corte vuelve al centro del modelo en ese eje.
+            const int axis = sectionPlane_->currentIndex() == 0 ? 2 : sectionPlane_->currentIndex() == 1 ? 1 : 0;
+            double lo = 0.0;
+            double hi = 0.0;
+            bool first = true;
+            for (const document::Body& body : document_.result().bodies) {
+                const geometry::Box box = body.shape.bounds();
+                if (box.empty) {
+                    continue;
+                }
+                const double a = axis == 0 ? box.min.x : axis == 1 ? box.min.y : box.min.z;
+                const double b = axis == 0 ? box.max.x : axis == 1 ? box.max.y : box.max.z;
+                lo = first ? a : std::min(lo, a);
+                hi = first ? b : std::max(hi, b);
+                first = false;
+            }
+            sectionOffset_->setValue((lo + hi) / 2.0);
+        });
+        connect(sectionOffset_, &QDoubleSpinBox::valueChanged, this, [this] { updateSection(); });
+        connect(sectionFlip_, &QCheckBox::toggled, this, [this] { updateSection(); });
+        sectionPanel_->move(16, 16);
+    }
+    if (on) {
+        // Fuerza la posición inicial (el centro del modelo) aunque el plano ya fuera el primero.
+        QSignalBlocker block(sectionOffset_);
+        emit sectionPlane_->currentIndexChanged(sectionPlane_->currentIndex());
+        block.unblock();
+        sectionPanel_->adjustSize();
+        sectionPanel_->show();
+        updateSection();
+        statusBar()->showMessage(QStringLiteral("Sección: mueve el corte con la posición · Esc termina"));
+    } else {
+        sectionPanel_->hide();
+        viewport_->clearSectionPlane();
+        statusBar()->clearMessage();
+    }
+    if (measurePanel_ != nullptr && measurePanel_->isVisible()) {
+        updateMeasure();
+    }
+}
+
+void MainWindow::updateSection()
+{
+    if (sectionPlane_ == nullptr || sectionAction_ == nullptr || !sectionAction_->isChecked()) {
+        return;
+    }
+    const int plane = sectionPlane_->currentIndex();
+    const double sign = sectionFlip_->isChecked() ? -1.0 : 1.0;
+    const double at = sectionOffset_->value();
+    sketch::Vec3 origin{0.0, 0.0, 0.0};
+    sketch::Vec3 normal{0.0, 0.0, sign};
+    if (plane == 0) {
+        origin.z = at;
+    } else if (plane == 1) {
+        origin.y = at;
+        normal = {0.0, sign, 0.0};
+    } else {
+        origin.x = at;
+        normal = {sign, 0.0, 0.0};
+    }
+    viewport_->setSectionPlane(origin, normal);
 }
 
 // Medir: mientras está activo, cada clic en una cara o arista se suma a la selección (una o dos) y
@@ -1249,6 +1357,7 @@ void MainWindow::updateMeasure()
     }
     measurePanel_->setText(html);
     measurePanel_->adjustSize();
+    measurePanel_->move(16, sectionPanel_ != nullptr && sectionPanel_->isVisible() ? sectionPanel_->geometry().bottom() + 10 : 16);
 }
 
 // Imprimir: revisa la pieza, la exporta a STL en una carpeta temporal y abre el slicer con ella.
@@ -1520,6 +1629,11 @@ void MainWindow::cancel()
     if (measureAction_ != nullptr && measureAction_->isChecked()) {
         measureAction_->setChecked(false);
         toggleMeasure(false);
+        return;
+    }
+    if (sectionAction_ != nullptr && sectionAction_->isChecked()) {
+        sectionAction_->setChecked(false);
+        toggleSection(false);
         return;
     }
     if (tool_) {

@@ -58,6 +58,7 @@
 #include <Graphic3d_AspectLine3d.hxx>
 #include <Graphic3d_AspectMarker3d.hxx>
 #include <Graphic3d_AspectText3d.hxx>
+#include <Graphic3d_ClipPlane.hxx>
 #include <Graphic3d_Text.hxx>
 #include <Graphic3d_Vec2.hxx>
 #include <Graphic3d_ZLayerSettings.hxx>
@@ -641,6 +642,9 @@ public:
             ais->SetColor(rgb(0xB7, 0xBE, 0xC7));
             // El modo de selección va en Display: con -1 el cuerpo queda como
             // no seleccionable y un Activate posterior no lo revierte.
+            if (!clipSection.IsNull()) {
+                ais->AddClipPlane(clipSection);
+            }
             context->Display(ais, AIS_Shaded, AIS_Shape::SelectionMode(TopAbs_FACE), false);
             next.push_back({body.key, body.shape, ais});
             created.push_back(ais);
@@ -657,6 +661,37 @@ public:
                 activateBody(b);
             }
         }
+    }
+
+    // --- Sección -------------------------------------------------------------
+
+    Handle(Graphic3d_ClipPlane) clipSection;
+
+    void setSection(const sketch::Vec3& origin, const sketch::Vec3& normal)
+    {
+        const bool fresh = clipSection.IsNull();
+        if (fresh) {
+            clipSection = new Graphic3d_ClipPlane();
+            clipSection->SetCapping(true);
+            clipSection->SetCappingColor(rgb(0x6C, 0xA6, 0xFF));
+        }
+        clipSection->SetEquation(gp_Pln(toPnt(origin), toDir(normal)));
+        if (fresh) {
+            for (const ShownBody& b : bodies) {
+                b.ais->AddClipPlane(clipSection);
+            }
+        }
+    }
+
+    void clearSection()
+    {
+        if (clipSection.IsNull()) {
+            return;
+        }
+        for (const ShownBody& b : bodies) {
+            b.ais->RemoveClipPlane(clipSection);
+        }
+        clipSection.Nullify();
     }
 
     // Modos de selección de un cuerpo según lo que se esté haciendo.
@@ -2126,6 +2161,20 @@ void Viewport::showConstructionAxes(const std::vector<ConstructionAxisView>& axe
 void Viewport::showBodies(const std::vector<document::Body>& bodies)
 {
     impl_->showBodies(bodies);
+    impl_->view->Invalidate();
+    update();
+}
+
+void Viewport::setSectionPlane(const sketch::Vec3& origin, const sketch::Vec3& normal)
+{
+    impl_->setSection(origin, normal);
+    impl_->view->Invalidate();
+    update();
+}
+
+void Viewport::clearSectionPlane()
+{
+    impl_->clearSection();
     impl_->view->Invalidate();
     update();
 }

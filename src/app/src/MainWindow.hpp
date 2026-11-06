@@ -24,6 +24,10 @@ class QDragEnterEvent;
 class QDropEvent;
 class QActionGroup;
 class QDockWidget;
+class QCheckBox;
+class QComboBox;
+class QDoubleSpinBox;
+class QFrame;
 class QLabel;
 class QMenu;
 
@@ -98,6 +102,8 @@ private:
     void printBodies();
     void toggleMeasure(bool on);
     void updateMeasure();
+    void toggleSection(bool on);
+    void updateSection();
     void importStep();
     void openRecent(const QString& path);
     std::string thumbnailPng();
@@ -147,6 +153,11 @@ private:
     QAction* organizeAction_ = nullptr;
     QAction* jointAction_ = nullptr;
     QAction* measureAction_ = nullptr;
+    QAction* sectionAction_ = nullptr;
+    QFrame* sectionPanel_ = nullptr;
+    QComboBox* sectionPlane_ = nullptr;
+    QDoubleSpinBox* sectionOffset_ = nullptr;
+    QCheckBox* sectionFlip_ = nullptr;
     QLabel* measurePanel_ = nullptr;  // resultado de la medición, sobre la vista
     QAction* exportAction_ = nullptr;
     QAction* printAction_ = nullptr;
