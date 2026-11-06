@@ -66,11 +66,12 @@ ExportDialog::ExportDialog(const std::vector<document::Body>& bodies, const std:
     // La impresora del usuario: con sus medidas se calcula la revisión.
     QSettings settings;
     const auto spin = [&](const char* key, double value, double low, double high, const QString& suffix) {
-        auto* box = new QDoubleSpinBox(this);
+        auto* box = new ExpressionSpinBox(this);
         box->setRange(low, high);
         box->setDecimals(2);
-        setUnit(box, suffix.trimmed());
+        Q_UNUSED(suffix);
         box->setValue(settings.value(QLatin1String(key), value).toDouble());
+        box->setLength(true);
         box->setKeyboardTracking(false);
         return box;
     };

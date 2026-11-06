@@ -121,3 +121,15 @@ TEST_CASE("Anotaciones: iconos apilados, cotas y selección", "[sketch][annotati
     REQUIRE(formatDimension(angle) == "30°");
     REQUIRE(formatDimension(Constraint::diameter(1, 12.5)) == "Ø12.5");
 }
+
+TEST_CASE("Las cotas se muestran en la unidad elegida (el sketch sigue en milímetros)", "[annotations]")
+{
+    using namespace nuf::sketch;
+    setDimensionLengthScale(10.0, 4);  // centímetros
+    REQUIRE(formatDimension(Constraint::diameter(1, 12.5)) == "Ø1.25");
+    setDimensionLengthScale(25.4, 4);  // pulgadas
+    REQUIRE(formatDimension(Constraint::diameter(1, 25.4)) == "Ø1");
+    REQUIRE(formatDimension(Constraint::angle(1, 2, 0.5235987755982988)) == "30°");  // los ángulos no cambian
+    setDimensionLengthScale(1.0, 3);  // milímetros otra vez
+    REQUIRE(formatDimension(Constraint::diameter(1, 12.5)) == "Ø12.5");
+}

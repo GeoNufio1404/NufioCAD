@@ -32,14 +32,20 @@ public:
 
     // La expresión que dio el valor actual; vacía si es un número a secas.
     QString expression() const { return expression_; }
+    // Cuadro de longitud: el valor (value(), el mínimo y el máximo) está siempre en milímetros, pero se
+    // muestra y se escribe en la unidad elegida en Configuración; un número a secas se entiende en esa unidad.
+    void setLength(bool on);
+    bool isLength() const { return length_; }
     // Pone la expresión (la evalúa y la muestra).
     void setExpression(const QString& text);
 
     QValidator::State validate(QString& text, int& pos) const override;
     double valueFromText(const QString& text) const override;
     QString textFromValue(double value) const override;
+    void stepBy(int steps) override;
 
 private:
+    bool length_ = false;
     mutable QString expression_;
     mutable double expressionValue_ = 0.0;
 };

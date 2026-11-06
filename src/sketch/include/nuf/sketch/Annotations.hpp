@@ -31,4 +31,8 @@ ConstraintId pickAnnotation(const std::vector<Annotation>& annotations, Vec2 cur
 // de referencia.
 std::string formatDimension(const Constraint& constraint);
 
+// Las longitudes de las cotas se muestran divididas por «mmPerUnit» (la unidad elegida), con «decimals»
+// como máximo. El sketch sigue en milímetros.
+void setDimensionLengthScale(double mmPerUnit, int decimals);
+
 } // namespace nuf::sketch

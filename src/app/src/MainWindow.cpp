@@ -3,6 +3,8 @@
 #include "ExportDialog.hpp"
 #include "BodiesDialog.hpp"
 #include "ExpressionSpinBox.hpp"
+#include "SettingsDialog.hpp"
+#include "Units.hpp"
 #include "ParametersDialog.hpp"
 #include "FeatureTools.hpp"
 #include "Icons.hpp"
@@ -19,6 +21,7 @@
 #include <nuf/commands/SetParameters.hpp>
 #include <nuf/geometry/Exchange.hpp>
 #include <nuf/geometry/Kernel.hpp>
+#include <nuf/sketch/Annotations.hpp>
 #include <nuf/geometry/Measure.hpp>
 #include <nuf/io/NufFile.hpp>
 #include <nuf/render/Viewport.hpp>
@@ -146,6 +149,15 @@ MainWindow::MainWindow(QWidget* parent)
         commands_.push(std::make_unique<commands::MoveFeature>(id, index));
     });
     ExpressionSpinBox::setDocument(&document_);
+    // Las cotas del sketch se escriben en la unidad elegida.
+    const auto applyUnits = [this] {
+        sketch::setDimensionLengthScale(Units::instance().factor(), 3 + Units::instance().extraDecimals());
+        if (sketch_) {
+            sketch_->refreshView();
+        }
+    };
+    connect(&Units::instance(), &Units::changed, this, applyUnits);
+    applyUnits();
     connect(navigator_, &NavigatorWidget::bodyVisibilityChanged, this, [this](const std::string& key, bool visible) {
         if (visible) {
             hiddenBodies_.erase(key);
@@ -193,8 +205,8 @@ MainWindow::MainWindow(QWidget* parent)
         viewport_->setGroundVisible(visible);
     });
     connect(viewport_, &render::Viewport::sketchCursorMoved, this, [this](bool hasPoint, double x, double y) {
-        cursorLabel_->setText(hasPoint ? QStringLiteral("X %1   Y %2 mm")
-                                             .arg(QLocale().toString(x, 'f', 2), QLocale().toString(y, 'f', 2))
+        cursorLabel_->setText(hasPoint ? QStringLiteral("X %1   Y %2 %3")
+                                             .arg(Units::instance().format(x), Units::instance().format(y), Units::instance().unit())
                                        : QString());
     });
 
@@ -281,6 +293,11 @@ void MainWindow::createMenus()
     printAction_ = addFile(QStringLiteral("&Imprimir…"), QKeySequence(QStringLiteral("Ctrl+P")), QStringLiteral("file-export"),
                            &MainWindow::printBodies);
     printAction_->setEnabled(false);
+    file->addSeparator();
+    file->addAction(QStringLiteral("&Configuración…"), this, [this] {
+        SettingsDialog dialog(this);
+        dialog.exec();
+    });
     file->addSeparator();
     file->addAction(QStringLiteral("&Salir"), QKeySequence(QKeySequence::Quit), this, &QWidget::close);
 
@@ -1218,10 +1235,10 @@ void MainWindow::toggleSection(bool on)
         sectionPlane_->addItems({QStringLiteral("Plano XY (horizontal)"), QStringLiteral("Plano XZ (frontal)"),
                                  QStringLiteral("Plano YZ (lateral)")});
         form->addRow(QStringLiteral("Corte"), sectionPlane_);
-        sectionOffset_ = new QDoubleSpinBox(sectionPanel_);
+        sectionOffset_ = new ExpressionSpinBox(sectionPanel_);
         sectionOffset_->setRange(-100000.0, 100000.0);
         sectionOffset_->setDecimals(2);
-        setUnit(sectionOffset_, QStringLiteral("mm"));
+        static_cast<ExpressionSpinBox*>(sectionOffset_)->setLength(true);
         form->addRow(QStringLiteral("Posición"), sectionOffset_);
         sectionFlip_ = new QCheckBox(QStringLiteral("Ver el otro lado"), sectionPanel_);
         form->addRow(QString(), sectionFlip_);

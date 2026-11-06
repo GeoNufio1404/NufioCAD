@@ -262,3 +262,13 @@ Con una captura de pantalla y los pasos suele bastar. Si algo se cierra, no hace
 | U.2 | Haz doble clic en el valor de un cuadro o pulsa Ctrl+A dentro | Solo se selecciona el número, no el «mm» |
 | U.3 | Escribe `10` y Enter; luego `diametro*2` con un parámetro; luego `5 mm` | Las tres se aceptan |
 | U.4 | Revisa Sección, Exportar/Imprimir (impresora) y la altura del texto del sketch | También con la unidad como etiqueta |
+
+### Unidades de longitud
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| U.5 | Archivo › **Configuración…** y elige «Centímetros» | Al instante, los cuadros de las herramientas (con una abierta) muestran cm: M8 sale 0.800 cm |
+| U.6 | Escribe `1` en un cuadro de longitud y Enter | Se entiende 1 cm (10 mm); escribe `5 mm` y se entiende 5 mm |
+| U.7 | En un sketch, mira las cotas y el cursor (X/Y); pon una cota nueva | Todo en la unidad elegida; el cuadro de la cota dice «Valor (cm)» |
+| U.8 | Cierra y abre la app | La unidad se recuerda |
+| U.9 | Vuelve a «Milímetros» | Todo vuelve a mm; el archivo guardado no cambia |

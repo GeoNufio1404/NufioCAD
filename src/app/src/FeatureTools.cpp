@@ -1,6 +1,7 @@
 #include "FeatureTools.hpp"
 
 #include "ExpressionSpinBox.hpp"
+#include "Units.hpp"
 
 #include <nuf/geometry/Modeling.hpp>
 #include <nuf/render/Viewport.hpp>
@@ -32,8 +33,8 @@ QDoubleSpinBox* lengthBox(double value)
     auto* box = new ExpressionSpinBox();
     box->setRange(-100000.0, 100000.0);
     box->setDecimals(2);
-    setUnit(box, QStringLiteral("mm"));
     box->setValue(value);
+    box->setLength(true);
     box->setKeyboardTracking(false);
     return box;
 }
@@ -1326,7 +1327,7 @@ QString PlaneTool::inputsText() const
     if (base_->currentIndex() == 3 && face_.empty()) {
         return QStringLiteral("Elige en la vista la cara plana de la que parte el plano");
     }
-    return QStringLiteral("Plano a %1 mm de «%2»").arg(offset_->value()).arg(base_->currentText());
+    return QStringLiteral("Plano a %1 de «%2»").arg(Units::instance().formatWithUnit(offset_->value()), base_->currentText());
 }
 
 // --- Eje de construcción -----------------------------------------------------------
@@ -2156,9 +2157,8 @@ QString ThreadTool::inputsText() const
     geometry::ThreadSpec spec;
     spec.diameter = diameter_->value();
     spec.pitch = pitch_->value();
-    return QStringLiteral("Ø mayor %1 mm, Ø menor %2 mm (agujero para roscar)")
-        .arg(spec.diameter, 0, 'f', 2)
-        .arg(geometry::threadMinorDiameter(spec), 0, 'f', 2);
+    return QStringLiteral("Ø mayor %1, Ø menor %2 (agujero para roscar)")
+        .arg(Units::instance().formatWithUnit(spec.diameter), Units::instance().formatWithUnit(geometry::threadMinorDiameter(spec)));
 }
 
 bool ThreadTool::removesMaterial() const

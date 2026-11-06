@@ -1,5 +1,6 @@
 #include "SketchSession.hpp"
 #include "ExpressionSpinBox.hpp"
+#include "Units.hpp"
 #include "ValueInput.hpp"
 
 #include <nuf/render/Viewport.hpp>
@@ -343,10 +344,10 @@ void SketchSession::placeText(sketch::Vec2 at)
     if (!textFamily_.isEmpty()) {
         fontBox->setCurrentFont(QFont(textFamily_));
     }
-    auto* heightBox = new QDoubleSpinBox(&dialog);
+    auto* heightBox = new ExpressionSpinBox(&dialog);
     heightBox->setRange(0.1, 1000.0);
     heightBox->setDecimals(2);
-    setUnit(heightBox, QStringLiteral("mm"));
+    heightBox->setLength(true);
     heightBox->setValue(textHeight_);
     auto* size = new QLabel(&dialog);
     form->addRow(QStringLiteral("Texto"), textEdit);
@@ -421,11 +422,14 @@ void SketchSession::placeImage(sketch::Vec2 at)
         return;
     }
     bool ok = false;
-    const double width = QInputDialog::getDouble(&viewport_, QStringLiteral("Imagen de referencia"),
-                                                 QStringLiteral("Ancho (mm):"), 100.0, 0.1, 100000.0, 2, &ok);
+    const double shownWidth = QInputDialog::getDouble(
+        &viewport_, QStringLiteral("Imagen de referencia"), QStringLiteral("Ancho (%1):").arg(Units::instance().unit()),
+        Units::instance().toDisplay(100.0), Units::instance().toDisplay(0.1), Units::instance().toDisplay(100000.0),
+        2 + Units::instance().extraDecimals(), &ok);
     if (!ok) {
         return;
     }
+    const double width = Units::instance().fromDisplay(shownWidth);
     const double height = width * image.height() / std::max(1, image.width());
     viewport_.showSketchImage(path, at, width, height);
     setTool(Tool::None);
@@ -795,17 +799,19 @@ void SketchSession::applyConstraint(sketch::ConstraintType type)
 bool SketchSession::askDimensionValue(sketch::Constraint& dimension)
 {
     const bool angle = dimension.type == sketch::ConstraintType::Angle;
-    const double shown = angle ? std::abs(dimension.value) * 180.0 / std::numbers::pi : std::abs(dimension.value);
+    const Units& units = Units::instance();
+    const double shown = angle ? std::abs(dimension.value) * 180.0 / std::numbers::pi : units.toDisplay(std::abs(dimension.value));
     bool ok = false;
-    const double value = QInputDialog::getDouble(&viewport_, QStringLiteral("Cota"),
-                                                 angle ? QStringLiteral("Ángulo (°):") : QStringLiteral("Valor (mm):"),
-                                                 shown, angle ? 0.0 : 1e-6, angle ? 360.0 : 1e6, 3, &ok);
+    const double value = QInputDialog::getDouble(
+        &viewport_, QStringLiteral("Cota"),
+        angle ? QStringLiteral("Ángulo (°):") : QStringLiteral("Valor (%1):").arg(units.unit()), shown,
+        angle ? 0.0 : 1e-6, angle ? 360.0 : units.toDisplay(1e6), 3 + (angle ? 0 : units.extraDecimals()), &ok);
     if (!ok) {
         return false;
     }
     // Se conserva el signo (sentido) de la medida actual.
     const double sign = dimension.value < 0.0 ? -1.0 : 1.0;
-    dimension.value = sign * (angle ? value * std::numbers::pi / 180.0 : value);
+    dimension.value = sign * (angle ? value * std::numbers::pi / 180.0 : units.fromDisplay(value));
     return true;
 }
 
@@ -895,13 +901,28 @@ void SketchSession::typed(const QString& text)
     }
 }
 
+// Los campos de longitud se escriben en la unidad elegida; los demás (ángulos, cantidades, factores) no.
+bool SketchSession::isLengthField(const QString& label)
+{
+    static const QStringList other = {QStringLiteral("Ángulo"), QStringLiteral("Lados"), QStringLiteral("Copias"),
+                                      QStringLiteral("Columnas"), QStringLiteral("Filas"), QStringLiteral("Factor"),
+                                      QStringLiteral("Rho")};
+    return !other.contains(label);
+}
+
 void SketchSession::applyTypedValues()
 {
     if (!tool_) {
         return;
     }
     sketch::Sketch before = sketch_;
-    if (tool_->applyValues(sketch_, valueInput_->values())) {
+    std::vector<std::optional<double>> typed = valueInput_->values();
+    for (std::size_t i = 0; i < typed.size() && i < valueLabels_.size(); ++i) {
+        if (typed[i] && isLengthField(valueLabels_[i])) {
+            typed[i] = Units::instance().fromDisplay(*typed[i]);
+        }
+    }
+    if (tool_->applyValues(sketch_, typed)) {
         remember(std::move(before));
         solveAndShow();
     }
@@ -924,7 +945,14 @@ void SketchSession::updateValueInput()
     for (const std::string& f : fields) {
         labels.push_back(QString::fromStdString(f));
     }
-    valueInput_->setFields(labels, tool_->currentValues());
+    valueLabels_ = labels;
+    std::vector<double> current = tool_->currentValues();
+    for (std::size_t i = 0; i < current.size() && i < labels.size(); ++i) {
+        if (isLengthField(labels[i])) {
+            current[i] = Units::instance().toDisplay(current[i]);
+        }
+    }
+    valueInput_->setFields(labels, current);
     // Mientras se escribe, el recuadro se queda quieto.
     if (!valueInput_->isTyping()) {
         QPoint at = viewport_.mapFromGlobal(QCursor::pos()) + QPoint(18, 18);

@@ -58,6 +58,8 @@ public:
     // Resuelve y muestra el sketch por primera vez (después de conectar sus
     // señales, para que lleguen el estado y los grados de libertad).
     void start();
+    // Vuelve a calcular y dibujar (por ejemplo, tras cambiar la unidad de las cotas).
+    void refreshView() { solveAndShow(); }
 
     const sketch::Sketch& sketch() const noexcept { return sketch_; }
     const sketch::Plane& plane() const noexcept { return plane_; }
@@ -141,6 +143,8 @@ private:
 
     sketch::Snap snapAt(sketch::Vec2 point) const;
     void solveAndShow();
+    static bool isLengthField(const QString& label);
+    std::vector<QString> valueLabels_;
     void showSketch();
     void showPreview();
     // Guarda el estado actual para deshacer (antes de cambiar el sketch).

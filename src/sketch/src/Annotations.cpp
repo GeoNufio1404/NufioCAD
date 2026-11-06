@@ -31,6 +31,9 @@ Vec2 unit(Vec2 v)
 Vec2 normalOf(Vec2 u) { return {-u.y, u.x}; }
 Vec2 midpoint(Vec2 a, Vec2 b) { return 0.5 * (a + b); }
 
+double gLengthScale = 1.0;
+int gLengthDecimals = 3;
+
 std::string trimmed(double value, int decimals)
 {
     char buffer[64];
@@ -328,6 +331,12 @@ std::optional<Annotation> dimensionAnnotation(const Sketch& sketch, const Constr
 
 } // namespace
 
+void setDimensionLengthScale(double mmPerUnit, int decimals)
+{
+    gLengthScale = mmPerUnit > 0.0 ? mmPerUnit : 1.0;
+    gLengthDecimals = decimals;
+}
+
 std::string formatDimension(const Constraint& c)
 {
     std::string text;
@@ -338,17 +347,17 @@ std::string formatDimension(const Constraint& c)
     case ConstraintType::Radius:
     case ConstraintType::MajorRadius:
     case ConstraintType::MinorRadius:
-        text = "R" + trimmed(c.value, 3);
+        text = "R" + trimmed(c.value / gLengthScale, gLengthDecimals);
         break;
     case ConstraintType::Diameter:
-        text = "Ø" + trimmed(c.value, 3);
+        text = "Ø" + trimmed(c.value / gLengthScale, gLengthDecimals);
         break;
     case ConstraintType::DistanceX:
     case ConstraintType::DistanceY:
-        text = trimmed(std::abs(c.value), 3);
+        text = trimmed(std::abs(c.value) / gLengthScale, gLengthDecimals);
         break;
     default:
-        text = trimmed(c.value, 3);
+        text = trimmed(c.value / gLengthScale, gLengthDecimals);
         break;
     }
     return c.driving ? text : "(" + text + ")";

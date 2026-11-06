@@ -3,6 +3,8 @@
 #include <nuf/document/Document.hpp>
 #include <nuf/document/Expression.hpp>
 
+#include "Units.hpp"
+
 #include <QEvent>
 #include <QLabel>
 #include <QLineEdit>
@@ -10,6 +12,7 @@
 #include <QObject>
 #include <QPointer>
 
+#include <algorithm>
 #include <cmath>
 
 namespace nuf::app {
@@ -135,10 +138,14 @@ double ExpressionSpinBox::valueFromText(const QString& text) const
             gDocument != nullptr ? gDocument->lookup() : document::ParameterLookup([](std::string_view) { return std::nullopt; });
         const double result = document::evaluateExpression(source, lookup);
         const bool plain = document::expressionNames(source).empty();
+        // En un cuadro de longitud, un número a secas (sin letras: ni unidades ni parámetros) está en la
+        // unidad elegida; con unidad o parámetros ya viene en milímetros.
+        const bool hasLetters = std::any_of(t.begin(), t.end(), [](QChar c) { return c.isLetter(); });
+        const double scaled = length_ && !hasLetters ? Units::instance().fromDisplay(result) : result;
         expression_ = plain ? QString() : t;
-        expressionValue_ = result;
-        self->setToolTip(plain ? QString() : QStringLiteral("= %1").arg(result, 0, 'g', 8));
-        return result;
+        expressionValue_ = scaled;
+        self->setToolTip(plain ? QString() : QStringLiteral("= %1").arg(scaled, 0, 'g', 8));
+        return scaled;
     } catch (const std::exception& e) {
         self->setToolTip(QString::fromUtf8(e.what()));
         return value();
@@ -152,7 +159,43 @@ QString ExpressionSpinBox::textFromValue(double v) const
     if (!expression_.isEmpty() && std::abs(v - expressionValue_) > 0.5 * std::pow(10.0, -decimals()) + 1e-9) {
         expression_.clear();
     }
-    return expression_.isEmpty() ? QDoubleSpinBox::textFromValue(v) : expression_;
+    if (!expression_.isEmpty()) {
+        return expression_;
+    }
+    if (length_) {
+        return locale().toString(Units::instance().toDisplay(v), 'f', decimals() + Units::instance().extraDecimals());
+    }
+    return QDoubleSpinBox::textFromValue(v);
+}
+
+void ExpressionSpinBox::stepBy(int steps)
+{
+    if (!length_) {
+        QDoubleSpinBox::stepBy(steps);
+        return;
+    }
+    // Un paso es singleStep() unidades de la unidad elegida.
+    expression_.clear();
+    setValue(value() + steps * singleStep() * Units::instance().factor());
+}
+
+void ExpressionSpinBox::setLength(bool on)
+{
+    length_ = on;
+    if (!on) {
+        return;
+    }
+    setUnit(this, Units::instance().unit());
+    // Al cambiar la unidad en Configuración, se reescribe el número y la etiqueta.
+    connect(&Units::instance(), &Units::changed, this, [this] {
+        setUnit(this, Units::instance().unit());
+        if (expression_.isEmpty() && lineEdit() != nullptr) {
+            lineEdit()->setText(textFromValue(value()));
+        }
+    });
+    if (lineEdit() != nullptr && expression_.isEmpty()) {
+        lineEdit()->setText(textFromValue(value()));
+    }
 }
 
 void ExpressionSpinBox::setExpression(const QString& text)
