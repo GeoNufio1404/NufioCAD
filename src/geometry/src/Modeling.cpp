@@ -8,6 +8,13 @@
 #include <BRepBndLib.hxx>
 #include <BRepCheck_Analyzer.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
+#include <BRepBuilderAPI_MakeSolid.hxx>
+#include <BRepBuilderAPI_Sewing.hxx>
+#include <BRepAdaptor_Curve.hxx>
+#include <Geom_BSplineSurface.hxx>
+#include <NCollection_Array1.hxx>
+#include <NCollection_Array2.hxx>
+#include <TopoDS_Shell.hxx>
 #include <BRep_Tool.hxx>
 #include <Bnd_Box.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
@@ -944,53 +951,154 @@ Shape thread(std::string_view tagView, const sketch::Plane& plane, const ThreadS
     try {
         const gp_Pnt origin = toPnt(plane.origin);
         const gp_Dir normal = toDir(plane.normal);
-        // Corte transversal: r(φ) = perfil(−paso·φ/2π), una curva cerrada; a cada altura es la misma
-        // curva girada, así que la rosca es un sólido por secciones giradas.
-        constexpr int kPoints = 64;
+        // Corte transversal: r(φ) = perfil(−paso·φ/2π), una curva cerrada y periódica; a cada altura es
+        // la misma curva girada, así que la rosca es UNA superficie (lineal a lo largo del eje, por
+        // secciones giradas) más dos tapas: 3 caras en vez de cientos, que es lo que hace rápido todo lo
+        // que viene después (comprobar, mallar, booleanas).
+        constexpr int kPoints = 32;
         const double hand = spec.leftHanded ? -1.0 : 1.0;
-        occ::handle<NCollection_HArray1<gp_Pnt>> array = new NCollection_HArray1<gp_Pnt>(1, kPoints + 1);
-        for (int i = 0; i <= kPoints; ++i) {
+        occ::handle<NCollection_HArray1<gp_Pnt>> array = new NCollection_HArray1<gp_Pnt>(1, kPoints);
+        for (int i = 0; i < kPoints; ++i) {
             const double phi = 2.0 * kPi * i / kPoints;
-            const double r = profile(-hand * pitch * phi / (2.0 * kPi));
+            // Las esquinas del perfil se suavizan (promedio en una ventana de ±paso/24): la curva por
+            // puntos no se pasa de largo en las esquinas (sin ello el diámetro salía hasta un 11 % mayor)
+            // y se parece más a una rosca real, con cresta y fondo redondeados.
+            double r = 0.0;
+            constexpr int kWindow = 9;
+            for (int w = 0; w < kWindow; ++w) {
+                const double offset = (double(w) / (kWindow - 1) - 0.5) * (pitch / 12.0);
+                r += profile(-hand * pitch * phi / (2.0 * kPi) + offset);
+            }
+            r /= kWindow;
             array->SetValue(i + 1, toPnt(plane.toWorld({r * std::cos(phi), r * std::sin(phi)})));
         }
-        GeomAPI_Interpolate interpolation(array, false, 1e-7);  // cerrada: el último punto es el primero
+        GeomAPI_Interpolate interpolation(array, true, 1e-7);
         interpolation.Perform();
         if (!interpolation.IsDone()) {
             throw GeometryError("No se pudo trazar el perfil de la rosca");
         }
-        const TopoDS_Wire section = BRepBuilderAPI_MakeWire(BRepBuilderAPI_MakeEdge(interpolation.Curve()).Edge()).Wire();
-        TopoDS_Edge sectionEdge;
-        for (TopoDS_Iterator it(section); it.More(); it.Next()) {
-            sectionEdge = TopoDS::Edge(it.Value());
-        }
+        const occ::handle<Geom_BSplineCurve> curve = interpolation.Curve();
 
         const double turns = std::abs(spec.length) / pitch;
-        // Secciones unidas por superficies regladas (las suaves tardan minutos): con 16 por
-        // vuelta el giro entre dos es de 22° y la hélice sale lisa a la vista.
-        const int sections = std::clamp(int(std::ceil(turns * 16.0)), 8, 400);
-        BRepOffsetAPI_ThruSections loft(true, true, 1e-6);
-        for (int k = 0; k <= sections; ++k) {
+        // Una sección cada 45° (8 por vuelta), unidas por una curva cúbica en cada polo de la sección:
+        // la superficie es suave (C2) en toda la hélice, que es lo que necesitan las booleanas (con
+        // aristas vivas entre secciones no encontraban la intersección con los planos del bloque).
+        const int sections = std::clamp(int(std::ceil(turns * 8.0)), 6, 1600);
+        const int nPoles = curve->NbPoles();
+        const auto moveAt = [&](int k) {
             const double t = double(k) / sections;
-            if (k == 0) {
-                loft.AddWire(section);
-                continue;
-            }
             gp_Trsf turn;
             turn.SetRotation(gp_Ax1(origin, normal), hand * 2.0 * kPi * turns * t * (spec.length < 0 ? -1.0 : 1.0));
             gp_Trsf slide;
             slide.SetTranslation(gp_Vec(normal).Multiplied(spec.length * t));
-            BRepBuilderAPI_Transform moved(section, slide * turn, true);
-            loft.AddWire(TopoDS::Wire(moved.Shape()));
+            return slide * turn;
+        };
+        occ::handle<NCollection_HArray1<double>> parameters = new NCollection_HArray1<double>(1, sections + 1);
+        for (int k = 0; k <= sections; ++k) {
+            parameters->SetValue(k + 1, double(k) / sections);
         }
-        loft.Build();
-        if (!loft.IsDone()) {
-            throw GeometryError("No se pudo generar la rosca");
+        std::vector<gp_Trsf> moves;
+        for (int k = 0; k <= sections; ++k) {
+            moves.push_back(moveAt(k));
         }
-        Namer namer(loft.Shape());
-        namer.name(loft.FirstShape(), tag + ":inicio");
-        namer.name(loft.LastShape(), tag + ":fin");
-        namer.name(loft.GeneratedFace(sectionEdge), tag + ":rosca");
+        occ::handle<Geom_BSplineCurve> first;
+        std::vector<occ::handle<Geom_BSplineCurve>> helices;
+        for (int j = 1; j <= nPoles; ++j) {
+            occ::handle<NCollection_HArray1<gp_Pnt>> path = new NCollection_HArray1<gp_Pnt>(1, sections + 1);
+            for (int k = 0; k <= sections; ++k) {
+                path->SetValue(k + 1, curve->Pole(j).Transformed(moves[std::size_t(k)]));
+            }
+            GeomAPI_Interpolate along(path, parameters, false, 1e-9);
+            along.Perform();
+            if (!along.IsDone()) {
+                throw GeometryError("No se pudo trazar la hélice de la rosca");
+            }
+            helices.push_back(along.Curve());
+        }
+        first = helices.front();
+        const int nU = first->NbPoles();
+        NCollection_Array2<gp_Pnt> poles(1, nU, 1, nPoles);
+        for (int j = 1; j <= nPoles; ++j) {
+            for (int i = 1; i <= nU; ++i) {
+                poles.SetValue(i, j, helices[std::size_t(j - 1)]->Pole(i));
+            }
+        }
+        const NCollection_Array1<double>& uKnots = first->Knots();
+        const NCollection_Array1<int>& uMults = first->Multiplicities();
+        const NCollection_Array1<double>& vKnots = curve->Knots();
+        const NCollection_Array1<int>& vMults = curve->Multiplicities();
+        const occ::handle<Geom_BSplineSurface> surface = new Geom_BSplineSurface(
+            poles, uKnots, vKnots, uMults, vMults, first->Degree(), curve->Degree(), false, curve->IsPeriodic());
+        const TopoDS_Face side = BRepBuilderAPI_MakeFace(surface, 1e-6).Face();
+
+        // Las tapas: el plano de la primera y de la última sección, con el borde de la superficie.
+        TopoDS_Face startCap;
+        TopoDS_Face endCap;
+        for (TopExp_Explorer ex(side, TopAbs_WIRE); ex.More(); ex.Next()) {
+            // Los bordes de la superficie en u = 0 y u = 1 son los círculos cerrados; el costado es la costura.
+            for (TopExp_Explorer ee(ex.Current(), TopAbs_EDGE); ee.More(); ee.Next()) {
+                const TopoDS_Edge edge = TopoDS::Edge(ee.Current());
+                if (BRep_Tool::Degenerated(edge)) {
+                    continue;
+                }
+                BRepAdaptor_Curve onEdge(edge);
+                const gp_Pnt mid = onEdge.Value(0.5 * (onEdge.FirstParameter() + onEdge.LastParameter()));
+                const double along = gp_Vec(origin, mid).Dot(gp_Vec(normal));
+                const bool atStart = std::abs(along) < 1e-6;
+                const bool atEnd = std::abs(along - spec.length) < 1e-6;
+                if (!atStart && !atEnd) {
+                    continue;
+                }
+                const TopoDS_Wire wire = BRepBuilderAPI_MakeWire(edge).Wire();
+                TopoDS_Face cap = BRepBuilderAPI_MakeFace(wire, true).Face();
+                (atStart ? startCap : endCap) = cap;
+            }
+        }
+        if (startCap.IsNull() || endCap.IsNull()) {
+            throw GeometryError("No se pudo cerrar la rosca");
+        }
+        BRepBuilderAPI_Sewing sewing(1e-6);
+        sewing.Add(side);
+        sewing.Add(startCap);
+        sewing.Add(endCap);
+        sewing.Perform();
+        TopoDS_Shell shell;
+        if (const TopExp_Explorer ex(sewing.SewedShape(), TopAbs_SHELL); ex.More()) {
+            shell = TopoDS::Shell(ex.Current());
+        }
+        if (shell.IsNull()) {
+            throw GeometryError("No se pudo cerrar la rosca");
+        }
+        BRepBuilderAPI_MakeSolid makeSolid(shell);
+        TopoDS_Solid solid = makeSolid.Solid();
+        // Orientación hacia fuera sin clasificar puntos (BRepLib::OrientClosedSolid lanza rayos contra la
+        // superficie entera y tardaba segundos): en un punto de la cresta, la normal efectiva de la cara
+        // lateral debe apuntar lejos del eje.
+        {
+            const TopoDS_Shape sewnSide = sewing.Modified(side);
+            TopoDS_Face lateral = TopoDS::Face(sewnSide.IsNull() ? TopoDS_Shape(side) : sewnSide);
+            const BRepAdaptor_Surface probe(lateral);
+            gp_Pnt at;
+            gp_Vec du;
+            gp_Vec dv;
+            probe.D1(0.5 * (probe.FirstUParameter() + probe.LastUParameter()), probe.FirstVParameter(), at, du, dv);
+            gp_Vec outward = du.Crossed(dv);
+            if (lateral.Orientation() == TopAbs_REVERSED) {
+                outward.Reverse();
+            }
+            const gp_Vec axisPart = gp_Vec(normal) * gp_Vec(origin, at).Dot(gp_Vec(normal));
+            const gp_Vec radial = gp_Vec(origin, at) - axisPart;
+            if (outward.Dot(radial) < 0.0) {
+                solid.Reverse();
+            }
+        }
+        Namer namer(solid);
+        const auto sewn = [&](const TopoDS_Face& face) {
+            const TopoDS_Shape modified = sewing.Modified(face);
+            return modified.IsNull() ? TopoDS_Shape(face) : modified;
+        };
+        namer.name(sewn(startCap), tag + ":inicio");
+        namer.name(sewn(endCap), tag + ":fin");
         namer.nameUnnamed(tag + ":rosca");
         Shape result = namer.finish(tag);
         if (!result.isValid()) {

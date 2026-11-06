@@ -79,6 +79,9 @@ protected:
     // Texto de las entradas («2 perfiles»…), para el panel.
     virtual QString inputsText() const = 0;
     virtual bool removesMaterial() const = 0;
+    // Milisegundos de espera tras el último cambio antes de calcular la vista previa: las operaciones
+    // pesadas (rosca, engranaje) lo usan para no recalcular a cada tecla; 0 = al instante.
+    virtual int previewDelayMs() const { return 0; }
 
     void updatePreview();
     // Registra un cuadro numérico como el campo «key» de la operación, para
@@ -102,6 +105,9 @@ protected:
 
 private:
     std::vector<std::pair<std::string, QDoubleSpinBox*>> fields_;
+    QTimer* previewTimer_ = nullptr;
+    bool previewDue_ = false;       // llamada del temporizador: calcular ya
+    bool firstPreviewDone_ = false;  // la primera vista previa sale al instante
 };
 
 class ExtrudeTool final : public FeatureTool {
@@ -354,6 +360,7 @@ public:
 
 protected:
     QString title() const override { return QStringLiteral("Engranaje"); }
+    int previewDelayMs() const override { return 250; }
     void createFields(QFormLayout* form) override;
     void selectionChanged(const render::ModelSelection&) override {}
     QString inputsText() const override;
@@ -513,6 +520,7 @@ public:
 
 protected:
     QString title() const override { return QStringLiteral("Rosca"); }
+    int previewDelayMs() const override { return 250; }
     void createFields(QFormLayout* form) override;
     void selectionChanged(const render::ModelSelection&) override {}
     QString inputsText() const override;

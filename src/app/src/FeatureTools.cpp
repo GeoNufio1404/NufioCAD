@@ -266,6 +266,25 @@ void FeatureTool::updatePreview()
         return;
     }
     inputsLabel_->setText(inputsText());
+    if (const int delay = previewDelayMs(); delay > 0 && firstPreviewDone_ && !previewDue_) {
+        // Se espera a que se deje de teclear o de mover el cuadro.
+        if (previewTimer_ == nullptr) {
+            previewTimer_ = new QTimer(this);
+            previewTimer_->setSingleShot(true);
+            connect(previewTimer_, &QTimer::timeout, this, [this] {
+                previewDue_ = true;
+                updatePreview();
+                previewDue_ = false;
+            });
+        }
+        statusLabel_->setText(QStringLiteral("<span style='color:#8B93A0'>Calculando…</span>"));
+        previewTimer_->start(delay);
+        return;
+    }
+    firstPreviewDone_ = true;
+    if (previewTimer_ != nullptr) {
+        previewTimer_->stop();
+    }
     std::unique_ptr<document::Feature> feature = make();
     if (!feature) {
         viewport_.showBodies(before().bodies);

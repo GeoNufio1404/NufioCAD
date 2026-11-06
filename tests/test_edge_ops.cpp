@@ -1517,3 +1517,66 @@ TEST_CASE("Medir una cara, una arista y la relación entre dos caras", "[measure
     REQUIRE(geometry::measure({}).lines.empty());
     REQUIRE(geometry::measure({{box, true, 999}}).lines.empty());
 }
+
+#include <chrono>
+#include <iostream>
+
+TEST_CASE("Medida de tiempo de la rosca", "[.perf]")
+{
+    using Clock = std::chrono::steady_clock;
+    const auto plane = sketch::Plane::fromPointAndNormal({0, 0, 0}, {0, 0, 1});
+    for (const auto& [d, p, len] : std::vector<std::tuple<double, double, double>>{
+             {8, 1.25, 10}, {8, 1.25, 20}, {8, 1.25, 40}, {3, 0.5, 10}, {8, 0.5, 10}, {20, 2.5, 30}}) {
+        geometry::ThreadSpec spec;
+        spec.diameter = d;
+        spec.pitch = p;
+        spec.length = len;
+        const auto t0 = Clock::now();
+        geometry::Shape s = geometry::thread("t", plane, spec);
+        const auto t1 = Clock::now();
+        const bool ok = s.isValid();
+        const auto t2 = Clock::now();
+        const int faces = s.faceCount();
+        std::cout << "d=" << d << " p=" << p << " L=" << len << " vueltas=" << len / p << " thread(): "
+                  << std::chrono::duration<double>(t1 - t0).count() << " s (incl. isValid interna), isValid otra vez: "
+                  << std::chrono::duration<double>(t2 - t1).count() << " s, caras=" << faces << " valido=" << ok << "\n";
+    }
+}
+
+TEST_CASE("Una rosca se une y se corta bien con un bloque (y sus caras salen enteras)", "[thread]")
+{
+    Document doc = boxDocument(8.0);  // 20×10×8
+    const geometry::Shape& block = doc.result().bodies.front().shape;
+    geometry::ThreadSpec spec;
+    spec.diameter = 8.0;
+    spec.pitch = 1.25;
+    spec.length = 10.0;
+    auto plane = sketch::Plane::fromPointAndNormal({10, 5, -1}, {0, 0, 1});
+    plane.origin = {10, 5, -1};  // el centro del bloque, asomando un milímetro por abajo y por arriba
+    const geometry::Shape rod = geometry::thread("t", plane, spec);
+    REQUIRE(rod.isValid());
+    REQUIRE(rod.faceCount() == 3);  // una superficie y dos tapas, no cientos de caras
+    // La caja es la de la rosca de verdad, no la de los puntos de control de la superficie.
+    REQUIRE(rod.bounds().max.x < 14.05);
+    REQUIRE(rod.bounds().min.x > 5.95);
+    const double inside = rod.volume() * 0.8;  // 8 de los 10 mm de largo quedan dentro del bloque
+
+    const geometry::Shape cut = geometry::boolean(geometry::BooleanOp::Cut, block, rod);
+    REQUIRE(cut.solidCount() == 1);
+    REQUIRE_THAT(cut.volume(), Catch::Matchers::WithinAbs(1600.0 - inside, 25.0));
+    const geometry::Shape fused = geometry::boolean(geometry::BooleanOp::Fuse, block, rod);
+    REQUIRE(fused.solidCount() == 1);
+    REQUIRE_THAT(fused.volume(), Catch::Matchers::WithinAbs(1600.0 + rod.volume() - inside, 25.0));
+
+    // A izquierdas y con el largo hacia el otro lado también salen sólidos válidos y del mismo volumen.
+    spec.leftHanded = true;
+    const geometry::Shape left = geometry::thread("t", plane, spec);
+    REQUIRE(left.isValid());
+    REQUIRE_THAT(left.volume(), Catch::Matchers::WithinRel(rod.volume(), 0.01));
+    spec.leftHanded = false;
+    spec.length = -10.0;
+    const geometry::Shape down = geometry::thread("t", plane, spec);
+    REQUIRE(down.isValid());
+    REQUIRE_THAT(down.volume(), Catch::Matchers::WithinRel(rod.volume(), 0.01));
+    REQUIRE(down.bounds().max.z < -0.9);
+}

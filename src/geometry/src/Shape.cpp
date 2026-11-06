@@ -136,7 +136,9 @@ Box Shape::bounds() const
         return box;
     }
     Bnd_Box bnd;
-    BRepBndLib::Add(impl_->shape, bnd);
+    // Caja ajustada (no la de los puntos de control de las superficies spline, que en una rosca
+    // sale hasta un 10 % mayor); sin la malla, que puede no existir.
+    BRepBndLib::AddOptimal(impl_->shape, bnd, false, false);
     if (bnd.IsVoid()) {
         return box;
     }
