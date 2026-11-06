@@ -3,6 +3,7 @@
 nuf_add_library(geometry SOURCES
     src/Exchange.cpp
     src/Kernel.cpp
+    src/Measure.cpp
     src/Modeling.cpp
     src/Printability.cpp
     src/Shape.cpp

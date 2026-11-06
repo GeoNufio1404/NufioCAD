@@ -2,6 +2,7 @@
 #include <nuf/document/Expression.hpp>
 #include <nuf/document/Features.hpp>
 #include <nuf/geometry/Modeling.hpp>
+#include <nuf/geometry/Measure.hpp>
 #include <nuf/geometry/Printability.hpp>
 #include <nuf/io/DocumentFile.hpp>
 #include <nuf/sketch/Profiles.hpp>
@@ -1457,4 +1458,62 @@ TEST_CASE("La revisión avisa de paredes finas, cuerpos solapados y piezas que n
     tight.bedY = 12.0;
     tight.bedZ = 6.0;
     REQUIRE_FALSE(mentions(geometry::checkPrintable(namedBodies(Document(boxDocument())), tight), "no cabe"));
+}
+
+namespace {
+
+int faceWithNormal(const geometry::Shape& shape, double x, double y, double z)
+{
+    for (int i = 0; i < shape.faceCount(); ++i) {
+        if (const auto plane = shape.facePlane(i);
+            plane && plane->normal.x * x + plane->normal.y * y + plane->normal.z * z > 0.99) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+bool hasLine(const geometry::Measurement& m, const std::string& text)
+{
+    return std::ranges::any_of(m.lines, [&](const std::string& l) { return l.find(text) != std::string::npos; });
+}
+
+} // namespace
+
+TEST_CASE("Medir una cara, una arista y la relación entre dos caras", "[measure]")
+{
+    Document doc = boxDocument();  // 20×10×5, arriba en z = 5
+    const geometry::Shape& box = doc.result().bodies.front().shape;
+    const int top = faceWithNormal(box, 0, 0, 1);
+    const int bottom = faceWithNormal(box, 0, 0, -1);
+    const int side = faceWithNormal(box, 1, 0, 0);
+    REQUIRE(top >= 0);
+    REQUIRE(bottom >= 0);
+    REQUIRE(side >= 0);
+
+    const geometry::Measurement one = geometry::measure({{box, true, top}});
+    REQUIRE(one.title == "Cara plana");
+    REQUIRE(hasLine(one, "Área: 200.00 mm²"));
+    REQUIRE_FALSE(one.hasSegment);
+
+    const geometry::Measurement parallel = geometry::measure({{box, true, top}, {box, true, bottom}});
+    REQUIRE(parallel.hasSegment);
+    REQUIRE_THAT(parallel.distance, Catch::Matchers::WithinAbs(5.0, 1e-6));
+    REQUIRE(hasLine(parallel, "Paralelas, separadas 5.00 mm"));
+
+    const geometry::Measurement square = geometry::measure({{box, true, top}, {box, true, side}});
+    REQUIRE(hasLine(square, "Ángulo entre caras: 90.00°"));
+    REQUIRE_THAT(square.distance, Catch::Matchers::WithinAbs(0.0, 1e-6));  // comparten una arista
+
+    // Una arista recta de 20 mm.
+    for (int i = 0; i < box.edgeCount(); ++i) {
+        if (const auto line = box.edgeLine(i); line && std::abs(line->second.x) > 0.99) {
+            REQUIRE(hasLine(geometry::measure({{box, false, i}}), "Longitud: 20.00 mm"));
+            break;
+        }
+    }
+
+    // Sin elementos válidos no hay medición.
+    REQUIRE(geometry::measure({}).lines.empty());
+    REQUIRE(geometry::measure({{box, true, 999}}).lines.empty());
 }

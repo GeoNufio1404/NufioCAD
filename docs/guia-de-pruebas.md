@@ -203,6 +203,18 @@ Necesitas un cuerpo (la caja de 40×25×10 de «Antes de empezar»). Los botones
 | 9.12 | Pulsar «Imprimir» | Tu slicer se abre con la pieza ya cargada (el STL queda en `%TEMP%\NufioCAD`) |
 | 9.13 | Imprimir con un cuerpo oculto desmarcado | Solo se manda lo marcado |
 
+
+### 9c. Medir
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| 9.14 | Con un cuerpo, SÓLIDO › INSPECCIONAR › **Medir** | Aparece un panel arriba a la izquierda de la vista: «Elige una cara o una arista» |
+| 9.15 | Clic en una cara plana | Área y normal |
+| 9.16 | Clic en una arista recta; luego en el borde de un agujero | Longitud; radio, diámetro y centro |
+| 9.17 | Clic en dos caras paralelas | Distancia mínima y «Paralelas, separadas X mm» |
+| 9.18 | Clic en dos agujeros del mismo tipo | «Distancia entre ejes/centros» |
+| 9.19 | Esc, o iniciar un sketch o una herramienta | El panel desaparece y Medir se apaga |
+
 **Fíjate en:** ¿los avisos se entienden sin explicación? ¿Hay falsos avisos (te avisa de una pared que no existe)? ¿Echas de menos que señale dónde está el problema en la vista? ¿Los valores de tu impresora son los correctos (anota tu modelo)?
 
 Medición, análisis de sección y el botón «Imprimir» (abrir el slicer): se agregan aquí cuando se implementen.

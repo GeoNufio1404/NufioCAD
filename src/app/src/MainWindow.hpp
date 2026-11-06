@@ -96,6 +96,8 @@ private:
     void updateExportAction();
     void exportBodies();
     void printBodies();
+    void toggleMeasure(bool on);
+    void updateMeasure();
     void importStep();
     void openRecent(const QString& path);
     std::string thumbnailPng();
@@ -144,6 +146,8 @@ private:
     QAction* combineAction_ = nullptr;
     QAction* organizeAction_ = nullptr;
     QAction* jointAction_ = nullptr;
+    QAction* measureAction_ = nullptr;
+    QLabel* measurePanel_ = nullptr;  // resultado de la medición, sobre la vista
     QAction* exportAction_ = nullptr;
     QAction* printAction_ = nullptr;
     QAction* importAction_ = nullptr;

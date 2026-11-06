@@ -19,6 +19,7 @@
 #include <nuf/commands/SetParameters.hpp>
 #include <nuf/geometry/Exchange.hpp>
 #include <nuf/geometry/Kernel.hpp>
+#include <nuf/geometry/Measure.hpp>
 #include <nuf/io/NufFile.hpp>
 #include <nuf/render/Viewport.hpp>
 
@@ -414,6 +415,11 @@ void MainWindow::createMenus()
     });
     decorate(jointAction_, QStringLiteral("joint-solid"),
              QStringLiteral("Unir dos cuerpos por sus caras (rígida, giratoria o deslizante)"), QStringLiteral("Unión"));
+    measureAction_ = solidMenu->addAction(QStringLiteral("&Medir"), this, [this](bool on) { toggleMeasure(on); });
+    measureAction_->setCheckable(true);
+    decorate(measureAction_, QStringLiteral("measure-solid"),
+             QStringLiteral("Medir caras y aristas: área, longitud, radio, distancia y ángulo (Mayús o clic para añadir otra)"),
+             QStringLiteral("Medir"));
     decorate(shellAction_, QStringLiteral("shell"), QStringLiteral("Vaciar un cuerpo dejando abiertas las caras elegidas"));
 
     // Herramientas de dibujo por familias (como en Fusion 360); la primera
@@ -589,6 +595,8 @@ void MainWindow::createMenus()
     ribbon_->addGroup(solidTab_, QStringLiteral("GENERAR"));
     ribbon_->addAction(solidTab_, gearAction_);
     ribbon_->addAction(solidTab_, threadAction_);
+    ribbon_->addGroup(solidTab_, QStringLiteral("INSPECCIONAR"));
+    ribbon_->addAction(solidTab_, measureAction_);
 
     auto family = [this, &families](const QString& name) {
         const std::size_t i = static_cast<std::size_t>(
@@ -1142,6 +1150,14 @@ void MainWindow::updateExportAction()
             action->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane() && !document_.result().bodies.empty());
         }
     }
+    if (measureAction_ != nullptr) {
+        if ((sketch_ || tool_) && measureAction_->isChecked()) {
+            measureAction_->setChecked(false);
+            toggleMeasure(false);
+        }
+        measureAction_->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane() &&
+                                   !document_.result().bodies.empty());
+    }
     for (QAction* action : {planeAction_, axisAction_, parametersAction_, gearAction_, threadAction_}) {
         if (action != nullptr) {
             action->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane());
@@ -1156,6 +1172,83 @@ void MainWindow::updateExportAction()
     if (printAction_ != nullptr) {
         printAction_->setEnabled(!sketch_ && !tool_ && !document_.result().bodies.empty());
     }
+}
+
+// Medir: mientras está activo, cada clic en una cara o arista se suma a la selección (una o dos) y
+// el panel de la esquina de la vista dice qué es o qué relación tienen.
+void MainWindow::toggleMeasure(bool on)
+{
+    if (measurePanel_ == nullptr) {
+        measurePanel_ = new QLabel(viewport_);
+        measurePanel_->setObjectName(QStringLiteral("measurePanel"));
+        measurePanel_->setTextFormat(Qt::RichText);
+        measurePanel_->setAttribute(Qt::WA_TransparentForMouseEvents);
+        measurePanel_->setStyleSheet(QStringLiteral(
+            "QLabel#measurePanel { background: rgba(32, 36, 42, 225); color: #E8EBEF; border: 1px solid #4A515B; "
+            "border-radius: 6px; padding: 8px 12px; }"));
+        measurePanel_->move(16, 16);
+        connect(viewport_, &render::Viewport::modelSelectionChanged, this, [this] {
+            if (measureAction_ != nullptr && measureAction_->isChecked()) {
+                updateMeasure();
+            }
+        });
+    }
+    viewport_->clearModelSelection();
+    viewport_->setAdditiveSelection(on);
+    if (on) {
+        updateMeasure();
+        measurePanel_->show();
+        statusBar()->showMessage(QStringLiteral("Medir: elige una cara o arista y, para compararla, otra más · Esc termina"));
+    } else {
+        measurePanel_->hide();
+        statusBar()->clearMessage();
+    }
+}
+
+void MainWindow::updateMeasure()
+{
+    if (measurePanel_ == nullptr) {
+        return;
+    }
+    std::vector<geometry::MeasureElement> elements;
+    const render::ModelSelection selection = viewport_->modelSelection();
+    const auto bodyOf = [this](const std::string& key) -> const document::Body* {
+        for (const document::Body& body : document_.result().bodies) {
+            if (body.key == key) {
+                return &body;
+            }
+        }
+        return nullptr;
+    };
+    for (const render::ModelSelection::Face& f : selection.faces) {
+        if (const document::Body* body = bodyOf(f.body)) {
+            if (const auto index = body->shape.findFace(f.ref)) {
+                elements.push_back({body->shape, true, *index});
+            }
+        }
+    }
+    for (const render::ModelSelection::Edge& e : selection.edges) {
+        if (const document::Body* body = bodyOf(e.body)) {
+            if (const auto index = body->shape.findEdge(e.ref)) {
+                elements.push_back({body->shape, false, *index});
+            }
+        }
+    }
+    QString html = QStringLiteral("<b>Medir</b>");
+    if (elements.empty()) {
+        html += QStringLiteral("<br>Elige una cara o una arista.<br>Con otra más, mide la distancia y el ángulo.");
+    } else {
+        const geometry::Measurement m = geometry::measure(elements);
+        html += QStringLiteral(" — ") + QString::fromStdString(m.title).toHtmlEscaped();
+        for (const std::string& line : m.lines) {
+            html += QStringLiteral("<br>") + QString::fromStdString(line).toHtmlEscaped();
+        }
+        if (selection.faces.size() + selection.edges.size() > 2) {
+            html += QStringLiteral("<br><i>Se miden las dos últimas por orden de lista.</i>");
+        }
+    }
+    measurePanel_->setText(html);
+    measurePanel_->adjustSize();
 }
 
 // Imprimir: revisa la pieza, la exporta a STL en una carpeta temporal y abre el slicer con ella.
@@ -1422,6 +1515,11 @@ void MainWindow::cancel()
     }
     if (navGroup_ && navGroup_->checkedAction()) {
         clearNavigation();
+        return;
+    }
+    if (measureAction_ != nullptr && measureAction_->isChecked()) {
+        measureAction_->setChecked(false);
+        toggleMeasure(false);
         return;
     }
     if (tool_) {
