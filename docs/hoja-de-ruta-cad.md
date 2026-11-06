@@ -397,7 +397,7 @@ Todas siguen el patrón de las operaciones actuales: una clase en `document/Feat
 - **9c Medir ✅:** botón **Medir** (grupo INSPECCIONAR). Con una cara o arista da área, longitud, radio, diámetro, centro o normal; con dos, distancia mínima, diferencia en X/Y/Z, ángulo, paralelismo y distancia entre ejes o centros de agujeros. El resultado sale en un panel sobre la vista; Esc termina.
 - **Pendiente de 9c:** no dibuja la línea de la medida sobre el modelo; mide solo caras y aristas (no vértices ni puntos libres); con más de dos elementos usa los dos últimos de la lista, no por orden de clic; los números usan punto decimal; no copia el resultado al portapapeles.
 - **9d Sección ✅:** botón **Sección** (INSPECCIONAR). Corta la vista de los cuerpos con un plano XY, XZ o YZ a la posición elegida, tapa el corte en azul y permite ver el otro lado. Solo cambia la vista: el modelo, el timeline y la exportación no se tocan. Esc termina.
-- **Pendiente de 9d:** no se probó a ojo en la app (solo compila y pasan las pruebas), así que la dirección del corte, el color de la tapa y el rendimiento con piezas grandes están por verificar; solo planos de origen (no caras ni planos de construcción); un solo corte a la vez; no se guarda en el archivo; no hay análisis de calidad de malla (se deja para más adelante).
+- **Pendiente de 9d:** probado a ojo con una caja (los tres planos, tapa azul, «otro lado» y Esc); falta comprobar el rendimiento con piezas grandes y cómo se ve la tapa en piezas con huecos; solo planos de origen (no caras ni planos de construcción); un solo corte a la vez; no se guarda en el archivo; no hay análisis de calidad de malla (se deja para más adelante).
 - Control de calidad de malla al exportar.
 - Posible envío directo al slicer.
 

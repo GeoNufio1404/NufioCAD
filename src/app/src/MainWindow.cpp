@@ -1266,7 +1266,8 @@ void MainWindow::updateSection()
         return;
     }
     const int plane = sectionPlane_->currentIndex();
-    const double sign = sectionFlip_->isChecked() ? -1.0 : 1.0;
+    // Por defecto se quita el lado que da a la cámara isométrica (arriba, delante, derecha) para que el corte se vea.
+    const double sign = (plane == 1 ? 1.0 : -1.0) * (sectionFlip_->isChecked() ? -1.0 : 1.0);
     const double at = sectionOffset_->value();
     sketch::Vec3 origin{0.0, 0.0, 0.0};
     sketch::Vec3 normal{0.0, 0.0, sign};
