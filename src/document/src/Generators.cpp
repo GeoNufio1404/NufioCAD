@@ -53,6 +53,12 @@ public:
             f.showIndex = showIndex;
             return f;
         };
+        GeneratorField cableWall;
+        cableWall.key = "pared_cable";
+        cableWall.label = "Salida del cable";
+        cableWall.kind = K::Choice;
+        cableWall.choices = {"Atrás (en la tapa)", "Pared de abajo", "Pared de arriba", "Pared izquierda", "Pared derecha"};
+        cableWall.hint = "Por dónde sale el cable de la tira LED";
         GeneratorField shape;
         shape.key = "forma";
         shape.label = "Forma";
@@ -68,7 +74,8 @@ public:
                 length("tapa", "Tapa trasera", 2.4, 0.8, 20.0),
                 length("labio", "Labio de la tapa", 3.0, 1.0, 30.0, "Lo que entra en la caja"),
                 length("holgura", "Holgura de la tapa", 0.2, 0.0, 2.0, "Para que la tapa encaje sin forzar"),
-                length("cable", "Agujero del cable", 6.0, 0.0, 50.0, "0 = sin agujero")};
+                length("cable", "Agujero del cable", 6.0, 0.0, 50.0, "0 = sin agujero"),
+                cableWall};
     }
 
     Recipe make(const GeneratorValues& values, const std::string& suffix) const override
@@ -143,14 +150,19 @@ public:
             f->expressions = {{"width", inner("")}, {"depth", innerH}, {"z", frente}, {"height", profundidad}};
             recipe.features.push_back(std::move(f));
         }
-        // 3. El agujero del cable, por la pared de abajo (el plano XZ mira hacia -Y: «z» es hacia abajo).
-        if (hasCable) {
+        // 3. El agujero del cable, por una pared (el plano XZ mira hacia -Y y el YZ hacia +X: «z» es hacia fuera
+        // de la pared de abajo / de la derecha, y su opuesto hacia la de arriba / la izquierda).
+        const int wall = int(v("pared_cable"));
+        if (hasCable && wall >= 1) {
             auto f = addCylinder("Lightbox: agujero del cable", Operation::Cut);
-            f->base.origin = OriginPlane::XZ;
+            const bool alongY = wall <= 2;  // abajo o arriba
+            f->base.origin = alongY ? OriginPlane::XZ : OriginPlane::YZ;
             f->symmetric = true;
+            const std::string half = (alongY && !round ? alto : (round ? diametro : ancho)) + "/2 - " + pared + "/2";
+            const bool positive = wall == 1 || wall == 4;  // abajo y derecha
             f->expressions = {{"diameter", cable},
                               {"y", frente + " + (" + profundidad + " - " + frente + ")/2"},
-                              {"z", (round ? diametro : alto) + "/2 - " + pared + "/2"},
+                              {"z", positive ? half : "-(" + half + ")"},
                               {"height", pared + " + 2"}};
             recipe.features.push_back(std::move(f));
         }
@@ -173,6 +185,16 @@ public:
                                 {"depth", innerH + " - 2*" + holgura},
                                 {"height", tapa + " + " + labio}};
             recipe.features.push_back(std::move(lip));
+        }
+        // 5. El agujero del cable por detrás: atraviesa la placa y el labio de la tapa, hacia abajo del centro.
+        if (hasCable && wall == 0) {
+            auto f = addCylinder("Lightbox: agujero del cable (tapa)", Operation::Cut);
+            f->expressions = {{"diameter", cable},
+                              {"x", beside},
+                              {"y", "-(" + (round ? diametro : alto) + ")/4"},
+                              {"z", "-1"},
+                              {"height", tapa + " + " + labio + " + 2"}};
+            recipe.features.push_back(std::move(f));
         }
         return recipe;
     }

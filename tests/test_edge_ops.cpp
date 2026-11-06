@@ -1884,6 +1884,7 @@ TEST_CASE("El lightbox redondo y el agujero del cable", "[generator]")
     const document::Generator* lightbox = document::findGenerator("lightbox");
     document::GeneratorValues values = lightbox->defaults();
     values["forma"] = 1.0;
+    values["pared_cable"] = 1.0;  // por la pared de abajo
     Document doc;
     document::applyRecipe(doc, lightbox->make(values, ""));
     REQUIRE(doc.result().bodies.size() == 2);
@@ -1894,4 +1895,31 @@ TEST_CASE("El lightbox redondo y el agujero del cable", "[generator]")
     REQUIRE(volume < hollow - 20.0);
     REQUIRE(volume > hollow - 200.0);
     REQUIRE(doc.result().bodies[0].shape.bounds().max.z == Catch::Approx(40.0).margin(1e-6));
+}
+
+TEST_CASE("El agujero del cable del lightbox sale por la pared elegida", "[generator]")
+{
+    const document::Generator* lightbox = document::findGenerator("lightbox");
+    const auto volumes = [&](double wall, double cable) {
+        document::GeneratorValues values = lightbox->defaults();
+        values["pared_cable"] = wall;
+        values["cable"] = cable;
+        Document doc;
+        document::applyRecipe(doc, lightbox->make(values, ""));
+        REQUIRE(doc.result().bodies.size() == 2);
+        for (std::size_t i = 0; i < doc.featureCount(); ++i) {
+            REQUIRE(doc.status(doc.feature(i).id()).health != Health::Error);
+        }
+        return std::pair{doc.result().bodies[0].shape.volume(), doc.result().bodies[1].shape.volume()};
+    };
+    const auto [boxSolid, coverSolid] = volumes(0.0, 0.0);  // sin agujero
+    const auto [boxBack, coverBack] = volumes(0.0, 6.0);    // atrás: solo la tapa pierde material
+    REQUIRE_THAT(boxBack, Catch::Matchers::WithinAbs(boxSolid, 1e-3));
+    REQUIRE(coverBack < coverSolid - 50.0);
+    for (const double wall : {1.0, 2.0, 3.0, 4.0}) {  // por una pared: solo la caja pierde material
+        INFO(wall);
+        const auto [boxSide, coverSide] = volumes(wall, 6.0);
+        REQUIRE(boxSide < boxSolid - 20.0);
+        REQUIRE_THAT(coverSide, Catch::Matchers::WithinAbs(coverSolid, 1e-3));
+    }
 }
