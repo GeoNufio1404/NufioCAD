@@ -39,6 +39,18 @@ void GeneratorTool::createFields(QFormLayout* form)
             }
             connect(box, &QFontComboBox::currentFontChanged, this, [this] { updatePreview(); });
             widget = box;
+        } else if (f.kind == document::GeneratorField::Kind::Count || f.kind == document::GeneratorField::Kind::Angle) {
+            auto* box = new ExpressionSpinBox();
+            const bool count = f.kind == document::GeneratorField::Kind::Count;
+            box->setRange(f.min, f.max);
+            box->setDecimals(count ? 0 : 1);
+            box->setValue(f.value);
+            if (!count) {
+                setUnit(box, QStringLiteral("°"));
+            }
+            box->setKeyboardTracking(false);
+            connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
+            widget = box;
         } else if (f.kind == document::GeneratorField::Kind::Choice) {
             auto* box = new QComboBox();
             for (const std::string& choice : f.choices) {
@@ -82,6 +94,18 @@ void GeneratorTool::updateVisibility()
         }
         form_->setRowVisible(row.widget, visible);
     }
+}
+
+QString GeneratorTool::inputsText() const
+{
+    QString text = QString::fromStdString(generator_.description());
+    if (!rows_.empty()) {
+        const std::string summary = generator_.summary(values());
+        if (!summary.empty()) {
+            text += QStringLiteral("\n") + QString::fromStdString(summary);
+        }
+    }
+    return text;
 }
 
 document::GeneratorValues GeneratorTool::values() const

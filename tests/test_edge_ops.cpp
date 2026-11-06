@@ -2093,3 +2093,82 @@ TEST_CASE("El generador de letreros pone las letras en relieve, grabadas o suelt
     REQUIRE(relief.result().bodies[1].shape.bounds().min.z == Catch::Approx(5.0).margin(1e-6));
     document::setTextOutliner({});
 }
+
+TEST_CASE("El par de engranajes sale a la distancia correcta y con los dientes encajados", "[generator][gear]")
+{
+    const document::Generator* generator = document::findGenerator("par-engranajes");
+    REQUIRE(generator != nullptr);
+    const document::GeneratorValues values = generator->defaults();
+    REQUIRE(generator->summary(values).find("distancia entre ejes 36.15 mm") != std::string::npos);
+
+    Document doc;
+    document::applyRecipe(doc, generator->make(values, ""));
+    REQUIRE(doc.result().bodies.size() == 2);
+    for (std::size_t i = 0; i < doc.featureCount(); ++i) {
+        INFO(doc.feature(i).name());
+        REQUIRE(doc.status(doc.feature(i).id()).health != Health::Error);
+    }
+    REQUIRE(doc.bodyInfo().at(doc.result().bodies[1].key).name == "Rueda 2");
+    // Módulo 2, 12 y 24 dientes: distancia entre ejes 2·(12 + 24)/2 = 36 más 0,15 de juego.
+    const geometry::Box second = doc.result().bodies[1].shape.bounds();
+    REQUIRE_THAT(0.5 * (second.min.x + second.max.x), Catch::Matchers::WithinAbs(36.15, 0.05));
+    REQUIRE_THAT(0.5 * (second.min.y + second.max.y), Catch::Matchers::WithinAbs(0.0, 0.05));
+
+    // Engranan: no se tocan (con el juego) ni se solapan.
+    const auto overlap = [](Document& d) {
+        return geometry::boolean(geometry::BooleanOp::Common, d.result().bodies[0].shape, d.result().bodies[1].shape)
+            .volume();
+    };
+    REQUIRE(overlap(doc) < 0.5);
+
+    // Sin el giro de la segunda rueda, un diente da contra otro: los cuerpos se solapan.
+    auto params = doc.parameters();
+    for (document::Parameter& p : params) {
+        if (p.name == "giro_rueda_2") {
+            p.expression = "0";
+        }
+    }
+    doc.setParameters(params);
+    REQUIRE(overlap(doc) > 5.0);
+}
+
+TEST_CASE("El par de engranajes helicoidales lleva la hélice en sentido contrario", "[generator][gear]")
+{
+    const document::Generator* generator = document::findGenerator("par-engranajes");
+    document::GeneratorValues values = generator->defaults();
+    values["helice"] = 15.0;
+    Document doc;
+    document::applyRecipe(doc, generator->make(values, ""));
+    REQUIRE(doc.result().bodies.size() == 2);
+    const auto* first = static_cast<const GearFeature*>(doc.findFeature(doc.feature(0).id()));
+    const auto* second = static_cast<const GearFeature*>(doc.findFeature(doc.feature(1).id()));
+    // Las dos ruedas usan la misma hélice (parámetro `helice`), la segunda con el signo contrario.
+    REQUIRE(first->expressions.at("helixAngle") == "helice");
+    REQUIRE(second->expressions.at("helixAngle") == "-helice");
+    REQUIRE_THAT(doc.result().bodies[0].shape.volume() / doc.result().bodies[1].shape.volume(),
+                 Catch::Matchers::WithinAbs(0.24, 0.03));  // 12 dientes frente a 24: un cuarto de la superficie
+    for (std::size_t i = 0; i < doc.featureCount(); ++i) {
+        REQUIRE(doc.status(doc.feature(i).id()).health != Health::Error);
+    }
+}
+
+TEST_CASE("Las expresiones de ángulos están en grados", "[params]")
+{
+    Document doc;
+    doc.setParameters({{"presion", "25"}});
+    auto gear = std::make_unique<GearFeature>();
+    gear->base.origin = OriginPlane::XY;
+    gear->expressions["pressureAngle"] = "presion";
+    gear->expressions["helixAngle"] = "10 + 5";
+    const FeatureId id = doc.addFeature(std::move(gear));
+    REQUIRE(doc.status(id).health == Health::Ok);
+    // El valor guardado sigue siendo el de la operación (en radianes); lo calculado usó 25° y 15°.
+    const auto bound = doc.findFeature(id)->clone();
+    for (const Feature::NumericField& field : bound->numericFields()) {
+        if (field.key == "pressureAngle") {
+            field.set(25.0);
+            REQUIRE_THAT(field.get(), Catch::Matchers::WithinAbs(25.0, 1e-9));
+        }
+    }
+    REQUIRE(doc.result().bodies.size() == 1);
+}

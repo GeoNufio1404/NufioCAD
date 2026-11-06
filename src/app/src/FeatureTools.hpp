@@ -388,7 +388,8 @@ private:
 
     Placement placement_;
     QDoubleSpinBox* module_ = nullptr;
-    QSpinBox* teeth_ = nullptr;
+    QDoubleSpinBox* teeth_ = nullptr;
+    QDoubleSpinBox* rotation_ = nullptr;
     QDoubleSpinBox* pressure_ = nullptr;
     QDoubleSpinBox* thickness_ = nullptr;
     QDoubleSpinBox* bore_ = nullptr;

@@ -19,13 +19,13 @@ namespace nuf::document {
 
 // Una pregunta del formulario del generador.
 struct GeneratorField {
-    enum class Kind { Length, Choice, Text, Font };
+    enum class Kind { Length, Choice, Text, Font, Count, Angle };
     std::string key;
     std::string label;
     std::string hint;                  // ayuda breve bajo el campo
     Kind kind = Kind::Length;
     double value = 0.0;                // valor por defecto, o la opción elegida (Choice)
-    double min = 0.0;                  // mm (Length)
+    double min = 0.0;                  // mm (Length), cantidad (Count) o grados (Angle)
     double max = 100000.0;
     std::vector<std::string> choices;  // Choice
     std::string text;                  // valor por defecto de Text y Font (la fuente vacía = la de la interfaz)
@@ -67,6 +67,8 @@ public:
     virtual std::string id() const = 0;
     virtual std::string title() const = 0;
     virtual std::string description() const = 0;
+    // Un resumen de lo que saldría con esos valores (relación de transmisión…), para mostrarlo en el formulario.
+    virtual std::string summary(const GeneratorValues& /*values*/) const { return {}; }
     // Nombre del icono (de la interfaz) de su botón.
     virtual std::string icon() const { return "lightbox-solid"; }
     virtual std::vector<GeneratorField> fields() const = 0;

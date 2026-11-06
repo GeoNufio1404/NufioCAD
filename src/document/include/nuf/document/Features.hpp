@@ -268,6 +268,7 @@ public:
     SketchAttachment base;   // plano o cara donde se coloca
     double x = 0.0;          // posición del centro en ese plano (mm, desde su origen)
     double y = 0.0;
+    double rotation = 0.0;   // giro del engranaje sobre su eje (rad): dónde queda el primer diente
     geometry::GearSpec spec;
     Operation operation = Operation::NewBody;
 

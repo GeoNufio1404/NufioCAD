@@ -563,6 +563,106 @@ public:
     }
 };
 
+// --- Par de engranajes ---------------------------------------------------------------------
+// Dos ruedas que engranan: mismo módulo y ángulo de presión; hélice de sentido contrario; a la distancia entre
+// ejes módulo·(z1 + z2)/2 (más el juego) y con la segunda girada para que un diente caiga en el hueco de la primera.
+
+class GearPair final : public Generator {
+public:
+    std::string id() const override { return "par-engranajes"; }
+    std::string title() const override { return "Par de engranajes"; }
+    std::string icon() const override { return "gear-solid"; }
+    std::string description() const override
+    {
+        return "Dos engranajes que engranan: mismo módulo y ángulo de presión, a la distancia entre ejes correcta y "
+               "con la segunda rueda girada para que los dientes encajen.";
+    }
+
+    std::vector<GeneratorField> fields() const override
+    {
+        using K = GeneratorField::Kind;
+        const auto make = [](K kind, std::string key, std::string label, double value, double min, double max,
+                             std::string hint = {}) {
+            GeneratorField f;
+            f.kind = kind;
+            f.key = std::move(key);
+            f.label = std::move(label);
+            f.value = value;
+            f.min = min;
+            f.max = max;
+            f.hint = std::move(hint);
+            return f;
+        };
+        return {make(K::Length, "modulo", "Módulo", 2.0, 0.3, 20.0, "El tamaño del diente: igual en las dos ruedas"),
+                make(K::Count, "dientes_1", "Dientes de la rueda 1", 12.0, 6.0, 300.0),
+                make(K::Count, "dientes_2", "Dientes de la rueda 2", 24.0, 6.0, 300.0),
+                make(K::Angle, "presion", "Ángulo de presión", 20.0, 5.0, 35.0, "Igual en las dos ruedas (20° es lo normal)"),
+                make(K::Length, "ancho_rueda", "Ancho de las ruedas", 8.0, 1.0, 200.0, "A lo largo del eje"),
+                make(K::Angle, "helice", "Ángulo de hélice", 0.0, 0.0, 45.0,
+                     "0 = dientes rectos; si no, la rueda 2 lleva el sentido contrario"),
+                make(K::Length, "agujero_1", "Agujero de la rueda 1", 5.0, 0.0, 100.0, "0 = macizo"),
+                make(K::Length, "agujero_2", "Agujero de la rueda 2", 5.0, 0.0, 100.0, "0 = macizo"),
+                make(K::Length, "juego", "Juego entre dientes", 0.15, 0.0, 2.0,
+                     "Aire para que giren sin atascarse al imprimir (se suma a la distancia entre ejes)")};
+    }
+
+    std::string summary(const GeneratorValues& values) const override
+    {
+        const double m = values.at("modulo"), z1 = values.at("dientes_1"), z2 = values.at("dientes_2");
+        char text[256];
+        std::snprintf(text, sizeof text,
+                      "Relación %g:%g (la rueda 2 gira %.3f veces por vuelta de la 1) · distancia entre ejes %.2f mm · "
+                      "Ø primitivos %.2f y %.2f mm",
+                      z1, z2, z1 / z2, m * (z1 + z2) / 2.0 + values.at("juego"), m * z1, m * z2);
+        return text;
+    }
+
+    Recipe make(const GeneratorValues& values, const std::string& suffix) const override
+    {
+        const auto p = [&](const char* name) { return std::string(name) + suffix; };
+        const std::string modulo = p("modulo"), z1 = p("dientes_1"), z2 = p("dientes_2"), presion = p("presion"),
+                          ancho = p("ancho_rueda"), helice = p("helice"), bore1 = p("agujero_1"), bore2 = p("agujero_2"),
+                          juego = p("juego"), giro = p("giro_rueda_2");
+
+        Recipe recipe;
+        recipe.component = "Par de engranajes";
+        recipe.bodyNames = {"Rueda 1", "Rueda 2"};
+        const auto param = [&](const std::string& name, const std::string& expression) {
+            recipe.parameters.push_back({name, expression});
+        };
+        param(modulo, number(values.at("modulo")));
+        param(z1, number(values.at("dientes_1")));
+        param(z2, number(values.at("dientes_2")));
+        param(presion, number(values.at("presion")));
+        param(ancho, number(values.at("ancho_rueda")));
+        param(helice, number(values.at("helice")));
+        param(bore1, number(values.at("agujero_1")));
+        param(bore2, number(values.at("agujero_2")));
+        param(juego, number(values.at("juego")));
+        // El giro de la rueda 2 (en grados): con un diente de la rueda 1 apuntando a la 2, la 2 debe tener un hueco
+        // apuntando a la 1, es decir, 180° − medio paso angular, reducido a un paso (360°/dientes).
+        const std::string halfStep = "180/" + z2;
+        const std::string step = "360/" + z2;
+        param(giro, "(180 - " + halfStep + ") - floor((180 - " + halfStep + ")/(" + step + "))*(" + step + ")");
+
+        const auto wheel = [&](const std::string& name, const std::string& teeth, const std::string& bore,
+                               const std::string& sign) {
+            auto f = std::make_unique<GearFeature>();
+            f->setName(name);
+            f->base.origin = OriginPlane::XY;
+            f->expressions = {{"module", modulo}, {"teeth", teeth}, {"pressureAngle", presion}, {"thickness", ancho},
+                              {"bore", bore}, {"helixAngle", sign + helice}};
+            return f;
+        };
+        recipe.features.push_back(wheel("Engranaje: rueda 1", z1, bore1, ""));
+        auto second = wheel("Engranaje: rueda 2", z2, bore2, "-");
+        second->expressions["x"] = modulo + "*(" + z1 + " + " + z2 + ")/2 + " + juego;
+        second->expressions["rotation"] = giro;
+        recipe.features.push_back(std::move(second));
+        return recipe;
+    }
+};
+
 } // namespace
 
 GeneratorValues Generator::defaults() const
@@ -610,7 +710,8 @@ const std::vector<const Generator*>& generators()
     static const Lightbox lightbox;
     static const BoxWithLid boxWithLid;
     static const Sign sign;
-    static const std::vector<const Generator*> all = {&lightbox, &boxWithLid, &sign};
+    static const GearPair gearPair;
+    static const std::vector<const Generator*> all = {&lightbox, &boxWithLid, &sign, &gearPair};
     return all;
 }
 

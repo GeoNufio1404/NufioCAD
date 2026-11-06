@@ -1556,10 +1556,14 @@ void GearTool::createFields(QFormLayout* form)
     module_ = lengthBox(2.0);
     module_->setMinimum(0.1);
     field("module", module_);
-    teeth_ = new QSpinBox();
+    teeth_ = new ExpressionSpinBox();
     teeth_->setRange(6, 300);
+    teeth_->setDecimals(0);
     teeth_->setValue(20);
     teeth_->setKeyboardTracking(false);
+    field("teeth", teeth_);
+    rotation_ = angleBox(original != nullptr ? original->rotation / kDegree : 0.0, 360.0);
+    field("rotation", rotation_);
     pressure_ = angleBox(20.0, 35.0);
     pressure_->setMinimum(5.0);
     field("pressureAngle", pressure_);
@@ -1584,6 +1588,7 @@ void GearTool::createFields(QFormLayout* form)
     }
     form->addRow(QStringLiteral("Módulo"), module_);
     form->addRow(QStringLiteral("Dientes"), teeth_);
+    form->addRow(QStringLiteral("Giro inicial"), rotation_);
     form->addRow(QStringLiteral("Ángulo de presión"), pressure_);
     form->addRow(QStringLiteral("Ancho (±)"), thickness_);
     form->addRow(QStringLiteral("Agujero central"), bore_);
@@ -1593,8 +1598,7 @@ void GearTool::createFields(QFormLayout* form)
         adjustDirection();
         updatePreview();
     });
-    connect(teeth_, &QSpinBox::valueChanged, this, [this] { updatePreview(); });
-    for (QDoubleSpinBox* box : {module_, pressure_, thickness_, bore_, helix_}) {
+    for (QDoubleSpinBox* box : {teeth_, rotation_, module_, pressure_, thickness_, bore_, helix_}) {
         connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
     }
 }
@@ -1627,7 +1631,8 @@ std::unique_ptr<document::Feature> GearTool::build() const
     f->x = placement_.x->value();
     f->y = placement_.y->value();
     f->spec.module = module_->value();
-    f->spec.teeth = teeth_->value();
+    f->rotation = rotation_->value() * kDegree;
+    f->spec.teeth = int(std::lround(teeth_->value()));
     f->spec.pressureAngle = pressure_->value() * kDegree;
     f->spec.thickness = thickness_->value();
     f->spec.bore = bore_->value();
@@ -1640,9 +1645,9 @@ std::unique_ptr<document::Feature> GearTool::build() const
 QString GearTool::inputsText() const
 {
     return QStringLiteral("%1 dientes, módulo %2: Ø primitivo %3%4")
-        .arg(teeth_->value())
+        .arg(int(std::lround(teeth_->value())))
         .arg(Units::instance().format(module_->value()))
-        .arg(Units::instance().formatWithUnit(module_->value() * teeth_->value()),
+        .arg(Units::instance().formatWithUnit(module_->value() * std::lround(teeth_->value())),
              placementOnFace(placement_) ? QStringLiteral(" · en la cara elegida") : QString());
 }
 

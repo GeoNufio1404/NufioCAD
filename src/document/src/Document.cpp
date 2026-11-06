@@ -71,7 +71,8 @@ std::unique_ptr<Feature> bindExpressions(const Feature& feature, const Parameter
             continue;
         }
         try {
-            field.set(evaluateExpression(it->second, lookup) * field.scale);
+            // set() ya convierte de las unidades del usuario (grados) a las internas (radianes).
+            field.set(evaluateExpression(it->second, lookup));
         } catch (const ExpressionError& e) {
             throw FeatureError(field.label + ": " + e.what());
         }

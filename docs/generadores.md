@@ -215,6 +215,48 @@ Cuerpos: **Placa** y **Texto** (en relieve), solo **Placa** (grabado) o solo **T
 «Letrero» o «Llavero». Las regiones que rellenan el hueco de una letra (el interior de una «O», una «A»…) no se
 extruyen.
 
+## Par de engranajes
+
+Dos ruedas que engranan, ya colocadas: mismo módulo y ángulo de presión, a la **distancia entre ejes** correcta y con
+la segunda **girada** para que un diente de una caiga en el hueco de la otra. El formulario muestra la relación de
+transmisión, la distancia entre ejes y los diámetros primitivos mientras cambias los valores.
+
+### Cómo se calcula
+
+| Qué | Fórmula |
+|---|---|
+| Diámetro primitivo | `módulo × dientes` |
+| Relación de transmisión | `dientes 1 : dientes 2` (la rueda 2 gira `dientes 1 / dientes 2` veces por vuelta de la 1) |
+| Distancia entre ejes | `módulo × (dientes 1 + dientes 2) / 2 + juego` |
+| Giro de la rueda 2 | `(180° − 180°/dientes 2)` reducido a un paso (`360°/dientes 2`): con un diente de la rueda 1 apuntando a la 2, la 2 tiene un hueco apuntando a la 1 |
+| Hélice | la rueda 1 con `+ángulo` y la rueda 2 con `−ángulo` (mismo ángulo, sentido contrario) |
+
+### Preguntas y medidas
+
+| Pregunta | Parámetro | Por defecto | Mín. – máx. | Para qué sirve |
+|---|---|---|---|---|
+| Módulo | `modulo` | 2 mm | 0,3 – 20 | Tamaño del diente, igual en las dos |
+| Dientes de la rueda 1 | `dientes_1` | 12 | 6 – 300 | |
+| Dientes de la rueda 2 | `dientes_2` | 24 | 6 – 300 | |
+| Ángulo de presión | `presion` | 20° | 5 – 35 | Igual en las dos (20° es lo normal) |
+| Ancho de las ruedas | `ancho_rueda` | 8 mm | 1 – 200 | A lo largo del eje |
+| Ángulo de hélice | `helice` | 0° | 0 – 45 | 0 = dientes rectos |
+| Agujero de la rueda 1 / 2 | `agujero_1`, `agujero_2` | 5 mm | 0 – 100 | 0 = macizo |
+| Juego entre dientes | `juego` | 0,15 mm | 0 – 2 | Aire para que giren sin atascarse al imprimir |
+
+Con los valores por defecto: ruedas de Ø24 y Ø48 mm, distancia entre ejes de 36,15 mm (36 + 0,15 de juego) y giro de la
+rueda 2 de 7,5°. La rueda 1 queda en el origen y la 2 en X = distancia entre ejes.
+
+### Operaciones que crea
+
+| # | Nombre | Tipo | Operación |
+|---|---|---|---|
+| 1 | Engranaje: rueda 1 | Engranaje en el origen, con la hélice `+helice` | Cuerpo nuevo |
+| 2 | Engranaje: rueda 2 | Engranaje en X = distancia entre ejes, girado `giro_rueda_2` (parámetro calculado), con la hélice `−helice` | Cuerpo nuevo |
+
+Cuerpos **Rueda 1** y **Rueda 2** en el componente «Par de engranajes». Todo está ligado a parámetros: al cambiar los
+dientes o el módulo en Sólido › Parámetros, la distancia y el giro se recalculan solos.
+
 ## Primitivas: Caja y Cilindro
 
 Son las piezas con las que se construyen los generadores; también se pueden usar solas (Sólido › Caja / Cilindro).

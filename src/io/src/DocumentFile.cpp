@@ -580,7 +580,8 @@ FeatureRow rowOf(const Feature& f)
     case FeatureKind::Gear: {
         const auto& g = static_cast<const GearFeature&>(f);
         row.type = "gear";
-        params = {{"base", toJson(g.base)}, {"x", g.x}, {"y", g.y}, {"module", g.spec.module}, {"teeth", g.spec.teeth},
+        params = {{"base", toJson(g.base)}, {"x", g.x}, {"y", g.y}, {"rotation", g.rotation}, {"module", g.spec.module},
+                  {"teeth", g.spec.teeth},
                   {"pressureAngle", g.spec.pressureAngle}, {"thickness", g.spec.thickness}, {"bore", g.spec.bore},
                   {"helixAngle", g.spec.helixAngle}, {"operation", nameOf(kOperations, g.operation)}};
         break;
@@ -769,6 +770,7 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         g->base = attachmentOf(p.at("base"));
         g->x = p.value("x", 0.0);
         g->y = p.value("y", 0.0);
+        g->rotation = p.value("rotation", 0.0);
         g->spec.module = number(p, "module");
         g->spec.teeth = p.at("teeth").get<int>();
         g->spec.pressureAngle = number(p, "pressureAngle");

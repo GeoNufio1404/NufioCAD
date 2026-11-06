@@ -763,6 +763,13 @@ std::optional<std::string> GearFeature::compute(ModelState& state) const
     std::optional<std::string> warning;
     sketch::Plane plane = resolvePlane(state, base, "del engranaje", "se usa su última posición", warning);
     plane.origin = plane.toWorld({x, y});
+    if (rotation != 0.0) {
+        // El primer diente apunta por el eje X del plano: se gira ese eje (y el Y con él) alrededor de la normal.
+        const double c = std::cos(rotation), s = std::sin(rotation);
+        const sketch::Vec3 xAxis = plane.xAxis, yAxis = plane.yAxis;
+        plane.xAxis = {c * xAxis.x + s * yAxis.x, c * xAxis.y + s * yAxis.y, c * xAxis.z + s * yAxis.z};
+        plane.yAxis = {-s * xAxis.x + c * yAxis.x, -s * xAxis.y + c * yAxis.y, -s * xAxis.z + c * yAxis.z};
+    }
     try {
         const geometry::Shape gear = geometry::gear(tag(), plane, spec);
         if (auto extra = applyOperation(state, *this, operation, gear)) {
@@ -783,7 +790,8 @@ std::vector<FeatureId> GearFeature::dependencies() const
 
 std::vector<Feature::NumericField> GearFeature::numericFields()
 {
-    return {field("x", "Posición X", x), field("y", "Posición Y", y), field("module", "Módulo", spec.module),
+    return {field("x", "Posición X", x), field("y", "Posición Y", y),
+            field("rotation", "Giro inicial", rotation, kRadiansPerDegree), field("module", "Módulo", spec.module),
             field("thickness", "Ancho", spec.thickness),
             field("bore", "Agujero central", spec.bore),
             field("pressureAngle", "Ángulo de presión", spec.pressureAngle, kRadiansPerDegree),

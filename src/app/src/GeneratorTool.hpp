@@ -32,7 +32,7 @@ protected:
     int previewDelayMs() const override { return 250; }
     void createFields(QFormLayout* form) override;
     void selectionChanged(const render::ModelSelection&) override {}
-    QString inputsText() const override { return QString::fromStdString(generator_.description()); }
+    QString inputsText() const override;
     bool removesMaterial() const override { return false; }
     void updatePreview() override;
 

@@ -322,3 +322,14 @@ Con una captura de pantalla y los pasos suele bastar. Si algo se cierra, no hace
 | T.5 | Prueba letras con hueco (O, A, B, 8) | El hueco queda libre, no se rellena |
 | T.6 | Aceptar | Navegador: «Placa» y «Texto» en el componente; el historial tiene el sketch «…: letras» y sus operaciones |
 | T.7 | Imprime con relieve en otro color | El cuerpo «Texto» se asigna a otro filamento sin tocar la placa |
+
+### Par de engranajes
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| E.1 | Herramientas › **Par de engranajes** | Se ven dos ruedas (12 y 24 dientes) con los dientes encajados, sin tocarse; el panel dice la relación 12:24 y la distancia 36,15 mm |
+| E.2 | Cambia los dientes (por ejemplo 15 y 30) y el módulo | Las ruedas se recolocan solas a la nueva distancia y siguen encajadas |
+| E.3 | Pon un ángulo de hélice de 15° | Las dos ruedas llevan la hélice en sentido contrario |
+| E.4 | Aceptar y abrir Sólido › Parámetros | `modulo`, `dientes_1`, `dientes_2`… y `giro_rueda_2` (calculado); al cambiar un parámetro, todo se recalcula |
+| E.5 | Imprime las dos ruedas con sus ejes | Giran juntas sin atascarse con el juego de 0,15 mm (subirlo a 0,25 si rozan) |
+| E.6 | Haz doble clic en «Engranaje: rueda 2» del historial | Se abre su panel con Posición X, Giro inicial y los demás campos ligados |
