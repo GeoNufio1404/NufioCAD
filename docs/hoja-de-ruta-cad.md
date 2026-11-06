@@ -405,6 +405,7 @@ Asistentes que hacen preguntas («redonda o rectangular», grosor de paredes, gr
 - **10b Lightbox** rectangular y redonda: forma, medidas, paredes, frente, tapa trasera con holgura, agujero para cable, canal para tira LED.
 - **10c Caja con tapa** y otras piezas geométricas (carcasas, soportes, bisagras).
 - **10d Con texto:** letreros y llaveros.
+- **10e Par de engranajes:** asistente que pide módulo, ángulo de presión, dientes de cada rueda (y ángulo de hélice) y crea las dos ruedas ya con el sentido de hélice contrario, a la distancia entre ejes `módulo × (z1 + z2) / 2` y con el giro de fase para que un diente caiga en el hueco del otro; muestra la relación de transmisión. Además, aviso de compatibilidad (módulo, ángulo de presión, hélice) en el panel del engranaje cuando se detecta otro engranaje cerca. Pendiente de 10e: decidir si el aviso de compatibilidad compensa la complejidad (el usuario no está seguro, pero lo ve como un gran agregado).
 - **Más adelante (aparte):** litofanías y relieves desde imagen (mallas, camino fuera de OpenCASCADE) y letreros multicolor (requiere exportar 3MF).
 
 ---
