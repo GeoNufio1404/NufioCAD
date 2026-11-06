@@ -300,3 +300,13 @@ Con una captura de pantalla y los pasos suele bastar. Si algo se cierra, no hace
 | G.9 | Exporta o imprime los cuatro cuerpos | La revisión no avisa de paredes finas con los valores por defecto; marco, labio y cara no se solapan |
 | G.10 | Sólido › Caja / Cilindro | Primitivas con posición, centradas o no, con alto ± y operación; doble clic en una operación «Lightbox: …» del historial abre su panel |
 | G.11 | Compara con tus lightboxes de referencia (Illescas, Aguilar) | Las medidas son las de `docs/generadores.md`: 175 × 131 × 37 con pared 2; para igualar la de Illescas pon ancho 174,664, alto 132,036, profundidad 37 y holgura 0 |
+
+### Caja con tapa
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| C.1 | Herramientas › **Caja con tapa** | Se ve una caja abierta por arriba y su tapa al lado; por defecto con labio |
+| C.2 | Cambia «Cierre» a «Tornillos en las esquinas» | Aparecen cuatro postes con agujero en la caja y cuatro agujeros en la tapa; desaparecen los campos del labio y salen los de los postes |
+| C.3 | Aceptar y abrir Sólido › Parámetros | Ancho, fondo, alto, pared… como parámetros; al cambiar «alto» la caja y los postes crecen |
+| C.4 | Imprime la tapa con labio sobre la caja | Entra a presión sin forzar con holgura 0,2 (subir a 0,3 si queda dura) |
+| C.5 | Prueba un tornillo M3 en un poste y en la tapa | Se enrosca en el poste (Ø2,5) y pasa libre por la tapa (Ø3,4) |

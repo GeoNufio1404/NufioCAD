@@ -474,7 +474,7 @@ void MainWindow::createMenus()
     for (const document::Generator* generator : document::generators()) {
         QAction* action = toolsMenu->addAction(QString::fromStdString(generator->title()), this,
                                                [this, generator] { startGenerator(*generator); });
-        decorate(action, QStringLiteral("lightbox-solid"), QString::fromStdString(generator->description()),
+        decorate(action, QString::fromStdString(generator->icon()), QString::fromStdString(generator->description()),
                  QString::fromStdString(generator->title()));
         generatorActions_.push_back(action);
     }

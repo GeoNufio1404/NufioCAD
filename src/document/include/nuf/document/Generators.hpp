@@ -47,6 +47,8 @@ public:
     virtual std::string id() const = 0;
     virtual std::string title() const = 0;
     virtual std::string description() const = 0;
+    // Nombre del icono (de la interfaz) de su botón.
+    virtual std::string icon() const { return "lightbox-solid"; }
     virtual std::vector<GeneratorField> fields() const = 0;
     // «suffix» se agrega a los nombres de los parámetros (« », «_2», «_3»…) para no chocar con los que ya haya.
     virtual Recipe make(const GeneratorValues& values, const std::string& suffix) const = 0;

@@ -1954,3 +1954,53 @@ TEST_CASE("Una caja con esquinas redondeadas", "[box]")
     }
     REQUIRE(faces == 10);  // 4 lados, 4 esquinas, fondo y tapa
 }
+
+TEST_CASE("La caja con tapa cierra con labio a presión o con tornillos en las esquinas", "[generator]")
+{
+    const document::Generator* generator = document::findGenerator("caja-con-tapa");
+    REQUIRE(generator != nullptr);
+    const double pi = std::numbers::pi;
+    const auto build = [&](double closure, Document& doc) {
+        document::GeneratorValues values = generator->defaults();
+        values["cierre"] = closure;
+        document::applyRecipe(doc, generator->make(values, ""));
+        REQUIRE(doc.result().bodies.size() == 2);
+        for (std::size_t i = 0; i < doc.featureCount(); ++i) {
+            INFO(doc.feature(i).name());
+            REQUIRE(doc.status(doc.feature(i).id()).health != Health::Error);
+        }
+    };
+
+    Document lip;
+    build(0.0, lip);
+    // 100 × 60 × 40 con pared y base de 2 y esquinas de radio 3: el hueco es 96 × 56 × 38.
+    const double outer = 100.0 * 60.0 - (4.0 - pi) * 9.0;
+    const double boxLip = outer * 40.0 - 96.0 * 56.0 * 38.0;
+    REQUIRE_THAT(lip.result().bodies[0].shape.volume(), Catch::Matchers::WithinAbs(boxLip, 3.0));
+    // La tapa: placa de 2 mm y labio de 3 mm (hueco − 2·0,2 de holgura por fuera, 1,2 de grueso).
+    const double ring = (95.6 * 55.6) - (93.2 * 53.2);
+    REQUIRE_THAT(lip.result().bodies[1].shape.volume(), Catch::Matchers::WithinAbs(outer * 2.0 + ring * 3.0, 4.0));
+    REQUIRE(lip.result().bodies[1].shape.bounds().min.x > 50.0);  // al lado de la caja
+
+    Document screws;
+    build(1.0, screws);
+    // Los cuatro postes aportan material (y los agujeros se llevan un poco); la tapa pierde cuatro agujeros.
+    const double boxScrews = screws.result().bodies[0].shape.volume();
+    REQUIRE(boxScrews > boxLip + 3000.0);
+    REQUIRE(boxScrews < boxLip + 9000.0);
+    REQUIRE_THAT(screws.result().bodies[1].shape.volume(),
+                 Catch::Matchers::WithinAbs(outer * 2.0 - 4.0 * pi * 1.7 * 1.7 * 2.0, 3.0));
+    // Los postes llegan hasta el borde de la caja.
+    REQUIRE(screws.result().bodies[0].shape.bounds().max.z == Catch::Approx(40.0).margin(1e-6));
+
+    // Cambiar un parámetro cambia todo: más alta, más material.
+    auto params = screws.parameters();
+    for (document::Parameter& p : params) {
+        if (p.name == "alto") {
+            p.expression = "60";
+        }
+    }
+    screws.setParameters(params);
+    REQUIRE(screws.result().bodies[0].shape.volume() > boxScrews + 5000.0);
+    REQUIRE(screws.result().bodies[0].shape.bounds().max.z == Catch::Approx(60.0).margin(1e-6));
+}

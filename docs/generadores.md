@@ -135,6 +135,47 @@ La tapa se imprime cara abajo (la imagen contra la cama) y la caja con el fondo 
 Aguilar lleva además un agujero cilíndrico de Ø26 mm que el usuario le añadió a mano (un «negative part» de Bambu
 Studio); la caja de MakerLab no trae agujero para el cable.
 
+## Caja con tapa
+
+Una caja rectangular abierta por arriba y su tapa. La tapa cierra de una de dos maneras: con un **labio a presión** o
+con **tornillos en las esquinas**. Sirve para electrónica, regalos u organizadores.
+
+### Preguntas y medidas
+
+| Pregunta | Parámetro | Por defecto | Mín. – máx. | Para qué sirve |
+|---|---|---|---|---|
+| Ancho (exterior) | `ancho` | 100 mm | 20 – 1000 | Largo de la planta en X |
+| Fondo (exterior) | `fondo` | 60 mm | 20 – 1000 | Largo de la planta en Y |
+| Alto de la caja | `alto` | 40 mm | 10 – 500 | Del fondo al borde, sin la tapa |
+| Pared | `pared` | 2 mm | 0,8 – 20 | Grosor de las paredes |
+| Base | `base` | 2 mm | 0,8 – 20 | Grosor del fondo |
+| Radio de esquinas | `esquina` | 3 mm | 0 – 30 | Esquinas exteriores de la caja y de la tapa |
+| Grosor de la tapa | `tapa` | 2 mm | 0,8 – 20 | Grosor de la placa de la tapa |
+| Cierre | — | Labio a presión | Labio a presión / Tornillos en las esquinas | Cómo se cierra |
+| Alto del labio | `labio` | 3 mm | 1 – 30 | Solo con labio: lo que entra la tapa en la caja |
+| Grosor del labio | `labio_pared` | 1,2 mm | 0,4 – 10 | Solo con labio |
+| Holgura del labio | `holgura` | 0,2 mm | 0 – 2 | Solo con labio: aire por cada lado |
+| Diámetro de los postes | `poste` | 8 mm | 4 – 30 | Solo con tornillos: postes cilíndricos en las 4 esquinas, por dentro |
+| Agujero del poste | `tornillo` | 2,5 mm | 1 – 10 | Solo con tornillos: para roscar el tornillo (M3: 2,5), de 10 mm de profundidad como mucho |
+| Agujero de la tapa | `pasante` | 3,4 mm | 1 – 12 | Solo con tornillos: para que el tornillo pase (M3: 3,4) |
+
+### Medidas derivadas (con los valores por defecto)
+
+| Pieza | Medida |
+|---|---|
+| Caja | 100 × 60 × 40 mm, esquinas de radio 3 |
+| Hueco | 96 × 56 mm (ancho − 2·pared, fondo − 2·pared) y 38 mm de profundidad |
+| Tapa (labio) | placa de 100 × 60 × 2 mm y un anillo de 95,6 × 55,6 exterior (hueco − 2·holgura) y 93,2 × 53,2 interior, 3 mm de alto |
+| Tapa (tornillos) | placa de 100 × 60 × 2 mm con cuatro agujeros de Ø3,4 |
+| Postes | Ø8, centrados a `ancho/2 − pared − poste/2 + 0,5` en X y `fondo/2 − pared − poste/2 + 0,5` en Y de cada esquina (el 0,5 los mete en la pared para que se unan), desde la base hasta el borde |
+
+### Operaciones que crea
+
+Siempre: «Caja: cuerpo» (caja con esquinas redondeadas), «Caja: hueco» y «Tapa: placa» (al lado, en X = ancho + 10).
+Con labio: «Tapa: labio» y «Tapa: hueco del labio». Con tornillos: «Caja: poste 1–4», «Caja: agujero del poste 1–4» y
+«Tapa: agujero 1–4». Cuerpos **Caja** y **Tapa**, en el componente «Caja con tapa». Todas las medidas son
+parámetros (`ancho`, `alto`…), así que se pueden cambiar después en Sólido › Parámetros.
+
 ## Primitivas: Caja y Cilindro
 
 Son las piezas con las que se construyen los generadores; también se pueden usar solas (Sólido › Caja / Cilindro).

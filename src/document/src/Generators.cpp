@@ -205,6 +205,166 @@ public:
     }
 };
 
+// --- Caja con tapa -------------------------------------------------------------------------
+// Una caja rectangular abierta por arriba y su tapa, que cierra con un labio a presión o con tornillos en las
+// esquinas. Sirve para electrónica, cajas de regalo, organizadores…
+
+class BoxWithLid final : public Generator {
+public:
+    std::string id() const override { return "caja-con-tapa"; }
+    std::string title() const override { return "Caja con tapa"; }
+    std::string icon() const override { return "box-solid"; }
+    std::string description() const override
+    {
+        return "Caja rectangular abierta por arriba y su tapa, que cierra con un labio a presión o con tornillos "
+               "en las esquinas.";
+    }
+
+    std::vector<GeneratorField> fields() const override
+    {
+        using K = GeneratorField::Kind;
+        const auto length = [](std::string key, std::string label, double value, double min, double max,
+                               std::string hint = {}, std::string showKey = {}, int showIndex = 0) {
+            GeneratorField f;
+            f.key = std::move(key);
+            f.label = std::move(label);
+            f.kind = K::Length;
+            f.value = value;
+            f.min = min;
+            f.max = max;
+            f.hint = std::move(hint);
+            f.showKey = std::move(showKey);
+            f.showIndex = showIndex;
+            return f;
+        };
+        GeneratorField closure;
+        closure.key = "cierre";
+        closure.label = "Cierre";
+        closure.kind = K::Choice;
+        closure.choices = {"Labio a presión", "Tornillos en las esquinas"};
+        return {length("ancho", "Ancho (exterior)", 100.0, 20.0, 1000.0),
+                length("fondo", "Fondo (exterior)", 60.0, 20.0, 1000.0, "El otro lado de la planta"),
+                length("alto", "Alto de la caja", 40.0, 10.0, 500.0, "Sin la tapa"),
+                length("pared", "Pared", 2.0, 0.8, 20.0, "Un múltiplo del ancho de la boquilla"),
+                length("base", "Base", 2.0, 0.8, 20.0, "Grosor del fondo"),
+                length("esquina", "Radio de esquinas", 3.0, 0.0, 30.0),
+                length("tapa", "Grosor de la tapa", 2.0, 0.8, 20.0),
+                closure,
+                length("labio", "Alto del labio", 3.0, 1.0, 30.0, "Lo que entra la tapa en la caja", "cierre", 0),
+                length("labio_pared", "Grosor del labio", 1.2, 0.4, 10.0, {}, "cierre", 0),
+                length("holgura", "Holgura del labio", 0.2, 0.0, 2.0, "Aire entre el labio y la pared, por cada lado",
+                       "cierre", 0),
+                length("poste", "Diámetro de los postes", 8.0, 4.0, 30.0, "Uno en cada esquina, por dentro", "cierre", 1),
+                length("tornillo", "Agujero del poste", 2.5, 1.0, 10.0, "Para roscar el tornillo (M3: 2,5)", "cierre", 1),
+                length("pasante", "Agujero de la tapa", 3.4, 1.0, 12.0, "Para que el tornillo pase (M3: 3,4)", "cierre", 1)};
+    }
+
+    Recipe make(const GeneratorValues& values, const std::string& suffix) const override
+    {
+        const auto v = [&](const char* key) { return values.at(key); };
+        const bool screws = v("cierre") >= 0.5;
+        const auto p = [&](const char* name) { return std::string(name) + suffix; };
+        const std::string ancho = p("ancho"), fondo = p("fondo"), alto = p("alto"), pared = p("pared"), base = p("base"),
+                          esquina = p("esquina"), tapa = p("tapa"), labio = p("labio"), labioPared = p("labio_pared"),
+                          holgura = p("holgura"), poste = p("poste"), tornillo = p("tornillo"), pasante = p("pasante");
+
+        Recipe recipe;
+        recipe.component = "Caja con tapa";
+        recipe.bodyNames = {"Caja", "Tapa"};
+        const auto param = [&](const std::string& name, double value) {
+            recipe.parameters.push_back({name, number(value)});
+        };
+        param(ancho, v("ancho"));
+        param(fondo, v("fondo"));
+        param(alto, v("alto"));
+        param(pared, v("pared"));
+        param(base, v("base"));
+        param(esquina, v("esquina"));
+        param(tapa, v("tapa"));
+        if (screws) {
+            param(poste, v("poste"));
+            param(tornillo, v("tornillo"));
+            param(pasante, v("pasante"));
+        } else {
+            param(labio, v("labio"));
+            param(labioPared, v("labio_pared"));
+            param(holgura, v("holgura"));
+        }
+
+        const auto addBox = [&](const std::string& name, Operation operation, const std::string& w, const std::string& d,
+                                const std::string& z, const std::string& h, const std::string& x, const std::string& radius) {
+            auto f = std::make_unique<BoxFeature>();
+            f->setName(name);
+            f->base.origin = OriginPlane::XY;
+            f->centered = true;
+            f->operation = operation;
+            f->expressions = {{"width", w}, {"depth", d}, {"z", z}, {"height", h}};
+            if (!x.empty()) {
+                f->expressions["x"] = x;
+            }
+            if (!radius.empty()) {
+                f->expressions["radius"] = radius;
+            }
+            return f;
+        };
+        const auto addCylinder = [&](const std::string& name, Operation operation, const std::string& diameter,
+                                     const std::string& x, const std::string& y, const std::string& z, const std::string& h) {
+            auto f = std::make_unique<CylinderFeature>();
+            f->setName(name);
+            f->base.origin = OriginPlane::XY;
+            f->operation = operation;
+            f->expressions = {{"diameter", diameter}, {"x", x}, {"y", y}, {"z", z}, {"height", h}};
+            return f;
+        };
+        const std::string inW = ancho + " - 2*" + pared;
+        const std::string inD = fondo + " - 2*" + pared;
+        const std::string beside = ancho + " + 10";
+
+        // 1. La caja y su hueco (abierta por arriba).
+        recipe.features.push_back(addBox("Caja: cuerpo", Operation::NewBody, ancho, fondo, "0", alto, "", esquina));
+        recipe.features.push_back(addBox("Caja: hueco", Operation::Cut, inW, inD, base, alto, "", ""));
+
+        // Los postes de las cuatro esquinas, tangentes a la pared por dentro (con 0,5 mm metidos en ella para que
+        // se unan), con su agujero para roscar.
+        const std::string px = ancho + "/2 - " + pared + " - " + poste + "/2 + 0.5";
+        const std::string py = fondo + "/2 - " + pared + " - " + poste + "/2 + 0.5";
+        const std::string depth = "min(10; " + alto + " - " + base + " - 1)";  // el agujero, como mucho 10 mm
+        const char* corners[4][2] = {{"", ""}, {"-", ""}, {"", "-"}, {"-", "-"}};
+        if (screws) {
+            for (int i = 0; i < 4; ++i) {
+                const std::string sx = corners[i][0], sy = corners[i][1];
+                recipe.features.push_back(addCylinder("Caja: poste " + std::to_string(i + 1), Operation::Join, poste,
+                                                       sx + "(" + px + ")", sy + "(" + py + ")", base + " - 0.5",
+                                                       alto + " - " + base + " + 0.5"));
+            }
+            for (int i = 0; i < 4; ++i) {
+                const std::string sx = corners[i][0], sy = corners[i][1];
+                recipe.features.push_back(addCylinder("Caja: agujero del poste " + std::to_string(i + 1), Operation::Cut,
+                                                       tornillo, sx + "(" + px + ")", sy + "(" + py + ")",
+                                                       alto + " - " + depth, depth + " + 1"));
+            }
+        }
+
+        // 2. La tapa, al lado (apoyada en la cama).
+        recipe.features.push_back(addBox("Tapa: placa", Operation::NewBody, ancho, fondo, "0", tapa, beside, esquina));
+        if (screws) {
+            for (int i = 0; i < 4; ++i) {
+                const std::string sx = corners[i][0], sy = corners[i][1];
+                recipe.features.push_back(addCylinder("Tapa: agujero " + std::to_string(i + 1), Operation::Cut, pasante,
+                                                       beside + (sx.empty() ? " + " : " - ") + "(" + px + ")", sy + "(" + py + ")", "-1",
+                                                       tapa + " + 2"));
+            }
+        } else {
+            // El labio: un anillo que sale hacia arriba de la placa y entra en la caja con holgura.
+            const std::string lipW = inW + " - 2*" + holgura, lipD = inD + " - 2*" + holgura;
+            recipe.features.push_back(addBox("Tapa: labio", Operation::Join, lipW, lipD, tapa + " - 0.01", labio + " + 0.01", beside, ""));
+            recipe.features.push_back(addBox("Tapa: hueco del labio", Operation::Cut, lipW + " - 2*" + labioPared,
+                                             lipD + " - 2*" + labioPared, tapa, labio + " + 1", beside, ""));
+        }
+        return recipe;
+    }
+};
+
 } // namespace
 
 GeneratorValues Generator::defaults() const
@@ -219,7 +379,8 @@ GeneratorValues Generator::defaults() const
 const std::vector<const Generator*>& generators()
 {
     static const Lightbox lightbox;
-    static const std::vector<const Generator*> all = {&lightbox};
+    static const BoxWithLid boxWithLid;
+    static const std::vector<const Generator*> all = {&lightbox, &boxWithLid};
     return all;
 }
 
