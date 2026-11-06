@@ -1,4 +1,5 @@
 #include "SketchSession.hpp"
+#include "ExpressionSpinBox.hpp"
 #include "ValueInput.hpp"
 
 #include <nuf/render/Viewport.hpp>
@@ -345,7 +346,7 @@ void SketchSession::placeText(sketch::Vec2 at)
     auto* heightBox = new QDoubleSpinBox(&dialog);
     heightBox->setRange(0.1, 1000.0);
     heightBox->setDecimals(2);
-    heightBox->setSuffix(QStringLiteral(" mm"));
+    setUnit(heightBox, QStringLiteral("mm"));
     heightBox->setValue(textHeight_);
     auto* size = new QLabel(&dialog);
     form->addRow(QStringLiteral("Texto"), textEdit);

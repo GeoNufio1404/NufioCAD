@@ -5,6 +5,7 @@
 // cuadro recuerda la expresión (expression()) y la operación la guarda: así el
 // valor se recalcula solo cuando cambia la tabla de parámetros.
 
+#include <QAbstractSpinBox>
 #include <QDoubleSpinBox>
 #include <QString>
 
@@ -13,6 +14,12 @@ class Document;
 }
 
 namespace nuf::app {
+
+// Muestra la unidad («mm», «°») como una etiqueta fija a la derecha del número, dentro del cuadro: no se
+// edita ni forma parte del texto (al cambiar el valor solo se reescribe el número).
+void setUnit(QAbstractSpinBox* box, const QString& unit);
+// La unidad puesta con setUnit (vacía si no hay).
+QString unitOf(const QAbstractSpinBox* box);
 
 class ExpressionSpinBox final : public QDoubleSpinBox {
     Q_OBJECT

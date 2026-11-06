@@ -1,4 +1,5 @@
 #include "ExportDialog.hpp"
+#include "ExpressionSpinBox.hpp"
 
 #include <QApplication>
 #include <QCheckBox>
@@ -68,7 +69,7 @@ ExportDialog::ExportDialog(const std::vector<document::Body>& bodies, const std:
         auto* box = new QDoubleSpinBox(this);
         box->setRange(low, high);
         box->setDecimals(2);
-        box->setSuffix(suffix);
+        setUnit(box, suffix.trimmed());
         box->setValue(settings.value(QLatin1String(key), value).toDouble());
         box->setKeyboardTracking(false);
         return box;

@@ -410,6 +410,10 @@ Todas siguen el patrón de las operaciones actuales: una clase en `document/Feat
 - Control de calidad de malla al exportar.
 - Posible envío directo al slicer.
 
+### Unidad como etiqueta en los cuadros numéricos ✅ (pedido en las pruebas)
+La unidad («mm», «°») ya no forma parte del texto del cuadro: es una etiqueta fija a la derecha del número (`setUnit` en `ExpressionSpinBox.hpp`, sirve para cualquier cuadro numérico), así que al editar solo se selecciona y reescribe el número. Se aplica a las herramientas de operación (distancias, ángulos, diámetros, paso, largo…), la Sección, el diálogo de Exportar/Imprimir (medidas de la impresora) y la altura del texto del sketch. Si se escribe «10 mm» a mano, se sigue entendiendo.
+- **Pendiente:** **unidades configurables** (mm/cm/in…) en Configuración, con toda la app trabajando en ellas (cuadros, cotas del sketch, avisos, exportación); hoy el modelo y las etiquetas son siempre mm. Las cotas del sketch (ValueInput), el cuadro «copias en total» del patrón y otros diálogos pueden tener aún la unidad en el texto.
+
 ### Fase 10 — Herramientas generadoras (tipo MakerLab)
 Asistentes que hacen preguntas («redonda o rectangular», grosor de paredes, grosor del frente, profundidad, alto, ancho…) y **generan un diseño normal** en el timeline, con las respuestas como parámetros con nombre: se puede seguir editando con el CAD después. Un solo motor, dos entradas: tarjeta «Herramientas» junto a «Diseñar desde cero» sobre el lienzo vacío, y pestaña HERRAMIENTAS en la cinta.
 - **10a Base común:** formulario de preguntas con vista previa en vivo (esperando a que se deje de escribir) y generación del historial con parámetros; resultado agrupado en un componente.

@@ -253,3 +253,12 @@ Captura / archivo .nuf (opcional):
 ```
 
 Con una captura de pantalla y los pasos suele bastar. Si algo se cierra, no hace falta que copies nada: el informe queda guardado y lo leo yo.
+
+### Unidad en los cuadros numéricos
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| U.1 | Abre Sólido › Rosca y mira Diámetro, Paso y Largo | El «mm» sale como una etiqueta gris a la derecha del número, junto a las flechas; el número va solo |
+| U.2 | Haz doble clic en el valor de un cuadro o pulsa Ctrl+A dentro | Solo se selecciona el número, no el «mm» |
+| U.3 | Escribe `10` y Enter; luego `diametro*2` con un parámetro; luego `5 mm` | Las tres se aceptan |
+| U.4 | Revisa Sección, Exportar/Imprimir (impresora) y la altura del texto del sketch | También con la unidad como etiqueta |

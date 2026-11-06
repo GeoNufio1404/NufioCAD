@@ -1221,7 +1221,7 @@ void MainWindow::toggleSection(bool on)
         sectionOffset_ = new QDoubleSpinBox(sectionPanel_);
         sectionOffset_->setRange(-100000.0, 100000.0);
         sectionOffset_->setDecimals(2);
-        sectionOffset_->setSuffix(QStringLiteral(" mm"));
+        setUnit(sectionOffset_, QStringLiteral("mm"));
         form->addRow(QStringLiteral("Posición"), sectionOffset_);
         sectionFlip_ = new QCheckBox(QStringLiteral("Ver el otro lado"), sectionPanel_);
         form->addRow(QString(), sectionFlip_);

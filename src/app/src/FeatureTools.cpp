@@ -32,7 +32,7 @@ QDoubleSpinBox* lengthBox(double value)
     auto* box = new ExpressionSpinBox();
     box->setRange(-100000.0, 100000.0);
     box->setDecimals(2);
-    box->setSuffix(QStringLiteral(" mm"));
+    setUnit(box, QStringLiteral("mm"));
     box->setValue(value);
     box->setKeyboardTracking(false);
     return box;
@@ -43,7 +43,7 @@ QDoubleSpinBox* angleBox(double value, double limit)
     auto* box = new ExpressionSpinBox();
     box->setRange(-limit, limit);
     box->setDecimals(1);
-    box->setSuffix(QStringLiteral(" °"));
+    setUnit(box, QStringLiteral("°"));
     box->setValue(value);
     box->setKeyboardTracking(false);
     return box;
