@@ -230,6 +230,7 @@ public:
     double width = 10.0;
     double depth = 10.0;
     double height = 10.0;
+    double cornerRadius = 0.0;  // esquinas redondeadas (las aristas paralelas a la normal)
     bool centered = false;   // el punto es el centro del ancho y del fondo
     bool symmetric = false;  // el alto va mitad a cada lado del plano
     Operation operation = Operation::NewBody;

@@ -25,6 +25,9 @@ std::string number(double value)
 }
 
 // --- Lightbox ------------------------------------------------------------------------------
+// Como la «Light Box» de MakerLab: una caja abierta por delante (fondo cerrado y paredes), y una tapa delantera
+// hecha de un marco, un labio que entra en la caja y la cara central (donde va la imagen). Todo son cuerpos
+// aparte para poder darle a cada uno su filamento sin pintar caras.
 
 class Lightbox final : public Generator {
 public:
@@ -32,8 +35,8 @@ public:
     std::string title() const override { return "Lightbox"; }
     std::string description() const override
     {
-        return "Caja de luz para imprimir: frente fino que difunde la luz, paredes, tapa trasera con labio y "
-               "holgura, y un agujero para el cable.";
+        return "Caja de luz para imprimir, como la de MakerLab: caja abierta por delante y tapa delantera con marco, "
+               "labio y una cara central aparte (para la imagen).";
     }
 
     std::vector<GeneratorField> fields() const override
@@ -53,27 +56,29 @@ public:
             f.showIndex = showIndex;
             return f;
         };
-        GeneratorField cableWall;
-        cableWall.key = "pared_cable";
-        cableWall.label = "Salida del cable";
-        cableWall.kind = K::Choice;
-        cableWall.choices = {"Atrás (en la tapa)", "Pared de abajo", "Pared de arriba", "Pared izquierda", "Pared derecha"};
-        cableWall.hint = "Por dónde sale el cable de la tira LED";
         GeneratorField shape;
         shape.key = "forma";
         shape.label = "Forma";
         shape.kind = K::Choice;
         shape.choices = {"Rectangular", "Redonda"};
+        GeneratorField cableWall;
+        cableWall.key = "pared_cable";
+        cableWall.label = "Salida del cable";
+        cableWall.kind = K::Choice;
+        cableWall.choices = {"Atrás (en el fondo)", "Pared de abajo", "Pared de arriba", "Pared izquierda", "Pared derecha"};
+        cableWall.hint = "Por dónde sale el cable de la tira LED";
         return {shape,
-                length("ancho", "Ancho", 150.0, 20.0, 1000.0, {}, "forma", 0),
-                length("alto", "Alto", 100.0, 20.0, 1000.0, {}, "forma", 0),
-                length("diametro", "Diámetro", 120.0, 20.0, 1000.0, {}, "forma", 1),
-                length("profundidad", "Profundidad", 40.0, 10.0, 500.0, "De adelante hacia atrás"),
-                length("pared", "Pared", 2.4, 0.8, 20.0, "Un múltiplo del ancho de la boquilla"),
-                length("frente", "Frente", 1.2, 0.4, 10.0, "Más fino = más luz pasa"),
-                length("tapa", "Tapa trasera", 2.4, 0.8, 20.0),
-                length("labio", "Labio de la tapa", 3.0, 1.0, 30.0, "Lo que entra en la caja"),
-                length("holgura", "Holgura de la tapa", 0.2, 0.0, 2.0, "Para que la tapa encaje sin forzar"),
+                length("ancho", "Ancho (exterior)", 175.0, 30.0, 1000.0, "La imagen mide esto menos 2 paredes", "forma", 0),
+                length("alto", "Alto (exterior)", 131.0, 30.0, 1000.0, {}, "forma", 0),
+                length("diametro", "Diámetro (exterior)", 150.0, 30.0, 1000.0, {}, "forma", 1),
+                length("profundidad", "Profundidad total", 37.0, 10.0, 500.0, "Fondo + hueco, sin la tapa delantera"),
+                length("pared", "Pared", 2.0, 0.8, 20.0, "Un múltiplo del ancho de la boquilla"),
+                length("fondo", "Fondo de la caja", 2.0, 0.8, 20.0, "La pared de atrás"),
+                length("frente", "Frente (marco e imagen)", 0.8, 0.4, 10.0, "Grosor de la tapa: más fino, más luz pasa"),
+                length("esquina", "Radio de esquinas", 2.0, 0.0, 30.0, "Solo la parte exterior", "forma", 0),
+                length("labio", "Alto del labio", 5.0, 1.0, 30.0, "Lo que entra en la caja"),
+                length("labio_pared", "Grosor del labio", 1.0, 0.4, 10.0),
+                length("holgura", "Holgura del labio", 0.1, 0.0, 2.0, "Aire entre el labio y la pared, por cada lado"),
                 length("cable", "Agujero del cable", 6.0, 0.0, 50.0, "0 = sin agujero"),
                 cableWall};
     }
@@ -83,13 +88,14 @@ public:
         const auto v = [&](const char* key) { return values.at(key); };
         const bool round = v("forma") >= 0.5;
         const auto p = [&](const char* name) { return std::string(name) + suffix; };
-        const std::string profundidad = p("profundidad"), pared = p("pared"), frente = p("frente"), tapa = p("tapa"),
-                          labio = p("labio"), holgura = p("holgura"), cable = p("cable");
+        const std::string profundidad = p("profundidad"), pared = p("pared"), fondo = p("fondo"), frente = p("frente"),
+                          esquina = p("esquina"), labio = p("labio"), labioPared = p("labio_pared"),
+                          holgura = p("holgura"), cable = p("cable");
         const std::string ancho = p("ancho"), alto = p("alto"), diametro = p("diametro");
 
         Recipe recipe;
         recipe.component = "Lightbox";
-        recipe.bodyNames = {"Caja", "Tapa"};
+        recipe.bodyNames = {"Caja", "Marco", "Labio", "Cara"};
         const auto param = [&](const std::string& name, double value) {
             recipe.parameters.push_back({name, number(value)});
         };
@@ -98,12 +104,14 @@ public:
         } else {
             param(ancho, v("ancho"));
             param(alto, v("alto"));
+            param(esquina, v("esquina"));
         }
         param(profundidad, v("profundidad"));
         param(pared, v("pared"));
+        param(fondo, v("fondo"));
         param(frente, v("frente"));
-        param(tapa, v("tapa"));
         param(labio, v("labio"));
+        param(labioPared, v("labio_pared"));
         param(holgura, v("holgura"));
         const bool hasCable = v("cable") > 0.0;
         if (hasCable) {
@@ -125,77 +133,74 @@ public:
             f->operation = operation;
             return f;
         };
-        // El tamaño exterior, y lo que hay que restar para una pieza que entre por dentro de la pared.
-        const std::string across = round ? diametro : ancho;
-        const auto inner = [&](const std::string& extra) { return across + " - 2*" + pared + extra; };
-        const std::string innerH = round ? "" : alto + " - 2*" + pared;
+        // «Pieza» de planta rectangular o redonda con un tamaño dado por expresiones (ancho/alto o diámetro).
+        // Con «x»: la posición X de la pieza (la tapa va al lado).
+        const auto shapeAt = [&](const std::string& name, Operation operation, const std::string& w, const std::string& h,
+                                 const std::string& z, const std::string& height, const std::string& x,
+                                 const std::string& radius) -> std::unique_ptr<Feature> {
+            if (round) {
+                auto f = addCylinder(name, operation);
+                f->expressions = {{"diameter", w}, {"z", z}, {"height", height}};
+                if (!x.empty()) {
+                    f->expressions["x"] = x;
+                }
+                return f;
+            }
+            auto f = addBox(name, operation);
+            f->expressions = {{"width", w}, {"depth", h}, {"z", z}, {"height", height}};
+            if (!x.empty()) {
+                f->expressions["x"] = x;
+            }
+            if (!radius.empty()) {
+                f->expressions["radius"] = radius;
+            }
+            return f;
+        };
+        const std::string W = round ? diametro : ancho;   // tamaño exterior (el diámetro hace de ancho y de alto)
+        const std::string H = round ? diametro : alto;
+        const std::string inW = W + " - 2*" + pared;       // interior de la pared = tamaño de la imagen
+        const std::string inH = H + " - 2*" + pared;
+        const std::string lipW = inW + " - 2*" + holgura;  // el labio entra con holgura
+        const std::string lipH = inH + " - 2*" + holgura;
+        const std::string lipInW = lipW + " - 2*" + labioPared;
+        const std::string lipInH = lipH + " - 2*" + labioPared;
+        const std::string beside = W + " + 10";            // la tapa se imprime al lado
 
-        // 1. La caja entera.
-        if (round) {
-            auto f = addCylinder("Lightbox: caja", Operation::NewBody);
-            f->expressions = {{"diameter", diametro}, {"height", profundidad}};
-            recipe.features.push_back(std::move(f));
-        } else {
-            auto f = addBox("Lightbox: caja", Operation::NewBody);
-            f->expressions = {{"width", ancho}, {"depth", alto}, {"height", profundidad}};
-            recipe.features.push_back(std::move(f));
-        }
-        // 2. El hueco: desde el frente (que queda con su grosor) hasta salir por detrás.
-        if (round) {
-            auto f = addCylinder("Lightbox: hueco", Operation::Cut);
-            f->expressions = {{"diameter", inner("")}, {"z", frente}, {"height", profundidad}};
-            recipe.features.push_back(std::move(f));
-        } else {
-            auto f = addBox("Lightbox: hueco", Operation::Cut);
-            f->expressions = {{"width", inner("")}, {"depth", innerH}, {"z", frente}, {"height", profundidad}};
-            recipe.features.push_back(std::move(f));
-        }
-        // 3. El agujero del cable, por una pared (el plano XZ mira hacia -Y y el YZ hacia +X: «z» es hacia fuera
-        // de la pared de abajo / de la derecha, y su opuesto hacia la de arriba / la izquierda).
+        // 1. La caja, con el fondo en Z = 0 (apoyado en la cama) y abierta por delante (+Z).
+        recipe.features.push_back(shapeAt("Lightbox: caja", Operation::NewBody, W, H, "0", profundidad, "", esquina));
+        // 2. El hueco, desde el fondo hasta salir por delante (esquinas interiores vivas).
+        recipe.features.push_back(shapeAt("Lightbox: hueco", Operation::Cut, inW, inH, fondo, profundidad, "", ""));
+        // 3. El agujero del cable: por detrás (atraviesa el fondo) o por una pared.
         const int wall = int(v("pared_cable"));
-        if (hasCable && wall >= 1) {
+        if (hasCable) {
             auto f = addCylinder("Lightbox: agujero del cable", Operation::Cut);
-            const bool alongY = wall <= 2;  // abajo o arriba
-            f->base.origin = alongY ? OriginPlane::XZ : OriginPlane::YZ;
-            f->symmetric = true;
-            const std::string half = (alongY && !round ? alto : (round ? diametro : ancho)) + "/2 - " + pared + "/2";
-            const bool positive = wall == 1 || wall == 4;  // abajo y derecha
-            f->expressions = {{"diameter", cable},
-                              {"y", frente + " + (" + profundidad + " - " + frente + ")/2"},
-                              {"z", positive ? half : "-(" + half + ")"},
-                              {"height", pared + " + 2"}};
+            if (wall == 0) {
+                f->expressions = {{"diameter", cable}, {"y", "-(" + H + ")/4"}, {"z", "-1"}, {"height", fondo + " + 2"}};
+            } else {
+                // El plano XZ mira hacia -Y y el YZ hacia +X: «z» es hacia fuera de la pared de abajo / de la
+                // derecha, y su opuesto hacia la de arriba / la izquierda.
+                const bool alongY = wall <= 2;  // abajo o arriba
+                f->base.origin = alongY ? OriginPlane::XZ : OriginPlane::YZ;
+                f->symmetric = true;
+                const std::string half = (alongY ? H : W) + "/2 - " + pared + "/2";
+                const bool positive = wall == 1 || wall == 4;  // abajo y derecha
+                f->expressions = {{"diameter", cable},
+                                  {"y", fondo + " + (" + profundidad + " - " + fondo + ")/2"},
+                                  {"z", positive ? half : "-(" + half + ")"},
+                                  {"height", pared + " + 2"}};
+            }
             recipe.features.push_back(std::move(f));
         }
-        // 4. La tapa: una placa al lado, con un labio que entra en la caja.
-        const std::string beside = across + " + 10";
-        if (round) {
-            auto f = addCylinder("Lightbox: tapa", Operation::NewBody);
-            f->expressions = {{"x", beside}, {"diameter", diametro}, {"height", tapa}};
-            recipe.features.push_back(std::move(f));
-            auto lip = addCylinder("Lightbox: labio de la tapa", Operation::Join);
-            lip->expressions = {{"x", beside}, {"diameter", inner(" - 2*" + holgura)}, {"height", tapa + " + " + labio}};
-            recipe.features.push_back(std::move(lip));
-        } else {
-            auto f = addBox("Lightbox: tapa", Operation::NewBody);
-            f->expressions = {{"x", beside}, {"width", ancho}, {"depth", alto}, {"height", tapa}};
-            recipe.features.push_back(std::move(f));
-            auto lip = addBox("Lightbox: labio de la tapa", Operation::Join);
-            lip->expressions = {{"x", beside},
-                                {"width", inner(" - 2*" + holgura)},
-                                {"depth", innerH + " - 2*" + holgura},
-                                {"height", tapa + " + " + labio}};
-            recipe.features.push_back(std::move(lip));
-        }
-        // 5. El agujero del cable por detrás: atraviesa la placa y el labio de la tapa, hacia abajo del centro.
-        if (hasCable && wall == 0) {
-            auto f = addCylinder("Lightbox: agujero del cable (tapa)", Operation::Cut);
-            f->expressions = {{"diameter", cable},
-                              {"x", beside},
-                              {"y", "-(" + (round ? diametro : alto) + ")/4"},
-                              {"z", "-1"},
-                              {"height", tapa + " + " + labio + " + 2"}};
-            recipe.features.push_back(std::move(f));
-        }
+        // 4. El marco de la tapa: una placa del tamaño de la caja con el centro hueco (el anillo de la pared).
+        recipe.features.push_back(shapeAt("Lightbox: marco", Operation::NewBody, W, H, "0", frente, beside, esquina));
+        recipe.features.push_back(
+            shapeAt("Lightbox: hueco del marco", Operation::Cut, inW, inH, "-1", frente + " + 2", beside, ""));
+        // 5. El labio: un anillo que sale hacia atrás desde la cara interior de la tapa y entra en la caja.
+        recipe.features.push_back(shapeAt("Lightbox: labio", Operation::NewBody, lipW, lipH, frente, labio, beside, ""));
+        recipe.features.push_back(
+            shapeAt("Lightbox: hueco del labio", Operation::Cut, lipInW, lipInH, frente, labio + " + 1", beside, ""));
+        // 6. La cara central, donde va la imagen: rellena el hueco del marco (un cuerpo aparte).
+        recipe.features.push_back(shapeAt("Lightbox: cara central", Operation::NewBody, inW, inH, "0", frente, beside, ""));
         return recipe;
     }
 };

@@ -703,7 +703,7 @@ std::optional<std::string> BoxFeature::compute(ModelState& state) const
     const sketch::Plane plane = resolvePlane(state, base, "de la caja", "se usa su última posición", warning);
     try {
         const geometry::Shape box =
-            geometry::box(tag(), primitivePlane(plane, x, y, z, symmetric, height), width, depth, height, centered);
+            geometry::box(tag(), primitivePlane(plane, x, y, z, symmetric, height), width, depth, height, centered, cornerRadius);
         if (auto extra = applyOperation(state, *this, operation, box)) {
             warning = warning ? *warning + " " + *extra : *extra;
         }
@@ -723,7 +723,8 @@ std::vector<FeatureId> BoxFeature::dependencies() const
 std::vector<Feature::NumericField> BoxFeature::numericFields()
 {
     return {field("x", "Posición X", x), field("y", "Posición Y", y), field("z", "Posición Z", z),
-            field("width", "Ancho", width), field("depth", "Fondo", depth), field("height", "Alto", height)};
+            field("width", "Ancho", width), field("depth", "Fondo", depth), field("height", "Alto", height),
+            field("radius", "Radio de esquinas", cornerRadius)};
 }
 
 std::optional<std::string> CylinderFeature::compute(ModelState& state) const

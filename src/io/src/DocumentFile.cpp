@@ -556,7 +556,7 @@ FeatureRow rowOf(const Feature& f)
         const auto& b = static_cast<const BoxFeature&>(f);
         row.type = "box";
         params = {{"base", toJson(b.base)}, {"x", b.x}, {"y", b.y}, {"z", b.z}, {"width", b.width},
-                  {"depth", b.depth}, {"height", b.height}, {"centered", b.centered},
+                  {"depth", b.depth}, {"height", b.height}, {"cornerRadius", b.cornerRadius}, {"centered", b.centered},
                   {"symmetric", b.symmetric}, {"operation", nameOf(kOperations, b.operation)}};
         break;
     }
@@ -736,6 +736,7 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         b->width = number(p, "width");
         b->depth = number(p, "depth");
         b->height = number(p, "height");
+        b->cornerRadius = p.value("cornerRadius", 0.0);
         b->centered = p.at("centered").get<bool>();
         b->symmetric = p.at("symmetric").get<bool>();
         b->operation = parseEnum(kOperations, text(p, "operation"), "operación");

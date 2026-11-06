@@ -136,7 +136,10 @@ Shape gear(std::string_view tag, const sketch::Plane& plane, const GearSpec& spe
 // Caja con una esquina (o su centro, «centered») en el origen del plano: ancho a lo largo de su X, fondo a lo
 // largo de su Y y alto a lo largo de la normal (el signo da el sentido). Caras: «tag:cara:+x», «-x», «+y», «-y»,
 // «+z» y «-z» (según los ejes del plano; +z es la que mira hacia donde apunta la normal).
-Shape box(std::string_view tag, const sketch::Plane& plane, double width, double depth, double height, bool centered);
+// Con «cornerRadius» > 0 las cuatro aristas paralelas a la normal van redondeadas (las caras de las esquinas se
+// llaman «tag:cara:esquina+x+y», etc.).
+Shape box(std::string_view tag, const sketch::Plane& plane, double width, double depth, double height, bool centered,
+          double cornerRadius = 0.0);
 
 // Cilindro con el centro de su base en el origen del plano y el eje a lo largo de la normal (el signo del alto
 // da el sentido). Caras: «tag:cara:lado», «+z» y «-z».

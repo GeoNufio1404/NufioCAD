@@ -987,7 +987,8 @@ Shape gear(std::string_view tagView, const sketch::Plane& plane, const GearSpec&
     }
 }
 
-Shape box(std::string_view tagView, const sketch::Plane& plane, double width, double depth, double height, bool centered)
+Shape box(std::string_view tagView, const sketch::Plane& plane, double width, double depth, double height, bool centered,
+          double cornerRadius)
 {
     const std::string tag(tagView);
     if (!(width > kTiny) || !(depth > kTiny) || std::abs(height) <= kTiny) {
@@ -1000,6 +1001,59 @@ Shape box(std::string_view tagView, const sketch::Plane& plane, double width, do
         gp_Pnt corner = toPnt(plane.origin);
         if (centered) {
             corner.Translate(gp_Vec(xAxis) * (-width / 2.0) + gp_Vec(yAxis) * (-depth / 2.0));
+        }
+        if (cornerRadius > kTiny) {
+            // Rectángulo con las esquinas redondeadas, extruido a lo largo de la normal.
+            const double r = std::min({cornerRadius, width / 2.0 - kTiny, depth / 2.0 - kTiny});
+            const gp_Ax2 frame(corner, normal, xAxis);
+            const auto at = [&](double x, double y) { return corner.Translated(gp_Vec(xAxis) * x + gp_Vec(yAxis) * y); };
+            const auto arc = [&](double cx, double cy, double from) {
+                return BRepBuilderAPI_MakeEdge(gp_Circ(gp_Ax2(at(cx, cy), normal, xAxis), r), from, from + std::numbers::pi / 2.0)
+                    .Edge();
+            };
+            const auto line = [&](gp_Pnt a, gp_Pnt b) { return BRepBuilderAPI_MakeEdge(a, b).Edge(); };
+            constexpr double kPi = std::numbers::pi;
+            std::vector<std::pair<TopoDS_Edge, std::string>> edges = {
+                {line(at(r, 0), at(width - r, 0)), ":cara:-y"},
+                {arc(width - r, r, 3.0 * kPi / 2.0), ":cara:esquina+x-y"},
+                {line(at(width, r), at(width, depth - r)), ":cara:+x"},
+                {arc(width - r, depth - r, 0.0), ":cara:esquina+x+y"},
+                {line(at(width - r, depth), at(r, depth)), ":cara:+y"},
+                {arc(r, depth - r, kPi / 2.0), ":cara:esquina-x+y"},
+                {line(at(0, depth - r), at(0, r)), ":cara:-x"},
+                {arc(r, r, kPi), ":cara:esquina-x-y"}};
+            BRepBuilderAPI_MakeWire outline;
+            for (const auto& [edge, name] : edges) {
+                outline.Add(edge);
+            }
+            if (!outline.IsDone()) {
+                throw GeometryError("No se pudo cerrar el contorno de la caja");
+            }
+            // El constructor de caminos puede sustituir las aristas por copias: se relee el contorno en orden.
+            {
+                TopoDS_Iterator children(outline.Wire());
+                for (auto& [edge, name] : edges) {
+                    if (!children.More()) {
+                        throw GeometryError("El contorno de la caja quedó incompleto");
+                    }
+                    edge = TopoDS::Edge(children.Value());
+                    children.Next();
+                }
+            }
+            const BRepBuilderAPI_MakeFace face(gp_Pln(corner, normal), outline.Wire(), true);
+            BRepPrimAPI_MakePrism prism(face.Face(), gp_Vec(normal) * height, true);
+            if (!prism.IsDone()) {
+                throw GeometryError("No se pudo generar la caja");
+            }
+            Namer namer(prism.Shape());
+            namer.name(prism.FirstShape(), tag + (height > 0.0 ? ":cara:-z" : ":cara:+z"));
+            namer.name(prism.LastShape(), tag + (height > 0.0 ? ":cara:+z" : ":cara:-z"));
+            for (const auto& [edge, name] : edges) {
+                for (const TopoDS_Shape& side : prism.Generated(edge)) {
+                    namer.name(side, tag + name);
+                }
+            }
+            return namer.finish(tag);
         }
         if (height < 0.0) {
             corner.Translate(gp_Vec(normal) * height);

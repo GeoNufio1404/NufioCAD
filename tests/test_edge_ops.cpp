@@ -1826,35 +1826,45 @@ TEST_CASE("Una caja y un cilindro se colocan, se cortan y se ligan a parámetros
     REQUIRE_THAT(reopened.result().bodies.front().shape.bounds().max.x, Catch::Matchers::WithinAbs(20.0, 1e-6));
 }
 
-TEST_CASE("El generador de lightbox hace caja y tapa ligadas a parámetros, con nombres y componente", "[generator]")
+TEST_CASE("El generador de lightbox hace caja y tapa de cuatro cuerpos ligados a parámetros", "[generator]")
 {
     const document::Generator* lightbox = document::findGenerator("lightbox");
     REQUIRE(lightbox != nullptr);
     document::GeneratorValues values = lightbox->defaults();
-    values["cable"] = 0.0;  // sin agujero: el volumen se calcula a mano
+    values["cable"] = 0.0;  // sin agujero: los volúmenes se calculan a mano
 
     Document doc;
     commands::AddRecipe command(lightbox->make(values, ""), "Lightbox");
     command.execute(doc);
-    REQUIRE(doc.result().bodies.size() == 2);
+    REQUIRE(doc.result().bodies.size() == 4);
     for (std::size_t i = 0; i < doc.featureCount(); ++i) {
         INFO(doc.feature(i).name());
         REQUIRE(doc.status(doc.feature(i).id()).health != Health::Error);
     }
-    REQUIRE(doc.bodyInfo().at(doc.result().bodies[0].key).name == "Caja");
-    REQUIRE(doc.bodyInfo().at(doc.result().bodies[0].key).component == "Lightbox");
-    REQUIRE(doc.bodyInfo().at(doc.result().bodies[1].key).name == "Tapa");
+    const char* names[] = {"Caja", "Marco", "Labio", "Cara"};
+    for (std::size_t i = 0; i < 4; ++i) {
+        REQUIRE(doc.bodyInfo().at(doc.result().bodies[i].key).name == names[i]);
+        REQUIRE(doc.bodyInfo().at(doc.result().bodies[i].key).component == "Lightbox");
+    }
 
-    // Caja 150×100×40 con pared 2,4 y frente 1,2: el hueco es 145,2 × 95,2 × 38,8.
-    const double box = 150.0 * 100.0 * 40.0 - 145.2 * 95.2 * 38.8;
-    REQUIRE_THAT(doc.result().bodies[0].shape.volume(), Catch::Matchers::WithinAbs(box, 1.0));
-    REQUIRE(doc.result().bodies[0].shape.bounds().max.z == Catch::Approx(40.0).margin(1e-6));
-    // La tapa va al lado, con el labio entrando 0,2 mm más estrecho que el hueco por cada lado.
-    const geometry::Box cover = doc.result().bodies[1].shape.bounds();
-    REQUIRE(cover.min.x > 75.0);
-    const double plate = 150.0 * 100.0 * 2.4;
-    const double lip = (145.2 - 0.4) * (95.2 - 0.4) * 3.0;
-    REQUIRE_THAT(doc.result().bodies[1].shape.volume(), Catch::Matchers::WithinAbs(plate + lip, 1.0));
+    // Como la de MakerLab: caja de 175 × 131 × 37 con paredes y fondo de 2 mm y esquinas de radio 2 por fuera;
+    // la imagen mide 171 × 127.
+    const double pi = std::numbers::pi;
+    const double outer = 175.0 * 131.0 - (4.0 - pi) * 2.0 * 2.0;
+    const auto volume = [&](int body) { return doc.result().bodies[std::size_t(body)].shape.volume(); };
+    const double box = outer * 37.0 - 171.0 * 127.0 * 35.0;
+    REQUIRE_THAT(volume(0), Catch::Matchers::WithinAbs(box, 3.0));
+    REQUIRE(doc.result().bodies[0].shape.bounds().min.z == Catch::Approx(0.0).margin(1e-6));  // el fondo, en la cama
+    REQUIRE(doc.result().bodies[0].shape.bounds().max.z == Catch::Approx(37.0).margin(1e-6));
+    // El marco (el anillo de 2 mm, de 0,8), el labio (1 mm de grueso y 5 de alto, 0,1 de holgura) y la cara central.
+    REQUIRE_THAT(volume(1), Catch::Matchers::WithinAbs((outer - 171.0 * 127.0) * 0.8, 3.0));
+    REQUIRE_THAT(volume(2), Catch::Matchers::WithinAbs((170.8 * 126.8 - 168.8 * 124.8) * 5.0, 3.0));
+    REQUIRE_THAT(volume(3), Catch::Matchers::WithinAbs(171.0 * 127.0 * 0.8, 3.0));
+    // La tapa va al lado y apoyada en la cama; el labio, sobre el marco.
+    REQUIRE(doc.result().bodies[1].shape.bounds().min.x > 80.0);
+    REQUIRE(doc.result().bodies[1].shape.bounds().min.z == Catch::Approx(0.0).margin(1e-6));
+    REQUIRE(doc.result().bodies[2].shape.bounds().min.z == Catch::Approx(0.8).margin(1e-6));
+    REQUIRE(doc.result().bodies[2].shape.bounds().max.z == Catch::Approx(5.8).margin(1e-6));
 
     // Los parámetros mandan: con más pared, menos hueco.
     auto params = doc.parameters();
@@ -1864,7 +1874,7 @@ TEST_CASE("El generador de lightbox hace caja y tapa ligadas a parámetros, con 
         }
     }
     doc.setParameters(params);
-    REQUIRE(doc.result().bodies[0].shape.volume() > box + 1000.0);
+    REQUIRE(volume(0) > box + 1000.0);
 
     // Deshacer lo deja todo como estaba, y rehacer lo vuelve a poner.
     command.undo(doc);
@@ -1872,14 +1882,13 @@ TEST_CASE("El generador de lightbox hace caja y tapa ligadas a parámetros, con 
     REQUIRE(doc.parameters().empty());
     REQUIRE(doc.bodyInfo().empty());
     command.execute(doc);
-    REQUIRE(doc.result().bodies.size() == 2);
+    REQUIRE(doc.result().bodies.size() == 4);
 
     // Una segunda vez usa otros nombres de parámetros.
-    const std::string second = document::freeSuffix(doc, *lightbox, values);
-    REQUIRE(second == "_2");
+    REQUIRE(document::freeSuffix(doc, *lightbox, values) == "_2");
 }
 
-TEST_CASE("El lightbox redondo y el agujero del cable", "[generator]")
+TEST_CASE("El lightbox redondo", "[generator]")
 {
     const document::Generator* lightbox = document::findGenerator("lightbox");
     document::GeneratorValues values = lightbox->defaults();
@@ -1887,14 +1896,15 @@ TEST_CASE("El lightbox redondo y el agujero del cable", "[generator]")
     values["pared_cable"] = 1.0;  // por la pared de abajo
     Document doc;
     document::applyRecipe(doc, lightbox->make(values, ""));
-    REQUIRE(doc.result().bodies.size() == 2);
+    REQUIRE(doc.result().bodies.size() == 4);
     const double pi = std::numbers::pi;
-    const double hollow = pi * 60.0 * 60.0 * 40.0 - pi * 57.6 * 57.6 * 38.8;
-    // El agujero del cable (Ø6 por una pared de 2,4) le quita algo de material.
+    const double hollow = pi * 75.0 * 75.0 * 37.0 - pi * 73.0 * 73.0 * 35.0;
+    // El agujero del cable (Ø6 por una pared de 2) le quita algo de material a la caja.
     const double volume = doc.result().bodies[0].shape.volume();
     REQUIRE(volume < hollow - 20.0);
     REQUIRE(volume > hollow - 200.0);
-    REQUIRE(doc.result().bodies[0].shape.bounds().max.z == Catch::Approx(40.0).margin(1e-6));
+    REQUIRE(doc.result().bodies[0].shape.bounds().max.z == Catch::Approx(37.0).margin(1e-6));
+    REQUIRE_THAT(doc.result().bodies[3].shape.volume(), Catch::Matchers::WithinAbs(pi * 73.0 * 73.0 * 0.8, 2.0));
 }
 
 TEST_CASE("El agujero del cable del lightbox sale por la pared elegida", "[generator]")
@@ -1906,20 +1916,41 @@ TEST_CASE("El agujero del cable del lightbox sale por la pared elegida", "[gener
         values["cable"] = cable;
         Document doc;
         document::applyRecipe(doc, lightbox->make(values, ""));
-        REQUIRE(doc.result().bodies.size() == 2);
+        REQUIRE(doc.result().bodies.size() == 4);
         for (std::size_t i = 0; i < doc.featureCount(); ++i) {
             REQUIRE(doc.status(doc.feature(i).id()).health != Health::Error);
         }
-        return std::pair{doc.result().bodies[0].shape.volume(), doc.result().bodies[1].shape.volume()};
+        std::vector<double> result;
+        for (const Body& body : doc.result().bodies) {
+            result.push_back(body.shape.volume());
+        }
+        return result;
     };
-    const auto [boxSolid, coverSolid] = volumes(0.0, 0.0);  // sin agujero
-    const auto [boxBack, coverBack] = volumes(0.0, 6.0);    // atrás: solo la tapa pierde material
-    REQUIRE_THAT(boxBack, Catch::Matchers::WithinAbs(boxSolid, 1e-3));
-    REQUIRE(coverBack < coverSolid - 50.0);
-    for (const double wall : {1.0, 2.0, 3.0, 4.0}) {  // por una pared: solo la caja pierde material
+    const std::vector<double> solid = volumes(0.0, 0.0);  // sin agujero
+    for (const double wall : {0.0, 1.0, 2.0, 3.0, 4.0}) {  // por el fondo o por una pared: solo la caja pierde material
         INFO(wall);
-        const auto [boxSide, coverSide] = volumes(wall, 6.0);
-        REQUIRE(boxSide < boxSolid - 20.0);
-        REQUIRE_THAT(coverSide, Catch::Matchers::WithinAbs(coverSolid, 1e-3));
+        const std::vector<double> with = volumes(wall, 6.0);
+        REQUIRE(with[0] < solid[0] - 30.0);
+        for (std::size_t i = 1; i < 4; ++i) {
+            REQUIRE_THAT(with[i], Catch::Matchers::WithinAbs(solid[i], 1e-3));
+        }
     }
+}
+
+TEST_CASE("Una caja con esquinas redondeadas", "[box]")
+{
+    const double r = 3.0;
+    const geometry::Shape rounded = geometry::box("c", sketch::Plane::xy(), 40.0, 20.0, 10.0, true, r);
+    REQUIRE(rounded.isValid());
+    REQUIRE_THAT(rounded.volume(), Catch::Matchers::WithinAbs((40.0 * 20.0 - (4.0 - std::numbers::pi) * r * r) * 10.0, 1e-3));
+    REQUIRE_THAT(rounded.bounds().min.x, Catch::Matchers::WithinAbs(-20.0, 1e-6));
+    REQUIRE_THAT(rounded.bounds().max.z, Catch::Matchers::WithinAbs(10.0, 1e-6));
+    // Hacia el otro lado y con las caras de siempre.
+    const geometry::Shape down = geometry::box("c", sketch::Plane::xy(), 40.0, 20.0, -10.0, true, r);
+    REQUIRE_THAT(down.bounds().min.z, Catch::Matchers::WithinAbs(-10.0, 1e-6));
+    int faces = 0;
+    for (int i = 0; i < down.faceCount(); ++i) {
+        faces += down.faceName(i).starts_with("c:cara:") ? 1 : 0;
+    }
+    REQUIRE(faces == 10);  // 4 lados, 4 esquinas, fondo y tapa
 }

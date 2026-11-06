@@ -27,87 +27,113 @@ y Sólido › Parámetros cambia las medidas de todo el diseño. El formulario d
 |---|---|
 | Unidades | milímetros (se muestran en la unidad configurada) |
 | Plano de trabajo | XY, con la pieza centrada en el origen |
-| Ancho | a lo largo de X |
-| Alto | a lo largo de Y |
-| Profundidad | a lo largo de Z: el **frente** está en Z = 0 y el fondo hacia +Z; la caja se abre por **detrás** (en Z = profundidad) |
-| Tapa | sale **al lado** de la caja, en +X a `ancho + 10` mm del centro, apoyada en Z = 0, lista para imprimir |
-| Cuerpos | «Caja» y «Tapa», en el componente «Lightbox» |
-
-El frente se imprime apoyado en la cama (cara en contacto con la cama = Z = 0) y la tapa también.
+| Ancho y alto | a lo largo de X y de Y |
+| Profundidad | a lo largo de Z: el **fondo** de la caja está en Z = 0 (apoyado en la cama) y la caja se abre por **delante** (+Z) |
+| Tapa | sale **al lado** de la caja, en +X a `ancho + 10` mm del centro, con la cara de la imagen apoyada en Z = 0 (cara abajo, como se imprime) |
+| Cuerpos | «Caja», «Marco», «Labio» y «Cara», en el componente «Lightbox» |
 
 ## Lightbox (rectangular y redonda)
 
-Caja de luz: un frente fino que difunde la luz, paredes, una tapa trasera con un labio que entra en la caja y un
-agujero para el cable de la tira LED.
+Hecha a imagen de la «Light Box» de MakerLab (ver la referencia al final de esta sección): una **caja** abierta
+por delante (fondo cerrado y paredes) y una **tapa delantera** que entra en la caja y se compone de tres cuerpos
+aparte: el **marco** (el anillo de la pared), el **labio** (un anillo que entra en la caja) y la **cara central**
+(la zona de la imagen). Al ser cuerpos distintos, cada uno puede llevar su filamento sin pintar caras: por ejemplo,
+marco y labio negros y la cara central blanca (o la que lleve tu imagen).
 
 ### Preguntas y medidas
 
 | Pregunta | Parámetro | Por defecto | Mín. – máx. | Para qué sirve |
 |---|---|---|---|---|
-| Forma | — | Rectangular | Rectangular / Redonda | Caja de planta rectangular o cilíndrica |
-| Ancho | `ancho` | 150 mm | 20 – 1000 | Largo de la caja en X (solo rectangular) |
-| Alto | `alto` | 100 mm | 20 – 1000 | Largo de la caja en Y (solo rectangular) |
-| Diámetro | `diametro` | 120 mm | 20 – 1000 | Diámetro exterior (solo redonda) |
-| Profundidad | `profundidad` | 40 mm | 10 – 500 | Grosor total de la caja, de adelante hacia atrás |
-| Pared | `pared` | 2,4 mm | 0,8 – 20 | Grosor de las paredes laterales |
-| Frente | `frente` | 1,2 mm | 0,4 – 10 | Grosor del panel frontal que difunde la luz: más fino, más luz pasa |
-| Tapa trasera | `tapa` | 2,4 mm | 0,8 – 20 | Grosor de la placa de la tapa |
-| Labio de la tapa | `labio` | 3 mm | 1 – 30 | Cuánto entra la tapa dentro de la caja |
-| Holgura de la tapa | `holgura` | 0,2 mm | 0 – 2 | Aire entre el labio y la pared, por cada lado, para que encaje sin forzar |
+| Forma | — | Rectangular | Rectangular / Redonda | Planta rectangular o circular |
+| Ancho (exterior) | `ancho` | 175 mm | 30 – 1000 | Ancho exterior de la caja (la imagen mide esto − 2·pared) |
+| Alto (exterior) | `alto` | 131 mm | 30 – 1000 | Alto exterior |
+| Diámetro (exterior) | `diametro` | 150 mm | 30 – 1000 | Solo en la redonda |
+| Profundidad total | `profundidad` | 37 mm | 10 – 500 | Del fondo hasta el borde delantero (fondo incluido; el hueco mide profundidad − fondo) |
+| Pared | `pared` | 2 mm | 0,8 – 20 | Grosor de las paredes; también el ancho del marco |
+| Fondo de la caja | `fondo` | 2 mm | 0,8 – 20 | Grosor de la pared de atrás |
+| Frente (marco e imagen) | `frente` | 0,8 mm | 0,4 – 10 | Grosor del marco y de la cara central: más fino, más luz pasa |
+| Radio de esquinas | `esquina` | 2 mm | 0 – 30 | Esquinas exteriores redondeadas de la caja y del marco (rectangular) |
+| Alto del labio | `labio` | 5 mm | 1 – 30 | Cuánto entra la tapa en la caja |
+| Grosor del labio | `labio_pared` | 1 mm | 0,4 – 10 | Grosor del anillo del labio |
+| Holgura del labio | `holgura` | 0,1 mm | 0 – 2 | Aire entre el labio y la pared, por cada lado (la referencia de MakerLab usa 0) |
 | Agujero del cable | `cable` | 6 mm | 0 – 50 | Diámetro del agujero; 0 = sin agujero |
-| Salida del cable | — | Atrás (en la tapa) | ver abajo | Por dónde sale el cable |
+| Salida del cable | — | Atrás (en el fondo) | ver abajo | Por dónde sale el cable |
 
-Recomendaciones para una boquilla de 0,4 mm: la pared y la tapa como múltiplos del ancho de línea (2,4 mm = 6
-líneas); el frente de 1,2 mm (3 líneas) deja pasar bastante luz con filamento claro; una holgura de 0,2 mm es un
-buen punto de partida (subirla a 0,3 si la tapa queda dura).
+Para una boquilla de 0,4 mm: pared y fondo como múltiplos del ancho de línea (2 mm = 5 líneas de 0,4); el frente de 0,8
+mm son 4 capas de 0,2 (o 5 de 0,16); una holgura de 0,1 a 0,2 mm suele bastar para que el labio entre sin forzar.
 
 ### Salida del cable
 
 | Opción | Dónde hace el agujero |
 |---|---|
-| Atrás (en la tapa) — por defecto | Atraviesa la placa y el labio de la tapa, centrado en X y a un cuarto del alto por debajo del centro |
+| Atrás (en el fondo) — por defecto | Atraviesa el fondo de la caja, centrado en X y a un cuarto del alto por debajo del centro |
 | Pared de abajo | Atraviesa la pared inferior (Y negativo), centrado en X y a media altura del hueco |
 | Pared de arriba | Igual, por la pared superior (Y positivo) |
 | Pared izquierda | Atraviesa la pared de X negativo, centrada en Y y a media altura del hueco |
 | Pared derecha | Igual, por la pared de X positivo |
 
-A media altura del hueco quiere decir en Z = `frente + (profundidad − frente) / 2`. En la lightbox redonda las cuatro
-paredes son la misma pared curva (abajo, arriba, izquierda y derecha son direcciones del círculo).
+A media altura del hueco quiere decir en Z = `fondo + (profundidad − fondo) / 2`. En la redonda, las cuatro paredes son
+la misma pared curva (abajo, arriba, izquierda y derecha son direcciones del círculo).
 
 ### Medidas derivadas (con los valores por defecto)
 
 | Pieza | Medida |
 |---|---|
-| Caja, exterior | 150 × 100 × 40 mm |
-| Hueco | 145,2 × 95,2 mm de planta (ancho − 2·pared, alto − 2·pared) y 38,8 mm de profundidad (profundidad − frente) |
-| Placa de la tapa | 150 × 100 × 2,4 mm |
-| Labio de la tapa | 144,8 × 94,8 mm de planta (hueco − 2·holgura) y 3 mm de altura |
-| Tapa, alto total | 5,4 mm (tapa + labio) |
-| Volumen de la caja sin agujero | ≈ 150·100·40 − 145,2·95,2·38,8 ≈ 63 700 mm³ |
+| Caja, exterior | 175 × 131 × 37 mm, esquinas de radio 2 |
+| Hueco | 171 × 127 mm (ancho − 2·pared, alto − 2·pared) y 35 mm de profundidad, esquinas interiores vivas |
+| Marco | Anillo de 175 × 131 exterior y 171 × 127 interior, 0,8 mm de alto |
+| Labio | Anillo de 170,8 × 126,8 exterior (hueco − 2·holgura) y 168,8 × 124,8 interior, 5 mm de alto, sobre el marco (Z de 0,8 a 5,8) |
+| Cara central | 171 × 127 × 0,8 mm: rellena el hueco del marco |
+| Volumen de la caja sin agujero | ≈ 88 000 mm³ |
 
-La versión redonda usa las mismas fórmulas con círculos: diámetro exterior, hueco de diámetro − 2·pared, labio de
-diámetro − 2·pared − 2·holgura.
+La versión redonda usa las mismas fórmulas con círculos (diámetro exterior, hueco de diámetro − 2·pared, labio de
+diámetro − 2·pared − 2·holgura).
 
 ### Operaciones que crea (rectangular)
 
 | # | Nombre | Tipo | Medidas (expresiones) | Operación |
 |---|---|---|---|---|
-| 1 | Lightbox: caja | Caja centrada | ancho × alto × profundidad | Cuerpo nuevo |
-| 2 | Lightbox: hueco | Caja centrada, desplazada `frente` en Z | (ancho − 2·pared) × (alto − 2·pared) × profundidad | Cortar |
-| 3 | Lightbox: agujero del cable | Cilindro Ø `cable` por la pared elegida (no si es «Atrás») | longitud `pared + 2`, repartida a los dos lados de la pared | Cortar |
-| 4 | Lightbox: tapa | Caja centrada en X = ancho + 10 | ancho × alto × tapa | Cuerpo nuevo |
-| 5 | Lightbox: labio de la tapa | Caja centrada en X = ancho + 10, desde Z = 0 | (ancho − 2·pared − 2·holgura) × (alto − 2·pared − 2·holgura) × (tapa + labio) | Unir |
-| 6 | Lightbox: agujero del cable (tapa) | Cilindro Ø `cable` desde Z = −1, en Y = −alto/4 (solo con «Atrás») | longitud `tapa + labio + 2` | Cortar |
+| 1 | Lightbox: caja | Caja centrada, radio `esquina` | ancho × alto × profundidad, desde Z = 0 | Cuerpo nuevo |
+| 2 | Lightbox: hueco | Caja centrada, desplazada `fondo` en Z | (ancho − 2·pared) × (alto − 2·pared) × profundidad | Cortar |
+| 3 | Lightbox: agujero del cable | Cilindro Ø `cable` por el fondo o por la pared elegida | por el fondo: desde Z = −1, longitud `fondo + 2`; por una pared: `pared + 2`, repartida a los dos lados | Cortar |
+| 4 | Lightbox: marco | Caja centrada en X = ancho + 10, radio `esquina` | ancho × alto × frente | Cuerpo nuevo |
+| 5 | Lightbox: hueco del marco | Caja en el mismo sitio | (ancho − 2·pared) × (alto − 2·pared), atravesando el marco | Cortar |
+| 6 | Lightbox: labio | Caja en el mismo sitio, desde Z = frente | (hueco − 2·holgura) × alto del labio | Cuerpo nuevo |
+| 7 | Lightbox: hueco del labio | Caja en el mismo sitio, desde Z = frente | (hueco − 2·holgura − 2·grosor del labio), más alta que el labio | Cortar |
+| 8 | Lightbox: cara central | Caja en el mismo sitio, desde Z = 0 | (ancho − 2·pared) × (alto − 2·pared) × frente | Cuerpo nuevo |
 
-En la redonda, la caja, el hueco, la tapa y el labio son cilindros (el diámetro hace de ancho y de alto).
+En la redonda, las cajas son cilindros (el diámetro hace de ancho y de alto) y no hay radio de esquinas.
 
 ### Nombres
 
-- Cuerpos: **Caja** y **Tapa**; componente **Lightbox**.
+- Cuerpos: **Caja**, **Marco**, **Labio** y **Cara**; componente **Lightbox**.
 - Operaciones: las de la tabla («Lightbox: …»).
-- Caras: cada caja y cada cilindro nombra sus caras por su orientación (ver más abajo), así que se puede, por
-  ejemplo, dibujar un sketch en la cara frontal de la caja o aplicar un redondeo a las aristas, y la operación sigue
-  su cara si cambias una medida.
+- Caras: cada caja y cada cilindro nombra sus caras por su orientación (ver más abajo; las esquinas redondeadas se
+  llaman `esquina+x+y`, etc.), así que se puede dibujar un sketch en la **cara central** (para cortar o dar relieve a tu
+  imagen) y la operación sigue su cara si cambias una medida.
+
+### Referencia: la «Light Box» de MakerLab
+
+Medida a partir de los dos proyectos de ejemplo (`Fam_Nufio_Illescas_Box.3mf` y `Fam_Nufio_Aguilar_Box.3mf`,
+generados con «Creador de LightBox» / MakerLab «Light Box V0.0.1» y guardados con Bambu Studio 2.3.2):
+
+| Medida | Illescas (4:3) | Aguilar (apaisada) |
+|---|---|---|
+| Exterior de la caja | 174,664 × 132,036 mm | 174,664 × 96,902 mm |
+| Imagen (interior de la pared) | 170,664 × 128,02 mm | 170,664 × 92,9 mm |
+| Pared / fondo | 2 / 2 mm | 2 / 2 mm |
+| Altura de la pared | 35 mm (37 con el fondo) | 20 mm (22 con el fondo) |
+| Esquinas | exteriores de radio 2; interiores vivas | igual |
+| Marco de la tapa | anillo de 2 mm de ancho y 0,8 mm de grueso | igual |
+| Labio | anillo de 1 mm de ancho y 5 mm de alto; exterior 170,666 (= hueco, holgura 0) | igual |
+| Imagen | 153 piezas de 0,8 mm de grueso (las manchas del SVG) | ~1000 piezas |
+| Filamentos | PLA negro (marco y labio) y blanco (imagen) | igual |
+| Impresión | Creality Hi, boquilla 0,4, capa 0,2 mm, 2 perímetros, 3 capas arriba y abajo, relleno 15 % | capa 0,16 mm, relleno 10 % |
+| Placas | tapa y caja en dos placas aparte | igual |
+
+La tapa se imprime cara abajo (la imagen contra la cama) y la caja con el fondo en la cama y la boca hacia arriba.
+Aguilar lleva además un agujero cilíndrico de Ø26 mm que el usuario le añadió a mano (un «negative part» de Bambu
+Studio); la caja de MakerLab no trae agujero para el cable.
 
 ## Primitivas: Caja y Cilindro
 
@@ -155,5 +181,5 @@ un componente. Se registra en `generators()` y aparece solo en la cinta y en el 
 
 ## Pendiente
 
-Ver la hoja de ruta. Lo más cercano: el canal para la tira LED, la tapa en el frente con una **cara central**
-separada de los bordes (para pintarla aparte), y los demás generadores (caja con tapa, letreros, par de engranajes).
+Ver la hoja de ruta. Lo más cercano: el canal para la tira LED, poner tu SVG sobre la cara central (relieve o corte) y los demás
+generadores (caja con tapa, letreros, par de engranajes).

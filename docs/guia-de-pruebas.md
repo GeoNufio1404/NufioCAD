@@ -289,13 +289,14 @@ Con una captura de pantalla y los pasos suele bastar. Si algo se cierra, no hace
 
 | # | Haz esto | Debe pasar |
 |---|---|---|
-| G.1 | Pestaña HERRAMIENTAS (o menú Herramientas) › **Lightbox** | Se abre el formulario a la derecha y se ve una caja con su tapa al lado |
+| G.1 | Pestaña HERRAMIENTAS (o menú Herramientas) › **Lightbox** | Se abre el formulario a la derecha y se ve una caja abierta por delante con su tapa (marco, labio y cara central) al lado |
 | G.2 | Cambia Ancho, Alto, Pared… | La vista previa se actualiza (con «Calculando…» un momento) |
 | G.3 | Cambia «Forma» a Redonda | Desaparecen Ancho y Alto, aparece Diámetro, y la caja es redonda |
 | G.4 | Pon Ancho 20 y Pared 20 (un hueco imposible) | Avisa en rojo de la operación que falla y no deja aceptar, sin cerrar la herramienta |
-| G.5 | Aceptar | Navegador: componente «Lightbox» con «Caja» y «Tapa»; el historial muestra las 5 operaciones «Lightbox: …» |
+| G.5 | Aceptar | Navegador: componente «Lightbox» con «Caja», «Marco», «Labio» y «Cara»; el historial muestra las 8 operaciones «Lightbox: …» |
 | G.6 | Sólido › Parámetros | Aparecen ancho, alto, profundidad, pared, frente, tapa, labio, holgura y cable; al cambiar uno, todo se recalcula |
 | G.7 | Ctrl+Z | Desaparece todo de una vez (operaciones, parámetros y componente) |
 | G.8 | Genera un segundo Lightbox | Sus parámetros salen como ancho_2, alto_2… y no pisan los del primero |
-| G.9 | Exporta o imprime la caja y la tapa | La revisión no avisa de paredes finas con los valores por defecto |
+| G.9 | Exporta o imprime los cuatro cuerpos | La revisión no avisa de paredes finas con los valores por defecto; marco, labio y cara no se solapan |
 | G.10 | Sólido › Caja / Cilindro | Primitivas con posición, centradas o no, con alto ± y operación; doble clic en una operación «Lightbox: …» del historial abre su panel |
+| G.11 | Compara con tus lightboxes de referencia (Illescas, Aguilar) | Las medidas son las de `docs/generadores.md`: 175 × 131 × 37 con pared 2; para igualar la de Illescas pon ancho 174,664, alto 132,036, profundidad 37 y holgura 0 |

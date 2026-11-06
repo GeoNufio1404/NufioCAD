@@ -1693,6 +1693,9 @@ void BoxTool::createFields(QFormLayout* form)
     field("depth", depth_);
     height_ = lengthBox(original != nullptr ? original->height : 10.0);
     field("height", height_);
+    radius_ = lengthBox(original != nullptr ? original->cornerRadius : 0.0);
+    radius_->setMinimum(0.0);
+    field("radius", radius_);
     centered_ = new QCheckBox(QStringLiteral("Centrada en el punto (ancho y fondo)"));
     centered_->setChecked(original != nullptr && original->centered);
     symmetric_ = new QCheckBox(QStringLiteral("Alto repartido a los dos lados del plano"));
@@ -1703,10 +1706,11 @@ void BoxTool::createFields(QFormLayout* form)
     form->addRow(QStringLiteral("Ancho"), width_);
     form->addRow(QStringLiteral("Fondo"), depth_);
     form->addRow(QStringLiteral("Alto (±)"), height_);
+    form->addRow(QStringLiteral("Radio de esquinas"), radius_);
     form->addRow(QString(), centered_);
     form->addRow(QString(), symmetric_);
     form->addRow(QStringLiteral("Operación"), operation_);
-    for (QDoubleSpinBox* box : {z_, width_, depth_, height_}) {
+    for (QDoubleSpinBox* box : {z_, width_, depth_, height_, radius_}) {
         connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
     }
     for (QCheckBox* box : {centered_, symmetric_}) {
@@ -1735,6 +1739,7 @@ std::unique_ptr<document::Feature> BoxTool::build() const
     f->width = width_->value();
     f->depth = depth_->value();
     f->height = height_->value();
+    f->cornerRadius = radius_->value();
     f->centered = centered_->isChecked();
     f->symmetric = symmetric_->isChecked();
     f->operation = primitiveOperation(operation_->currentIndex());

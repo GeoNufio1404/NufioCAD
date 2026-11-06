@@ -418,6 +418,7 @@ private:
     QDoubleSpinBox* width_ = nullptr;
     QDoubleSpinBox* depth_ = nullptr;
     QDoubleSpinBox* height_ = nullptr;
+    QDoubleSpinBox* radius_ = nullptr;
     QCheckBox* centered_ = nullptr;
     QCheckBox* symmetric_ = nullptr;
     QComboBox* operation_ = nullptr;
