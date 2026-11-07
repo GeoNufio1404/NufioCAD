@@ -76,8 +76,8 @@ PreparedMesh prepareMesh(const Shape& shape, double deviation, double angle, con
         return PreparedMesh(nullptr);
     }
     try {
-        // Copia de la topología (la geometría se comparte: solo se lee).
-        BRepBuilderAPI_Copy copier(occtShape(shape), false, false);
+        // Copia completa (topología y geometría): el hilo de trabajo no comparte nada con la interfaz.
+        BRepBuilderAPI_Copy copier(occtShape(shape), true, false);
         TopoDS_Shape copy = copier.Shape();
         IMeshTools_Parameters parameters;
         parameters.Deflection = deviation;
@@ -107,8 +107,8 @@ PreparedMesh prepareMesh(const Shape& shape, double deviation, double angle, con
         auto impl = std::make_shared<PreparedMesh::Impl>();
         impl->copy = copy;
         return PreparedMesh(std::move(impl));
-    } catch (const Standard_Failure&) {
-        return PreparedMesh(nullptr);
+    } catch (...) {
+        return PreparedMesh(nullptr);  // sea cual sea el fallo, el visor dibuja el cuerpo como siempre
     }
 }
 

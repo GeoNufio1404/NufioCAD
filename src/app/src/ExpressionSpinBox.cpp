@@ -11,6 +11,7 @@
 #include <QLocale>
 #include <QObject>
 #include <QPointer>
+#include <QRegularExpression>
 
 #include <algorithm>
 #include <cmath>
@@ -140,7 +141,10 @@ double ExpressionSpinBox::valueFromText(const QString& text) const
         const bool plain = document::expressionNames(source).empty();
         // En un cuadro de longitud, un número a secas (sin letras: ni unidades ni parámetros) está en la
         // unidad elegida; con unidad o parámetros ya viene en milímetros.
-        const bool hasLetters = std::any_of(t.begin(), t.end(), [](QChar c) { return c.isLetter(); });
+        // (la «e» de una notación como 1e3 no cuenta como letra)
+        QString withoutExponents = t;
+        withoutExponents.remove(QRegularExpression(QStringLiteral("(?<=[0-9.,])[eE](?=[+-]?[0-9])")));
+        const bool hasLetters = std::any_of(withoutExponents.begin(), withoutExponents.end(), [](QChar c) { return c.isLetter(); });
         const double scaled = length_ && !hasLetters ? Units::instance().fromDisplay(result) : result;
         expression_ = plain ? QString() : t;
         expressionValue_ = scaled;

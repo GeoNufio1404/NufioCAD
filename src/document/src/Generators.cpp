@@ -376,7 +376,7 @@ class Sign final : public Generator {
 public:
     std::string id() const override { return "letrero"; }
     std::string title() const override { return "Letrero o llavero"; }
-    std::string icon() const override { return "box-solid"; }
+    std::string icon() const override { return "sign-solid"; }
     std::string description() const override
     {
         return "Placa con tu texto en relieve (en otro cuerpo, para otro color) o grabado, con una anilla opcional "

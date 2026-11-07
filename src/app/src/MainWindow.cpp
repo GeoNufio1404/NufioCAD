@@ -1049,7 +1049,12 @@ void MainWindow::finishTool(bool accepted)
     // Un generador no da una operación sino una receta (parámetros, operaciones y nombres) que se aplica de una vez.
     std::optional<commands::AddRecipe> recipe;
     if (const auto* generator = dynamic_cast<const GeneratorTool*>(tool_.get()); generator != nullptr && accepted) {
-        recipe.emplace(generator->recipe(), generator->generator().title());
+        try {
+            recipe.emplace(generator->recipe(), generator->generator().title());
+        } catch (const std::exception& e) {
+            statusBar()->showMessage(QString::fromUtf8(e.what()), 8000);  // p. ej. un texto sin letras
+            return;                                                       // la herramienta sigue abierta
+        }
     }
     std::unique_ptr<document::Feature> feature = accepted && !recipe ? tool_->make() : nullptr;
     const std::optional<document::FeatureId> editing = tool_->editing();

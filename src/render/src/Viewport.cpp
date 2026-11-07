@@ -634,6 +634,7 @@ public:
     // un hilo de trabajo sobre una copia, y mientras tanto se sigue viendo lo anterior.
 
     struct MeshTask {
+        std::uint64_t id = 0;
         geometry::Shape shape;
         std::atomic<bool> cancel{false};
         std::atomic<bool> finished{false};
@@ -643,6 +644,7 @@ public:
     std::vector<std::unique_ptr<MeshTask>> meshTasks;
     std::vector<std::unique_ptr<MeshTask>> cancelledTasks;  // canceladas que aún no han terminado
     std::vector<document::Body> wantedBodies;               // la última lista pedida
+    std::uint64_t nextMeshTaskId = 1;
     std::vector<const void*> unmeshable;                    // su malla en segundo plano falló: se dibujan como siempre
     bool busy = false;
 
@@ -657,21 +659,23 @@ public:
     void startMeshTask(const geometry::Shape& shape)
     {
         auto task = std::make_unique<MeshTask>();
+        task->id = nextMeshTaskId++;
         task->shape = shape;
         MeshTask* raw = task.get();
+        const std::uint64_t id = task->id;
         Impl* self = this;
-        task->thread = std::thread([raw, self] {
+        task->thread = std::thread([raw, self, id] {
             raw->mesh = geometry::prepareMesh(raw->shape, geometry::kHeavyDeviation, geometry::kHeavyAngle, raw->cancel);
             raw->finished = true;
-            QMetaObject::invokeMethod(&self->widget_, [self, raw] { self->meshTaskFinished(raw); }, Qt::QueuedConnection);
+            QMetaObject::invokeMethod(&self->widget_, [self, id] { self->meshTaskFinished(id); }, Qt::QueuedConnection);
         });
         meshTasks.push_back(std::move(task));
     }
 
     // En el hilo de la interfaz: la malla ya está; se pasa al cuerpo y se vuelve a pintar.
-    void meshTaskFinished(MeshTask* raw)
+    void meshTaskFinished(std::uint64_t id)
     {
-        const auto it = std::ranges::find_if(meshTasks, [&](const auto& t) { return t.get() == raw; });
+        const auto it = std::ranges::find_if(meshTasks, [&](const auto& t) { return t->id == id; });
         if (it == meshTasks.end()) {
             return;  // cancelada y retirada
         }
@@ -680,6 +684,9 @@ public:
             if ((*it)->mesh.valid()) {
                 geometry::applyMesh((*it)->shape, (*it)->mesh);
             } else {
+                if (unmeshable.size() > 64) {
+                    unmeshable.clear();  // son solo direcciones: no se guardan para siempre
+                }
                 unmeshable.push_back((*it)->shape.impl());
             }
         }
