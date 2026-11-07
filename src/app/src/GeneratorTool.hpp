@@ -22,6 +22,7 @@ public:
 
     std::unique_ptr<document::Feature> build() const override { return nullptr; }
     void accept() override;
+    void stopPreview() override;
 
     const document::Generator& generator() const { return generator_; }
     // La receta con los valores de ahora y nombres de parámetros que no choquen con los del documento.

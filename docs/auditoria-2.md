@@ -25,6 +25,7 @@ Alcance: el código nuevo de las fases 5 a 10, lo que más riesgo tiene (hilos, 
 | 5 | Un cuadro de longitud trataba `1e3` como si llevara una unidad o un parámetro (la «e» es una letra) y no lo escalaba a la unidad elegida | Valor 10 veces mal con cm o pulgadas | La «e» de una notación científica no cuenta |
 | 6 | El Letrero compartía el icono con la Caja con tapa | Confusión en la cinta | Icono propio |
 | 7 | La hoja de ruta decía que la caja de una rosca ya era la ajustada (se revirtió: tardaba decenas de segundos) y mantenía como pendientes cosas ya hechas (el mallado en segundo plano, los demás generadores) | Documentación que engaña | Corregida |
+| 8 | *(Hallado por la prueba de interfaz)* Al aceptar o cancelar una herramienta, su vista previa pendiente (la que espera 250 ms) se calculaba y se dibujaba **después** de cerrarla | Hasta 6 s de parada en Debug y un dibujo de más | `stopPreview()` al cerrar la herramienta |
 
 ## Abierto, por prioridad
 
@@ -33,10 +34,8 @@ Alcance: el código nuevo de las fases 5 a 10, lo que más riesgo tiene (hilos, 
 1. **Las pruebas manuales 1–38 y las de las fases 5–10 siguen sin hacerse en la ventana.** Es la mayor deuda: casi todo lo
    de la interfaz se ha comprobado por pruebas automáticas del núcleo y con capturas del arnés, no con el ratón. Seguir la
    [guía de pruebas](guia-de-pruebas.md) fase por fase.
-2. **No hay prueba automática de la interfaz** (Viewport, `GeneratorTool`, unidades, mallado en segundo plano). Lo más
-   arriesgado de todo el proyecto vive ahí. Propuesta: un modo `--prueba-interfaz` (ya existe `SelfCheck`) que, sin ventana
-   visible, abra cada herramienta y cada generador, cambie un valor, acepte, deshaga y compruebe que no hay pausas ni
-   cierres (lo que hace hoy el arnés temporal, hecho permanente).
+2. ~~No hay prueba automática de la interfaz.~~ **Hecha** después de esta auditoría: `NufioCAD.exe --prueba-interfaz` (ver la
+   guía de pruebas). Ya encontró un fallo real (nº 8 abajo). Falta llevarla al CI y que compruebe también cómo se ve.
 3. **El build Release no se puede probar** (Smart App Control bloquea las DLL sin firmar). Todas las medidas de rendimiento
    son de Debug, que en OpenCASCADE es mucho más lento. Antes de seguir optimizando hay que medir en Release.
 

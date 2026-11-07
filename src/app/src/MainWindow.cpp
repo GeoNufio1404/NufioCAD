@@ -1059,6 +1059,7 @@ void MainWindow::finishTool(bool accepted)
     std::unique_ptr<document::Feature> feature = accepted && !recipe ? tool_->make() : nullptr;
     const std::optional<document::FeatureId> editing = tool_->editing();
     const document::FeatureId id = tool_->featureId();
+    tool_->stopPreview();
     // Se destruye después: esta llamada viene de una señal de la herramienta.
     propertiesDock_->setWidget(propertiesPlaceholder_);
     propertiesDock_->hide();  // como los diálogos de Fusion: solo mientras hay un comando

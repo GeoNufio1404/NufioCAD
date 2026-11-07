@@ -61,6 +61,9 @@ public:
     // que se debe usar para calcular y aplicar.
     std::unique_ptr<document::Feature> make() const;
     virtual void accept();
+    // Al cerrar la herramienta: se cancela la vista previa que estuviera esperando su turno (si no, se
+    // calcularía y se dibujaría después de aceptar o cancelar).
+    virtual void stopPreview();
 
 signals:
     void accepted();

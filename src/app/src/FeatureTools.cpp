@@ -215,6 +215,14 @@ std::unique_ptr<document::Feature> FeatureTool::make() const
     return feature;
 }
 
+void FeatureTool::stopPreview()
+{
+    if (previewTimer_ != nullptr) {
+        previewTimer_->stop();
+    }
+    updating_ = true;  // updatePreview() ya no hace nada
+}
+
 void FeatureTool::accept()
 {
     if (build()) {

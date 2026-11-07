@@ -1,4 +1,5 @@
 #include "CrashHandler.hpp"
+#include "InterfaceCheck.hpp"
 #include "MainWindow.hpp"
 #include "SelfCheck.hpp"
 #include "Theme.hpp"
@@ -7,7 +8,11 @@
 #include <nuf/render/Viewport.hpp>
 
 #include <QApplication>
+#include <QDir>
 #include <QIcon>
+#include <QSettings>
+#include <QStandardPaths>
+#include <QTimer>
 
 #include <filesystem>
 #include <iostream>
@@ -57,6 +62,29 @@ int main(int argc, char* argv[])
             *static_cast<volatile int*>(nullptr) = 1;
         }
     }
+    // --prueba-interfaz [--informe archivo] [--umbral-ms N]: abre las herramientas con la ventana real y comprueba
+    // que no hay fallos ni paradas largas. Usa carpetas y ajustes propios: no toca los del usuario.
+    bool interfaceCheck = false;
+    QString reportPath;
+    int thresholdMs = 20000;  // en Debug, OpenCASCADE es lento: sirve para detectar paradas de decenas de segundos
+    for (int i = 1; i < argc; ++i) {
+        const std::string_view argument(argv[i]);
+        if (argument == "--prueba-interfaz") {
+            interfaceCheck = true;
+        } else if (argument == "--informe" && i + 1 < argc) {
+            reportPath = QString::fromLocal8Bit(argv[i + 1]);
+        } else if (argument == "--umbral-ms" && i + 1 < argc) {
+            thresholdMs = QString::fromLocal8Bit(argv[i + 1]).toInt();
+        }
+    }
+    if (interfaceCheck) {
+        QStandardPaths::setTestModeEnabled(true);
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, QDir::tempPath() + QStringLiteral("/NufioCAD-prueba"));
+        if (reportPath.isEmpty()) {
+            reportPath = QDir::tempPath() + QStringLiteral("/NufioCAD-prueba-interfaz.txt");
+        }
+    }
     QSurfaceFormat::setDefaultFormat(nuf::render::Viewport::defaultFormat());
     QApplication app(argc, argv);
     QApplication::setOrganizationName(QStringLiteral("NufioCAD"));
@@ -74,6 +102,14 @@ int main(int argc, char* argv[])
 
     nuf::app::MainWindow window;
     window.show();
+    if (interfaceCheck) {
+        QTimer::singleShot(800, &window, [&window, reportPath, thresholdMs] {
+            const int code = nuf::app::InterfaceCheck(window, reportPath, thresholdMs).run();
+            window.close();
+            QApplication::exit(code);
+        });
+        return QApplication::exec();
+    }
     // NufioCAD archivo.nuf (también lo que pasa el sistema al abrir un .nuf).
     const QStringList arguments = QApplication::arguments();
     for (int i = 1; i < arguments.size(); ++i) {

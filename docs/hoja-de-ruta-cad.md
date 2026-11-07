@@ -438,6 +438,11 @@ Asistentes que hacen preguntas («redonda o rectangular», grosor de paredes, gr
 
 ---
 
+### Prueba automática de la interfaz ✅ (de la segunda auditoría)
+`NufioCAD.exe --prueba-interfaz` (`InterfaceCheck`): con la ventana real recorre generadores y herramientas (abrir, cambiar un valor, aceptar, deshacer, cancelar), las unidades, la sección y la medición, y escribe un informe con la parada más larga de la interfaz por paso. Un **vigilante** en otro hilo, si la interfaz lleva más de un segundo sin dar señales, la detiene un instante, copia su pila y la descifra, así que el informe dice **dónde** estaba parada. Aisla ajustes y carpetas (`QStandardPaths::setTestModeEnabled`, ajustes en un `.ini` temporal). Cómo usarla: ver la guía de pruebas.
+- **Encontró un fallo real:** al aceptar o cancelar una herramienta con vista previa, la vista previa pendiente (la que espera 250 ms) se calculaba y se dibujaba **después** de cerrarla (hasta 6 s de parada en Debug y un dibujo de más tras aceptar). Ahora `stopPreview()` la cancela al cerrar; las paradas de las herramientas pasaron de 5–6 s a 60–130 ms.
+- **Pendiente de la prueba de interfaz:** no comprueba cómo se ve (solo que hay o no cuerpos, errores y paradas); no pulsa con el ratón sino con el código de los botones; solo Windows para el vigilante de pilas (en Linux no vigila); falta añadirla al CI cuando haya una pantalla virtual (Xvfb); los generadores con muchas operaciones en Debug aún paran la interfaz 1–2 s (el Letrero, al calcular las regiones de las letras, y el Par de engranajes).
+
 ### Fase de pruebas (manual, transversal)
 Guía paso a paso para probar cada fase y dar feedback: [`guia-de-pruebas.md`](guia-de-pruebas.md) (con plantilla para reportar). Se hace fase por fase cuando haya tiempo; lo que salga se anota aquí como pendiente de la fase correspondiente.
 

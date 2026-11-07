@@ -131,6 +131,14 @@ document::Recipe GeneratorTool::recipe() const
     return generator_.make(v, document::freeSuffix(document_, generator_, v));
 }
 
+void GeneratorTool::stopPreview()
+{
+    if (timer_ != nullptr) {
+        timer_->stop();
+    }
+    updating_ = true;
+}
+
 void GeneratorTool::accept()
 {
     emit accepted();

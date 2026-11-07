@@ -23,6 +23,8 @@ add_executable(nuf_app
     src/ExportDialog.cpp
     src/ExportDialog.hpp
     src/ExpressionSpinBox.cpp
+    src/InterfaceCheck.cpp
+    src/InterfaceCheck.hpp
     src/GeneratorTool.cpp
     src/GeneratorTool.hpp
     src/SettingsDialog.cpp

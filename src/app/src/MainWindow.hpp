@@ -42,6 +42,7 @@ class Generator;
 namespace nuf::app {
 
 class FeatureTool;
+class InterfaceCheck;
 class Recovery;
 class Ribbon;
 class StartScreen;
@@ -53,6 +54,7 @@ class TimelineWidget;
 // implementa en su fase.
 class MainWindow final : public QMainWindow {
     Q_OBJECT
+    friend class InterfaceCheck;  // la prueba automática de la interfaz (--prueba-interfaz)
 
 public:
     explicit MainWindow(QWidget* parent = nullptr);
