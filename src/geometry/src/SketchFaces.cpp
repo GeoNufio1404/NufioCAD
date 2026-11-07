@@ -4,6 +4,7 @@
 
 #include <BRepAdaptor_Curve.hxx>
 #include <BOPAlgo_Builder.hxx>
+#include <Standard_Failure.hxx>
 #include <BOPAlgo_BuilderFace.hxx>
 #include <BRepBndLib.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
@@ -355,7 +356,8 @@ std::optional<gp_Pnt2d> pointInside(const TopoDS_Face& face)
 
 } // namespace
 
-std::vector<sketch::Geometry> outlineOf(const TopoDS_Shape& planarShape)
+namespace {
+std::vector<sketch::Geometry> unifiedOutline(const TopoDS_Shape& planarShape)
 {
     // Contornos originales, con su sentido, para el número de vueltas.
     std::vector<std::vector<gp_Pnt2d>> contours;
@@ -438,6 +440,41 @@ std::vector<sketch::Geometry> outlineOf(const TopoDS_Shape& planarShape)
         }
     }
     return geometry;
+}
+
+// Los bordes tal como están, sin unir regiones: sirve cuando la unión falla.
+std::vector<sketch::Geometry> rawOutline(const TopoDS_Shape& planarShape)
+{
+    std::vector<sketch::Geometry> geometry;
+    NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> unique;
+    TopExp::MapShapes(planarShape, TopAbs_EDGE, unique);
+    for (int i = 1; i <= unique.Extent(); ++i) {
+        for (const sketch::Geometry& g : projectEdge(TopoDS::Edge(unique(i)), sketch::Plane::xy())) {
+            geometry.push_back(g);
+        }
+    }
+    return geometry;
+}
+} // namespace
+
+std::vector<sketch::Geometry> outlineOf(const TopoDS_Shape& planarShape)
+{
+    // Fuentes decorativas (Ravie, etc.) tienen contornos que hacen fallar las
+    // operaciones booleanas: entonces se usan los contornos originales.
+    std::vector<sketch::Geometry> result;
+    try {
+        result = unifiedOutline(planarShape);
+    } catch (const Standard_Failure&) {
+        result.clear();
+    }
+    if (result.empty()) {
+        try {
+            result = rawOutline(planarShape);
+        } catch (const Standard_Failure&) {
+            result.clear();
+        }
+    }
+    return result;
 }
 
 } // namespace nuf::geometry

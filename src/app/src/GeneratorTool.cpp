@@ -183,6 +183,11 @@ void GeneratorTool::updatePreview()
         }
     } catch (const std::exception& e) {
         problem = e.what();
+        if (problem.find_first_not_of(' ') == std::string::npos) {
+            problem = "No se pudo calcular con esos valores";
+        }
+    } catch (...) {
+        problem = "No se pudo calcular con esos valores";
     }
     std::vector<document::Body> shown = before().bodies;
     for (const document::Body& body : scratch.result().bodies) {
