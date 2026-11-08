@@ -45,6 +45,13 @@ protected:
     void updatePreview() override;
 
 private:
+    // Lo que se calcula en el hilo de trabajo: el diseño que saldría, en un documento aparte (solo lo generado).
+    struct Calculation {
+        std::shared_ptr<const document::Recipe> recipe;
+        document::Document scratch;
+        std::string problem;
+    };
+    void showResult(const Calculation& calculation, bool first);
     document::GeneratorValues values() const;
     void updateVisibility();
     std::optional<Arrow> dimensionArrow(const std::string& key) const override;

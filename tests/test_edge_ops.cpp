@@ -4,6 +4,7 @@
 #include <nuf/document/Generators.hpp>
 #include <nuf/document/Expression.hpp>
 #include <nuf/document/Features.hpp>
+#include <nuf/geometry/Cancel.hpp>
 #include <nuf/geometry/Modeling.hpp>
 #include <nuf/geometry/DisplayMesh.hpp>
 #include <nuf/geometry/Measure.hpp>
@@ -15,9 +16,14 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <chrono>
 #include <cmath>
+#include <deque>
 #include <filesystem>
+#include <functional>
+#include <mutex>
 #include <numbers>
+#include <thread>
 
 using namespace nuf;
 using namespace nuf::document;
@@ -1781,6 +1787,145 @@ TEST_CASE("La malla de una rosca se prepara en otro hilo y se pasa al cuerpo ori
     const geometry::Shape other = geometry::thread("t", plane, spec);
     std::atomic<bool> stop{true};
     REQUIRE_FALSE(geometry::prepareMesh(other, geometry::kHeavyDeviation, geometry::kHeavyAngle, stop).valid());
+}
+
+namespace {
+
+// Hace de «hilo de la interfaz»: lo que los hilos de cálculo publican se ejecuta aquí, cuando se pide.
+class MainQueue {
+public:
+    void post(std::function<void()> f)
+    {
+        std::lock_guard lock(mutex_);
+        queue_.push_back(std::move(f));
+    }
+    // Ejecuta lo publicado hasta que «done» sea cierto (o se acaba el tiempo).
+    bool pumpUntil(const std::function<bool()>& done, std::chrono::seconds limit = std::chrono::seconds(60))
+    {
+        const auto end = std::chrono::steady_clock::now() + limit;
+        while (!done()) {
+            if (std::chrono::steady_clock::now() > end) {
+                return false;
+            }
+            std::function<void()> next;
+            {
+                std::lock_guard lock(mutex_);
+                if (!queue_.empty()) {
+                    next = std::move(queue_.front());
+                    queue_.pop_front();
+                }
+            }
+            if (next) {
+                next();
+            } else {
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            }
+        }
+        return true;
+    }
+
+private:
+    std::mutex mutex_;
+    std::deque<std::function<void()>> queue_;
+};
+
+} // namespace
+
+TEST_CASE("El recálculo en segundo plano da lo mismo que el inmediato y no bloquea", "[background]")
+{
+    const Document expected = boxDocument(5.0);
+    const double volume = expected.result().bodies.front().shape.volume();
+
+    MainQueue queue;
+    Document doc;
+    doc.enableBackgroundCompute([&](std::function<void()> f) { queue.post(std::move(f)); });
+    int changes = 0;
+    std::vector<bool> states;
+    doc.changed.connect([&] { ++changes; });
+    doc.computingChanged.connect([&](bool on) { states.push_back(on); });
+
+    sketch::Sketch s;
+    s.addLine({0, 0}, {20, 0});
+    s.addLine({20, 0}, {20, 10});
+    s.addLine({20, 10}, {0, 10});
+    s.addLine({0, 10}, {0, 0});
+    SketchAttachment at;
+    at.origin = OriginPlane::XY;
+    const FeatureId sk = doc.addFeature(std::make_unique<SketchFeature>(std::move(s), at));
+    auto extrusion = std::make_unique<ExtrudeFeature>();
+    extrusion->profiles.push_back(profileRef(sk, sketch::findProfiles(static_cast<const SketchFeature*>(doc.findFeature(sk))->sketch()).front()));
+    extrusion->spec.side1.distance = 5.0;
+    const FeatureId ex = doc.addFeature(std::move(extrusion));
+
+    // Los cambios vuelven al instante; el modelo aún no es el nuevo.
+    REQUIRE(doc.computing());
+    REQUIRE(doc.featureCount() == 2);
+    REQUIRE(doc.result().bodies.empty());
+
+    REQUIRE(queue.pumpUntil([&] { return !doc.computing(); }));
+    REQUIRE(doc.status(ex).health == Health::Ok);
+    REQUIRE(doc.result().bodies.size() == 1);
+    REQUIRE_THAT(doc.result().bodies.front().shape.volume(), WithinRel(volume, 1e-9));
+    REQUIRE(states == std::vector<bool>{true, false});  // un solo cálculo vigente, aunque hubo dos cambios
+    REQUIRE(changes >= 3);
+}
+
+TEST_CASE("Un cambio nuevo cancela el cálculo en curso y solo vale el último", "[background]")
+{
+    MainQueue queue;
+    Document doc;
+    doc.enableBackgroundCompute([&](std::function<void()> f) { queue.post(std::move(f)); });
+
+    sketch::Sketch s;
+    s.addLine({0, 0}, {20, 0});
+    s.addLine({20, 0}, {20, 10});
+    s.addLine({20, 10}, {0, 10});
+    s.addLine({0, 10}, {0, 0});
+    SketchAttachment at;
+    at.origin = OriginPlane::XY;
+    const FeatureId sk = doc.addFeature(std::make_unique<SketchFeature>(std::move(s), at));
+    auto extrusion = std::make_unique<ExtrudeFeature>();
+    extrusion->profiles.push_back(profileRef(sk, sketch::findProfiles(static_cast<const SketchFeature*>(doc.findFeature(sk))->sketch()).front()));
+    extrusion->spec.side1.distance = 5.0;
+    const FeatureId ex = doc.addFeature(std::move(extrusion));
+    // Se cambia dos veces seguidas sin esperar.
+    for (const double depth : {7.0, 9.0}) {
+        auto edited = std::make_unique<ExtrudeFeature>(*static_cast<const ExtrudeFeature*>(doc.findFeature(ex)));
+        edited->spec.side1.distance = depth;
+        doc.replaceFeature(ex, std::move(edited));
+    }
+    REQUIRE(queue.pumpUntil([&] { return !doc.computing(); }));
+    REQUIRE_THAT(doc.result().bodies.front().shape.volume(), WithinRel(20.0 * 10.0 * 9.0, 1e-9));
+
+    // Con otro cambio a medias, esperar a que acabe también sirve (guardar, exportar).
+    auto again = std::make_unique<ExtrudeFeature>(*static_cast<const ExtrudeFeature*>(doc.findFeature(ex)));
+    again->spec.side1.distance = 4.0;
+    doc.replaceFeature(ex, std::move(again));
+    doc.waitForCompute();
+    REQUIRE_FALSE(doc.computing());
+    REQUIRE_THAT(doc.result().bodies.front().shape.volume(), WithinRel(20.0 * 10.0 * 4.0, 1e-9));
+}
+
+TEST_CASE("Una booleana se interrumpe cuando el hilo de trabajo pide cancelar", "[background][thread]")
+{
+    const auto plane = sketch::Plane::fromPointAndNormal({0, 0, 0}, {0, 0, 1});
+    geometry::ThreadSpec spec;
+    spec.diameter = 8.0;
+    spec.pitch = 1.25;
+    spec.length = 10.0;
+    const geometry::Shape rod = geometry::thread("t", plane, spec);
+    const geometry::Shape block = boxDocument().result().bodies.front().shape;
+
+    REQUIRE_FALSE(geometry::cancelRequested());
+    std::atomic<bool> stop{true};
+    {
+        geometry::CancelScope scope(stop);
+        REQUIRE(geometry::cancelRequested());
+        REQUIRE_THROWS_AS(geometry::boolean(geometry::BooleanOp::Cut, block, rod), geometry::GeometryError);
+    }
+    REQUIRE_FALSE(geometry::cancelRequested());
+    // Sin petición de cancelar, la misma booleana sale bien.
+    REQUIRE_FALSE(geometry::boolean(geometry::BooleanOp::Cut, block, rod).isNull());
 }
 
 TEST_CASE("Una rosca y un engranaje se colocan en una posición X/Y del plano", "[thread][gear]")

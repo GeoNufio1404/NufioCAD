@@ -166,6 +166,7 @@ std::unique_ptr<document::Feature> FeatureTool::make() const
 
 void FeatureTool::stopPreview()
 {
+    previewRun_.cancel();
     if (previewTimer_ != nullptr) {
         previewTimer_->stop();
     }
@@ -344,6 +345,7 @@ void FeatureTool::updatePreview()
     }
     std::unique_ptr<document::Feature> feature = make();
     if (!feature) {
+        previewRun_.cancel();
         viewport_.showBodies(before().bodies);
         showPlanes(viewport_, document_, before(), nullptr);
         viewport_.clearToolPreview();
@@ -353,20 +355,48 @@ void FeatureTool::updatePreview()
         return;
     }
     feature->setId(id_);
-    const document::Preview result = document::preview(document_, *feature, index_);
+
+    // El cálculo (una rosca, un engranaje, una booleana grande) va en un hilo aparte sobre copias; mientras
+    // tanto la vista se queda como estaba y se puede seguir moviendo, girando o cambiando el valor (lo
+    // nuevo cancela lo anterior).
+    struct Calculation {
+        std::shared_ptr<document::Feature> feature;
+        document::Preview result;
+    };
+    auto calculation = std::make_shared<Calculation>();
+    calculation->feature = std::move(feature);
+    okButton_->setEnabled(false);  // hasta saber si lo que se pide sale bien
+    QTimer::singleShot(300, this, [this] {
+        if (previewRun_.running() && statusLabel_ != nullptr) {
+            statusLabel_->setText(QStringLiteral("<span style='color:#8B93A0'>Calculando…</span>"));
+        }
+    });
+    previewRun_.start(
+        [calculation, state = before(), lookup = document_.snapshotLookup()] {
+            calculation->result = document::preview(state, *calculation->feature, lookup);
+        },
+        [this, calculation] {
+            if (panel_ && !updating_) {
+                showPreview(*calculation->feature, calculation->result);
+            }
+        });
+}
+
+void FeatureTool::showPreview(const document::Feature& feature, const document::Preview& result)
+{
     viewport_.showBodies(result.state.bodies);
-    showPlanes(viewport_, document_, result.state, feature.get());
+    showPlanes(viewport_, document_, result.state, &feature);
 
     // Lo que se quita, en rojo translúcido encima del resultado.
     viewport_.clearToolPreview();
     if (removesMaterial() && result.status.health != document::Health::Error) {
         try {
             geometry::Shape tool;
-            if (const auto* e = dynamic_cast<const document::ExtrudeFeature*>(feature.get())) {
+            if (const auto* e = dynamic_cast<const document::ExtrudeFeature*>(&feature)) {
                 tool = e->tool(before());
-            } else if (const auto* r = dynamic_cast<const document::RevolveFeature*>(feature.get())) {
+            } else if (const auto* r = dynamic_cast<const document::RevolveFeature*>(&feature)) {
                 tool = r->tool(before());
-            } else if (const auto* h = dynamic_cast<const document::HoleFeature*>(feature.get())) {
+            } else if (const auto* h = dynamic_cast<const document::HoleFeature*>(&feature)) {
                 tool = h->tool(before());
             }
             viewport_.showToolPreview(tool, true);

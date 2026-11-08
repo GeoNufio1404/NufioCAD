@@ -185,6 +185,24 @@ MainWindow::MainWindow(QWidget* parent)
                                        : QString());
     });
 
+    // El historial se recalcula en un hilo aparte: una rosca o una pieza grande no deben colgar la interfaz.
+    document_.enableBackgroundCompute([this](std::function<void()> done) {
+        QMetaObject::invokeMethod(this, std::move(done), Qt::QueuedConnection);
+    });
+    document_.computingChanged.connect([this](bool computing) {
+        if (computing) {
+            statusBar()->showMessage(QStringLiteral("Calculando el modelo… puedes seguir mirando; un cambio nuevo cancela el cálculo"));
+        } else {
+            statusBar()->clearMessage();
+            auto pending = std::move(afterCompute_);
+            afterCompute_.clear();
+            for (const auto& what : pending) {
+                what();
+            }
+        }
+        updateSketchActions();
+        updateExportAction();
+    });
     document_.changed.connect([this] {
         updateTitle();
         refreshModel();
@@ -218,7 +236,29 @@ MainWindow::MainWindow(QWidget* parent)
     propertiesDock_->hide();  // aparece al usar una herramienta
 }
 
-MainWindow::~MainWindow() = default;
+MainWindow::~MainWindow()
+{
+    // Los hilos de cálculo avisan a esta ventana: se paran antes de que empiece a destruirse.
+    document_.stopBackground();
+}
+
+bool MainWindow::modelBusy()
+{
+    if (!document_.computing()) {
+        return false;
+    }
+    statusBar()->showMessage(QStringLiteral("El modelo todavía se está calculando; espera a que termine"), 4000);
+    return true;
+}
+
+void MainWindow::whenComputed(std::function<void()> what)
+{
+    if (document_.computing()) {
+        afterCompute_.push_back(std::move(what));
+    } else {
+        what();
+    }
+}
 
 void MainWindow::closeEvent(QCloseEvent* event)
 {
@@ -321,7 +361,7 @@ void MainWindow::showRecents()
 
 void MainWindow::createSketch()
 {
-    if (sketch_ || tool_ || viewport_->isPickingSketchPlane()) {
+    if (sketch_ || tool_ || viewport_->isPickingSketchPlane() || modelBusy()) {
         return;
     }
     viewport_->pickSketchPlane();
@@ -339,7 +379,7 @@ void MainWindow::startSketch(const sketch::Plane& plane, const QString& descript
 
 void MainWindow::editSketch(document::FeatureId id)
 {
-    if (sketch_ || tool_ || viewport_->isPickingSketchPlane()) {
+    if (sketch_ || tool_ || viewport_->isPickingSketchPlane() || modelBusy()) {
         return;
     }
     const auto index = document_.indexOf(id);
@@ -426,7 +466,7 @@ void MainWindow::finishSketch()
 
 void MainWindow::startTool(std::unique_ptr<FeatureTool> tool)
 {
-    if (sketch_ || tool_ || viewport_->isPickingSketchPlane()) {
+    if (sketch_ || tool_ || viewport_->isPickingSketchPlane() || modelBusy()) {
         return;
     }
     tool_ = std::move(tool);
@@ -445,7 +485,7 @@ void MainWindow::startTool(std::unique_ptr<FeatureTool> tool)
 
 void MainWindow::startGenerator(const document::Generator& generator)
 {
-    if (sketch_ || tool_ || viewport_->isPickingSketchPlane()) {
+    if (sketch_ || tool_ || viewport_->isPickingSketchPlane() || modelBusy()) {
         return;
     }
     startTool(std::make_unique<GeneratorTool>(document_, *viewport_, generator));
@@ -453,7 +493,7 @@ void MainWindow::startGenerator(const document::Generator& generator)
 
 void MainWindow::reopenGenerator(document::FeatureId id)
 {
-    if (sketch_ || tool_ || viewport_->isPickingSketchPlane()) {
+    if (sketch_ || tool_ || viewport_->isPickingSketchPlane() || modelBusy()) {
         return;
     }
     const document::Feature* feature = document_.findFeature(id);

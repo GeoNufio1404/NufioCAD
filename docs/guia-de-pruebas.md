@@ -350,6 +350,23 @@ Necesitas un cuerpo (la caja de 40×25×10 de «Antes de empezar»). Los botones
 
 ---
 
+## Cálculo en segundo plano
+
+La app ya no se cuelga mientras recalcula: lo lento (una rosca cortante, un engranaje, una booleana grande) corre en un hilo aparte.
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| B.1 | Crea un **cilindro de 10 mm**, pon una **rosca** con operación «Cortar» encima de él y acepta | Al aceptar la ventana sigue respondiendo (puedes girar la vista); la barra de estado dice «Calculando el modelo…» y la rosca aparece al terminar |
+| B.2 | Haz doble clic en el cilindro y pon **20 mm de diámetro**; acepta | La ventana no se congela; mientras calcula sigues viendo la pieza anterior; al terminar se ve el cilindro de 20 mm con su rosca |
+| B.3 | Vuelve a editar el cilindro a **10 mm** y, sin esperar, cambia a 15 y a 12 | Solo vale el último: acaba en 12 mm; no se acumulan cálculos ni se cierra la app |
+| B.4 | Mientras calcula (barra de estado «Calculando…») intenta abrir una herramienta o exportar | Avisa «El modelo todavía se está calculando; espera a que termine» y no hace nada; al terminar sí abre |
+| B.5 | Mientras calcula pulsa **Ctrl+Z** | Se cancela lo que calculaba y se calcula el estado anterior (la ventana no se traba) |
+| B.6 | Abre la herramienta **Rosca** (o **Engranaje** con muchos dientes) y cambia el diámetro varias veces seguidas | La ventana no se congela; aparece «Calculando…» si tarda; «Aceptar» se activa cuando la vista previa está lista; la vista previa final es la del último valor |
+| B.7 | Abre un diseño grande (o uno con roscas) desde Archivo › Abrir | La ventana aparece enseguida; el modelo y el mensaje «Abierto …» salen al terminar de calcular |
+| B.8 | Cierra la app mientras calcula | Se cierra limpia, sin error ni proceso colgado en el administrador de tareas |
+
+---
+
 ## Prueba automática y fuentes
 
 ### Prueba automática de la interfaz
@@ -360,7 +377,7 @@ No hace falta tocar nada: abre la ventana real, recorre las herramientas y los g
 NufioCAD.exe --prueba-interfaz [--informe ruta.txt] [--umbral-ms 20000]
 ```
 
-- Abre cada generador (Lightbox, Caja con tapa, Letrero o llavero, Par de engranajes), cambia un valor, acepta y deshace; hace lo mismo con Rosca, Engranaje, Caja y Cilindro; cancela una herramienta; cambia las unidades a cm y vuelve a mm; activa y desactiva Sección y Medir con un cuerpo; y comprueba que al final no queda nada.
+- Abre cada generador (Lightbox, Caja con tapa, Letrero o llavero, Par de engranajes), cambia un valor, acepta y deshace; hace lo mismo con Rosca, Engranaje, Caja y Cilindro; cancela una herramienta; cambia las unidades a cm y vuelve a mm; activa y desactiva Sección y Medir con un cuerpo; cambia el diámetro de un cilindro con una rosca cortante encima (debe volver al instante y calcular en segundo plano); y comprueba que al final no queda nada.
 - Falla si algo no se abre o no se cierra, si deshacer deja restos, o si la interfaz se para más del umbral (por defecto 20 s: en Debug OpenCASCADE es lento).
 - El informe (por defecto `%TEMP%\NufioCAD-prueba-interfaz.txt`) dice la parada más larga de cada paso y qué la provocó, y, si hubo paradas de más de un segundo, **dónde estaba el programa** (la pila de llamadas).
 - Usa ajustes y carpetas propios (no toca tus ajustes, tus recientes ni las copias de recuperación). Devuelve 0 si todo va bien.

@@ -1,5 +1,6 @@
 #include "Naming.hpp"
 
+#include <nuf/geometry/Cancel.hpp>
 #include <nuf/geometry/Modeling.hpp>
 #include <nuf/geometry/Occt.hpp>
 
@@ -27,6 +28,8 @@
 #include <BRepTools.hxx>
 #include <GeomAPI_Interpolate.hxx>
 #include <Geom_BSplineCurve.hxx>
+#include <Message_ProgressIndicator.hxx>
+#include <Message_ProgressRange.hxx>
 #include <NCollection_HArray1.hxx>
 #include <gp_Circ.hxx>
 #include <BRepExtrema_DistShapeShape.hxx>
@@ -464,6 +467,17 @@ Shape revolve(std::string_view tagView, const SketchRegion& region, const Axis& 
     }
 }
 
+namespace {
+
+// Deja que el kernel se detenga a media booleana cuando el hilo de trabajo pide cancelar.
+class BooleanCanceller final : public Message_ProgressIndicator {
+protected:
+    bool UserBreak() override { return cancelRequested(); }
+    void Show(const Message_ProgressScope&, const bool) override {}
+};
+
+} // namespace
+
 Shape boolean(BooleanOp op, const Shape& target, const Shape& tool)
 {
     try {
@@ -489,7 +503,11 @@ Shape boolean(BooleanOp op, const Shape& target, const Shape& tool)
         algo->SetArguments(objects);
         algo->SetTools(tools);
         algo->SetRunParallel(true);
-        algo->Build();
+        occ::handle<BooleanCanceller> canceller = new BooleanCanceller();
+        algo->Build(canceller->Start());
+        if (cancelRequested()) {
+            throw GeometryError("Cálculo cancelado");
+        }
         if (!algo->IsDone() || algo->HasErrors()) {
             throw GeometryError("La operación booleana falló");
         }

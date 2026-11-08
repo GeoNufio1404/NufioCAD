@@ -5,6 +5,8 @@
 // previa en vivo, y al aceptar entregan la operación para agregarla (o
 // sustituir la que se editaba) con un comando.
 
+#include "BackgroundRun.hpp"
+
 #include <nuf/document/Document.hpp>
 #include <nuf/document/Features.hpp>
 
@@ -55,6 +57,8 @@ public:
 
     // Llamar tras conectar las señales.
     void start();
+    // true mientras la vista previa se está calculando en segundo plano.
+    bool previewing() const { return previewRun_.running(); }
     // La operación con los parámetros actuales (nullptr si faltan entradas).
     virtual std::unique_ptr<document::Feature> build() const = 0;
     // Lo mismo, con las expresiones de los cuadros que usan parámetros: es la
@@ -141,8 +145,12 @@ protected:
     // Flecha de «length» a lo largo de «dir» desde «from» (una medida lineal), o de «length» ± centrada.
     static Arrow arrowAlong(const sketch::Vec3& from, const sketch::Vec3& dir, double length);
 
+    // Dibuja el resultado de la vista previa (en el hilo de la interfaz, cuando el cálculo ya acabó).
+    void showPreview(const document::Feature& feature, const document::Preview& result);
+
     document::Document& document_;
     render::Viewport& viewport_;
+    BackgroundRun previewRun_;  // la vista previa se calcula en un hilo aparte: una rosca no cuelga la interfaz
     std::optional<document::FeatureId> editing_;
     document::FeatureId id_ = 0;
     std::size_t index_ = 0;

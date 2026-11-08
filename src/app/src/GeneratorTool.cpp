@@ -187,6 +187,7 @@ document::Recipe GeneratorTool::recipe() const
 
 void GeneratorTool::stopPreview()
 {
+    previewRun_.cancel();
     if (timer_ != nullptr) {
         timer_->stop();
     }
@@ -237,24 +238,64 @@ void GeneratorTool::updatePreview()
     if (timer_ != nullptr) {
         timer_->stop();
     }
-    document::Document scratch;
-    std::string problem;
+    // El diseño se calcula en un hilo aparte (una caja con tapa o un par de engranajes tardan segundos): la
+    // receta se arma aquí, con los valores de los cuadros, y el hilo solo trabaja sobre esa copia.
+    auto calculation = std::make_shared<Calculation>();
     try {
-        document::applyRecipe(scratch, recipe());
-        for (std::size_t i = 0; i < scratch.featureCount() && problem.empty(); ++i) {
-            const document::FeatureStatus status = scratch.status(scratch.feature(i).id());
-            if (status.health == document::Health::Error) {
-                problem = scratch.feature(i).name() + ": " + status.message;
-            }
-        }
+        calculation->recipe = std::make_shared<const document::Recipe>(recipe());
     } catch (const std::exception& e) {
-        problem = e.what();
-        if (problem.find_first_not_of(' ') == std::string::npos) {
-            problem = "No se pudo calcular con esos valores";
+        calculation->problem = e.what();
+        if (calculation->problem.find_first_not_of(' ') == std::string::npos) {
+            calculation->problem = "No se pudo calcular con esos valores";
         }
     } catch (...) {
-        problem = "No se pudo calcular con esos valores";
+        calculation->problem = "No se pudo calcular con esos valores";
     }
+    const auto present = [this, calculation, first] {
+        if (panel_) {
+            showResult(*calculation, first);
+        }
+    };
+    if (!calculation->recipe) {
+        previewRun_.cancel();
+        present();
+        return;
+    }
+    okButton_->setEnabled(false);
+    QTimer::singleShot(300, this, [this] {
+        if (previewRun_.running() && statusLabel_ != nullptr) {
+            statusLabel_->setText(QStringLiteral("<span style='color:#8B93A0'>Calculando…</span>"));
+        }
+    });
+    previewRun_.start(
+        [calculation] {
+            document::Document& scratch = calculation->scratch;
+            std::string& problem = calculation->problem;
+            try {
+                document::applyRecipe(scratch, *calculation->recipe);
+                for (std::size_t i = 0; i < scratch.featureCount() && problem.empty(); ++i) {
+                    const document::FeatureStatus status = scratch.status(scratch.feature(i).id());
+                    if (status.health == document::Health::Error) {
+                        problem = scratch.feature(i).name() + ": " + status.message;
+                    }
+                }
+            } catch (const std::exception& e) {
+                problem = e.what();
+                if (problem.find_first_not_of(' ') == std::string::npos) {
+                    problem = "No se pudo calcular con esos valores";
+                }
+            } catch (...) {
+                problem = "No se pudo calcular con esos valores";
+            }
+        },
+        present);
+}
+
+// En el hilo de la interfaz, ya calculado el diseño: se dibuja junto a lo que hay.
+void GeneratorTool::showResult(const Calculation& calculation, bool first)
+{
+    const document::Document& scratch = calculation.scratch;
+    const std::string& problem = calculation.problem;
     bounds_.clear();
     for (const document::Body& body : scratch.result().bodies) {
         bounds_.push_back(body.shape.bounds());

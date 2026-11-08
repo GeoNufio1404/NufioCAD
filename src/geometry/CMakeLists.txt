@@ -1,6 +1,7 @@
 # geometry: único módulo que habla directamente con OpenCASCADE (render/
 # también, para dibujar; usa nuf/geometry/Occt.hpp como puente).
 nuf_add_library(geometry SOURCES
+    src/Cancel.cpp
     src/DisplayMesh.cpp
     src/Exchange.cpp
     src/Kernel.cpp

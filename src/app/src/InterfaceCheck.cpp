@@ -1,8 +1,10 @@
 #include "InterfaceCheck.hpp"
 
+#include "FeatureTools.hpp"
 #include "MainWindow.hpp"
 #include "Units.hpp"
 
+#include <nuf/commands/FeatureCommands.hpp>
 #include <nuf/render/Viewport.hpp>
 
 #include <QAction>
@@ -224,6 +226,10 @@ bool InterfaceCheck::waitFor(const std::function<bool()>& condition, int timeout
 void InterfaceCheck::waitIdle()
 {
     settle(400);  // la vista previa espera 250 ms tras el último cambio
+    expect(waitFor([this] { return !window_.document_.computing(); }, 120000),
+           QStringLiteral("el modelo no terminó de calcularse en segundo plano"));
+    expect(waitFor([this] { return window_.tool_ == nullptr || !window_.tool_->previewing(); }, 120000),
+           QStringLiteral("la vista previa no terminó de calcularse en segundo plano"));
     expect(waitFor([this] { return !viewBusy_; }, 60000), QStringLiteral("el visor no terminó de preparar el dibujo"));
     settle(100);
 }
@@ -284,7 +290,7 @@ void InterfaceCheck::undoAll()
     while (window_.commands_.canUndo()) {
         blocking(QStringLiteral("deshacer"), [&] { window_.commands_.undo(); });
     }
-    settle(300);
+    waitIdle();
     expect(window_.document_.featureCount() == 0, QStringLiteral("quedan operaciones tras deshacer"));
     expect(window_.document_.result().bodies.empty(), QStringLiteral("quedan cuerpos tras deshacer"));
     expect(window_.document_.parameters().empty(), QStringLiteral("quedan parámetros tras deshacer"));
@@ -323,6 +329,7 @@ int InterfaceCheck::run()
         step(QStringLiteral("Generador «%1»").arg(action->text()), [&] {
             const int added = openChangeAccept(action, 0);
             expect(added >= 1, QStringLiteral("no añadió operaciones"));
+            waitIdle();
             expect(!window_.document_.result().bodies.empty(), QStringLiteral("no creó cuerpos"));
             undoAll();
         });
@@ -337,6 +344,7 @@ int InterfaceCheck::run()
         step(QStringLiteral("Herramienta «%1»: abrir, cambiar, aceptar y deshacer").arg(name), [&] {
             const int added = openChangeAccept(action, 2);
             expect(added == 1, QStringLiteral("debía añadir una operación"));
+            waitIdle();
             expect(window_.document_.result().bodies.size() == 1, QStringLiteral("debía crear un cuerpo"));
             undoAll();
         });
@@ -457,6 +465,44 @@ int InterfaceCheck::run()
             blocking(QStringLiteral("desactivar"), [&] { action->trigger(); });
             expect(!action->isChecked(), QStringLiteral("«%1» no se desactivó").arg(action->text()));
         }
+        undoAll();
+    });
+
+    // Un cilindro con una rosca cortante encima: cambiar el diámetro recalcula la rosca (lento), pero en segundo plano.
+    step(QStringLiteral("Cambiar un cilindro con una rosca encima no cuelga la interfaz"), [&] {
+        auto cylinder = std::make_unique<document::CylinderFeature>();
+        cylinder->base.origin = document::OriginPlane::XY;
+        cylinder->diameter = 10.0;
+        cylinder->height = 10.0;
+        auto thread = std::make_unique<document::ThreadFeature>();
+        thread->base.origin = document::OriginPlane::XY;
+        thread->spec.diameter = 8.0;
+        thread->spec.pitch = 1.25;
+        thread->spec.length = 10.0;
+        thread->operation = document::Operation::Cut;
+        blocking(QStringLiteral("agregar el cilindro y la rosca"), [&] {
+            window_.commands_.push(std::make_unique<commands::AddFeature>(std::move(cylinder)));
+            window_.commands_.push(std::make_unique<commands::AddFeature>(std::move(thread)));
+        });
+        waitIdle();
+        const document::FeatureId cylinderId = window_.document_.feature(0).id();
+        const document::FeatureId threadId = window_.document_.feature(1).id();
+        expect(window_.document_.status(threadId).health != document::Health::Error,
+               QStringLiteral("la rosca falló: %1").arg(QString::fromStdString(window_.document_.status(threadId).message)));
+        for (const double diameter : {20.0, 10.0}) {
+            auto edited = std::make_unique<document::CylinderFeature>(
+                static_cast<const document::CylinderFeature&>(window_.document_.feature(0)));
+            edited->diameter = diameter;
+            QElapsedTimer timer;
+            timer.start();
+            blocking(QStringLiteral("cambiar el diámetro a %1").arg(diameter),
+                     [&] { window_.commands_.push(std::make_unique<commands::EditFeature>(cylinderId, std::move(edited))); });
+            expect(timer.elapsed() < 1000, QStringLiteral("cambiar el diámetro tardó %1 ms: debía volver al instante").arg(timer.elapsed()));
+            expect(window_.document_.computing(), QStringLiteral("el recálculo no quedó en segundo plano"));
+            settle(100);  // la interfaz sigue atendiendo eventos mientras se calcula
+        }
+        waitIdle();
+        expect(window_.document_.status(threadId).health != document::Health::Error, QStringLiteral("la rosca falló al final"));
         undoAll();
     });
 

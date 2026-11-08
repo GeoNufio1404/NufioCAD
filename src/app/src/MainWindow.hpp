@@ -12,6 +12,7 @@
 #include <QMainWindow>
 
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -123,6 +124,10 @@ private:
 
     // Operaciones sólidas.
     void startTool(std::unique_ptr<FeatureTool> tool);
+    // El modelo se recalcula en segundo plano: lo que necesita el resultado nuevo espera (avisa y devuelve true).
+    bool modelBusy();
+    // Ejecuta «what» ya, o en cuanto termine el cálculo en segundo plano.
+    void whenComputed(std::function<void()> what);
     void finishTool(bool accepted);
     // Editar una operación (doble clic en el timeline).
     void activateFeature(document::FeatureId id);
@@ -136,6 +141,7 @@ private:
 
     document::Document document_;
     commands::CommandStack commands_{document_};
+    std::vector<std::function<void()>> afterCompute_;  // pendientes de que termine el cálculo en segundo plano
 
     render::Viewport* viewport_ = nullptr;
     QDockWidget* navigatorDock_ = nullptr;

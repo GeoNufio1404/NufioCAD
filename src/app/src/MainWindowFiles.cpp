@@ -222,15 +222,17 @@ bool MainWindow::openPath(const std::filesystem::path& path, bool recovered, con
     }
     updateTitle();
     refreshModel();
-    viewport_->fitAll();
-
-    int failed = 0;
-    for (std::size_t i = 0; i < document_.featureCount(); ++i) {
-        failed += document_.status(document_.feature(i).id()).health == document::Health::Error ? 1 : 0;
-    }
-    statusBar()->showMessage(failed == 0 ? QStringLiteral("Abierto %1").arg(QDir::toNativeSeparators(fromPath(path)))
-                                         : QStringLiteral("Abierto con %1 operación(es) con errores: míralas en el timeline").arg(failed),
-                             failed == 0 ? 6000 : 15000);
+    // El modelo se calcula en segundo plano: encuadre y resumen cuando esté listo.
+    whenComputed([this, path] {
+        viewport_->fitAll();
+        int failed = 0;
+        for (std::size_t i = 0; i < document_.featureCount(); ++i) {
+            failed += document_.status(document_.feature(i).id()).health == document::Health::Error ? 1 : 0;
+        }
+        statusBar()->showMessage(failed == 0 ? QStringLiteral("Abierto %1").arg(QDir::toNativeSeparators(fromPath(path)))
+                                             : QStringLiteral("Abierto con %1 operación(es) con errores: míralas en el timeline").arg(failed),
+                                 failed == 0 ? 6000 : 15000);
+    });
     return true;
 }
 
@@ -385,18 +387,17 @@ bool MainWindow::importStepFile(const std::filesystem::path& path)
     QApplication::restoreOverrideCursor();
     rememberDirectory(fromPath(path));
 
-    const document::FeatureStatus status = document_.status(raw->id());
-    if (status.health == document::Health::Error) {
-        statusBar()->showMessage(QStringLiteral("La importación falló: %1").arg(QString::fromStdString(status.message)), 15000);
-        return true;
-    }
-    if (wasEmpty) {
-        viewport_->fitAll();
-    }
-    statusBar()->showMessage(QStringLiteral("Importado %1 (%2 cuerpo(s))")
-                                 .arg(fromPath(path.filename()))
-                                 .arg(document_.result().bodies.size()),
-                             8000);
+    whenComputed([this, id = raw->id(), name = QString(fromPath(path.filename())), wasEmpty] {
+        const document::FeatureStatus status = document_.status(id);
+        if (status.health == document::Health::Error) {
+            statusBar()->showMessage(QStringLiteral("La importación falló: %1").arg(QString::fromStdString(status.message)), 15000);
+            return;
+        }
+        if (wasEmpty) {
+            viewport_->fitAll();
+        }
+        statusBar()->showMessage(QStringLiteral("Importado %1 (%2 cuerpo(s))").arg(name).arg(document_.result().bodies.size()), 8000);
+    });
     return true;
 }
 

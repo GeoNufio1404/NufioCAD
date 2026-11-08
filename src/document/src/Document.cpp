@@ -1,11 +1,14 @@
 #include <nuf/document/Document.hpp>
 
+#include <nuf/geometry/Cancel.hpp>
 #include <nuf/geometry/Shape.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <set>
 #include <stdexcept>
+#include <thread>
 #include <utility>
 
 namespace nuf::document {
@@ -166,7 +169,42 @@ std::vector<FeatureId> featuresIn(const geometry::ElementRef& ref)
 
 // --- Document --------------------------------------------------------------
 
+// Lo que lleva un cálculo en segundo plano: una copia de lo que necesita y, al acabar, lo que salió.
+struct Document::Job {
+    std::uint64_t generation = 0;
+    std::size_t from = 0;  // la primera operación que recalcula
+    std::atomic<bool> cancel{false};
+    std::atomic<bool> finished{false};
+    std::vector<ModelState> states;
+    std::vector<FeatureStatus> statuses;
+    std::thread thread;
+};
+
 Document::Document() = default;
+
+Document::~Document()
+{
+    stopBackground();
+}
+
+void Document::stopBackground()
+{
+    // Los hilos trabajan sobre copias, pero no se pueden dejar sueltos: se les pide parar y se espera.
+    post_ = nullptr;
+    for (auto& job : retired_) {
+        job->cancel = true;
+    }
+    if (job_) {
+        job_->cancel = true;
+        retired_.push_back(std::move(job_));
+    }
+    for (auto& job : retired_) {
+        if (job->thread.joinable()) {
+            job->thread.join();
+        }
+    }
+    retired_.clear();
+}
 
 void Document::setName(std::string name)
 {
@@ -218,7 +256,9 @@ FeatureId Document::insertFeature(std::unique_ptr<Feature> feature, std::size_t 
     }
     const FeatureId id = feature->id();
     features_.insert(features_.begin() + std::ptrdiff_t(index), std::move(feature));
-    states_.insert(states_.begin() + std::ptrdiff_t(index), ModelState{});
+    // En segundo plano, hasta que se calcule se sigue viendo lo anterior (no un modelo vacío).
+    states_.insert(states_.begin() + std::ptrdiff_t(index),
+                   post_ && index > 0 ? states_[index - 1] : ModelState{});
     statuses_.insert(statuses_.begin() + std::ptrdiff_t(index), FeatureStatus{});
     if (index <= marker_) {
         ++marker_;
@@ -496,6 +536,21 @@ ParameterLookup Document::lookup() const
     };
 }
 
+ParameterLookup Document::snapshotLookup() const
+{
+    const auto values = std::make_shared<const std::map<std::string, ParameterValue>>(values_);
+    return [values](std::string_view name) -> std::optional<double> {
+        const auto it = values->find(std::string(name));
+        if (it == values->end()) {
+            return std::nullopt;
+        }
+        if (!it->second.value) {
+            throw ExpressionError("El parámetro «" + std::string(name) + "» tiene un error: " + it->second.error);
+        }
+        return it->second.value;
+    };
+}
+
 void Document::evaluateParameters()
 {
     values_.clear();
@@ -585,8 +640,144 @@ const FeatureStatus& Document::status(FeatureId id) const
     return index ? statuses_[*index] : kUnknown;
 }
 
+void Document::enableBackgroundCompute(Poster post)
+{
+    waitForCompute();
+    post_ = std::move(post);
+}
+
+void Document::waitForCompute()
+{
+    if (job_) {
+        finishBackground(job_->generation);
+    }
+}
+
+void Document::reapRetired()
+{
+    std::erase_if(retired_, [](const std::shared_ptr<Job>& job) {
+        if (!job->finished.load()) {
+            return false;
+        }
+        if (job->thread.joinable()) {
+            job->thread.join();
+        }
+        return true;
+    });
+}
+
+// El cálculo en curso ya no vale: se le pide parar (el hilo se recoge cuando termine).
+void Document::retireJob()
+{
+    if (job_) {
+        job_->cancel = true;
+        retired_.push_back(std::move(job_));
+    }
+    reapRetired();
+}
+
+void Document::startBackground(std::size_t index)
+{
+    const bool wasComputing = job_ != nullptr;
+    dirty_ = dirty_ ? std::min(*dirty_, index) : index;
+    retireJob();
+    const std::size_t from = *dirty_;
+    if (from >= features_.size()) {
+        // Nada que calcular (se quitó lo último): lo mostrado ya es lo correcto.
+        dirty_.reset();
+        applyBodyInfo();
+        markChanged();
+        if (wasComputing) {
+            computingChanged.notify(false);
+        }
+        return;
+    }
+
+    // Todo lo que necesita el hilo es una copia: el documento puede seguir cambiando.
+    auto job = std::make_shared<Job>();
+    job->generation = ++generation_;
+    job->from = from;
+    std::vector<std::unique_ptr<Feature>> features;
+    for (std::size_t i = from; i < features_.size(); ++i) {
+        features.push_back(features_[i]->clone());
+    }
+    ModelState before = from == 0 ? empty_ : states_[from - 1];
+    const std::size_t marker = marker_;
+    const std::uint64_t generation = job->generation;
+    Job* raw = job.get();
+    Document* self = this;
+    const Poster post = post_;
+    const std::weak_ptr<bool> alive = alive_;
+    job_ = job;
+    raw->thread = std::thread([raw, self, post, alive, generation, from, marker, lookup = snapshotLookup(),
+                               features = std::move(features), before = std::move(before)]() mutable {
+        geometry::CancelScope scope(raw->cancel);
+        try {
+            for (std::size_t k = 0; k < features.size() && !raw->cancel.load(); ++k) {
+                const Feature& feature = *features[k];
+                if (from + k >= marker) {
+                    raw->states.push_back(before);
+                    raw->statuses.push_back({Health::RolledBack, {}});
+                } else if (feature.suppressed()) {
+                    raw->states.push_back(before);
+                    raw->statuses.push_back({Health::Suppressed, {}});
+                } else {
+                    auto [state, status] = computeOn(before, feature, lookup);
+                    raw->states.push_back(std::move(state));
+                    raw->statuses.push_back(std::move(status));
+                }
+                before = raw->states.back();
+            }
+        } catch (...) {
+            // Lo que salga mal aquí deja el cálculo incompleto: no se instala (ver finishBackground).
+        }
+        raw->finished = true;
+        if (!raw->cancel.load()) {
+            post([self, alive, generation] {
+                if (alive.lock()) {
+                    self->finishBackground(generation);
+                }
+            });
+        }
+    });
+
+    // La interfaz se refresca ya con lo anterior (el historial cambió aunque el modelo aún no).
+    applyBodyInfo();
+    markChanged();
+    if (!wasComputing) {
+        computingChanged.notify(true);
+    }
+}
+
+// En el hilo del documento: el cálculo terminó; si sigue siendo el vigente, su resultado se instala.
+void Document::finishBackground(std::uint64_t generation)
+{
+    if (!job_ || job_->generation != generation) {
+        return;  // lo cancelaron o lo reemplazó otro más nuevo
+    }
+    const std::shared_ptr<Job> job = std::move(job_);
+    if (job->thread.joinable()) {
+        job->thread.join();
+    }
+    reapRetired();
+    if (job->from + job->states.size() == features_.size()) {
+        for (std::size_t k = 0; k < job->states.size(); ++k) {
+            states_[job->from + k] = std::move(job->states[k]);
+            statuses_[job->from + k] = std::move(job->statuses[k]);
+        }
+        dirty_.reset();
+    }
+    applyBodyInfo();
+    markChanged();
+    computingChanged.notify(false);
+}
+
 void Document::recomputeFrom(std::size_t index)
 {
+    if (post_) {
+        startBackground(index);
+        return;
+    }
     for (std::size_t i = index; i < features_.size(); ++i) {
         const ModelState& before = i == 0 ? empty_ : states_[i - 1];
         const Feature& feature = *features_[i];
@@ -608,7 +799,12 @@ void Document::recomputeFrom(std::size_t index)
 
 Preview preview(const Document& document, const Feature& feature, std::size_t index)
 {
-    auto [state, status] = computeOn(document.stateBefore(index), feature, document.lookup());
+    return preview(document.stateBefore(index), feature, document.lookup());
+}
+
+Preview preview(const ModelState& before, const Feature& feature, const ParameterLookup& lookup)
+{
+    auto [state, status] = computeOn(before, feature, lookup);
     return {std::move(state), std::move(status)};
 }
 

@@ -5,6 +5,8 @@ set(CMAKE_AUTORCC ON)
 
 add_executable(nuf_app
     src/main.cpp
+    src/BackgroundRun.cpp
+    src/BackgroundRun.hpp
     src/MainWindow.cpp
     src/MainWindowMenus.cpp
     src/MainWindowView.cpp

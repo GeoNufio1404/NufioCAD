@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -42,6 +43,13 @@ struct ParameterValue {
 class Document {
 public:
     Document();
+    ~Document();
+    Document(const Document&) = delete;
+    Document& operator=(const Document&) = delete;
+    // Solo para devolverlo de una función: con el cálculo en segundo plano activado no se debe mover
+    // (los hilos conocen la dirección del documento).
+    Document(Document&&) = default;
+    Document& operator=(Document&&) = default;
 
     const std::string& name() const noexcept { return name_; }
     void setName(std::string name);
@@ -107,6 +115,8 @@ public:
     ParameterValue parameterValue(const std::string& name) const;
     // Para evaluar una expresión con los parámetros del documento.
     ParameterLookup lookup() const;
+    // Lo mismo sobre una copia de los valores de ahora: se puede usar en otro hilo mientras el documento cambia.
+    ParameterLookup snapshotLookup() const;
 
     // --- Nombres y componentes de los cuerpos ---
     const std::map<std::string, BodyInfo>& bodyInfo() const noexcept { return bodyInfo_; }
@@ -125,9 +135,31 @@ public:
     // Tras cualquier cambio (nombre, historial, recálculo).
     Signal<> changed;
 
+    // --- Cálculo en segundo plano ---
+    // Por omisión cada cambio recalcula en el acto (lo que esperan las pruebas y las herramientas
+    // que usan un documento de trabajo). Con esto activado, el recálculo de lo que cambió corre en un
+    // hilo aparte sobre una copia: la interfaz sigue viva viendo el resultado anterior, un cambio
+    // nuevo cancela el cálculo en curso, y al terminar se avisa con «changed». «post» ejecuta lo que
+    // se le da en el hilo del documento (en Qt, una llamada en cola a un objeto de la interfaz).
+    using Poster = std::function<void(std::function<void()>)>;
+    void enableBackgroundCompute(Poster post);
+    // true mientras el resultado mostrado todavía no es el de los últimos cambios.
+    bool computing() const noexcept { return job_ != nullptr; }
+    // Espera a que termine el cálculo en curso (bloquea): para guardar, exportar o las pruebas.
+    void waitForCompute();
+    // Cancela lo que corre, espera a que los hilos paren y vuelve al cálculo inmediato (al cerrar).
+    void stopBackground();
+    // Al empezar (true) y al acabar (false) un cálculo en segundo plano.
+    Signal<bool> computingChanged;
+
 private:
+    struct Job;
     void markChanged();
     void recomputeFrom(std::size_t index);
+    void startBackground(std::size_t index);
+    void finishBackground(std::uint64_t generation);
+    void retireJob();
+    void reapRetired();
     void evaluateParameters();
     void applyBodyInfo();
 
@@ -142,6 +174,14 @@ private:
     std::map<std::string, ParameterValue> values_;
     std::map<std::string, BodyInfo> bodyInfo_;
     ModelState empty_;
+
+    // Cálculo en segundo plano (ver enableBackgroundCompute).
+    Poster post_;
+    std::shared_ptr<Job> job_;                  // el vigente
+    std::vector<std::shared_ptr<Job>> retired_;  // cancelados que aún no han terminado
+    std::optional<std::size_t> dirty_;           // desde dónde el resultado mostrado está desactualizado
+    std::uint64_t generation_ = 0;
+    std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
 };
 
 // Calcula «feature» como si estuviera en «index» (sin tocar el documento):
@@ -151,5 +191,7 @@ struct Preview {
     FeatureStatus status;
 };
 Preview preview(const Document& document, const Feature& feature, std::size_t index);
+// Sin tocar el documento (solo copias): se puede llamar desde un hilo de trabajo.
+Preview preview(const ModelState& before, const Feature& feature, const ParameterLookup& lookup);
 
 } // namespace nuf::document

@@ -315,6 +315,9 @@ void MainWindow::updateMeasure()
 // Imprimir: revisa la pieza, la exporta a STL en una carpeta temporal y abre el slicer con ella.
 void MainWindow::printBodies()
 {
+    if (modelBusy()) {
+        return;
+    }
     const std::vector<document::Body>& bodies = document_.result().bodies;
     std::vector<std::string> shown;
     for (const document::Body& body : bodies) {
@@ -362,6 +365,9 @@ void MainWindow::printBodies()
 
 void MainWindow::exportBodies()
 {
+    if (modelBusy()) {
+        return;
+    }
     const std::vector<document::Body>& bodies = document_.result().bodies;
     std::vector<std::string> shown;
     for (const document::Body& body : bodies) {
