@@ -11,6 +11,8 @@
 #include <QLineEdit>
 #include <QLabel>
 #include <QPushButton>
+#include <QSettings>
+#include <QVBoxLayout>
 #include <QTimer>
 
 #include <algorithm>
@@ -40,6 +42,20 @@ void GeneratorTool::createFields(QFormLayout* form)
 {
     form_ = form;
     for (document::GeneratorField f : generator_.fields()) {
+        // Un formulario nuevo parte de las últimas respuestas que se aceptaron con este generador.
+        if (!hasInitial_) {
+            QSettings settings;
+            const QString base = QStringLiteral("generator/%1/").arg(QString::fromStdString(generator_.id()));
+            const QString key = base + QString::fromStdString(f.key);
+            if (f.kind == document::GeneratorField::Kind::Text || f.kind == document::GeneratorField::Kind::Font) {
+                if (settings.contains(key)) {
+                    f.text = settings.value(key).toString().toStdString();
+                }
+            } else if (settings.contains(key)) {
+                f.value = std::clamp(settings.value(key).toDouble(), f.kind == document::GeneratorField::Kind::Choice ? 0.0 : f.min,
+                                     f.kind == document::GeneratorField::Kind::Choice ? double(f.choices.size()) - 1.0 : f.max);
+            }
+        }
         // Al reabrir, el formulario parte de las respuestas de antes.
         if (hasInitial_) {
             if (const auto it = initial_.find(f.key); it != initial_.end()) {
@@ -95,11 +111,24 @@ void GeneratorTool::createFields(QFormLayout* form)
             connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
             widget = box;
         }
+        // La ayuda se ve siempre, en pequeño y en gris bajo el campo (y también como tooltip).
+        auto* container = new QWidget();
+        auto* column = new QVBoxLayout(container);
+        column->setContentsMargins(0, 0, 0, 0);
+        column->setSpacing(1);
+        column->addWidget(widget);
         if (!f.hint.empty()) {
             widget->setToolTip(QString::fromStdString(f.hint));
+            auto* hint = new QLabel(QString::fromStdString(f.hint));
+            hint->setWordWrap(true);
+            QFont small = hint->font();
+            small.setPointSizeF(small.pointSizeF() * 0.85);
+            hint->setFont(small);
+            hint->setStyleSheet(QStringLiteral("QLabel { color: palette(placeholder-text); }"));
+            column->addWidget(hint);
         }
-        form->addRow(QString::fromStdString(f.label), widget);
-        rows_.push_back({f, widget});
+        form->addRow(QString::fromStdString(f.label), container);
+        rows_.push_back({f, widget, container});
     }
     updateVisibility();
 }
@@ -115,7 +144,7 @@ void GeneratorTool::updateVisibility()
                 }
             }
         }
-        form_->setRowVisible(row.widget, visible);
+        form_->setRowVisible(row.container, visible);
     }
 }
 
@@ -167,6 +196,18 @@ void GeneratorTool::stopPreview()
 
 void GeneratorTool::accept()
 {
+    // Se recuerdan las respuestas para el próximo formulario de este generador.
+    if (lead_ == 0 && !hasInitial_) {
+        const document::GeneratorValues v = values();
+        QSettings settings;
+        const QString base = QStringLiteral("generator/%1/").arg(QString::fromStdString(generator_.id()));
+        for (const auto& [key, value] : v) {
+            settings.setValue(base + QString::fromStdString(key), value);
+        }
+        for (const auto& [key, text] : v.texts) {
+            settings.setValue(base + QString::fromStdString(key), QString::fromStdString(text));
+        }
+    }
     emit accepted();
 }
 

@@ -50,6 +50,7 @@ private:
     struct Row {
         document::GeneratorField field;
         QWidget* widget = nullptr;
+        QWidget* container = nullptr;  // el campo con su ayuda debajo (lo que se muestra y oculta)
     };
     const document::Generator& generator_;
     document::FeatureId lead_ = 0;

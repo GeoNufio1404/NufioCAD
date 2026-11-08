@@ -473,7 +473,7 @@ Resumen de todo lo pendiente que no son pruebas manuales; el detalle sigue en el
 - [ ] Limitaciones de Fase 2 y 3 (ver tabla de Estado): lo proyectado y el texto bloqueados; recortar/extender/desfase solo con líneas, arcos y círculos; elegir qué cuerpos participan en unir/cortar; «hasta una cara» con caras no planas; flecha en la revolución.
 
 **Oleada 3 — Usabilidad**
-- [ ] Formularios de generadores agrupados, con ayuda visible y últimos valores recordados.
+- [x] Generadores: ayuda visible bajo cada campo y últimas respuestas recordadas por generador (`QSettings`, `generator/<id>/<clave>`; se guardan al aceptar un diseño nuevo). Falta probarlo a mano (guía G.17–G.18). **Pendiente:** agrupar los campos por secciones (medidas, tapa, cable…) con títulos plegables; un botón «Restablecer valores».
 - [ ] Vista previa de generadores en color translúcido; indicador «Preparando…» sobre la vista.
 - [ ] Errores de geometría en lenguaje claro; ayudas sin «mm» fijo.
 - [ ] Selector de unidad en la barra de estado; atajos para Caja, Cilindro y generadores.
