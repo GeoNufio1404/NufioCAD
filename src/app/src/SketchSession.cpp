@@ -801,17 +801,43 @@ bool SketchSession::askDimensionValue(sketch::Constraint& dimension)
     const bool angle = dimension.type == sketch::ConstraintType::Angle;
     const Units& units = Units::instance();
     const double shown = angle ? std::abs(dimension.value) * 180.0 / std::numbers::pi : units.toDisplay(std::abs(dimension.value));
-    bool ok = false;
-    const double value = QInputDialog::getDouble(
-        &viewport_, QStringLiteral("Cota"),
-        angle ? QStringLiteral("Ángulo (°):") : QStringLiteral("Valor (%1):").arg(units.unit()), shown,
-        angle ? 0.0 : 1e-6, angle ? 360.0 : units.toDisplay(1e6), 3 + (angle ? 0 : units.extraDecimals()), &ok);
-    if (!ok) {
+    // El cuadro acepta un número o una expresión con parámetros («grosor * 2»); en las longitudes el
+    // valor del cuadro está siempre en milímetros y se muestra en la unidad elegida.
+    QDialog dialog(&viewport_);
+    dialog.setWindowTitle(QStringLiteral("Cota"));
+    auto* form = new QFormLayout(&dialog);
+    auto* box = new ExpressionSpinBox(&dialog);
+    box->setDecimals(3);
+    if (angle) {
+        box->setRange(0.0, 360.0);
+        setUnit(box, QStringLiteral("°"));
+        box->setValue(shown);
+    } else {
+        box->setRange(1e-6, 1e6);
+        box->setDecimals(3);
+        box->setLength(true);
+        box->setValue(std::abs(dimension.value));
+    }
+    if (!dimension.expression.empty()) {
+        box->setExpression(QString::fromStdString(dimension.expression));
+    }
+    box->setToolTip(box->toolTip().isEmpty() ? QStringLiteral("Un número o una expresión con parámetros (por ejemplo «grosor * 2»)")
+                                             : box->toolTip());
+    form->addRow(angle ? QStringLiteral("Ángulo:") : QStringLiteral("Valor:"), box);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    form->addRow(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    box->selectAll();
+    if (dialog.exec() != QDialog::Accepted) {
         return false;
     }
+    box->interpretText();
+    const double value = box->value();
     // Se conserva el signo (sentido) de la medida actual.
     const double sign = dimension.value < 0.0 ? -1.0 : 1.0;
-    dimension.value = sign * (angle ? value * std::numbers::pi / 180.0 : units.fromDisplay(value));
+    dimension.value = sign * (angle ? value * std::numbers::pi / 180.0 : value);
+    dimension.expression = box->expression().toStdString();
     return true;
 }
 
@@ -833,6 +859,7 @@ void SketchSession::addDimension()
         // La medida ya la fijan otras restricciones: cota de referencia.
         sketch_ = before;
         dimension->driving = false;
+        dimension->expression.clear();
         sketch_.addConstraint(*dimension);
         emit message(QStringLiteral("La medida ya está determinada: se añadió como cota de referencia"));
     }
@@ -854,6 +881,7 @@ void SketchSession::editDimension(sketch::ConstraintId id)
     }
     sketch::Sketch before = sketch_;
     sketch_.constraint(id)->value = edited.value;
+    sketch_.constraint(id)->expression = edited.expression;
     if (solver_->solve(sketch_).status != sketch::SolveStatus::Solved) {
         sketch_ = std::move(before);
         emit message(QStringLiteral("No se puede: con ese valor el sketch no tiene solución"));

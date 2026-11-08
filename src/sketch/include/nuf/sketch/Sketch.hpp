@@ -197,6 +197,10 @@ struct Constraint {
     // false = cota de referencia: no restringe, solo muestra la medida
     // (el solver la actualiza con la geometría).
     bool driving = true;
+    // Expresión con parámetros que dio el valor de la cota (vacía = número a
+    // secas). Solo vive mientras se edita el sketch: el documento la guarda en
+    // las expresiones de la operación (clave «c<id>») y recalcula el valor.
+    std::string expression;
 
     static Constraint coincident(Ref a, Ref b);
     static Constraint pointOnObject(Ref point, EntityId curve);

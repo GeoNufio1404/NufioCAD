@@ -415,7 +415,7 @@ void MainWindow::createMenus()
     parametersAction_ = solidMenu->addAction(QStringLiteral("&Parámetros…"), this, [this] {
         ParametersDialog dialog(document_.parameters(), this);
         if (dialog.exec() == QDialog::Accepted && dialog.parameters() != document_.parameters()) {
-            commands_.push(std::make_unique<commands::SetParameters>(dialog.parameters()));
+            commands_.push(std::make_unique<commands::SetParameters>(dialog.parameters(), dialog.renames()));
         }
     });
     decorate(parametersAction_, QStringLiteral("parameters-solid"),
@@ -945,7 +945,9 @@ void MainWindow::editSketch(document::FeatureId id)
     const auto placed = after.find(id);
     const sketch::Plane plane = placed != after.end() ? placed->second.plane : feature->attachment().lastPlane;
     // Con lo proyectado ya actualizado.
-    const sketch::Sketch sketch = placed != after.end() ? *placed->second.sketch : feature->sketch();
+    // (y con las expresiones de las cotas, para poder editarlas)
+    const sketch::Sketch sketch =
+        feature->forEditing(placed != after.end() ? *placed->second.sketch : feature->sketch());
     editingSketch_ = id;
     refreshModel();  // el modelo como estaba antes de este sketch
     openSession(plane, QString::fromStdString(feature->name()), sketch);
@@ -993,7 +995,7 @@ void MainWindow::finishSketch()
         if (const auto* feature = dynamic_cast<const document::SketchFeature*>(document_.findFeature(*editing))) {
             auto edited = std::unique_ptr<document::SketchFeature>(
                 static_cast<document::SketchFeature*>(feature->clone().release()));
-            edited->setSketch(std::move(finished));
+            edited->setSketchFromEditing(std::move(finished));
             const std::string label = "Editar " + feature->name();
             commands_.push(std::make_unique<commands::EditFeature>(*editing, std::move(edited), label));
         }
@@ -1003,8 +1005,9 @@ void MainWindow::finishSketch()
         if (!empty) {
             document::SketchAttachment attachment = newSketchAttachment_;
             attachment.lastPlane = plane;
-            commands_.push(std::make_unique<commands::AddFeature>(
-                std::make_unique<document::SketchFeature>(std::move(finished), attachment)));
+            auto created = std::make_unique<document::SketchFeature>(sketch::Sketch(), attachment);
+            created->setSketchFromEditing(std::move(finished));
+            commands_.push(std::make_unique<commands::AddFeature>(std::move(created)));
         }
     }
     refreshModel();

@@ -415,6 +415,67 @@ void Document::setParameters(std::vector<Parameter> parameters)
     markChanged();
 }
 
+Document::ExpressionSnapshot Document::expressionSnapshot() const
+{
+    ExpressionSnapshot snapshot;
+    for (const auto& feature : features_) {
+        if (!feature->expressions.empty()) {
+            snapshot[feature->id()] = feature->expressions;
+        }
+    }
+    return snapshot;
+}
+
+void Document::setParameters(std::vector<Parameter> parameters, const std::map<std::string, std::string>& renames)
+{
+    if (renames.empty()) {
+        setParameters(std::move(parameters));
+        return;
+    }
+    ExpressionSnapshot snapshot = expressionSnapshot();
+    for (auto& [id, fields] : snapshot) {
+        for (auto& [field, text] : fields) {
+            text = renameInExpression(text, renames);
+        }
+    }
+    restoreParameters(std::move(parameters), snapshot);
+}
+
+void Document::restoreParameters(std::vector<Parameter> parameters, const ExpressionSnapshot& snapshot)
+{
+    bool differs = parameters != parameters_;
+    std::optional<std::size_t> first;
+    for (std::size_t i = 0; i < features_.size(); ++i) {
+        const auto it = snapshot.find(features_[i]->id());
+        static const std::map<std::string, std::string> kNone;
+        const auto& wanted = it == snapshot.end() ? kNone : it->second;
+        if (features_[i]->expressions != wanted) {
+            features_[i]->expressions = wanted;
+            differs = true;
+            if (!first) {
+                first = i;
+            }
+        }
+    }
+    if (!differs) {
+        return;
+    }
+    parameters_ = std::move(parameters);
+    evaluateParameters();
+    // Desde la primera operación cambiada o que use expresiones.
+    std::optional<std::size_t> start = first;
+    for (std::size_t i = 0; i < features_.size() && (!start || i < *start); ++i) {
+        if (!features_[i]->expressions.empty()) {
+            start = i;
+        }
+    }
+    if (start) {
+        recomputeFrom(*start);
+    } else {
+        markChanged();
+    }
+}
+
 ParameterValue Document::parameterValue(const std::string& name) const
 {
     const auto it = values_.find(name);

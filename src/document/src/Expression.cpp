@@ -324,6 +324,28 @@ std::vector<std::string> expressionNames(std::string_view text)
     return names;
 }
 
+std::string renameInExpression(std::string_view text, const std::map<std::string, std::string>& renames)
+{
+    std::string result;
+    std::size_t i = 0;
+    while (i < text.size()) {
+        const auto c = static_cast<unsigned char>(text[i]);
+        if (std::isalpha(c) || c == '_') {
+            std::size_t end = i + 1;
+            while (end < text.size() && (std::isalnum(static_cast<unsigned char>(text[end])) || text[end] == '_')) {
+                ++end;
+            }
+            const std::string word(text.substr(i, end - i));
+            const auto it = renames.find(word);
+            result += it != renames.end() ? it->second : word;
+            i = end;
+        } else {
+            result += text[i++];
+        }
+    }
+    return result;
+}
+
 bool isValidParameterName(std::string_view name)
 {
     if (name.empty() || !(std::isalpha(static_cast<unsigned char>(name.front())) || name.front() == '_')) {

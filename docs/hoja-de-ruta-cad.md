@@ -369,7 +369,10 @@ Todas siguen el patrón de las operaciones actuales: una clase en `document/Feat
 - **6a Planos de construcción ✅:** `ConstructionPlaneFeature` (plano base —de origen, una cara plana u otro plano de construcción—, giro alrededor del eje X o Y del plano y desfase a lo largo de su normal; se publica en `ModelState::planes`). Un sitio (`SketchAttachment`) puede apuntar a un plano de construcción (`reference`), así que sirven para sketches y para el plano de simetría del espejo, y siguen al plano si se edita. Se ven como cuadrados translúcidos turquesa (tamaño según la pieza), con carpeta «Planos de construcción» en el navegador (casilla para ocultar) y se eligen en «Crear sketch». Herramienta Sólido › Plano (grupo CONSTRUIR). Se guarda como `plane`. 3 pruebas nuevas.
 - **6b Ejes de construcción ✅:** `ConstructionAxisFeature` (intersección de dos planos —de origen, cara o de construcción— o, con uno solo, la perpendicular a él por su origen; planos paralelos dan error). Se publica en `ModelState::axes`, se ve como una línea turquesa y se usa como eje de **Revolución** (`AxisRef::Kind::Construction`) y de **Patrón** (lineal: su dirección; circular: eje de giro, ya sin limitarse al origen). Herramienta Sólido › Eje; carpeta «Ejes de construcción» en el navegador. Se guarda como `axis`. 2 pruebas nuevas. Con esto el patrón y la revolución ya aceptan ejes propios.
 - **6c Parámetros y expresiones ✅:** tabla de parámetros del documento (`Document::parameters`, se guarda en la tabla `parameters` del `.nuf`; cambios por el comando `SetParameters`, con deshacer). Evaluador propio (`Expression.hpp`): números con punto o coma, `+ - * / ^`, paréntesis, otros parámetros, funciones (`sin cos tan asin acos atan sqrt abs round floor ceil min max pow`; argumentos con `;`; trigonometría en grados), constantes `pi` y `e`, unidades tras un número (`mm cm m in deg rad`), referencias circulares detectadas. Las operaciones guardan una expresión por campo (`Feature::expressions`, campos declarados en `numericFields()`): extrusión (distancias y desfase), revolución (ángulos), redondeo/chaflán (tamaño), vaciado (espesor), agujeros (diámetros, profundidades, ángulo), patrón (distancia, ángulo, cantidad) y plano de construcción (distancia, ángulo). Al calcular se evalúan sobre una copia, así que al cambiar un parámetro todo lo ligado se recalcula; si falta o falla un parámetro la operación queda en error con un mensaje. En la interfaz, los cuadros numéricos de las herramientas aceptan expresiones (`ExpressionSpinBox`: «alto*2» muestra el valor en el tooltip y la expresión se conserva al editar); botón Sólido › Parámetros (grupo CONSTRUIR) con la tabla, valores en vivo y avisos. 3 pruebas nuevas.
-- **Pendiente de 6c:** cotas del sketch ligadas a parámetros; renombrar un parámetro no actualiza las expresiones que lo usan; cantidad del patrón solo ligable desde el archivo (el cuadro es entero).
+- **Renombrar parámetros ✅ (backlog, oleada 1):** al cambiar el nombre de una fila en Sólido › Parámetros, las expresiones de las demás filas se reescriben al instante y, al aceptar, también las de las operaciones (`renameInExpression`, `Document::setParameters(tabla, renombrados)`; el comando `SetParameters` guarda las expresiones anteriores y se deshace entero). Funciona token a token (no toca `grosor_2` al renombrar `grosor`, ni funciones ni unidades). 1 prueba nueva ([params]). Probado solo con pruebas automáticas (pasos 6.17–6.19 de la guía, sin hacer a mano).
+- **Cotas del sketch ligadas a parámetros ✅ (backlog, oleada 1):** el cuadro de una cota (doble clic) acepta un número o una expresión (`radio`, `grosor*2`; longitudes en la unidad elegida, ángulos en grados). Mientras se edita, la expresión vive en `Constraint::expression`; al terminar el sketch pasa a las expresiones de la operación (clave `c<id>`, como cualquier otro campo ligado), así que se guarda en el `.nuf`, se renombra con el parámetro y se deshace igual. `SketchFeature::numericFields` expone las cotas con valor; al calcular, la operación evalúa las expresiones y **vuelve a resolver el sketch** (si el solver no converge o hay conflicto, la operación queda en error con el motivo; radios, diámetros y longitudes deben ser > 0; se conserva el signo de las distancias en X/Y). Al reabrir el sketch se parte del ya calculado con las expresiones puestas en sus cotas. 1 prueba nueva (círculo con radio ligado: cambio de volumen, renombrado, guardar y abrir, error y recuperación).
+- **Aviso de compilación (Windows en español):** MSVC escribe «Nota: inclusión del archivo» y ninja no la reconoce, así que **no detecta cambios en cabeceras** y deja objetos viejos enlazados con nuevos (síntoma: caídas absurdas en pruebas que antes pasaban). Compilar siempre con `VSLANG=1033` (salida de MSVC en inglés) y, si hubo cambios de cabecera sin esa variable, reconstruir con `--clean-first`.
+- **Pendiente de 6c:** la cota ligada no se distingue a simple vista en el sketch (falta una marca, p. ej. «ƒ»); editar una cota ligada con un número suelto quita la expresión sin avisar; cantidad del patrón solo ligable desde el archivo (el cuadro es entero); el diálogo no permite intercambiar dos nombres a la vez (a↔b se bloquea por «repetido»); solo cotas con valor (no restricciones como la curvatura); no probado a mano en la ventana.
 
 ### Fase 7 — Generadores
 - **7a Engranajes ✅:** `geometry::gear` (perfil de involuta con splines por flanco, cabeza y raíz en arcos, tramo radial si la base queda sobre la raíz; recto por prisma, helicoidal por secciones giradas en un solo sólido; agujero central) y `GearFeature` (plano de origen o de construcción, módulo, dientes 6–300, ángulo de presión 5–35°, ancho, agujero, ángulo de hélice hasta 45°, operación nuevo cuerpo/unir; todos ligables a parámetros). Caras con nombre estable: `f<id>:lado:d<i>:flanco_d|flanco_i|cabeza|raiz|rad_d|rad_i`, `…:lado:agujero`, `…:inicio`, `…:fin`. Herramienta Sólido › Engranaje (grupo GENERAR). Errores claros (dientes puntiagudos o solapados, agujero demasiado grande). 3 pruebas nuevas.
@@ -407,8 +410,7 @@ Todas siguen el patrón de las operaciones actuales: una clase en `document/Feat
 - **Pendiente de 9c:** no dibuja la línea de la medida sobre el modelo; mide solo caras y aristas (no vértices ni puntos libres); con más de dos elementos usa los dos últimos de la lista, no por orden de clic; los números usan punto decimal; no copia el resultado al portapapeles.
 - **9d Sección ✅:** botón **Sección** (INSPECCIONAR). Corta la vista de los cuerpos con un plano XY, XZ o YZ a la posición elegida, tapa el corte en azul y permite ver el otro lado. Solo cambia la vista: el modelo, el timeline y la exportación no se tocan. Esc termina.
 - **Pendiente de 9d:** probado a ojo con una caja (los tres planos, tapa azul, «otro lado» y Esc); falta comprobar el rendimiento con piezas grandes y cómo se ve la tapa en piezas con huecos; solo planos de origen (no caras ni planos de construcción); un solo corte a la vez; no se guarda en el archivo; no hay análisis de calidad de malla (se deja para más adelante).
-- Control de calidad de malla al exportar.
-- Posible envío directo al slicer.
+- **Sin hacer de la Fase 9:** control de calidad de malla al exportar (la revisión de 9a mira el sólido, no la malla). El envío al slicer ya está en 9b.
 
 ### Unidad como etiqueta en los cuadros numéricos ✅ (pedido en las pruebas)
 La unidad («mm», «°») ya no forma parte del texto del cuadro: es una etiqueta fija a la derecha del número (`setUnit` en `ExpressionSpinBox.hpp`, sirve para cualquier cuadro numérico), así que al editar solo se selecciona y reescribe el número. Se aplica a las herramientas de operación (distancias, ángulos, diámetros, paso, largo…), la Sección, el diálogo de Exportar/Imprimir (medidas de la impresora) y la altura del texto del sketch. Si se escribe «10 mm» a mano, se sigue entendiendo.
@@ -448,6 +450,48 @@ Guía paso a paso para probar cada fase y dar feedback: [`guia-de-pruebas.md`](g
 
 **Convención:** cada bloque termina con su línea «**Pendiente de …**» (lo que no se hizo, lo que no se probó a mano, límites conocidos). Todo pendiente nuevo se documenta ahí al cerrar el bloque, y al hacer la segunda auditoría de código se repasan todos.
 
+## Backlog consolidado (revisión del 7 nov. 2026)
+
+Resumen de todo lo pendiente que no son pruebas manuales; el detalle sigue en el «Pendiente de …» de cada bloque. Se trabaja por oleadas y al cerrar cada punto se tacha aquí y en su bloque.
+
+**Oleada 1 — Cimientos (hacer antes de ampliar generadores)**
+- [x] Cotas del sketch ligadas a parámetros (6c). Falta probarlo a mano (guía 6.20–6.24).
+- [x] Renombrar un parámetro actualiza las expresiones que lo usan (6c). Falta probarlo a mano (guía 6.17–6.19).
+- [ ] Cantidad del patrón ligable desde la interfaz (6c).
+- [ ] Generadores reabribles: guardar en el componente qué generador lo creó y con qué valores (10a).
+- [ ] Completar la guía de pruebas: 5–8, 9c, 9d, unidades y Fase 10.
+
+**Oleada 2 — Robustez**
+- [ ] Compilar y probar en Fedora/CI de Ubuntu (enlace STEP, nlohmann-json, filtro `*.exe`).
+- [ ] Prueba de interfaz en el CI (Xvfb) y que compruebe también cómo se ve.
+- [ ] Medir en Release (bloqueado por Smart App Control; probar en otra máquina o firmar).
+- [ ] Partir `Viewport.cpp`, `FeatureTools.cpp`, `MainWindow.cpp` y `Features.cpp`.
+- [ ] `hasHeavySurface`/`hasMesh` sin recorrer todas las caras en cada refresco.
+- [ ] Limitaciones de Fase 2 y 3 (ver tabla de Estado): lo proyectado y el texto bloqueados; recortar/extender/desfase solo con líneas, arcos y círculos; elegir qué cuerpos participan en unir/cortar; «hasta una cara» con caras no planas; flecha en la revolución.
+
+**Oleada 3 — Usabilidad**
+- [ ] Formularios de generadores agrupados, con ayuda visible y últimos valores recordados.
+- [ ] Vista previa de generadores en color translúcido; indicador «Preparando…» sobre la vista.
+- [ ] Errores de geometría en lenguaje claro; ayudas sin «mm» fijo.
+- [ ] Selector de unidad en la barra de estado; atajos para Caja, Cilindro y generadores.
+- [ ] Ocultar la pestaña HERRAMIENTAS dentro de un sketch; aviso de recuperación menos molesto.
+- [ ] Unidades restantes: Medir, avisos de impresión, lista de parámetros, área/volumen, por documento.
+- [ ] Interfaz Fusion: paleta flotante del sketch, barra superior, menú radial, valores junto al cursor en Extruir/Revolución.
+
+**Oleada 4 — Ampliaciones de modelado**
+- [ ] Repetir y reflejar operaciones (no solo cuerpos); patrón por trayectoria; espejo de varios cuerpos.
+- [ ] Redondeo/chaflán: dos distancias, ángulo, radio variable, redondear una cara entera.
+- [ ] Vaciado cerrado y espesores por cara; agujeros con punto y clic en cara; roscas sobre caras cilíndricas.
+- [ ] Barrido y loft con guías, torsión y tangencias; mover con gizmo; dividir cuerpos; componentes con origen propio; uniones cilíndricas.
+- [ ] Medir con línea dibujada y copiar; Sección con caras y planos de construcción; voladizos y soportes en la revisión.
+- [ ] STEP: pulgadas, colores, nombres y ensamblajes (XDE); reimportar; guardar la cámara; calidad de malla «Personalizada».
+
+**Oleada 5 — Generadores y salida**
+- [ ] SVG como sketch (letrero y lightbox); 3MF multicuerpo con filamentos.
+- [ ] Lightbox: canal para tira LED. Caja con tapa: redonda, bisagra, ventilación, patas, divisiones, catálogo de tornillos M2–M6.
+- [ ] Letrero: varias líneas, alineación y cambio de texto sin rehacer. Engranajes: internos, cremallera, pocos dientes, aviso de compatibilidad.
+- [ ] Tarjeta «Herramientas» sobre el lienzo vacío; control de calidad de malla al exportar.
+
 ## Notas de planificación
 
 - **Orden:** la Fase 4 va justo después del modelado básico para tener un flujo útil de punta a punta lo antes posible; cada fase siguiente agrega valor real.
@@ -464,12 +508,12 @@ Guía paso a paso para probar cada fase y dar feedback: [`guia-de-pruebas.md`](g
 | Windows | 🚧 Compila (MSVC), las pruebas pasan y la app abre y funciona en Debug. Pendiente: pasar las pruebas manuales 1–30 en Windows y el build Release (Smart App Control bloquea las DLL sin firmar de OCCT en esta PC) |
 | Fase 2 | 🚧 Implementada (2a–2d) — sketch completo: dibujo con variantes, elipse, spline y cónica; restricciones (incluida G2), cotas y valores junto al cursor; selección (también por rectángulo), deshacer, arrastre y perfiles; edición (recortar, extender, partir, empalme, chaflán, desfase, simetría, patrones, mover/copiar/girar/escalar); proyectar aristas, intersección, texto, imagen de referencia e importar DXF; los sketches terminados se guardan, sus perfiles y curvas se seleccionan en la vista 3D y se reabren con doble clic. Pendiente: las pruebas manuales de abajo y probar en Windows. Limitaciones: lo proyectado y el texto quedan bloqueados (no se actualizan con la pieza ni se editan como texto hasta la Fase 3); recortar/extender/partir y desfase trabajan con líneas, arcos y círculos; los patrones son copias independientes |
 | Fase 3 | 🚧 Implementada (3a–3c) — núcleo paramétrico con nombres estables de caras y aristas; sketches en el historial (sobre planos de origen o caras que siguen a la pieza); Extruir (todas sus variantes, empujar una cara) y Revolución con vista previa y flecha; timeline editable (editar, marcador, reordenar, suprimir, borrar, renombrar), navegador y deshacer/rehacer; lo proyectado sigue a su arista. Pendiente: las pruebas manuales 20–30 y probar en Windows. Limitaciones: los cuerpos que participan en unir/cortar son todos los que toca (sin elegirlos); «hasta una cara» solo con caras planas; el ángulo de la revolución se escribe en el panel (sin flecha) |
-| Fase 4 | 🚧 4a (Exportar), 4b (serialización), 4c (Nuevo/Abrir/Guardar/Guardar como con aviso de cambios), 4d (importar STEP), 4e (pantalla de inicio con recientes) y 4f (recuperación) implementadas: **Fase 4 completa**. Pendiente: probar a mano las pruebas 31–38 y compilar en Fedora/CI |
+| Fase 4 | ✅ 4a (Exportar), 4b (serialización), 4c (Nuevo/Abrir/Guardar/Guardar como con aviso de cambios), 4d (importar STEP), 4e (pantalla de inicio con recientes) y 4f (recuperación) implementadas. Pendiente: probar a mano las pruebas 31–38 y compilar en Fedora/CI |
 | Fase 5 | ✅ 5a (redondeo y chaflán), 5b (shell), 5c (agujeros), 5d (patrones de cuerpos) y 5e (espejo de cuerpos) implementadas; pendiente repetir/reflejar operaciones |
 | Fase 6 | ✅ 6a (planos de construcción), 6b (ejes de construcción) y 6c (parámetros con nombre y expresiones) implementadas. Pendiente: cotas del sketch ligadas a parámetros. Siguiente paso: Fase 7 |
 | Fase 7 | ✅ 7a (engranajes), 7b (roscas), 7c (barrido) y 7d (loft) implementadas. Siguiente paso: Fase 8 |
 | Fase 8 | ✅ 8a (mover/copiar/combinar cuerpos), 8b (nombres y componentes) y 8c (uniones entre caras planas) implementadas |
 | Fase 9 | ✅ 9a (revisión antes de exportar), 9b (Imprimir), 9c (Medir) y 9d (Sección) implementadas; sin calidad de malla ni línea de medida dibujada |
 | Fase 10 | ✅ 10a (base), 10b (Lightbox), 10c (Caja con tapa), 10d (Letrero o llavero) y 10e (Par de engranajes) implementadas; ver [`generadores.md`](generadores.md) |
-| Pruebas manuales | ⏳ Guía en [`guia-de-pruebas.md`](guia-de-pruebas.md) (fases 1 a 9b); el usuario irá probando fase por fase y dando feedback |
+| Pruebas manuales | ⏳ Guía en [`guia-de-pruebas.md`](guia-de-pruebas.md) (fases 1 a 9b); **faltan por añadir a la guía** 9c, 9d, unidades, colocación de roscas/engranajes y la Fase 10. El usuario irá probando fase por fase y dando feedback |
 | Auditoría de código | ✅ Segunda auditoría hecha: [`auditoria-2.md`](auditoria-2.md) (hallazgos arreglados, pendientes por prioridad, usabilidad y rendimiento) |

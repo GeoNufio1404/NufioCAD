@@ -7,6 +7,7 @@
 // grados; las funciones trigonométricas usan grados.
 
 #include <functional>
+#include <map>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -29,6 +30,12 @@ double evaluateExpression(std::string_view text, const ParameterLookup& lookup);
 // Los nombres de parámetros que usa la expresión (sin repetir; no cuenta
 // funciones, constantes ni unidades). Lanza ExpressionError si está mal escrita.
 std::vector<std::string> expressionNames(std::string_view text);
+
+// Cambia los nombres de parámetros de la expresión según «renames» (antiguo →
+// nuevo, todos a la vez, así que se pueden intercambiar dos nombres). No toca
+// funciones, constantes, unidades ni el resto del texto; si la expresión no
+// usa ninguno de los nombres la devuelve idéntica.
+std::string renameInExpression(std::string_view text, const std::map<std::string, std::string>& renames);
 
 // Nombre válido para un parámetro: letra o «_» seguido de letras, dígitos o
 // «_», y que no sea una función, una constante ni una unidad.

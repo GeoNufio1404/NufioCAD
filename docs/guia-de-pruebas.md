@@ -128,6 +128,14 @@ Necesitas un cuerpo (la caja de 40×25×10 de «Antes de empezar»). Los botones
 | 6.14 | Borrar un parámetro que se usa | La operación pasa a error con un mensaje claro |
 | 6.15 | Guardar y reabrir | Parámetros y expresiones siguen; cambiar un parámetro sigue recalculando |
 | 6.16 | Ctrl+Z tras cambiar parámetros | Vuelve al valor anterior |
+| 6.17 | Con `alto` usado en una extrusión y en otro parámetro (`doble = alto*2`): Parámetros → renombrar `alto` a `espesor` → Aceptar | La fila `doble` pasa sola a `espesor*2` mientras escribes; la pieza no cambia ni queda en error; al reabrir la operación, su campo dice `espesor` |
+| 6.18 | Ctrl+Z tras renombrar | Vuelven el nombre `alto` y la expresión de la operación; la pieza sigue igual |
+| 6.19 | Renombrar a un nombre que ya existe | Aviso «repetido» y Aceptar desactivado; al corregirlo, las expresiones se actualizan con el nombre final |
+| 6.20 | Parámetro `radio = 5`. Sketch con un círculo acotado (Ø o R) → doble clic en la cota → escribir `radio` (o `radio*2` en un Ø) → Aceptar → Terminar sketch | La medida es la del parámetro; el cuadro de la cota mostraba la expresión al reabrirla |
+| 6.21 | Sólido › Parámetros → cambiar `radio` a `8` | El sketch y la pieza se recalculan (el círculo crece); Ctrl+Z lo devuelve |
+| 6.22 | Poner `radio = -2` (o un valor que haga imposible el sketch) | La operación del sketch queda en «!» con el motivo («debe ser mayor que cero» o «no tiene solución»); al corregir, vuelve a la normalidad |
+| 6.23 | Cota angular con `ang = 30` y expresión `ang` (o `ang + 15`) | Se entiende en grados; guardar y reabrir conserva la expresión |
+| 6.24 | Renombrar `radio` a `r` en Parámetros | La cota sigue ligada (reabrirla muestra `r`) y la pieza no cambia |
 
 **Fíjate en:** ¿se entiende que un cuadro «tiene una expresión»? ¿Escribir un nombre de parámetro es natural? ¿Falta algo (las cotas del sketch aún no se ligan; ver «Pendiente de 6c»)?
 

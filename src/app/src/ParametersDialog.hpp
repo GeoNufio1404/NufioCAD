@@ -8,6 +8,9 @@
 
 #include <QDialog>
 
+#include <map>
+#include <string>
+
 class QLabel;
 class QPushButton;
 class QTableWidget;
@@ -21,9 +24,13 @@ public:
     ParametersDialog(const std::vector<document::Parameter>& parameters, QWidget* parent = nullptr);
 
     std::vector<document::Parameter> parameters() const;
+    // Parámetros que ya existían y cambiaron de nombre (antiguo → nuevo).
+    std::map<std::string, std::string> renames() const;
 
 private:
-    void addRow(const QString& name, const QString& expression);
+    // Si se cambió el nombre de una fila, actualiza las expresiones que lo usaban.
+    void followRename(int row);
+    void addRow(const QString& name, const QString& expression, bool existing = false);
     // Recalcula los valores y activa «Aceptar» solo si todo está bien.
     void refresh();
 

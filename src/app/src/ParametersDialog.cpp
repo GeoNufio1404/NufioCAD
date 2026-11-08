@@ -16,6 +16,8 @@ namespace nuf::app {
 namespace {
 
 enum Column { NameColumn, ExpressionColumn, ValueColumn };
+constexpr int OriginalNameRole = Qt::UserRole;
+constexpr int LastNameRole = Qt::UserRole + 1;
 
 } // namespace
 
@@ -60,7 +62,7 @@ ParametersDialog::ParametersDialog(const std::vector<document::Parameter>& param
     layout->addLayout(buttons);
 
     for (const document::Parameter& p : parameters) {
-        addRow(QString::fromStdString(p.name), QString::fromStdString(p.expression));
+        addRow(QString::fromStdString(p.name), QString::fromStdString(p.expression), true);
     }
     refresh();
 
@@ -86,17 +88,26 @@ ParametersDialog::ParametersDialog(const std::vector<document::Parameter>& param
             refresh();
         }
     });
-    connect(table_, &QTableWidget::itemChanged, this, [this] { refresh(); });
+    connect(table_, &QTableWidget::itemChanged, this, [this](QTableWidgetItem* item) {
+        if (!refreshing_ && item->column() == NameColumn) {
+            followRename(item->row());
+        }
+        refresh();
+    });
     connect(ok_, &QPushButton::clicked, this, &QDialog::accept);
     connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
 }
 
-void ParametersDialog::addRow(const QString& name, const QString& expression)
+void ParametersDialog::addRow(const QString& name, const QString& expression, bool existing)
 {
     refreshing_ = true;
     const int row = table_->rowCount();
     table_->insertRow(row);
-    table_->setItem(row, NameColumn, new QTableWidgetItem(name));
+    auto* nameItem = new QTableWidgetItem(name);
+    // Nombre original (vacío si la fila es nueva) y último nombre ya propagado.
+    nameItem->setData(OriginalNameRole, existing ? name : QString());
+    nameItem->setData(LastNameRole, name);
+    table_->setItem(row, NameColumn, nameItem);
     table_->setItem(row, ExpressionColumn, new QTableWidgetItem(expression));
     auto* value = new QTableWidgetItem();
     value->setFlags(value->flags() & ~Qt::ItemIsEditable);
@@ -112,6 +123,49 @@ std::vector<document::Parameter> ParametersDialog::parameters() const
                           table_->item(row, ExpressionColumn)->text().trimmed().toStdString()});
     }
     return result;
+}
+
+std::map<std::string, std::string> ParametersDialog::renames() const
+{
+    std::map<std::string, std::string> result;
+    for (int row = 0; row < table_->rowCount(); ++row) {
+        const QTableWidgetItem* item = table_->item(row, NameColumn);
+        const std::string original = item->data(OriginalNameRole).toString().toStdString();
+        const std::string current = item->text().trimmed().toStdString();
+        if (!original.empty() && original != current && document::isValidParameterName(current)) {
+            result[original] = current;
+        }
+    }
+    return result;
+}
+
+void ParametersDialog::followRename(int row)
+{
+    QTableWidgetItem* item = table_->item(row, NameColumn);
+    const std::string last = item->data(LastNameRole).toString().toStdString();
+    const std::string current = item->text().trimmed().toStdString();
+    if (last == current || !document::isValidParameterName(current) || !document::isValidParameterName(last)) {
+        return;
+    }
+    for (int other = 0; other < table_->rowCount(); ++other) {
+        if (other != row && table_->item(other, NameColumn)->text().trimmed().toStdString() == current) {
+            return;  // nombre repetido: se avisa en refresh(), y se propaga cuando se corrija
+        }
+    }
+    refreshing_ = true;
+    for (int other = 0; other < table_->rowCount(); ++other) {
+        if (other == row) {
+            continue;
+        }
+        QTableWidgetItem* expression = table_->item(other, ExpressionColumn);
+        const QString updated = QString::fromStdString(
+            document::renameInExpression(expression->text().toStdString(), {{last, current}}));
+        if (updated != expression->text()) {
+            expression->setText(updated);
+        }
+    }
+    item->setData(LastNameRole, QString::fromStdString(current));
+    refreshing_ = false;
 }
 
 void ParametersDialog::refresh()

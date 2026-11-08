@@ -833,6 +833,107 @@ TEST_CASE("Una operación ligada a parámetros se recalcula al cambiar la tabla"
     REQUIRE_THAT(doc.result().bodies.front().shape.volume(), WithinRel(20.0 * 10.0 * 20.0, 1e-6));
 }
 
+TEST_CASE("Renombrar un parámetro actualiza las expresiones que lo usan", "[params]")
+{
+    using document::renameInExpression;
+    REQUIRE(renameInExpression("grosor * 2 + grosor_2 + sin(grosor)", {{"grosor", "pared"}}) == "pared * 2 + grosor_2 + sin(pared)");
+    REQUIRE(renameInExpression("12 mm + a", {{"a", "b"}}) == "12 mm + b");
+    REQUIRE(renameInExpression("a + b", {{"a", "b"}, {"b", "a"}}) == "b + a");  // intercambio
+    REQUIRE(renameInExpression("5 + 3", {{"a", "b"}}) == "5 + 3");
+
+    Document doc = boxDocument(5.0);
+    doc.setParameters({{"grosor", "3"}, {"largo", "grosor * 10"}});
+    auto bound = std::unique_ptr<Feature>(doc.findFeature(2)->clone());
+    bound->expressions["distance"] = "largo / 2";
+    doc.replaceFeature(2, std::move(bound));
+    const double volume = doc.result().bodies.front().shape.volume();
+    REQUIRE(doc.status(2).health == Health::Ok);
+
+    const auto before = doc.expressionSnapshot();
+    const auto oldParameters = doc.parameters();
+    // La tabla ya viene con la expresión de «largo» reescrita, como hace el diálogo.
+    doc.setParameters({{"pared", "3"}, {"largo", "pared * 10"}}, {{"grosor", "pared"}});
+    REQUIRE(doc.status(2).health == Health::Ok);
+    REQUIRE(doc.findFeature(2)->expressions.at("distance") == "largo / 2");
+    REQUIRE_THAT(doc.result().bodies.front().shape.volume(), WithinRel(volume, 1e-9));
+
+    // Renombrar el parámetro que usa directamente la operación.
+    doc.setParameters({{"pared", "3"}, {"alto", "pared * 10"}}, {{"largo", "alto"}});
+    REQUIRE(doc.findFeature(2)->expressions.at("distance") == "alto / 2");
+    REQUIRE(doc.status(2).health == Health::Ok);
+    REQUIRE_THAT(doc.result().bodies.front().shape.volume(), WithinRel(volume, 1e-9));
+
+    // Deshacer devuelve tabla y expresiones.
+    doc.restoreParameters(oldParameters, before);
+    REQUIRE(doc.parameters() == oldParameters);
+    REQUIRE(doc.findFeature(2)->expressions.at("distance") == "largo / 2");
+    REQUIRE(doc.status(2).health == Health::Ok);
+    REQUIRE_THAT(doc.result().bodies.front().shape.volume(), WithinRel(volume, 1e-9));
+}
+
+TEST_CASE("Las cotas del sketch se ligan a parámetros", "[params][sketch]")
+{
+    // Un círculo en el origen cuyo radio es una cota, extruido 10 mm.
+    Document doc;
+    sketch::Sketch s;
+    const sketch::EntityId circle = s.addCircle({0, 0}, 5.0);
+    s.addConstraint(sketch::Constraint::coincident(sketch::Ref::center(circle), sketch::Ref::of(sketch::Sketch::kOrigin)));
+    const sketch::ConstraintId radiusId = s.addConstraint(sketch::Constraint::radius(circle, 5.0));
+    SketchAttachment at;
+    at.origin = OriginPlane::XY;
+    const FeatureId sk = doc.addFeature(std::make_unique<SketchFeature>(std::move(s), at));
+    auto extrusion = std::make_unique<ExtrudeFeature>();
+    extrusion->profiles.push_back(profileRef(sk, sketch::findProfiles(static_cast<const SketchFeature*>(doc.findFeature(sk))->sketch()).front()));
+    extrusion->spec.side1.distance = 10.0;
+    doc.addFeature(std::move(extrusion));
+    const auto volumeFor = [&](double r) { return kPi * r * r * 10.0; };
+    REQUIRE_THAT(doc.result().bodies.front().shape.volume(), WithinRel(volumeFor(5.0), 1e-3));
+
+    // Edición: la expresión viaja en Constraint::expression y al terminar pasa a la operación.
+    doc.setParameters({{"radio", "5"}});
+    {
+        auto edited = std::unique_ptr<SketchFeature>(static_cast<SketchFeature*>(doc.findFeature(sk)->clone().release()));
+        sketch::Sketch session = edited->forEditing(doc.stateBefore(1).sketches.at(sk).sketch.operator*());
+        REQUIRE(session.constraint(radiusId)->expression.empty());
+        session.constraint(radiusId)->expression = "radio";
+        edited->setSketchFromEditing(std::move(session));
+        REQUIRE(edited->expressions.at("c" + std::to_string(radiusId)) == "radio");
+        REQUIRE(edited->sketch().constraint(radiusId)->expression.empty());
+        doc.replaceFeature(sk, std::move(edited));
+    }
+    REQUIRE(doc.status(sk).health == Health::Ok);
+    REQUIRE_THAT(doc.result().bodies.front().shape.volume(), WithinRel(volumeFor(5.0), 1e-3));
+
+    // Al cambiar el parámetro, el sketch se resuelve de nuevo y la pieza cambia.
+    doc.setParameters({{"radio", "8"}});
+    REQUIRE(doc.status(sk).health == Health::Ok);
+    REQUIRE_THAT(doc.result().bodies.front().shape.volume(), WithinRel(volumeFor(8.0), 1e-3));
+    REQUIRE_THAT(doc.stateBefore(1).sketches.at(sk).sketch->constraint(radiusId)->value, Catch::Matchers::WithinAbs(8.0, 1e-9));
+
+    // Renombrar el parámetro actualiza la expresión de la cota.
+    doc.setParameters({{"r", "8"}}, {{"radio", "r"}});
+    REQUIRE(doc.findFeature(sk)->expressions.at("c" + std::to_string(radiusId)) == "r");
+    REQUIRE_THAT(doc.result().bodies.front().shape.volume(), WithinRel(volumeFor(8.0), 1e-3));
+
+    // Guardar y abrir conserva la expresión.
+    const auto path = std::filesystem::temp_directory_path() / "nuf_cotas.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    reopened.setParameters({{"r", "3"}});
+    REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(volumeFor(3.0), 1e-3));
+
+    // Un valor imposible deja la operación en error con un mensaje, y se recupera.
+    reopened.setParameters({{"r", "-2"}});
+    REQUIRE(reopened.status(sk).health == Health::Error);
+    reopened.setParameters({{"r", "4"}});
+    REQUIRE(reopened.status(sk).health == Health::Ok);
+    REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(volumeFor(4.0), 1e-3));
+}
+
 TEST_CASE("Los parámetros y las expresiones se guardan en el archivo", "[params][io]")
 {
     Document doc = boxDocument(5.0);

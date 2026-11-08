@@ -1,11 +1,14 @@
 #include <nuf/document/Features.hpp>
 
+#include <nuf/document/Expression.hpp>
+
 #include <nuf/geometry/Exchange.hpp>
 #include <nuf/sketch/Solver.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <iterator>
+#include <numbers>
 #include <map>
 #include <set>
 
@@ -174,11 +177,97 @@ std::optional<std::string> SketchFeature::compute(ModelState& state) const
     return warning;
 }
 
+namespace {
+
+constexpr const char* kDimensionPrefix = "c";
+
+bool isDimensionKey(const std::string& key)
+{
+    return key.size() > 1 && key[0] == kDimensionPrefix[0] &&
+           std::ranges::all_of(key.begin() + 1, key.end(), [](char c) { return c >= '0' && c <= '9'; });
+}
+
+bool hasSolvableValue(const sketch::Constraint& c)
+{
+    return sketch::isDimensional(c.type) && c.driving;
+}
+
+} // namespace
+
+std::vector<Feature::NumericField> SketchFeature::numericFields()
+{
+    std::vector<NumericField> fields;
+    for (const sketch::Constraint& c : sketch_->constraints()) {
+        if (!hasSolvableValue(c)) {
+            continue;
+        }
+        const sketch::ConstraintId cid = c.id;
+        const bool angle = c.type == sketch::ConstraintType::Angle;
+        const double factor = angle ? std::numbers::pi / 180.0 : 1.0;
+        NumericField field;
+        field.key = kDimensionPrefix + std::to_string(cid);
+        field.label = "Cota " + std::to_string(cid) + " del sketch";
+        field.scale = factor;
+        field.get = [this, cid, factor] {
+            const sketch::Constraint* now = sketch_->constraint(cid);
+            return now != nullptr ? now->value / factor : 0.0;
+        };
+        const bool positive = c.type != sketch::ConstraintType::DistanceX && c.type != sketch::ConstraintType::DistanceY &&
+                              c.type != sketch::ConstraintType::Angle;
+        field.set = [this, cid, factor, positive](double written) {
+            if (positive && written <= 0.0) {
+                throw ExpressionError("el valor debe ser mayor que cero");
+            }
+            auto copy = std::make_shared<sketch::Sketch>(*sketch_);
+            if (sketch::Constraint* target = copy->constraint(cid)) {
+                // Se conserva el sentido (signo) de la medida, como al editar la cota a mano.
+                const double value = written * factor;
+                target->value = (target->value < 0.0 && value > 0.0) ? -value : value;
+            }
+            sketch_ = std::move(copy);
+        };
+        fields.push_back(std::move(field));
+    }
+    return fields;
+}
+
+sketch::Sketch SketchFeature::forEditing(const sketch::Sketch& computed) const
+{
+    sketch::Sketch result = computed;
+    for (const auto& [key, text] : expressions) {
+        if (!isDimensionKey(key)) {
+            continue;
+        }
+        if (sketch::Constraint* c = result.constraint(static_cast<sketch::ConstraintId>(std::stoul(key.substr(1))))) {
+            c->expression = text;
+        }
+    }
+    return result;
+}
+
+void SketchFeature::setSketchFromEditing(sketch::Sketch sketch)
+{
+    std::erase_if(expressions, [](const auto& entry) { return isDimensionKey(entry.first); });
+    std::vector<sketch::ConstraintId> ids;
+    for (const sketch::Constraint& c : sketch.constraints()) {
+        ids.push_back(c.id);
+    }
+    for (const sketch::ConstraintId id : ids) {
+        sketch::Constraint& c = *sketch.constraint(id);
+        if (!c.expression.empty() && hasSolvableValue(c)) {
+            expressions[kDimensionPrefix + std::to_string(id)] = c.expression;
+        }
+        c.expression.clear();
+    }
+    setSketch(std::move(sketch));
+}
+
 std::shared_ptr<const sketch::Sketch> SketchFeature::updatedSketch(const ModelState& state, const sketch::Plane& plane,
                                                                    std::optional<std::string>& warning) const
 {
     const auto& entities = sketch_->entities();
-    if (std::ranges::none_of(entities, [](const sketch::Entity& e) { return e.link.has_value(); })) {
+    const bool bound = std::ranges::any_of(expressions, [](const auto& entry) { return isDimensionKey(entry.first); });
+    if (!bound && std::ranges::none_of(entities, [](const sketch::Entity& e) { return e.link.has_value(); })) {
         return sketch_;
     }
     // Lo proyectado se vuelve a proyectar desde la pieza actual y el resto
@@ -208,7 +297,12 @@ std::shared_ptr<const sketch::Sketch> SketchFeature::updatedSketch(const ModelSt
         }
         updated->entity(e.id)->geometry = fresh;
     }
-    sketch::makePlaneGcsSolver()->solve(*updated);
+    const sketch::SolveResult solved = sketch::makePlaneGcsSolver()->solve(*updated);
+    if (bound && solved.status != sketch::SolveStatus::Solved) {
+        throw FeatureError(solved.status == sketch::SolveStatus::Conflicting
+                               ? "Con los valores de los parámetros, las cotas del sketch entran en conflicto"
+                               : "Con los valores de los parámetros, el sketch no tiene solución");
+    }
     if (lost > 0 || changedType > 0) {
         const std::string note = "Algunas aristas proyectadas ya no existen o cambiaron; se mantienen como estaban.";
         warning = warning ? *warning + " " + note : note;

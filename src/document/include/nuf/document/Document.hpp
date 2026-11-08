@@ -93,6 +93,16 @@ public:
     const std::vector<Parameter>& parameters() const noexcept { return parameters_; }
     // Cambia la tabla y recalcula lo que usa expresiones.
     void setParameters(std::vector<Parameter> parameters);
+    // Expresiones de cada operación (para poder deshacer un renombrado).
+    using ExpressionSnapshot = std::map<FeatureId, std::map<std::string, std::string>>;
+    ExpressionSnapshot expressionSnapshot() const;
+    // Como setParameters, pero antes cambia el nombre de los parámetros según
+    // «renames» (antiguo → nuevo) en las expresiones de las operaciones, para que
+    // lo ligado no se rompa al renombrar. Las expresiones de «parameters» ya deben
+    // venir con los nombres nuevos (las reescribe quien llama, como el diálogo).
+    void setParameters(std::vector<Parameter> parameters, const std::map<std::string, std::string>& renames);
+    // Devuelve tabla y expresiones de las operaciones a un estado anterior.
+    void restoreParameters(std::vector<Parameter> parameters, const ExpressionSnapshot& snapshot);
     // El valor (o el error) de un parámetro de la tabla.
     ParameterValue parameterValue(const std::string& name) const;
     // Para evaluar una expresión con los parámetros del documento.

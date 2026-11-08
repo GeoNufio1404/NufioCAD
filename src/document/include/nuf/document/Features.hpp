@@ -38,6 +38,15 @@ public:
     std::unique_ptr<Feature> clone() const override { return std::make_unique<SketchFeature>(*this); }
     std::optional<std::string> compute(ModelState& state) const override;
     std::vector<FeatureId> dependencies() const override;
+    // Las cotas con valor (no de referencia) se pueden ligar a parámetros: clave «c<id>».
+    std::vector<NumericField> numericFields() override;
+
+    // Para editar: el sketch ya calculado (con los valores de las expresiones) y la
+    // expresión de cada cota en `Constraint::expression`.
+    sketch::Sketch forEditing(const sketch::Sketch& computed) const;
+    // Al terminar de editar: guarda el sketch y pasa las expresiones de las cotas a
+    // las de la operación (quitando las de cotas que ya no existen).
+    void setSketchFromEditing(sketch::Sketch sketch);
 
 private:
     // El sketch con lo proyectado al día (el mismo si no tiene vínculos).
