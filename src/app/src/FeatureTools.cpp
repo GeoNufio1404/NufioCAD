@@ -448,7 +448,8 @@ void FeatureTool::refreshArrow()
     focusedKey_ = key;
     if (!key.empty() && !updating_) {
         try {
-            if (const auto arrow = dimensionArrow(key)) {
+            const auto arrow = dimensionArrow(key);
+            if (arrow) {
                 viewport_.showDimensionArrow(arrow->first, arrow->second);
                 return;
             }

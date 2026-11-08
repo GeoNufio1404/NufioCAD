@@ -9,7 +9,9 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDockWidget>
+#include <QColor>
 #include <QDoubleSpinBox>
+#include <QImage>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QPushButton>
@@ -370,6 +372,51 @@ int InterfaceCheck::run()
         waitFor([this] { return window_.tool_ == nullptr; }, 10000);
         Units::instance().setLength(original);
         settle(150);
+    });
+
+    // La flecha de doble punta de la medida que se edita: al enfocar «Ancho» de la Caja deben verse píxeles turquesa.
+    step(QStringLiteral("Flecha de la medida que se edita"), [&] {
+        blocking(QStringLiteral("abrir Caja"), [&] { window_.boxAction_->trigger(); });
+        waitIdle();
+        const auto turquoise = [&] {
+            const QImage image = window_.viewport_->grabFramebuffer();
+            long count = 0;
+            for (int y = 0; y < image.height(); ++y) {
+                for (int x = 0; x < image.width(); ++x) {
+                    const QColor c = image.pixelColor(x, y);
+                    if (c.red() < 140 && c.green() > 170 && c.blue() > 180 && c.green() - c.red() > 70) {
+                        ++count;
+                    }
+                }
+            }
+            return count;
+        };
+        QDoubleSpinBox* width = spin(3);
+        expect(width != nullptr, QStringLiteral("no hay cuadro de ancho"));
+        if (width != nullptr) {
+            window_.activateWindow();
+            window_.propertiesDock_->widget()->setFocus();
+            settle(200);
+            const long without = turquoise();
+            width->setFocus(Qt::OtherFocusReason);
+            settle(400);
+            const long with = turquoise();
+            expect(width->hasFocus(), QStringLiteral("el cuadro no recibió el foco"));
+            expect(with > without + 50, QStringLiteral("no se dibujó la flecha (píxeles turquesa: %1 sin foco, %2 con foco)").arg(without).arg(with));
+            // Al escribir otro valor la flecha sigue ahí (se recoloca con la vista previa).
+            blocking(QStringLiteral("cambiar el ancho"), [&] { width->setValue(width->value() + 15.0); });
+            settle(400);
+            const long changed = turquoise();
+            expect(changed > 50, QStringLiteral("la flecha desapareció al cambiar el valor (%1 píxeles)").arg(changed));
+            if (current_ != nullptr) {
+                current_->detail += QStringLiteral(" turquesa %1 → %2").arg(without).arg(with);
+            }
+        }
+        if (QPushButton* cancel = button(QStringLiteral("Cancelar"))) {
+            cancel->click();
+        }
+        waitFor([this] { return window_.tool_ == nullptr; }, 10000);
+        waitIdle();
     });
 
     // Sección y medición con un cuerpo.

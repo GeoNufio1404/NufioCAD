@@ -117,15 +117,9 @@ void GeneratorTool::createFields(QFormLayout* form)
         column->setContentsMargins(0, 0, 0, 0);
         column->setSpacing(1);
         column->addWidget(widget);
+        // La ayuda sale como tooltip al dejar el ratón sobre el campo.
         if (!f.hint.empty()) {
             widget->setToolTip(QString::fromStdString(f.hint));
-            auto* hint = new QLabel(QString::fromStdString(f.hint));
-            hint->setWordWrap(true);
-            QFont small = hint->font();
-            small.setPointSizeF(small.pointSizeF() * 0.85);
-            hint->setFont(small);
-            hint->setStyleSheet(QStringLiteral("QLabel { color: palette(placeholder-text); }"));
-            column->addWidget(hint);
         }
         form->addRow(QString::fromStdString(f.label), container);
         rows_.push_back({f, widget, container});

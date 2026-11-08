@@ -605,15 +605,15 @@ public:
         }
         const gp_Dir dir(gp_Vec(a, b));
         // Puntas de tamaño fijo en pantalla (algo menores si la flecha es corta).
-        const double head = std::min(18.0 * pixelSize(), 0.4 * length);
-        const double radius = std::max(1.2 * pixelSize(), 1e-6);
+        const double head = std::min(28.0 * pixelSize(), 0.4 * length);
+        const double radius = std::max(2.5 * pixelSize(), 1e-6);
         BRep_Builder builder;
         TopoDS_Compound arrow;
         builder.MakeCompound(arrow);
         const double shaft = std::max(length - 2.0 * head, 1e-6);
         builder.Add(arrow, BRepPrimAPI_MakeCylinder(gp_Ax2(a.Translated(gp_Vec(dir) * head), dir), radius, shaft).Shape());
-        builder.Add(arrow, BRepPrimAPI_MakeCone(gp_Ax2(a.Translated(gp_Vec(dir) * head), dir.Reversed()), head * 0.36, 0.0, head).Shape());
-        builder.Add(arrow, BRepPrimAPI_MakeCone(gp_Ax2(b.Translated(gp_Vec(dir) * -head), dir), head * 0.36, 0.0, head).Shape());
+        builder.Add(arrow, BRepPrimAPI_MakeCone(gp_Ax2(a.Translated(gp_Vec(dir) * head), dir.Reversed()), head * 0.4, 0.0, head).Shape());
+        builder.Add(arrow, BRepPrimAPI_MakeCone(gp_Ax2(b.Translated(gp_Vec(dir) * -head), dir), head * 0.4, 0.0, head).Shape());
         dimArrow = new AIS_Shape(arrow);
         dimArrow->SetColor(rgb(0x3F, 0xD0, 0xE0));
         dimArrow->Attributes()->SetFaceBoundaryDraw(false);
