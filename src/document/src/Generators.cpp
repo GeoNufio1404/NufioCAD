@@ -91,7 +91,7 @@ public:
     {
         return {{"ancho", {0, 'x', false}}, {"diametro", {0, 'x', false}}, {"alto", {0, 'y', false}},
                 {"profundidad", {0, 'z', false}}, {"pared", {0, 'x', true}}, {"fondo", {0, 'z', false}},
-                {"frente", {3, 'z', false}}};
+                {"frente", {3, 'z', false}}, {"labio", {2, 'z', false}}};
     }
 
     Recipe make(const GeneratorValues& values, const std::string& suffix) const override
@@ -273,7 +273,7 @@ public:
     std::map<std::string, ArrowSpec> arrows() const override
     {
         return {{"ancho", {0, 'x', false}}, {"fondo", {0, 'y', false}}, {"alto", {0, 'z', false}},
-                {"pared", {0, 'x', true}}, {"base", {0, 'z', false}}, {"tapa", {1, 'z', false}}};
+                {"pared", {0, 'x', true}}, {"base", {0, 'z', false}}, {"tapa", {1, 'z', false}}, {"labio", {1, 'z', true}}};
     }
 
     Recipe make(const GeneratorValues& values, const std::string& suffix) const override
@@ -444,7 +444,7 @@ public:
                 length("agujero", "Agujero de la anilla", 5.0, 2.0, 40.0, {}, "tipo", 1)};
     }
 
-    std::map<std::string, ArrowSpec> arrows() const override { return {{"grosor", {0, 'z', false}}}; }
+    std::map<std::string, ArrowSpec> arrows() const override { return {{"grosor", {0, 'z', false}}, {"relieve", {1, 'z', false}}}; }
 
     Recipe make(const GeneratorValues& values, const std::string& suffix) const override
     {
@@ -631,6 +631,11 @@ public:
                       "Ø primitivos %.2f y %.2f mm",
                       z1, z2, z1 / z2, m * (z1 + z2) / 2.0 + values.at("juego"), m * z1, m * z2);
         return text;
+    }
+
+    std::map<std::string, ArrowSpec> arrows() const override
+    {
+        return {{"ancho_rueda", {0, 'z', false}}, {"agujero_1", {0, 'x', false, true}}, {"agujero_2", {1, 'x', false, true}}};
     }
 
     Recipe make(const GeneratorValues& values, const std::string& suffix) const override

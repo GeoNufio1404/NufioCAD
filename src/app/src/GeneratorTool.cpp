@@ -311,6 +311,7 @@ std::optional<FeatureTool::Arrow> GeneratorTool::dimensionArrow(const std::strin
     const sketch::Vec3 center{(box.min.x + box.max.x) / 2.0, (box.min.y + box.max.y) / 2.0, (box.min.z + box.max.z) / 2.0};
     sketch::Vec3 from = center;
     sketch::Vec3 dir{};
+    const bool centered = spec->second.centered;
     switch (spec->second.axis) {
     case 'x':
         from.x = spec->second.fromMax ? box.max.x : box.min.x;
@@ -324,6 +325,9 @@ std::optional<FeatureTool::Arrow> GeneratorTool::dimensionArrow(const std::strin
         from.z = spec->second.fromMax ? box.max.z : box.min.z;
         dir = {0.0, 0.0, 1.0};
         break;
+    }
+    if (centered) {
+        return arrowAlong({from.x - dir.x * value / 2.0, from.y - dir.y * value / 2.0, from.z - dir.z * value / 2.0}, dir, value);
     }
     return arrowAlong(from, dir, spec->second.fromMax ? -value : value);
 }

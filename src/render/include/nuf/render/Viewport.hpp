@@ -155,6 +155,9 @@ public:
     // Flecha de doble punta entre dos puntos del modelo: señala la medida que se está escribiendo en el panel de una
     // herramienta. No se puede arrastrar ni seleccionar.
     void showDimensionArrow(const sketch::Vec3& from, const sketch::Vec3& to);
+    // Lo mismo para un ángulo: arco de doble punta alrededor del eje (que pasa por «center» con dirección «axis»),
+    // desde el punto «start» y girando «angle» radianes (con signo).
+    void showDimensionArc(const sketch::Vec3& center, const sketch::Vec3& axis, const sketch::Vec3& start, double angle);
     void hideDimensionArrow();
     bool isSketching() const;
 

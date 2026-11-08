@@ -304,6 +304,37 @@ std::optional<FeatureTool::Arrow> MoveTool::dimensionArrow(const std::string& ke
     return std::nullopt;
 }
 
+std::optional<FeatureTool::Arc> MoveTool::dimensionArc(const std::string& key) const
+{
+    if (key != "angle") {
+        return std::nullopt;
+    }
+    sketch::Vec3 point{};
+    sketch::Vec3 axis{0.0, 0.0, 1.0};
+    const int at = axis_->currentIndex();
+    if (at == 0) {
+        axis = {1.0, 0.0, 0.0};
+    } else if (at == 1) {
+        axis = {0.0, 1.0, 0.0};
+    } else if (at >= 3 && std::size_t(at - 3) < axisIds_.size()) {
+        const auto it = before().axes.find(axisIds_[std::size_t(at - 3)]);
+        if (it == before().axes.end()) {
+            return std::nullopt;
+        }
+        point = it->second.point;
+        axis = it->second.direction;
+    }
+    // Alrededor del centro del cuerpo (el eje pasa por él) o del origen / del eje elegido.
+    if (around_->currentIndex() == 0) {
+        const auto center = bodyCenter(body_);
+        if (!center) {
+            return std::nullopt;
+        }
+        point = *center;
+    }
+    return Arc{point, axis, perpendicularPoint(point, axis, arcRadius()), angle_->value() * kDegree};
+}
+
 QString MoveTool::inputsText() const
 {
     if (bodyBox_->count() == 0) {
@@ -684,6 +715,13 @@ QString ThreadTool::inputsText() const
 
 std::optional<FeatureTool::Arrow> ThreadTool::dimensionArrow(const std::string& key) const
 {
+    if (key == "x" || key == "y") {
+        return placementArrow(placement_, key);
+    }
+    if (key == "pitch") {
+        const sketch::Plane plane = document::attachmentPlane(before(), placementAttachment(placement_));
+        return arrowAlong(plane.toWorld({placement_.x->value(), placement_.y->value()}), plane.normal, pitch_->value());
+    }
     const sketch::Plane plane = document::attachmentPlane(before(), placementAttachment(placement_));
     const sketch::Vec3 origin = plane.toWorld({placement_.x->value(), placement_.y->value()});
     if (key == "length") {
@@ -831,6 +869,42 @@ std::optional<FeatureTool::Arrow> PatternTool::dimensionArrow(const std::string&
         dir = it->second.direction;
     }
     return arrowAlong(*center, dir, spacing_->value());
+}
+
+std::optional<FeatureTool::Arc> PatternTool::dimensionArc(const std::string& key) const
+{
+    if (key != "angle" || layout_->currentIndex() != 1) {
+        return std::nullopt;
+    }
+    sketch::Vec3 point{};
+    sketch::Vec3 axis{1.0, 0.0, 0.0};
+    const int at = axis_->currentIndex();
+    if (at == 1) {
+        axis = {0.0, 1.0, 0.0};
+    } else if (at == 2) {
+        axis = {0.0, 0.0, 1.0};
+    } else if (at >= 3 && std::size_t(at - 3) < axisIds_.size()) {
+        const auto it = before().axes.find(axisIds_[std::size_t(at - 3)]);
+        if (it == before().axes.end()) {
+            return std::nullopt;
+        }
+        point = it->second.point;
+        axis = it->second.direction;
+    }
+    // El arco empieza en el centro del cuerpo (lo que se repite), a su distancia del eje.
+    sketch::Vec3 start = perpendicularPoint(point, axis, arcRadius());
+    if (const auto center = bodyCenter(body_)) {
+        const sketch::Vec3 v{center->x - point.x, center->y - point.y, center->z - point.z};
+        const double along = v.x * axis.x + v.y * axis.y + v.z * axis.z;
+        const sketch::Vec3 onAxis{point.x + axis.x * along, point.y + axis.y * along, point.z + axis.z * along};
+        const sketch::Vec3 radial{center->x - onAxis.x, center->y - onAxis.y, center->z - onAxis.z};
+        if (radial.x * radial.x + radial.y * radial.y + radial.z * radial.z > 1e-6) {
+            start = *center;
+        } else {
+            start = perpendicularPoint(onAxis, axis, arcRadius());
+        }
+    }
+    return Arc{point, axis, start, angle_->value() * kDegree};
 }
 
 QString PatternTool::inputsText() const

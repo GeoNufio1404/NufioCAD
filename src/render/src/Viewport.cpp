@@ -252,6 +252,13 @@ void Viewport::showDimensionArrow(const sketch::Vec3& from, const sketch::Vec3& 
     update();
 }
 
+void Viewport::showDimensionArc(const sketch::Vec3& center, const sketch::Vec3& axis, const sketch::Vec3& start, double angle)
+{
+    impl_->showDimensionArc(center, axis, start, angle);
+    impl_->view->Invalidate();
+    update();
+}
+
 void Viewport::hideDimensionArrow()
 {
     impl_->hideDimensionArrow();

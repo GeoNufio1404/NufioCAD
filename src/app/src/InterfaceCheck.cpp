@@ -10,6 +10,7 @@
 #include <QDateTime>
 #include <QDockWidget>
 #include <QColor>
+#include <optional>
 #include <QDoubleSpinBox>
 #include <QImage>
 #include <QElapsedTimer>
@@ -375,8 +376,12 @@ int InterfaceCheck::run()
     });
 
     // La flecha de doble punta de la medida que se edita: al enfocar un cuadro deben verse píxeles turquesa.
-    const auto arrowCheck = [&](const QString& name, QAction* action, int spinIndex) {
+    const auto arrowCheck = [&](const QString& name, QAction* action, int spinIndex, bool needsBody = false,
+                                std::optional<double> preset = std::nullopt) {
         step(QStringLiteral("Flecha de la medida que se edita: %1").arg(name), [&] {
+            if (needsBody) {
+                expect(openChangeAccept(window_.boxAction_, 3) == 1, QStringLiteral("no se creó la caja de apoyo"));
+            }
             blocking(QStringLiteral("abrir la herramienta"), [&] { action->trigger(); });
             waitIdle();
             const auto turquoise = [&] {
@@ -394,6 +399,10 @@ int InterfaceCheck::run()
             };
             QDoubleSpinBox* box = spin(spinIndex);
             expect(box != nullptr, QStringLiteral("no hay cuadro numérico"));
+            if (box != nullptr && preset) {
+                blocking(QStringLiteral("poner un valor"), [&] { box->setValue(*preset); });
+                waitIdle();
+            }
             if (box != nullptr) {
                 window_.activateWindow();
                 window_.propertiesDock_->widget()->setFocus();
@@ -418,9 +427,19 @@ int InterfaceCheck::run()
             }
             waitFor([this] { return window_.tool_ == nullptr; }, 10000);
             waitIdle();
+            if (needsBody) {
+                undoAll();
+            }
         });
     };
     arrowCheck(QStringLiteral("Caja"), window_.boxAction_, 3);
+    arrowCheck(QStringLiteral("Cilindro"), window_.cylinderAction_, 3);
+    arrowCheck(QStringLiteral("Rosca"), window_.threadAction_, 2);
+    arrowCheck(QStringLiteral("Engranaje"), window_.gearAction_, 2);
+    arrowCheck(QStringLiteral("Plano (ángulo)"), window_.planeAction_, 1, false, 30.0);
+    arrowCheck(QStringLiteral("Mover cuerpo (X)"), window_.moveAction_, 0, true, 20.0);
+    arrowCheck(QStringLiteral("Mover cuerpo (ángulo)"), window_.moveAction_, 3, true, 45.0);
+    arrowCheck(QStringLiteral("Patrón (distancia)"), window_.patternAction_, 1, true);
     for (QAction* action : generators) {
         if (action->text().contains(QStringLiteral("Caja con tapa")) || action->text().contains(QStringLiteral("Lightbox"))) {
             arrowCheck(action->text(), action, 0);

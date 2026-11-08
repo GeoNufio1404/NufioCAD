@@ -117,6 +117,20 @@ protected:
     void track(const char* key, QDoubleSpinBox* box) { arrowBoxes_.emplace_back(key, box); }
     // Dónde dibujar la flecha de la medida «key» con los valores de ahora (nullopt: no hay flecha).
     virtual std::optional<Arrow> dimensionArrow(const std::string& /*key*/) const { return std::nullopt; }
+    // La flecha de la posición X o Y de una colocación (en el plano o la cara elegida), si «key» es una de ellas.
+    std::optional<Arrow> placementArrow(const Placement& placement, const std::string& key) const;
+    // Un ángulo: arco alrededor del eje «axis» que pasa por «center», desde «start» y girando «angle» (rad).
+    struct Arc {
+        sketch::Vec3 center;
+        sketch::Vec3 axis;
+        sketch::Vec3 start;
+        double angle = 0.0;
+    };
+    virtual std::optional<Arc> dimensionArc(const std::string& /*key*/) const { return std::nullopt; }
+    // Radio razonable para dibujar un arco: una parte del tamaño de lo que hay en la escena.
+    double arcRadius() const;
+    // Un punto a «radius» de «center» perpendicular al eje «axis» (donde empieza el arco).
+    static sketch::Vec3 perpendicularPoint(const sketch::Vec3& center, const sketch::Vec3& axis, double radius);
     // Vuelve a colocar (o quita) la flecha de la medida que se está editando.
     void refreshArrow();
     // Perfiles de la selección como referencias del documento.
@@ -248,6 +262,7 @@ protected:
     void createFields(QFormLayout* form) override;
     void selectionChanged(const render::ModelSelection& selection) override;
     QString inputsText() const override;
+    std::optional<Arrow> dimensionArrow(const std::string& key) const override;
     bool removesMaterial() const override { return false; }
     void afterPreview(const document::ModelState& before) override;
 
@@ -272,6 +287,7 @@ protected:
     void selectionChanged(const render::ModelSelection& selection) override;
     void afterPreview(const document::ModelState& before) override;
     QString inputsText() const override;
+    std::optional<Arrow> dimensionArrow(const std::string& key) const override;
     bool removesMaterial() const override { return false; }
 
 private:
@@ -295,6 +311,7 @@ protected:
     void createFields(QFormLayout* form) override;
     void selectionChanged(const render::ModelSelection& selection) override;
     QString inputsText() const override;
+    std::optional<Arrow> dimensionArrow(const std::string& key) const override;
     bool removesMaterial() const override { return true; }
 
 private:
@@ -355,6 +372,7 @@ protected:
     void selectionChanged(const render::ModelSelection& selection) override;
     QString inputsText() const override;
     std::optional<Arrow> dimensionArrow(const std::string& key) const override;
+    std::optional<Arc> dimensionArc(const std::string& key) const override;
     bool removesMaterial() const override { return false; }
 
 private:
@@ -406,6 +424,7 @@ protected:
     void createFields(QFormLayout* form) override;
     void selectionChanged(const render::ModelSelection& selection) override;
     QString inputsText() const override;
+    std::optional<Arrow> dimensionArrow(const std::string& key) const override;
     bool removesMaterial() const override { return false; }
 
 private:
@@ -538,6 +557,7 @@ protected:
     void selectionChanged(const render::ModelSelection& selection) override;
     QString inputsText() const override;
     std::optional<Arrow> dimensionArrow(const std::string& key) const override;
+    std::optional<Arc> dimensionArc(const std::string& key) const override;
     bool removesMaterial() const override { return false; }
 
 private:
@@ -656,6 +676,7 @@ protected:
     void selectionChanged(const render::ModelSelection&) override {}
     QString inputsText() const override;
     std::optional<Arrow> dimensionArrow(const std::string& key) const override;
+    std::optional<Arc> dimensionArc(const std::string& key) const override;
     bool removesMaterial() const override { return false; }
 
 private:

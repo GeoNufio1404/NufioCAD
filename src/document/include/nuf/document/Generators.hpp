@@ -82,6 +82,7 @@ public:
         int body = 0;
         char axis = 'x';
         bool fromMax = false;
+        bool centered = false;  // la flecha va centrada en el cuerpo, de -valor/2 a +valor/2 (un diámetro)
     };
     virtual std::map<std::string, ArrowSpec> arrows() const { return {}; }
     // «suffix» se agrega a los nombres de los parámetros (« », «_2», «_3»…) para no chocar con los que ya haya.

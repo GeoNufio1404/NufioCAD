@@ -405,6 +405,40 @@ std::optional<sketch::Vec3> FeatureTool::bodyCenter(const std::string& key) cons
     return std::nullopt;
 }
 
+std::optional<FeatureTool::Arrow> FeatureTool::placementArrow(const Placement& placement, const std::string& key) const
+{
+    const sketch::Plane plane = document::attachmentPlane(before(), placementAttachment(placement));
+    const double x = placement.x->value();
+    if (key == "x") {
+        return arrowAlong(plane.origin, plane.xAxis, x);
+    }
+    if (key == "y") {
+        return arrowAlong(plane.toWorld({x, 0.0}), plane.yAxis, placement.y->value());
+    }
+    return std::nullopt;
+}
+
+double FeatureTool::arcRadius() const
+{
+    double extent = 0.0;
+    for (const document::Body& body : before().bodies) {
+        if (!body.shape.isNull()) {
+            const geometry::Box box = body.shape.bounds();
+            extent = std::max({extent, box.max.x - box.min.x, box.max.y - box.min.y, box.max.z - box.min.z});
+        }
+    }
+    return std::max(15.0, 0.4 * extent);
+}
+
+sketch::Vec3 FeatureTool::perpendicularPoint(const sketch::Vec3& center, const sketch::Vec3& axis, double radius)
+{
+    // Cualquier vector perpendicular al eje: el eje cruzado con el menos alineado de los ejes del modelo.
+    const sketch::Vec3 other = std::abs(axis.x) < 0.9 ? sketch::Vec3{1.0, 0.0, 0.0} : sketch::Vec3{0.0, 1.0, 0.0};
+    sketch::Vec3 v{axis.y * other.z - axis.z * other.y, axis.z * other.x - axis.x * other.z, axis.x * other.y - axis.y * other.x};
+    const double length = std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+    return moved(center, {v.x / length, v.y / length, v.z / length}, radius);
+}
+
 FeatureTool::Arrow FeatureTool::arrowAlong(const sketch::Vec3& from, const sketch::Vec3& dir, double length)
 {
     return {from, moved(from, dir, length)};
@@ -448,9 +482,12 @@ void FeatureTool::refreshArrow()
     focusedKey_ = key;
     if (!key.empty() && !updating_) {
         try {
-            const auto arrow = dimensionArrow(key);
-            if (arrow) {
+            if (const auto arrow = dimensionArrow(key)) {
                 viewport_.showDimensionArrow(arrow->first, arrow->second);
+                return;
+            }
+            if (const auto arc = dimensionArc(key)) {
+                viewport_.showDimensionArc(arc->center, arc->axis, arc->start, arc->angle);
                 return;
             }
         } catch (const std::exception&) {

@@ -839,3 +839,96 @@ QString HoleTool::inputsText() const
 }
 
 } // namespace nuf::app
+
+namespace nuf::app {
+
+std::optional<FeatureTool::Arrow> EdgeTool::dimensionArrow(const std::string& key) const
+{
+    if (key != "size" || edges_.empty()) {
+        return std::nullopt;
+    }
+    const auto hit = before().findEdge(edges_.front());
+    if (!hit) {
+        return std::nullopt;
+    }
+    const geometry::Shape& shape = before().bodies[hit->body].shape;
+    const auto line = shape.edgeLine(hit->edge);
+    if (!line) {
+        return std::nullopt;  // arista curva: sin flecha
+    }
+    // Desde el punto de la arista hacia dentro del cuerpo, perpendicular a la arista.
+    const geometry::Box box = shape.bounds();
+    sketch::Vec3 v{(box.min.x + box.max.x) / 2.0 - line->first.x, (box.min.y + box.max.y) / 2.0 - line->first.y,
+                   (box.min.z + box.max.z) / 2.0 - line->first.z};
+    const sketch::Vec3 d = line->second;
+    const double along = v.x * d.x + v.y * d.y + v.z * d.z;
+    v = {v.x - d.x * along, v.y - d.y * along, v.z - d.z * along};
+    const double length = std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+    if (length < 1e-9) {
+        return std::nullopt;
+    }
+    return arrowAlong(line->first, {v.x / length, v.y / length, v.z / length}, size_->value());
+}
+
+std::optional<FeatureTool::Arrow> ShellTool::dimensionArrow(const std::string& key) const
+{
+    if (key != "thickness" || faces_.empty()) {
+        return std::nullopt;
+    }
+    const auto hit = before().findFace(faces_.front());
+    if (!hit) {
+        return std::nullopt;
+    }
+    const geometry::Shape& shape = before().bodies[hit->body].shape;
+    const auto plane = shape.facePlane(hit->face);
+    if (!plane) {
+        return std::nullopt;
+    }
+    // Desde la cara abierta hacia dentro de la pared (o hacia fuera).
+    const double sign = direction_->currentIndex() == 1 ? 1.0 : -1.0;
+    return arrowAlong(shape.faceCenter(hit->face), plane->normal, sign * thickness_->value());
+}
+
+std::optional<FeatureTool::Arrow> HoleTool::dimensionArrow(const std::string& key) const
+{
+    const auto out = before().sketches.find(sketch_);
+    if (out == before().sketches.end()) {
+        return std::nullopt;
+    }
+    // El primer agujero del sketch (círculo o punto).
+    std::optional<sketch::Vec2> center;
+    for (const sketch::Entity& e : out->second.sketch->entities()) {
+        if (e.reference) {
+            continue;
+        }
+        if (const auto* circle = std::get_if<sketch::Circle>(&e.geometry); circle && !e.construction) {
+            center = circle->center;
+            break;
+        }
+        if (const auto* point = std::get_if<sketch::Point>(&e.geometry)) {
+            center = point->position;
+            break;
+        }
+    }
+    if (!center) {
+        return std::nullopt;
+    }
+    const sketch::Plane& plane = out->second.plane;
+    const sketch::Vec3 c = plane.toWorld(*center);
+    const sketch::Vec3 down = flip_->isChecked() ? plane.normal : sketch::Vec3{-plane.normal.x, -plane.normal.y, -plane.normal.z};
+    if (key == "diameter") {
+        return arrowAlong(moved(c, plane.xAxis, -diameter_->value() / 2.0), plane.xAxis, diameter_->value());
+    }
+    if (key == "depth") {
+        return arrowAlong(c, down, depth_->value());
+    }
+    if (key == "headDiameter") {
+        return arrowAlong(moved(c, plane.xAxis, -headDiameter_->value() / 2.0), plane.xAxis, headDiameter_->value());
+    }
+    if (key == "headDepth") {
+        return arrowAlong(c, down, headDepth_->value());
+    }
+    return std::nullopt;
+}
+
+} // namespace nuf::app

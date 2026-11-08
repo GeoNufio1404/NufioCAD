@@ -605,15 +605,59 @@ public:
         }
         const gp_Dir dir(gp_Vec(a, b));
         // Puntas de tamaño fijo en pantalla (algo menores si la flecha es corta).
-        const double head = std::min(34.0 * pixelSize(), 0.4 * length);
-        const double radius = std::max(3.5 * pixelSize(), 1e-6);
+        const double head = std::min(18.0 * pixelSize(), 0.4 * length);
+        const double radius = std::max(1.2 * pixelSize(), 1e-6);
         BRep_Builder builder;
         TopoDS_Compound arrow;
         builder.MakeCompound(arrow);
         const double shaft = std::max(length - 2.0 * head, 1e-6);
         builder.Add(arrow, BRepPrimAPI_MakeCylinder(gp_Ax2(a.Translated(gp_Vec(dir) * head), dir), radius, shaft).Shape());
-        builder.Add(arrow, BRepPrimAPI_MakeCone(gp_Ax2(a.Translated(gp_Vec(dir) * head), dir.Reversed()), head * 0.4, 0.0, head).Shape());
-        builder.Add(arrow, BRepPrimAPI_MakeCone(gp_Ax2(b.Translated(gp_Vec(dir) * -head), dir), head * 0.4, 0.0, head).Shape());
+        builder.Add(arrow, BRepPrimAPI_MakeCone(gp_Ax2(a.Translated(gp_Vec(dir) * head), dir.Reversed()), head * 0.36, 0.0, head).Shape());
+        builder.Add(arrow, BRepPrimAPI_MakeCone(gp_Ax2(b.Translated(gp_Vec(dir) * -head), dir), head * 0.36, 0.0, head).Shape());
+        dimArrow = new AIS_Shape(arrow);
+        dimArrow->SetColor(rgb(0x3F, 0xD0, 0xE0));
+        dimArrow->Attributes()->SetFaceBoundaryDraw(false);
+        dimArrow->SetZLayer(Graphic3d_ZLayerId_Topmost);
+        context->Display(dimArrow, AIS_Shaded, -1, false);
+    }
+
+    void showDimensionArc(const sketch::Vec3& centerPoint, const sketch::Vec3& axisDir, const sketch::Vec3& startPoint, double angle)
+    {
+        hideDimensionArrow();
+        const gp_Pnt c = toPnt(centerPoint);
+        const gp_Dir axis = toDir(axisDir);
+        const gp_Pnt s0 = toPnt(startPoint);
+        const gp_Vec radial(c, s0);
+        if (std::abs(angle) < 1e-6 || radial.Magnitude() < 1e-9) {
+            return;
+        }
+        const gp_Ax1 turn(c, axis);
+        const double head = std::min(18.0 * pixelSize(), 0.25 * radial.Magnitude() * std::abs(angle));
+        const double radius = std::max(1.2 * pixelSize(), 1e-6);
+        const int steps = std::clamp(int(std::abs(angle) / (std::numbers::pi / 36.0)) + 1, 6, 72);
+        std::vector<gp_Pnt> points;
+        for (int i = 0; i <= steps; ++i) {
+            gp_Pnt p = s0;
+            p.Rotate(turn, angle * double(i) / double(steps));
+            points.push_back(p);
+        }
+        BRep_Builder builder;
+        TopoDS_Compound arrow;
+        builder.MakeCompound(arrow);
+        for (int i = 0; i < steps; ++i) {
+            const gp_Vec v(points[std::size_t(i)], points[std::size_t(i) + 1]);
+            if (v.Magnitude() > 1e-9) {
+                builder.Add(arrow, BRepPrimAPI_MakeCylinder(gp_Ax2(points[std::size_t(i)], gp_Dir(v)), radius, v.Magnitude()).Shape());
+            }
+        }
+        const gp_Vec first(points[0], points[1]);
+        const gp_Vec last(points[std::size_t(steps) - 1], points[std::size_t(steps)]);
+        if (first.Magnitude() > 1e-9 && last.Magnitude() > 1e-9) {
+            const gp_Dir t0(first);
+            const gp_Dir t1(last);
+            builder.Add(arrow, BRepPrimAPI_MakeCone(gp_Ax2(points[0].Translated(gp_Vec(t0) * head), t0.Reversed()), head * 0.36, 0.0, head).Shape());
+            builder.Add(arrow, BRepPrimAPI_MakeCone(gp_Ax2(points[std::size_t(steps)].Translated(gp_Vec(t1) * -head), t1), head * 0.36, 0.0, head).Shape());
+        }
         dimArrow = new AIS_Shape(arrow);
         dimArrow->SetColor(rgb(0x3F, 0xD0, 0xE0));
         dimArrow->Attributes()->SetFaceBoundaryDraw(false);

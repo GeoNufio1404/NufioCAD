@@ -122,6 +122,8 @@ Necesitas un cuerpo (la caja de 40×25×10 de «Antes de empezar»). Los botones
 | F.5 | **Cilindro** (diámetro y alto), **Plano** (distancia), **Mover cuerpo** (X/Y/Z), **Patrón** (distancia entre copias) y **Rosca** (diámetro y largo) | La flecha marca la medida que editas; en Mover y Patrón sale desde el centro del cuerpo |
 | F.6 | Cambia de plano o elige una cara en Caja/Cilindro/Rosca | La flecha sigue al plano (gira con él) |
 | F.8 | **Herramientas › Caja con tapa** (o Lightbox, Letrero): haz clic en Ancho, Fondo, Alto, Pared, Base, Grosor de la tapa… | La flecha turquesa marca esa medida sobre la pieza (el grosor de la pared en el borde derecho, la base en el fondo, etc.); en el Letrero solo el grosor de la placa |
+| F.9 | **Ángulos**: Plano (ángulo, con un valor distinto de 0), Mover cuerpo (ángulo) y Patrón circular (ángulo total) | En vez de una flecha recta sale un **arco de doble punta** alrededor del eje de giro, con la apertura del ángulo |
+| F.10 | **Redondeo / Chaflán** (tamaño), **Vaciado** (espesor), **Agujero** (diámetro, profundidad, cabeza), **Engranaje** (módulo y dientes = diámetro primitivo, ancho, agujero), **Rosca** (paso) y **Posición X / Y** de Caja, Cilindro, Rosca y Engranaje | Cada medida tiene su flecha: el tamaño del redondeo desde la arista hacia dentro (solo aristas rectas), el espesor desde la cara abierta, el agujero en el primero de los círculos del sketch, X e Y desde el origen del plano |
 | F.7 | Acepta o cancela la herramienta | No queda ninguna flecha en la vista |
 
 

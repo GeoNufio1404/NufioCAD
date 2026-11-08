@@ -250,6 +250,25 @@ std::optional<FeatureTool::Arrow> PlaneTool::dimensionArrow(const std::string& k
     return arrowAlong(base.origin, base.normal, offset_->value());
 }
 
+std::optional<FeatureTool::Arc> PlaneTool::dimensionArc(const std::string& key) const
+{
+    if (key != "angle") {
+        return std::nullopt;
+    }
+    const auto feature = build();
+    const auto* plane = dynamic_cast<const document::ConstructionPlaneFeature*>(feature.get());
+    if (plane == nullptr) {
+        return std::nullopt;
+    }
+    // El plano gira alrededor de un eje suyo (X o Y) que pasa por su origen desplazado.
+    const sketch::Plane base = document::attachmentPlane(before(), plane->base);
+    const sketch::Vec3 origin = moved(base.origin, base.normal, plane->offset);
+    const bool aboutX = plane->angleAxis == 0;
+    const sketch::Vec3 axis = aboutX ? base.xAxis : base.yAxis;
+    const sketch::Vec3 across = aboutX ? base.yAxis : base.xAxis;
+    return Arc{origin, axis, moved(origin, across, arcRadius()), angle_->value() * kDegree * (aboutX ? 1.0 : -1.0)};
+}
+
 QString PlaneTool::inputsText() const
 {
     if (base_->currentIndex() == 3 && face_.empty()) {
@@ -472,6 +491,27 @@ std::unique_ptr<document::Feature> GearTool::build() const
     return f;
 }
 
+std::optional<FeatureTool::Arrow> GearTool::dimensionArrow(const std::string& key) const
+{
+    if (key == "x" || key == "y") {
+        return placementArrow(placement_, key);
+    }
+    const sketch::Plane plane = document::attachmentPlane(before(), placementAttachment(placement_));
+    const sketch::Vec3 origin = plane.toWorld({placement_.x->value(), placement_.y->value()});
+    if (key == "thickness") {
+        return arrowAlong(origin, plane.normal, thickness_->value());
+    }
+    if (key == "bore") {
+        return arrowAlong(moved(origin, plane.xAxis, -bore_->value() / 2.0), plane.xAxis, bore_->value());
+    }
+    if (key == "module" || key == "teeth") {
+        // El diámetro primitivo: módulo × dientes.
+        const double pitch = module_->value() * teeth_->value();
+        return arrowAlong(moved(origin, plane.xAxis, -pitch / 2.0), plane.xAxis, pitch);
+    }
+    return std::nullopt;
+}
+
 QString GearTool::inputsText() const
 {
     return QStringLiteral("%1 dientes, módulo %2: Ø primitivo %3%4")
@@ -588,6 +628,9 @@ bool BoxTool::removesMaterial() const
 
 std::optional<FeatureTool::Arrow> BoxTool::dimensionArrow(const std::string& key) const
 {
+    if (key == "x" || key == "y") {
+        return placementArrow(placement_, key);
+    }
     const sketch::Plane plane = document::attachmentPlane(before(), placementAttachment(placement_));
     const sketch::Vec3 point = plane.toWorld({placement_.x->value(), placement_.y->value()});
     const double height = height_->value();
@@ -677,6 +720,9 @@ std::unique_ptr<document::Feature> CylinderTool::build() const
 
 std::optional<FeatureTool::Arrow> CylinderTool::dimensionArrow(const std::string& key) const
 {
+    if (key == "x" || key == "y") {
+        return placementArrow(placement_, key);
+    }
     const sketch::Plane plane = document::attachmentPlane(before(), placementAttachment(placement_));
     const sketch::Vec3 point = plane.toWorld({placement_.x->value(), placement_.y->value()});
     const double height = height_->value();
