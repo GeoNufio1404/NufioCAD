@@ -467,8 +467,9 @@ Resumen de todo lo pendiente que no son pruebas manuales; el detalle sigue en el
 - [ ] Compilar y probar en Fedora/CI de Ubuntu (enlace STEP, nlohmann-json, filtro `*.exe`).
 - [ ] Prueba de interfaz en el CI (Xvfb) y que compruebe también cómo se ve.
 - [ ] Medir en Release (bloqueado por Smart App Control; probar en otra máquina o firmar).
-- [ ] Partir `Viewport.cpp`, `FeatureTools.cpp`, `MainWindow.cpp` y `Features.cpp`.
-- [ ] `hasHeavySurface`/`hasMesh` sin recorrer todas las caras en cada refresco.
+- [x] Partir `FeatureTools.cpp` (en 4 archivos más `FeatureToolsCommon.hpp`) y `Features.cpp` (en 2 más `FeaturesCommon.hpp`): solo se movió código, sin cambiar nada.
+- [ ] Partir `Viewport.cpp` (2750 líneas; su `Impl` en el espacio anónimo lo comparte todo, hay que sacarlo a una cabecera privada) y `MainWindow.cpp` (1800).
+- [x] `hasHeavySurface`/`hasMesh` sin recorrer todas las caras en cada refresco: el resultado se guarda en la propia forma (`Shape::Impl`, inmutable): «pesada» se calcula una vez y «con malla» se recuerda cuando es cierta.
 - [ ] Limitaciones de Fase 2 y 3 (ver tabla de Estado): lo proyectado y el texto bloqueados; recortar/extender/desfase solo con líneas, arcos y círculos; elegir qué cuerpos participan en unir/cortar; «hasta una cara» con caras no planas; flecha en la revolución.
 
 **Oleada 3 — Usabilidad**

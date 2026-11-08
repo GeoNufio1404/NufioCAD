@@ -2,6 +2,8 @@
 
 #include <nuf/geometry/Occt.hpp>
 
+#include "Naming.hpp"
+
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepBuilderAPI_Copy.hxx>
 #include <BRepLib_ToolTriangulatedShape.hxx>
@@ -38,6 +40,12 @@ PreparedMesh& PreparedMesh::operator=(PreparedMesh&&) noexcept = default;
 
 bool hasHeavySurface(const Shape& shape)
 {
+    if (shape.impl() == nullptr) {
+        return false;
+    }
+    if (const signed char known = shape.impl()->heavy.load(); known >= 0) {
+        return known == 1;
+    }
     // Suma de puntos de control de las caras spline (una rosca partida en tramos tiene miles).
     constexpr long kHeavyPoles = 2000;
     long poles = 0;
@@ -47,6 +55,7 @@ bool hasHeavySurface(const Shape& shape)
             poles += long(surface.NbUPoles()) * surface.NbVPoles();
         }
     }
+    shape.impl()->heavy.store(poles > kHeavyPoles ? 1 : 0);
     return poles > kHeavyPoles;
 }
 
@@ -139,12 +148,16 @@ bool hasMesh(const Shape& shape)
     if (shape.isNull() || shape.faceCount() == 0) {
         return false;
     }
+    if (shape.impl()->meshed.load()) {
+        return true;
+    }
     for (int i = 0; i < shape.faceCount(); ++i) {
         TopLoc_Location location;
         if (BRep_Tool::Triangulation(faceAt(shape, i), location).IsNull()) {
             return false;
         }
     }
+    shape.impl()->meshed.store(true);
     return true;
 }
 

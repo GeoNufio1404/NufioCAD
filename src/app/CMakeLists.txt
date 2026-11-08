@@ -9,6 +9,10 @@ add_executable(nuf_app
     src/MainWindowFiles.cpp
     src/MainWindow.hpp
     src/FeatureTools.cpp
+    src/FeatureToolsProfile.cpp
+    src/FeatureToolsConstruct.cpp
+    src/FeatureToolsMore.cpp
+    src/FeatureToolsCommon.hpp
     src/FeatureTools.hpp
     src/ModelPanels.cpp
     src/ModelPanels.hpp

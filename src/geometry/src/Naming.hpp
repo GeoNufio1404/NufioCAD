@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+
 // Interno de geometry/: la forma con sus mapas de caras y aristas, y cómo se
 // nombran las caras de un resultado a partir de sus entradas.
 
@@ -23,6 +25,9 @@ struct Shape::Impl {
     ShapeMap edges;
     std::vector<std::string> faceNames;
     std::vector<std::string> edgeNames;
+    // Resultados guardados para no recorrer todas las caras en cada refresco del visor (la forma no cambia).
+    mutable std::atomic<signed char> heavy{-1};  // hasHeavySurface: -1 sin calcular, 0 no, 1 sí
+    mutable std::atomic<bool> meshed{false};     // hasMesh: una vez mallada, sigue mallada
 };
 
 // Reúne los nombres de las caras de un resultado.
