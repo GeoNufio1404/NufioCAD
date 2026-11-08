@@ -87,6 +87,13 @@ public:
                 cableWall};
     }
 
+    std::map<std::string, ArrowSpec> arrows() const override
+    {
+        return {{"ancho", {0, 'x', false}}, {"diametro", {0, 'x', false}}, {"alto", {0, 'y', false}},
+                {"profundidad", {0, 'z', false}}, {"pared", {0, 'x', true}}, {"fondo", {0, 'z', false}},
+                {"frente", {3, 'z', false}}};
+    }
+
     Recipe make(const GeneratorValues& values, const std::string& suffix) const override
     {
         const auto v = [&](const char* key) { return values.at(key); };
@@ -263,6 +270,12 @@ public:
                 length("pasante", "Agujero de la tapa", 3.4, 1.0, 12.0, "Para que el tornillo pase (M3: 3,4)", "cierre", 1)};
     }
 
+    std::map<std::string, ArrowSpec> arrows() const override
+    {
+        return {{"ancho", {0, 'x', false}}, {"fondo", {0, 'y', false}}, {"alto", {0, 'z', false}},
+                {"pared", {0, 'x', true}}, {"base", {0, 'z', false}}, {"tapa", {1, 'z', false}}};
+    }
+
     Recipe make(const GeneratorValues& values, const std::string& suffix) const override
     {
         const auto v = [&](const char* key) { return values.at(key); };
@@ -430,6 +443,8 @@ public:
                 length("anilla", "Diámetro de la anilla", 12.0, 5.0, 60.0, "El círculo que rodea el agujero", "tipo", 1),
                 length("agujero", "Agujero de la anilla", 5.0, 2.0, 40.0, {}, "tipo", 1)};
     }
+
+    std::map<std::string, ArrowSpec> arrows() const override { return {{"grosor", {0, 'z', false}}}; }
 
     Recipe make(const GeneratorValues& values, const std::string& suffix) const override
     {

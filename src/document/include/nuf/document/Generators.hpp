@@ -75,6 +75,15 @@ public:
     // Nombre del icono (de la interfaz) de su botón.
     virtual std::string icon() const { return "lightbox-solid"; }
     virtual std::vector<GeneratorField> fields() const = 0;
+    // Dónde se dibuja la flecha de una medida mientras se edita su pregunta: a lo largo de «axis» (x, y o z), sobre el
+    // cuerpo «body» de la receta (por orden de salida), desde su borde mínimo (suma el valor) o máximo (lo resta), por
+    // el centro del cuerpo en los otros ejes. Solo las preguntas que son una medida sobre una pieza.
+    struct ArrowSpec {
+        int body = 0;
+        char axis = 'x';
+        bool fromMax = false;
+    };
+    virtual std::map<std::string, ArrowSpec> arrows() const { return {}; }
     // «suffix» se agrega a los nombres de los parámetros (« », «_2», «_3»…) para no chocar con los que ya haya.
     virtual Recipe make(const GeneratorValues& values, const std::string& suffix) const = 0;
 

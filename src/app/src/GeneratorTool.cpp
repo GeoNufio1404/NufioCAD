@@ -123,6 +123,11 @@ void GeneratorTool::createFields(QFormLayout* form)
         }
         form->addRow(QString::fromStdString(f.label), container);
         rows_.push_back({f, widget, container});
+        // Las preguntas que son una medida sobre una pieza señalan esa medida en la vista mientras se editan.
+        if (generator_.arrows().count(f.key) != 0 && f.kind != document::GeneratorField::Kind::Choice &&
+            f.kind != document::GeneratorField::Kind::Text && f.kind != document::GeneratorField::Kind::Font) {
+            track(f.key.c_str(), static_cast<QDoubleSpinBox*>(widget));
+        }
     }
     updateVisibility();
 }
@@ -250,6 +255,10 @@ void GeneratorTool::updatePreview()
     } catch (...) {
         problem = "No se pudo calcular con esos valores";
     }
+    bounds_.clear();
+    for (const document::Body& body : scratch.result().bodies) {
+        bounds_.push_back(body.shape.bounds());
+    }
     std::vector<document::Body> shown;
     // Al reabrir, lo que ya había sacado el generador se oculta: lo sustituye la vista previa.
     std::vector<std::string> replaced;
@@ -271,6 +280,7 @@ void GeneratorTool::updatePreview()
     if (first) {
         viewport_.fitAll();
     }
+    refreshArrow();
     if (problem.empty()) {
         statusLabel_->clear();
         okButton_->setEnabled(true);
@@ -279,6 +289,43 @@ void GeneratorTool::updatePreview()
                                   .arg(QString::fromStdString(problem).toHtmlEscaped()));
         okButton_->setEnabled(false);
     }
+}
+
+} // namespace nuf::app
+
+namespace nuf::app {
+
+std::optional<FeatureTool::Arrow> GeneratorTool::dimensionArrow(const std::string& key) const
+{
+    const auto specs = generator_.arrows();
+    const auto spec = specs.find(key);
+    const auto row = std::ranges::find_if(rows_, [&](const Row& r) { return r.field.key == key; });
+    if (spec == specs.end() || row == rows_.end() || spec->second.body < 0 || std::size_t(spec->second.body) >= bounds_.size()) {
+        return std::nullopt;
+    }
+    const geometry::Box& box = bounds_[std::size_t(spec->second.body)];
+    if (box.empty) {
+        return std::nullopt;
+    }
+    const double value = static_cast<QDoubleSpinBox*>(row->widget)->value();
+    const sketch::Vec3 center{(box.min.x + box.max.x) / 2.0, (box.min.y + box.max.y) / 2.0, (box.min.z + box.max.z) / 2.0};
+    sketch::Vec3 from = center;
+    sketch::Vec3 dir{};
+    switch (spec->second.axis) {
+    case 'x':
+        from.x = spec->second.fromMax ? box.max.x : box.min.x;
+        dir = {1.0, 0.0, 0.0};
+        break;
+    case 'y':
+        from.y = spec->second.fromMax ? box.max.y : box.min.y;
+        dir = {0.0, 1.0, 0.0};
+        break;
+    default:
+        from.z = spec->second.fromMax ? box.max.z : box.min.z;
+        dir = {0.0, 0.0, 1.0};
+        break;
+    }
+    return arrowAlong(from, dir, spec->second.fromMax ? -value : value);
 }
 
 } // namespace nuf::app

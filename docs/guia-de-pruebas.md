@@ -121,6 +121,7 @@ Necesitas un cuerpo (la caja de 40×25×10 de «Antes de empezar»). Los botones
 | F.4 | **Extruir** un perfil: haz clic en «Distancia», «Distancia 2» y «Desfase inicial» | Una flecha de doble punta por cada una, desde el perfil a lo largo de la normal (centrada si la dirección es Simétrica); sigue existiendo la flecha naranja para arrastrar |
 | F.5 | **Cilindro** (diámetro y alto), **Plano** (distancia), **Mover cuerpo** (X/Y/Z), **Patrón** (distancia entre copias) y **Rosca** (diámetro y largo) | La flecha marca la medida que editas; en Mover y Patrón sale desde el centro del cuerpo |
 | F.6 | Cambia de plano o elige una cara en Caja/Cilindro/Rosca | La flecha sigue al plano (gira con él) |
+| F.8 | **Herramientas › Caja con tapa** (o Lightbox, Letrero): haz clic en Ancho, Fondo, Alto, Pared, Base, Grosor de la tapa… | La flecha turquesa marca esa medida sobre la pieza (el grosor de la pared en el borde derecho, la base en el fondo, etc.); en el Letrero solo el grosor de la placa |
 | F.7 | Acepta o cancela la herramienta | No queda ninguna flecha en la vista |
 
 

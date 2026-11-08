@@ -8,6 +8,7 @@
 #include <nuf/document/Generators.hpp>
 
 #include <map>
+#include <optional>
 
 class QComboBox;
 class QDoubleSpinBox;
@@ -46,6 +47,7 @@ protected:
 private:
     document::GeneratorValues values() const;
     void updateVisibility();
+    std::optional<Arrow> dimensionArrow(const std::string& key) const override;
 
     struct Row {
         document::GeneratorField field;
@@ -62,6 +64,7 @@ private:
     QTimer* timer_ = nullptr;
     bool previewed_ = false;
     bool firstDone_ = false;
+    std::vector<geometry::Box> bounds_;  // de los cuerpos de la última vista previa, para colocar las flechas
 };
 
 } // namespace nuf::app

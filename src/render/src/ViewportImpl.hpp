@@ -605,8 +605,8 @@ public:
         }
         const gp_Dir dir(gp_Vec(a, b));
         // Puntas de tamaño fijo en pantalla (algo menores si la flecha es corta).
-        const double head = std::min(28.0 * pixelSize(), 0.4 * length);
-        const double radius = std::max(2.5 * pixelSize(), 1e-6);
+        const double head = std::min(34.0 * pixelSize(), 0.4 * length);
+        const double radius = std::max(3.5 * pixelSize(), 1e-6);
         BRep_Builder builder;
         TopoDS_Compound arrow;
         builder.MakeCompound(arrow);
