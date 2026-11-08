@@ -108,6 +108,8 @@ private:
     void printBodies();
     void toggleMeasure(bool on);
     void startGenerator(const document::Generator& generator);
+    // Vuelve a abrir el formulario de lo que sacó un generador (la operación «id» es una de ellas).
+    void reopenGenerator(document::FeatureId id);
     void updateMeasure();
     void toggleSection(bool on);
     void updateSection();

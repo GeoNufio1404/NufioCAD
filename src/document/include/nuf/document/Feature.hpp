@@ -19,6 +19,16 @@ namespace nuf::document {
 // Identificador estable de una operación (no cambia al reordenar).
 using FeatureId = std::uint64_t;
 
+// De qué generador (Lightbox, Caja con tapa…) salió una operación y con qué respuestas, para poder reabrir su formulario.
+// Todas las de un mismo resultado comparten «lead» (el id de la primera); solo la primera guarda «values».
+struct GeneratorOrigin {
+    std::string generator;  // id del generador
+    std::string suffix;     // el de los nombres de sus parámetros («», «_2»…)
+    std::string values;     // las respuestas, codificadas con encodeValues (Generators.hpp)
+    FeatureId lead = 0;     // 0: no viene de un generador
+    bool operator==(const GeneratorOrigin&) const = default;
+};
+
 struct Body {
     std::string key;   // estable: «f<id>» de la operación que lo creó
     std::string name;  // «Cuerpo1»
@@ -117,6 +127,9 @@ public:
 
     // clave de un campo → expresión (si está ligado a parámetros).
     std::map<std::string, std::string> expressions;
+
+    // Si la creó un generador (lead = 0: no).
+    GeneratorOrigin origin;
 
 protected:
     Feature() = default;

@@ -639,7 +639,7 @@ private:
     QComboBox* bodyBox_ = nullptr;
     QComboBox* layout_ = nullptr;
     QComboBox* axis_ = nullptr;
-    QSpinBox* count_ = nullptr;
+    QDoubleSpinBox* count_ = nullptr;
     QDoubleSpinBox* spacing_ = nullptr;
     QDoubleSpinBox* angle_ = nullptr;
     QComboBox* operation_ = nullptr;

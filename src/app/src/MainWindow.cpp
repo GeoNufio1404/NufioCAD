@@ -23,6 +23,7 @@
 #include <nuf/geometry/Exchange.hpp>
 #include <nuf/geometry/Kernel.hpp>
 #include <nuf/commands/AddRecipe.hpp>
+#include <nuf/commands/ReplaceRecipe.hpp>
 #include <nuf/document/Generators.hpp>
 #include <nuf/sketch/Annotations.hpp>
 #include <nuf/geometry/Measure.hpp>
@@ -1044,16 +1045,46 @@ void MainWindow::startGenerator(const document::Generator& generator)
     startTool(std::make_unique<GeneratorTool>(document_, *viewport_, generator));
 }
 
+void MainWindow::reopenGenerator(document::FeatureId id)
+{
+    if (sketch_ || tool_ || viewport_->isPickingSketchPlane()) {
+        return;
+    }
+    const document::Feature* feature = document_.findFeature(id);
+    if (feature == nullptr || feature->origin.lead == 0) {
+        return;
+    }
+    const document::FeatureId lead = feature->origin.lead;
+    const std::vector<document::FeatureId> group = document::generatedGroup(document_, lead);
+    const document::Generator* generator = group.empty() ? nullptr : document::findGenerator(document_.findFeature(group.front())->origin.generator);
+    if (generator == nullptr) {
+        statusBar()->showMessage(QStringLiteral("Este generador ya no existe en esta versión"), 8000);
+        return;
+    }
+    const document::GeneratorOrigin& origin = document_.findFeature(group.front())->origin;
+    startTool(std::make_unique<GeneratorTool>(document_, *viewport_, *generator, lead, document::decodeValues(origin.values),
+                                              origin.suffix));
+}
+
 void MainWindow::finishTool(bool accepted)
 {
     if (!tool_) {
         return;
     }
     // Un generador no da una operación sino una receta (parámetros, operaciones y nombres) que se aplica de una vez.
-    std::optional<commands::AddRecipe> recipe;
+    std::unique_ptr<commands::Command> recipe;
     if (const auto* generator = dynamic_cast<const GeneratorTool*>(tool_.get()); generator != nullptr && accepted) {
         try {
-            recipe.emplace(generator->recipe(), generator->generator().title());
+            document::Recipe made = generator->recipe();
+            if (generator->lead() != 0) {
+                if (const std::string problem = commands::ReplaceRecipe::problem(document_, generator->lead(), made); !problem.empty()) {
+                    statusBar()->showMessage(QString::fromStdString(problem), 12000);
+                    return;  // la herramienta sigue abierta
+                }
+                recipe = std::make_unique<commands::ReplaceRecipe>(generator->lead(), std::move(made), generator->generator().title());
+            } else {
+                recipe = std::make_unique<commands::AddRecipe>(std::move(made), generator->generator().title());
+            }
         } catch (const std::exception& e) {
             statusBar()->showMessage(QString::fromUtf8(e.what()), 8000);  // p. ej. un texto sin letras
             return;                                                       // la herramienta sigue abierta
@@ -1074,7 +1105,7 @@ void MainWindow::finishTool(bool accepted)
     viewport_->hideDistanceHandle();
     viewport_->setAdditiveSelection(false);
     if (recipe) {
-        commands_.push(std::make_unique<commands::AddRecipe>(std::move(*recipe)));
+        commands_.push(std::move(recipe));
     } else if (feature) {
         if (editing) {
             commands_.push(std::make_unique<commands::EditFeature>(*editing, std::move(feature)));
@@ -1167,6 +1198,12 @@ void MainWindow::showFeatureMenu(document::FeatureId id, const QPoint& globalPos
     const QString name = QString::fromStdString(feature->name());
     QMenu menu(this);
     menu.addAction(QStringLiteral("Editar"), this, [this, id] { activateFeature(id); });
+    if (feature->origin.lead != 0) {
+        if (const document::Generator* generator = document::findGenerator(feature->origin.generator)) {
+            menu.addAction(QStringLiteral("Reabrir «%1»…").arg(QString::fromStdString(generator->title())), this,
+                           [this, id] { reopenGenerator(id); });
+        }
+    }
     menu.addAction(QStringLiteral("Renombrar…"), this, [this, id, name] {
         bool ok = false;
         const QString text = QInputDialog::getText(this, QStringLiteral("Renombrar"), QStringLiteral("Nombre:"),

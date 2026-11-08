@@ -26,8 +26,24 @@ void AddRecipe::execute(document::Document& doc)
     }
     ids_.clear();
     document::FeatureId recipeSketch = 0;
+    // El id de la primera operación identifica el resultado entero (rehacer reutiliza el que ya tenía).
+    document::FeatureId lead = 0;
+    if (!recipe_.features.empty() && !recipe_.origin.generator.empty()) {
+        lead = recipe_.features.front()->id() != 0 ? recipe_.features.front()->id() : doc.reserveId();
+        recipe_.features.front()->setId(lead);
+    }
+    std::size_t k = 0;
     for (const auto& feature : recipe_.features) {
-        const document::FeatureId id = doc.insertFeature(document::instantiate(*feature, recipeSketch), doc.marker());
+        auto instance = document::instantiate(*feature, recipeSketch);
+        if (lead != 0) {
+            instance->origin = recipe_.origin;
+            instance->origin.lead = lead;
+            if (k != 0) {
+                instance->origin.values.clear();
+            }
+        }
+        ++k;
+        const document::FeatureId id = doc.insertFeature(std::move(instance), doc.marker());
         if (feature->kind() == document::FeatureKind::Sketch) {
             recipeSketch = id;
         }

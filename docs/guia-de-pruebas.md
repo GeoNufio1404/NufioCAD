@@ -103,6 +103,9 @@ Necesitas un cuerpo (la caja de 40×25×10 de «Antes de empezar»). Los botones
 | 5.9 | **Patrón lineal** | Sólido › Patrón; Lineal, eje X, cantidad `3`, distancia `60` | Tres copias separadas; con distancia `20` se funden en una pieza |
 | 5.10 | **Patrón circular** | Circular, eje Z, cantidad `4`, 360° | Cuatro copias alrededor del eje Z |
 | 5.11 | Editar la pieza original después | Cambiar la altura de la extrusión | Redondeos, agujeros, espejo y patrón siguen a la pieza |
+| 5.12 | **Cantidad ligada** | Crea el parámetro `n = 4` (Sólido › Parámetros); en el Patrón escribe `n` en «Cantidad» y Enter | El cuadro acepta la expresión y calcula 4 copias; el tooltip muestra el valor |
+| 5.13 | Cambiar el parámetro | Cambia `n` a `6` en Parámetros | El patrón se rehace con 6 copias; Ctrl+Z vuelve a 4 |
+| 5.14 | Resultado no entero | Escribe `n/2` o `n*0.4` en «Cantidad» | La cantidad se redondea al entero más cercano (mínimo 2) y no hay error |
 
 **Fíjate en:** ¿las aristas elegidas se ven claramente? ¿El panel explica qué falta elegir? ¿Algún resultado queda «raro» (caras de más, huecos)? Lo pendiente de esta fase: ver «Pendiente de 5a–5e» en la hoja de ruta.
 
@@ -188,9 +191,7 @@ Necesitas un cuerpo (la caja de 40×25×10 de «Antes de empezar»). Los botones
 | 8.18 | Elegir dos caras del mismo cuerpo | Error claro en el panel |
 | 8.19 | Cambiar la altura de la caja fija y volver a la Unión | La caja móvil sube con ella |
 
-**Fíjate en:** ¿las caras elegidas se distinguen en la vista (hoy no se resaltan)? ¿Se entiende cuál es la fija y cuál la móvil?
-
-**Fíjate en:** ¿se entiende qué cuerpo se mueve? ¿Mover con números es suficiente o echas de menos arrastrar con el ratón? (ver «Pendiente de 8a»).
+**Fíjate en:** ¿se entiende qué cuerpo se mueve y cuál es la pieza fija y cuál la móvil en una unión? ¿Las caras elegidas se distinguen en la vista (hoy no se resaltan)? ¿Mover con números es suficiente o echas de menos arrastrar con el ratón? (ver «Pendiente de 8a–8c»).
 
 ## Fase 9 — Pulido para impresión 3D
 
@@ -236,31 +237,9 @@ Necesitas un cuerpo (la caja de 40×25×10 de «Antes de empezar»). Los botones
 
 **Fíjate en:** ¿los avisos se entienden sin explicación? ¿Hay falsos avisos (te avisa de una pared que no existe)? ¿Echas de menos que señale dónde está el problema en la vista? ¿Los valores de tu impresora son los correctos (anota tu modelo)?
 
-Medición, análisis de sección y el botón «Imprimir» (abrir el slicer): se agregan aquí cuando se implementen.
-
 ---
 
-## Fase de pruebas transversal (cuando tengas tiempo)
-
-1. **Flujo completo**: diseña algo tuyo (por ejemplo una carcasa con tapa y tornillos) usando varias fases a la vez; guarda, cierra, abre, edita algo del principio del historial.
-2. **Estrés**: sketches con muchas figuras, piezas con 10+ operaciones, patrones de 20+ copias. Anota qué se siente lento.
-3. **Errores**: intenta romper cosas (radios enormes, borrar cosas de las que dependen otras, abrir un archivo vacío renombrado a `.nuf`).
-4. **Impresión 3D**: exporta STL de varias piezas y ábrelas en tu slicer (¿cerradas, en mm, sin caras invertidas?).
-5. **Claridad**: ¿qué cosa te costó descubrir sin ayuda? Eso es feedback de UX muy valioso.
-
-## Plantilla para darme feedback
-
-```
-Fase / prueba:      (por ejemplo 5.6 Agujero)
-Qué hice:
-Qué esperaba:
-Qué pasó:
-Tipo:               [ ] error  [ ] se ve mal  [ ] confuso / poco intuitivo  [ ] lento  [ ] falta algo  [ ] me gusta
-Gravedad:           [ ] bloquea  [ ] molesta  [ ] detalle
-Captura / archivo .nuf (opcional):
-```
-
-Con una captura de pantalla y los pasos suele bastar. Si algo se cierra, no hace falta que copies nada: el informe queda guardado y lo leo yo.
+## Unidades y colocación
 
 ### Unidad en los cuadros numéricos
 
@@ -293,6 +272,10 @@ Con una captura de pantalla y los pasos suele bastar. Si algo se cierra, no hace
 | R.6 | Haz lo mismo con Sólido › Engranaje (clic en una cara, X/Y, «Cortar») | Se coloca en la cara; con «Cortar» deja un hueco con la forma del engranaje |
 | R.7 | Guarda, cierra y abre el diseño | Posición, cara y holgura se conservan |
 
+---
+
+## Fase 10 — Herramientas generadoras
+
 ### Herramientas generadoras (Lightbox)
 
 | # | Haz esto | Debe pasar |
@@ -308,6 +291,11 @@ Con una captura de pantalla y los pasos suele bastar. Si algo se cierra, no hace
 | G.9 | Exporta o imprime los cuatro cuerpos | La revisión no avisa de paredes finas con los valores por defecto; marco, labio y cara no se solapan |
 | G.10 | Sólido › Caja / Cilindro | Primitivas con posición, centradas o no, con alto ± y operación; doble clic en una operación «Lightbox: …» del historial abre su panel |
 | G.11 | Compara con tus lightboxes de referencia (Illescas, Aguilar) | Las medidas son las de `docs/generadores.md`: 175 × 131 × 37 con pared 2; para igualar la de Illescas pon ancho 174,664, alto 132,036, profundidad 37 y holgura 0 |
+| G.12 | Con el Lightbox ya aceptado, clic derecho en cualquiera de sus operaciones del historial › **Reabrir «Lightbox»…** | Se abre el formulario con las **mismas respuestas** con que se generó; la vista previa sustituye al diseño anterior (no se ve duplicado) |
+| G.13 | Cambia solo medidas (Pared, Ancho…) y acepta | El diseño cambia **en su sitio**: las operaciones conservan su nombre y su orden, los cuerpos conservan sus nombres y el componente; los parámetros cambian de valor; Ctrl+Z lo devuelve todo |
+| G.14 | Reabre y cambia algo que añade operaciones (por ejemplo «Agujero del cable» de 0 a 6) | Se rehace el grupo entero en el mismo sitio del historial; Ctrl+Z / Ctrl+Y funcionan |
+| G.15 | Antes de reabrir, añade un Patrón o Redondeo sobre un cuerpo del generador y reabre cambiando algo que añade operaciones | Aviso en la barra de estado explicando que otra operación depende de las actuales; el formulario sigue abierto. Con cambios que no alteran la estructura sí se aplica |
+| G.16 | Guarda, cierra y abre; reabre el generador | Sigue disponible con las respuestas de antes (también en el Letrero, el Par de engranajes y la Caja con tapa) |
 
 ### Caja con tapa
 
@@ -342,6 +330,10 @@ Con una captura de pantalla y los pasos suele bastar. Si algo se cierra, no hace
 | E.5 | Imprime las dos ruedas con sus ejes | Giran juntas sin atascarse con el juego de 0,15 mm (subirlo a 0,25 si rozan) |
 | E.6 | Haz doble clic en «Engranaje: rueda 2» del historial | Se abre su panel con Posición X, Giro inicial y los demás campos ligados |
 
+---
+
+## Prueba automática y fuentes
+
 ### Prueba automática de la interfaz
 
 No hace falta tocar nada: abre la ventana real, recorre las herramientas y los generadores y escribe un informe.
@@ -359,3 +351,27 @@ NufioCAD.exe --prueba-interfaz [--informe ruta.txt] [--umbral-ms 20000]
 
 1. Generadores → Letrero o llavero, texto «Nufio», fuente **Ravie** (o Jokerman, Curlz, etc.).
 2. Debe aparecer la placa con las letras; si algo falla, el panel muestra el motivo en rojo (nunca en blanco).
+
+---
+
+## Fase de pruebas transversal (cuando tengas tiempo)
+
+1. **Flujo completo**: diseña algo tuyo (por ejemplo una carcasa con tapa y tornillos) usando varias fases a la vez; guarda, cierra, abre, edita algo del principio del historial.
+2. **Estrés**: sketches con muchas figuras, piezas con 10+ operaciones, patrones de 20+ copias. Anota qué se siente lento.
+3. **Errores**: intenta romper cosas (radios enormes, borrar cosas de las que dependen otras, abrir un archivo vacío renombrado a `.nuf`).
+4. **Impresión 3D**: exporta STL de varias piezas y ábrelas en tu slicer (¿cerradas, en mm, sin caras invertidas?).
+5. **Claridad**: ¿qué cosa te costó descubrir sin ayuda? Eso es feedback de UX muy valioso.
+
+## Plantilla para darme feedback
+
+```
+Fase / prueba:      (por ejemplo 5.6 Agujero)
+Qué hice:
+Qué esperaba:
+Qué pasó:
+Tipo:               [ ] error  [ ] se ve mal  [ ] confuso / poco intuitivo  [ ] lento  [ ] falta algo  [ ] me gusta
+Gravedad:           [ ] bloquea  [ ] molesta  [ ] detalle
+Captura / archivo .nuf (opcional):
+```
+
+Con una captura de pantalla y los pasos suele bastar. Si algo se cierra, no hace falta que copies nada: el informe queda guardado y lo leo yo.

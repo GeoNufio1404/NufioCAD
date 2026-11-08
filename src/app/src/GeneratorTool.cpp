@@ -13,6 +13,9 @@
 #include <QPushButton>
 #include <QTimer>
 
+#include <algorithm>
+#include <cctype>
+
 namespace nuf::app {
 
 GeneratorTool::GeneratorTool(document::Document& document, render::Viewport& viewport,
@@ -22,10 +25,30 @@ GeneratorTool::GeneratorTool(document::Document& document, render::Viewport& vie
 {
 }
 
+GeneratorTool::GeneratorTool(document::Document& document, render::Viewport& viewport, const document::Generator& generator,
+                             document::FeatureId lead, document::GeneratorValues initial, std::string suffix)
+    : FeatureTool(document, viewport, std::nullopt)
+    , generator_(generator)
+    , lead_(lead)
+    , initial_(std::move(initial))
+    , hasInitial_(true)
+    , suffix_(std::move(suffix))
+{
+}
+
 void GeneratorTool::createFields(QFormLayout* form)
 {
     form_ = form;
-    for (const document::GeneratorField& f : generator_.fields()) {
+    for (document::GeneratorField f : generator_.fields()) {
+        // Al reabrir, el formulario parte de las respuestas de antes.
+        if (hasInitial_) {
+            if (const auto it = initial_.find(f.key); it != initial_.end()) {
+                f.value = it->second;
+            }
+            if (const auto it = initial_.texts.find(f.key); it != initial_.texts.end()) {
+                f.text = it->second;
+            }
+        }
         QWidget* widget = nullptr;
         if (f.kind == document::GeneratorField::Kind::Text) {
             auto* edit = new QLineEdit(QString::fromStdString(f.text));
@@ -128,7 +151,10 @@ document::GeneratorValues GeneratorTool::values() const
 document::Recipe GeneratorTool::recipe() const
 {
     const document::GeneratorValues v = values();
-    return generator_.make(v, document::freeSuffix(document_, generator_, v));
+    const std::string suffix = lead_ != 0 ? suffix_ : document::freeSuffix(document_, generator_, v);
+    document::Recipe made = generator_.make(v, suffix);
+    made.origin = {generator_.id(), suffix, document::encodeValues(v), 0};
+    return made;
 }
 
 void GeneratorTool::stopPreview()
@@ -189,7 +215,20 @@ void GeneratorTool::updatePreview()
     } catch (...) {
         problem = "No se pudo calcular con esos valores";
     }
-    std::vector<document::Body> shown = before().bodies;
+    std::vector<document::Body> shown;
+    // Al reabrir, lo que ya había sacado el generador se oculta: lo sustituye la vista previa.
+    std::vector<std::string> replaced;
+    for (const document::FeatureId id : document::generatedGroup(document_, lead_)) {
+        replaced.push_back(document_.findFeature(id)->tag());
+    }
+    for (const document::Body& body : before().bodies) {
+        const bool old = std::ranges::any_of(replaced, [&](const std::string& tag) {
+            return body.key.rfind(tag, 0) == 0 && (body.key.size() == tag.size() || !std::isdigit(static_cast<unsigned char>(body.key[tag.size()])));
+        });
+        if (!old) {
+            shown.push_back(body);
+        }
+    }
     for (const document::Body& body : scratch.result().bodies) {
         shown.push_back({"gen:" + body.key, body.name, body.shape});
     }

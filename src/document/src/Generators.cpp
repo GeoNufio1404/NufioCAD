@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <stdexcept>
 
 namespace nuf::document {
@@ -738,6 +739,89 @@ std::string freeSuffix(const Document& doc, const Generator& generator, const Ge
         }
     }
     return "_x";
+}
+
+std::string encodeValues(const GeneratorValues& values)
+{
+    // Una línea por respuesta: «n<TAB>clave<TAB>número» o «t<TAB>clave<TAB>texto» (con barra, tabulador y salto
+    // de línea escapados).
+    const auto escape = [](const std::string& text) {
+        std::string out;
+        for (const char c : text) {
+            if (c == '\\') {
+                out += "\\\\";
+            } else if (c == '\t') {
+                out += "\\t";
+            } else if (c == '\n') {
+                out += "\\n";
+            } else {
+                out += c;
+            }
+        }
+        return out;
+    };
+    std::string out;
+    for (const auto& [key, value] : values) {
+        char buffer[40];
+        std::snprintf(buffer, sizeof buffer, "%.17g", value);
+        out += "n\t" + escape(key) + "\t" + buffer + "\n";
+    }
+    for (const auto& [key, text] : values.texts) {
+        out += "t\t" + escape(key) + "\t" + escape(text) + "\n";
+    }
+    return out;
+}
+
+GeneratorValues decodeValues(const std::string& text)
+{
+    const auto unescape = [](const std::string& in) {
+        std::string out;
+        for (std::size_t i = 0; i < in.size(); ++i) {
+            if (in[i] == '\\' && i + 1 < in.size()) {
+                ++i;
+                out += in[i] == 't' ? '\t' : in[i] == 'n' ? '\n' : in[i];
+            } else {
+                out += in[i];
+            }
+        }
+        return out;
+    };
+    GeneratorValues values;
+    std::size_t start = 0;
+    while (start < text.size()) {
+        std::size_t end = text.find('\n', start);
+        if (end == std::string::npos) {
+            end = text.size();
+        }
+        const std::string line = text.substr(start, end - start);
+        start = end + 1;
+        const std::size_t a = line.find('\t');
+        const std::size_t b = a == std::string::npos ? a : line.find('\t', a + 1);
+        if (b == std::string::npos) {
+            continue;
+        }
+        const std::string key = unescape(line.substr(a + 1, b - a - 1));
+        if (line[0] == 'n') {
+            values[key] = std::strtod(line.c_str() + b + 1, nullptr);
+        } else if (line[0] == 't') {
+            values.texts[key] = unescape(line.substr(b + 1));
+        }
+    }
+    return values;
+}
+
+std::vector<FeatureId> generatedGroup(const Document& doc, FeatureId lead)
+{
+    std::vector<FeatureId> ids;
+    if (lead == 0) {
+        return ids;
+    }
+    for (std::size_t i = 0; i < doc.featureCount(); ++i) {
+        if (doc.feature(i).origin.lead == lead) {
+            ids.push_back(doc.feature(i).id());
+        }
+    }
+    return ids;
 }
 
 void applyRecipe(Document& doc, const Recipe& recipe)

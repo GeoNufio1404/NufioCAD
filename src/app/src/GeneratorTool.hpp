@@ -19,12 +19,18 @@ class GeneratorTool final : public FeatureTool {
 
 public:
     GeneratorTool(document::Document& document, render::Viewport& viewport, const document::Generator& generator);
+    // Reabre el formulario de lo que ya sacó el generador: «lead» identifica ese resultado, y el formulario parte
+    // de sus respuestas y de su sufijo de parámetros.
+    GeneratorTool(document::Document& document, render::Viewport& viewport, const document::Generator& generator,
+                  document::FeatureId lead, document::GeneratorValues initial, std::string suffix);
 
     std::unique_ptr<document::Feature> build() const override { return nullptr; }
     void accept() override;
     void stopPreview() override;
 
     const document::Generator& generator() const { return generator_; }
+    // El resultado que se reabre (0: uno nuevo).
+    document::FeatureId lead() const { return lead_; }
     // La receta con los valores de ahora y nombres de parámetros que no choquen con los del documento.
     document::Recipe recipe() const;
 
@@ -46,6 +52,10 @@ private:
         QWidget* widget = nullptr;
     };
     const document::Generator& generator_;
+    document::FeatureId lead_ = 0;
+    document::GeneratorValues initial_;
+    bool hasInitial_ = false;
+    std::string suffix_;
     QFormLayout* form_ = nullptr;
     std::vector<Row> rows_;
     QTimer* timer_ = nullptr;

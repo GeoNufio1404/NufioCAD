@@ -1,4 +1,5 @@
 #include <nuf/commands/AddRecipe.hpp>
+#include <nuf/commands/ReplaceRecipe.hpp>
 #include <nuf/document/Document.hpp>
 #include <nuf/document/Generators.hpp>
 #include <nuf/document/Expression.hpp>
@@ -2272,4 +2273,136 @@ TEST_CASE("Las expresiones de ángulos están en grados", "[params]")
         }
     }
     REQUIRE(doc.result().bodies.size() == 1);
+}
+
+TEST_CASE("Las respuestas de un generador se guardan y se reabren", "[generator]")
+{
+    document::GeneratorValues values;
+    values["a"] = 1.5;
+    values["b"] = -7.0;
+    values.texts["t"] = "Hola\tmundo\n\\fin";
+    const document::GeneratorValues back = document::decodeValues(document::encodeValues(values));
+    REQUIRE(back.at("a") == 1.5);
+    REQUIRE(back.at("b") == -7.0);
+    REQUIRE(back.texts.at("t") == "Hola\tmundo\n\\fin");
+}
+
+TEST_CASE("Reabrir un generador cambia sus operaciones en su sitio y se puede deshacer", "[generator]")
+{
+    const document::Generator* lightbox = document::findGenerator("lightbox");
+    REQUIRE(lightbox != nullptr);
+    document::GeneratorValues values = lightbox->defaults();
+    values["cable"] = 0.0;
+    const auto make = [&](const document::GeneratorValues& v) {
+        document::Recipe recipe = lightbox->make(v, "");
+        recipe.origin = {"lightbox", "", document::encodeValues(v), 0};
+        return recipe;
+    };
+
+    Document doc;
+    commands::AddRecipe add(make(values), "Lightbox");
+    add.execute(doc);
+    const std::size_t count = doc.featureCount();
+    const FeatureId lead = doc.feature(0).origin.lead;
+    REQUIRE(lead != 0);
+    REQUIRE(doc.feature(0).id() == lead);
+    for (std::size_t i = 0; i < count; ++i) {
+        REQUIRE(doc.feature(i).origin.lead == lead);
+        REQUIRE(doc.feature(i).origin.generator == "lightbox");
+    }
+    REQUIRE(document::decodeValues(doc.feature(0).origin.values).at("cable") == 0.0);
+    REQUIRE(doc.feature(1).origin.values.empty());
+    REQUIRE(document::generatedGroup(doc, lead).size() == count);
+
+    // Otra medida: mismas operaciones, así que se sustituyen una a una y conservan su id.
+    std::vector<FeatureId> ids;
+    for (std::size_t i = 0; i < count; ++i) {
+        ids.push_back(doc.feature(i).id());
+    }
+    const auto oldVolume = doc.result().bodies[0].shape.volume();
+    values["pared"] = 4.0;
+    {
+        const document::Recipe recipe = make(values);
+        REQUIRE(commands::ReplaceRecipe::problem(doc, lead, recipe).empty());
+    }
+    commands::ReplaceRecipe inPlace(lead, make(values), "Lightbox");
+    inPlace.execute(doc);
+    REQUIRE(doc.featureCount() == count);
+    for (std::size_t i = 0; i < count; ++i) {
+        REQUIRE(doc.feature(i).id() == ids[i]);
+        REQUIRE(doc.status(ids[i]).health != Health::Error);
+    }
+    REQUIRE(doc.result().bodies.size() == 4);
+    REQUIRE(doc.result().bodies[0].shape.volume() != Catch::Approx(oldVolume));
+    REQUIRE(doc.bodyInfo().at(doc.result().bodies[0].key).name == "Caja");
+    REQUIRE(document::decodeValues(doc.feature(0).origin.values).at("pared") == 4.0);
+    for (const document::Parameter& p : doc.parameters()) {
+        if (p.name == "pared") {
+            REQUIRE(p.expression == "4");
+        }
+    }
+    inPlace.undo(doc);
+    REQUIRE(doc.result().bodies[0].shape.volume() == Catch::Approx(oldVolume));
+    REQUIRE(document::decodeValues(doc.feature(0).origin.values).at("pared") == 2.0);
+    inPlace.execute(doc);
+    REQUIRE(doc.result().bodies[0].shape.volume() != Catch::Approx(oldVolume));
+
+    // Con agujero para el cable hay más operaciones: se rehace el grupo entero (nada de fuera depende de él).
+    values["cable"] = 6.0;
+    commands::ReplaceRecipe rebuild(lead, make(values), "Lightbox");
+    REQUIRE(commands::ReplaceRecipe::problem(doc, lead, make(values)).empty());
+    rebuild.execute(doc);
+    REQUIRE(doc.featureCount() > count);
+    const FeatureId newLead = doc.feature(0).origin.lead;
+    REQUIRE(document::generatedGroup(doc, newLead).size() == doc.featureCount());
+    REQUIRE(doc.result().bodies.size() == 4);
+    for (std::size_t i = 0; i < doc.featureCount(); ++i) {
+        INFO(doc.feature(i).name());
+        REQUIRE(doc.status(doc.feature(i).id()).health != Health::Error);
+    }
+    REQUIRE(doc.bodyInfo().at(doc.result().bodies[0].key).name == "Caja");
+    REQUIRE(doc.bodyInfo().at(doc.result().bodies[0].key).component == "Lightbox");
+    const std::size_t grown = doc.featureCount();
+
+    // Se guarda y se vuelve a abrir con lo necesario para reabrirlo.
+    const auto path = std::filesystem::temp_directory_path() / "nuf_generador.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    REQUIRE(reopened.feature(0).origin.generator == "lightbox");
+    REQUIRE(reopened.feature(0).origin.lead == newLead);
+    REQUIRE(document::decodeValues(reopened.feature(0).origin.values).at("cable") == 6.0);
+
+    // Deshacer y rehacer devuelven lo mismo, con los mismos ids.
+    std::vector<FeatureId> grownIds;
+    for (std::size_t i = 0; i < grown; ++i) {
+        grownIds.push_back(doc.feature(i).id());
+    }
+    rebuild.undo(doc);
+    REQUIRE(doc.featureCount() == count);
+    REQUIRE(doc.result().bodies.size() == 4);
+    for (std::size_t i = 0; i < count; ++i) {
+        REQUIRE(doc.feature(i).id() == ids[i]);
+    }
+    rebuild.execute(doc);
+    REQUIRE(doc.featureCount() == grown);
+    for (std::size_t i = 0; i < grown; ++i) {
+        REQUIRE(doc.feature(i).id() == grownIds[i]);
+    }
+
+    // Si algo de fuera depende de lo generado, no se puede cambiar su estructura (sí las medidas).
+    auto pattern = std::make_unique<document::PatternFeature>();
+    pattern->body = doc.result().bodies[0].key;
+    pattern->count = 2;
+    pattern->spacing = 300.0;
+    doc.addFeature(std::move(pattern));
+    values["cable"] = 0.0;
+    REQUIRE_FALSE(commands::ReplaceRecipe::problem(doc, newLead, make(values)).empty());
+    values["cable"] = 6.0;
+    values["pared"] = 3.0;
+    REQUIRE(commands::ReplaceRecipe::problem(doc, newLead, make(values)).empty());
+    REQUIRE_FALSE(commands::ReplaceRecipe::problem(doc, 99999, make(values)).empty());
 }

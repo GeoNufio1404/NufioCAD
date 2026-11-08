@@ -58,6 +58,9 @@ struct Recipe {
     std::vector<std::unique_ptr<Feature>> features;
     std::vector<std::string> bodyNames;  // los de los cuerpos nuevos, en el orden en que salen
     std::string component;               // al que se agrupan (vacío: ninguno)
+    // De dónde sale (id del generador, sufijo y respuestas codificadas); lo pone quien arma la receta para que
+    // las operaciones queden marcadas y se pueda reabrir el formulario. «lead» lo pone el comando.
+    GeneratorOrigin origin;
 };
 
 class Generator {
@@ -79,12 +82,19 @@ public:
     GeneratorValues defaults() const;
 };
 
+// Las respuestas de un formulario como texto (para guardarlas en las operaciones) y de vuelta.
+std::string encodeValues(const GeneratorValues& values);
+GeneratorValues decodeValues(const std::string& text);
+
 // Todos los generadores.
 const std::vector<const Generator*>& generators();
 const Generator* findGenerator(const std::string& id);
 
 // El primer sufijo («», «_2», «_3»…) con el que ningún parámetro de la receta choca con los del documento.
 std::string freeSuffix(const Document& doc, const Generator& generator, const GeneratorValues& values);
+
+// Las operaciones que salieron de un mismo generador (las que tienen ese «lead»), en el orden del historial.
+std::vector<FeatureId> generatedGroup(const Document& doc, FeatureId lead);
 
 // Aplica la receta a un documento (parámetros, operaciones al final del historial y nombres de cuerpos).
 // Sirve para la vista previa en un documento vacío; el comando de la interfaz hace lo mismo con deshacer.

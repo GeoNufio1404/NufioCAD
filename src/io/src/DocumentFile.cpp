@@ -624,6 +624,10 @@ FeatureRow rowOf(const Feature& f)
     if (!f.expressions.empty()) {
         params["expressions"] = f.expressions;
     }
+    if (f.origin.lead != 0) {
+        params["origin"] = {{"generator", f.origin.generator}, {"suffix", f.origin.suffix},
+                            {"values", f.origin.values}, {"lead", f.origin.lead}};
+    }
     row.params = params.dump();
     return row;
 }
@@ -840,6 +844,11 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         for (const auto& [key, expression] : p.at("expressions").items()) {
             feature->expressions[key] = expression.get<std::string>();
         }
+    }
+    if (p.contains("origin")) {
+        const auto& o = p.at("origin");
+        feature->origin = {o.value("generator", std::string()), o.value("suffix", std::string()),
+                           o.value("values", std::string()), o.value("lead", FeatureId(0))};
     }
     return feature;
 }

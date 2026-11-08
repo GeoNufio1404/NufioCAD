@@ -2515,11 +2515,13 @@ void PatternTool::createFields(QFormLayout* form)
         axis_->addItem(f ? QString::fromStdString(f->name()) : QStringLiteral("Eje"));
         axisIds_.push_back(id);
     }
-    count_ = new QSpinBox();
+    count_ = new ExpressionSpinBox();
     count_->setRange(2, 200);
+    count_->setDecimals(0);
     count_->setValue(3);
-    count_->setSuffix(QStringLiteral(" copias en total"));
+    setUnit(count_, QStringLiteral("copias en total"));
     count_->setKeyboardTracking(false);
+    field("count", count_);
     spacing_ = lengthBox(30.0);
     field("spacing", spacing_);
     angle_ = angleBox(360.0, 360.0);
@@ -2533,7 +2535,7 @@ void PatternTool::createFields(QFormLayout* form)
             at = it != axisIds_.end() ? 3 + int(it - axisIds_.begin()) : 0;
         }
         axis_->setCurrentIndex(at);
-        count_->setValue(p->count);
+        count_->setValue(double(p->count));
         spacing_->setValue(p->spacing);
         angle_->setValue(p->angle / kDegree);
         operation_->setCurrentIndex(p->operation == document::Operation::NewBody ? 1 : 0);
@@ -2556,7 +2558,7 @@ void PatternTool::createFields(QFormLayout* form)
     for (QComboBox* box : {axis_, operation_}) {
         connect(box, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
     }
-    connect(count_, &QSpinBox::valueChanged, this, [this] { updatePreview(); });
+    connect(count_, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
     for (QDoubleSpinBox* box : {spacing_, angle_}) {
         connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
     }
@@ -2586,7 +2588,7 @@ std::unique_ptr<document::Feature> PatternTool::build() const
     } else {
         f->axis = axis_->currentIndex();
     }
-    f->count = count_->value();
+    f->count = int(std::lround(count_->value()));
     f->spacing = spacing_->value();
     f->angle = angle_->value() * kDegree;
     f->operation = operation_->currentIndex() == 1 ? document::Operation::NewBody : document::Operation::Join;
@@ -2601,7 +2603,7 @@ QString PatternTool::inputsText() const
     return QStringLiteral("Patrón %1 de «%2»: %3 en total")
         .arg(layout_->currentIndex() == 1 ? QStringLiteral("circular") : QStringLiteral("lineal"))
         .arg(bodyBox_->currentText())
-        .arg(count_->value());
+        .arg(int(std::lround(count_->value())));
 }
 
 } // namespace nuf::app
