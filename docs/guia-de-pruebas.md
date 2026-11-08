@@ -111,6 +111,19 @@ Necesitas un cuerpo (la caja de 40×25×10 de «Antes de empezar»). Los botones
 
 ---
 
+### Flecha de la medida que se edita (todas las herramientas con medidas)
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| F.1 | Sólido › **Caja**; haz clic en «Ancho» (o entra con el teclado) | En la vista sale una flecha azul turquesa **de doble punta** a lo largo del ancho de la caja; al escribir otro valor la flecha se alarga con la vista previa |
+| F.2 | Pasa a «Fondo», «Alto» y «Posición Z» | La flecha cambia a cada medida (fondo, alto, y la separación del plano en Z) |
+| F.3 | Haz clic fuera del cuadro (por ejemplo en el vacío del panel o en la vista) | La flecha desaparece |
+| F.4 | **Extruir** un perfil: haz clic en «Distancia», «Distancia 2» y «Desfase inicial» | Una flecha de doble punta por cada una, desde el perfil a lo largo de la normal (centrada si la dirección es Simétrica); sigue existiendo la flecha naranja para arrastrar |
+| F.5 | **Cilindro** (diámetro y alto), **Plano** (distancia), **Mover cuerpo** (X/Y/Z), **Patrón** (distancia entre copias) y **Rosca** (diámetro y largo) | La flecha marca la medida que editas; en Mover y Patrón sale desde el centro del cuerpo |
+| F.6 | Cambia de plano o elige una cara en Caja/Cilindro/Rosca | La flecha sigue al plano (gira con él) |
+| F.7 | Acepta o cancela la herramienta | No queda ninguna flecha en la vista |
+
+
 ## Fase 6 — Geometría de referencia y parámetros
 
 | # | Qué hacer | Qué debería pasar |

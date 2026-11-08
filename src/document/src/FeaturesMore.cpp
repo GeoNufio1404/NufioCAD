@@ -89,6 +89,12 @@ sketch::Plane primitivePlane(sketch::Plane plane, double x, double y, double z, 
 
 } // namespace
 
+sketch::Plane attachmentPlane(const ModelState& state, const SketchAttachment& attachment)
+{
+    std::optional<std::string> warning;
+    return resolvePlane(state, attachment, "", "", warning);
+}
+
 std::optional<std::string> BoxFeature::compute(ModelState& state) const
 {
     std::optional<std::string> warning;

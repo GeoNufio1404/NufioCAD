@@ -15,6 +15,8 @@
 #include <QListWidget>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QEvent>
+#include <QLineEdit>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -24,6 +26,13 @@
 #include "FeatureToolsCommon.hpp"
 
 namespace nuf::app {
+
+namespace {
+QLineEdit* lineOf(QDoubleSpinBox* box)
+{
+    return box->findChild<QLineEdit*>(QString(), Qt::FindDirectChildrenOnly);
+}
+} // namespace
 
 // --- Base ------------------------------------------------------------------------
 
@@ -47,6 +56,7 @@ FeatureTool::~FeatureTool()
 {
     viewport_.clearToolPreview();
     viewport_.hideDistanceHandle();
+    viewport_.hideDimensionArrow();
     viewport_.setAdditiveSelection(false);
     if (panel_) {
         panel_->deleteLater();
@@ -71,6 +81,12 @@ void FeatureTool::start()
     layout->addLayout(form);
     updating_ = true;
     createFields(form);
+    for (const auto& [key, box] : arrowBoxes_) {
+        box->installEventFilter(this);
+        if (lineOf(box) != nullptr) {
+            lineOf(box)->installEventFilter(this);
+        }
+    }
     // Al editar, vuelven las expresiones que tenía la operación.
     if (original_) {
         for (const auto& [key, box] : fields_) {
@@ -131,6 +147,8 @@ void FeatureTool::start()
         selectionChanged(viewport_.modelSelection());
     }
     updatePreview();
+    // El panel aún no se mostró: si algún cuadro nace con el foco (Extruir), su flecha sale cuando ya lo tiene.
+    QTimer::singleShot(150, this, [this] { refreshArrow(); });
 }
 
 std::unique_ptr<document::Feature> FeatureTool::make() const
@@ -152,6 +170,7 @@ void FeatureTool::stopPreview()
         previewTimer_->stop();
     }
     updating_ = true;  // updatePreview() ya no hace nada
+    viewport_.hideDimensionArrow();
 }
 
 void FeatureTool::accept()
@@ -372,6 +391,72 @@ void FeatureTool::updatePreview()
         break;
     }
     afterPreview(before());
+    refreshArrow();
+}
+
+std::optional<sketch::Vec3> FeatureTool::bodyCenter(const std::string& key) const
+{
+    for (const document::Body& body : before().bodies) {
+        if (body.key == key && !body.shape.isNull()) {
+            const geometry::Box box = body.shape.bounds();
+            return sketch::Vec3{(box.min.x + box.max.x) / 2.0, (box.min.y + box.max.y) / 2.0, (box.min.z + box.max.z) / 2.0};
+        }
+    }
+    return std::nullopt;
+}
+
+FeatureTool::Arrow FeatureTool::arrowAlong(const sketch::Vec3& from, const sketch::Vec3& dir, double length)
+{
+    return {from, moved(from, dir, length)};
+}
+
+// --- Flecha de la medida que se edita -----------------------------------------------
+
+bool FeatureTool::eventFilter(QObject* watched, QEvent* event)
+{
+    if (event->type() == QEvent::FocusIn || event->type() == QEvent::FocusOut) {
+        for (const auto& [key, box] : arrowBoxes_) {
+            if (watched != box && watched != lineOf(box)) {
+                continue;
+            }
+            if (event->type() == QEvent::FocusIn) {
+                focusedKey_ = key;
+            } else if (focusedKey_ == key) {
+                focusedKey_.clear();
+            }
+            // Al pasar de un cuadro a otro el foco sale de uno y entra en el otro: se decide cuando ya asentó.
+            QTimer::singleShot(0, this, [this] { refreshArrow(); });
+            break;
+        }
+    }
+    return QObject::eventFilter(watched, event);
+}
+
+void FeatureTool::refreshArrow()
+{
+    if (!panel_) {
+        return;
+    }
+    // Lo que tiene el foco ahora manda (el cuadro enfocado puede haber cambiado sin que llegara su evento).
+    std::string key;
+    for (const auto& [name, box] : arrowBoxes_) {
+        if (box->hasFocus() || (lineOf(box) != nullptr && lineOf(box)->hasFocus())) {
+            key = name;
+            break;
+        }
+    }
+    focusedKey_ = key;
+    if (!key.empty() && !updating_) {
+        try {
+            if (const auto arrow = dimensionArrow(key)) {
+                viewport_.showDimensionArrow(arrow->first, arrow->second);
+                return;
+            }
+        } catch (const std::exception&) {
+            // Sin datos para dibujarla: se quita.
+        }
+    }
+    viewport_.hideDimensionArrow();
 }
 
 } // namespace nuf::app

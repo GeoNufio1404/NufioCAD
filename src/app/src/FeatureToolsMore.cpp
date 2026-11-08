@@ -286,6 +286,24 @@ std::unique_ptr<document::Feature> MoveTool::build() const
     return f;
 }
 
+std::optional<FeatureTool::Arrow> MoveTool::dimensionArrow(const std::string& key) const
+{
+    const auto center = bodyCenter(body_);
+    if (!center) {
+        return std::nullopt;
+    }
+    if (key == "x") {
+        return arrowAlong(*center, {1.0, 0.0, 0.0}, x_->value());
+    }
+    if (key == "y") {
+        return arrowAlong(*center, {0.0, 1.0, 0.0}, y_->value());
+    }
+    if (key == "z") {
+        return arrowAlong(*center, {0.0, 0.0, 1.0}, z_->value());
+    }
+    return std::nullopt;
+}
+
 QString MoveTool::inputsText() const
 {
     if (bodyBox_->count() == 0) {
@@ -664,6 +682,19 @@ QString ThreadTool::inputsText() const
         .arg(units.formatWithUnit(spec.diameter), units.formatWithUnit(geometry::threadMinorDiameter(spec)));
 }
 
+std::optional<FeatureTool::Arrow> ThreadTool::dimensionArrow(const std::string& key) const
+{
+    const sketch::Plane plane = document::attachmentPlane(before(), placementAttachment(placement_));
+    const sketch::Vec3 origin = plane.toWorld({placement_.x->value(), placement_.y->value()});
+    if (key == "length") {
+        return arrowAlong(origin, plane.normal, length_->value());
+    }
+    if (key == "diameter") {
+        return arrowAlong(moved(origin, plane.xAxis, -diameter_->value() / 2.0), plane.xAxis, diameter_->value());
+    }
+    return std::nullopt;
+}
+
 bool ThreadTool::removesMaterial() const
 {
     return operation_ != nullptr && operation_->currentIndex() == 2;
@@ -778,6 +809,28 @@ std::unique_ptr<document::Feature> PatternTool::build() const
     f->angle = angle_->value() * kDegree;
     f->operation = operation_->currentIndex() == 1 ? document::Operation::NewBody : document::Operation::Join;
     return f;
+}
+
+std::optional<FeatureTool::Arrow> PatternTool::dimensionArrow(const std::string& key) const
+{
+    const auto center = bodyCenter(body_);
+    if (key != "spacing" || !center) {
+        return std::nullopt;
+    }
+    sketch::Vec3 dir{1.0, 0.0, 0.0};
+    const int at = axis_->currentIndex();
+    if (at == 1) {
+        dir = {0.0, 1.0, 0.0};
+    } else if (at == 2) {
+        dir = {0.0, 0.0, 1.0};
+    } else if (at >= 3 && std::size_t(at - 3) < axisIds_.size()) {
+        const auto it = before().axes.find(axisIds_[std::size_t(at - 3)]);
+        if (it == before().axes.end()) {
+            return std::nullopt;
+        }
+        dir = it->second.direction;
+    }
+    return arrowAlong(*center, dir, spacing_->value());
 }
 
 QString PatternTool::inputsText() const

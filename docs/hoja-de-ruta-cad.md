@@ -481,6 +481,8 @@ Resumen de todo lo pendiente que no son pruebas manuales; el detalle sigue en el
 - [ ] Unidades restantes: Medir, avisos de impresión, lista de parámetros, área/volumen, por documento.
 - [ ] Interfaz Fusion: paleta flotante del sketch, barra superior, menú radial, valores junto al cursor en Extruir/Revolución.
 
+- [x] Flecha de doble punta en la vista para la medida que se edita (pedido del usuario): `FeatureTool::track/dimensionArrow` + `Viewport::showDimensionArrow`; hecha para Extruir (distancia, distancia 2, desfase), Caja, Cilindro, Plano, Mover, Patrón (distancia) y Rosca (diámetro, largo). Falta probarla a mano (guía F.1–F.7). **Pendiente:** Revolución (ángulo, con un arco), Redondeo/Chaflán (tamaño), Vaciado (espesor), Agujero (diámetro, profundidad), Engranaje, Espejo, Barrido/Loft, Unión, Combinar, Patrón circular (ángulo), la posición X/Y de la colocación, y los cuadros de los generadores (que no son una herramienta de operación).
+
 **Oleada 4 — Ampliaciones de modelado**
 - [ ] Repetir y reflejar operaciones (no solo cuerpos); patrón por trayectoria; espejo de varios cuerpos.
 - [ ] Redondeo/chaflán: dos distancias, ángulo, radio variable, redondear una cara entera.

@@ -295,6 +295,45 @@ void ExtrudeTool::afterPreview(const document::ModelState& state)
     viewport_.showDistanceHandle(origin, n, distance1_->value());
 }
 
+std::optional<FeatureTool::Arrow> ExtrudeTool::dimensionArrow(const std::string& key) const
+{
+    // La misma base que la flecha de arrastre: centro del primer perfil (o de la cara) y su normal.
+    const document::ModelState& state = before();
+    std::optional<std::pair<sketch::Vec3, sketch::Vec3>> base;
+    if (!profiles_.empty()) {
+        const auto out = state.sketches.find(profiles_.front().sketch);
+        if (out != state.sketches.end()) {
+            if (const auto profile = document::resolveProfile(sketch::findProfiles(*out->second.sketch), profiles_.front())) {
+                base = std::pair{out->second.plane.toWorld(profileCenter(*profile)), out->second.plane.normal};
+            }
+        }
+    } else if (const auto hit = state.findFace(face_)) {
+        const geometry::Shape& shape = state.bodies[hit->body].shape;
+        if (const auto plane = shape.facePlane(hit->face)) {
+            base = std::pair{shape.faceCenter(hit->face), plane->normal};
+        }
+    }
+    if (!base) {
+        return std::nullopt;
+    }
+    const sketch::Vec3 n = base->second;
+    const sketch::Vec3 start = moved(base->first, n, offset_->value());
+    if (key == "startOffset") {
+        return arrowAlong(base->first, n, offset_->value());
+    }
+    if (key == "distance") {
+        if (direction_->currentIndex() == int(geometry::ExtrudeDirection::Symmetric)) {
+            const double half = distance1_->value() / 2.0;
+            return Arrow{moved(start, n, -half), moved(start, n, half)};
+        }
+        return arrowAlong(start, n, distance1_->value());
+    }
+    if (key == "distance2") {
+        return arrowAlong(start, sketch::Vec3{-n.x, -n.y, -n.z}, distance2_->value());
+    }
+    return std::nullopt;
+}
+
 QString ExtrudeTool::inputsText() const
 {
     if (!profiles_.empty()) {

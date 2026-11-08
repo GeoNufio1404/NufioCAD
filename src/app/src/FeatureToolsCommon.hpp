@@ -86,4 +86,10 @@ inline sketch::Vec2 profileCenter(const sketch::Profile& profile)
 }
 
 
+// El punto «p» movido «t» a lo largo de «dir».
+inline sketch::Vec3 moved(const sketch::Vec3& p, const sketch::Vec3& dir, double t)
+{
+    return {p.x + dir.x * t, p.y + dir.y * t, p.z + dir.z * t};
+}
+
 } // namespace nuf::app

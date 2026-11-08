@@ -592,6 +592,43 @@ public:
         handleDragging = false;
     }
 
+    // --- Flecha de medida (doble punta) -----------------------------------------
+
+    void showDimensionArrow(const sketch::Vec3& from, const sketch::Vec3& to)
+    {
+        hideDimensionArrow();
+        const gp_Pnt a = toPnt(from);
+        const gp_Pnt b = toPnt(to);
+        const double length = a.Distance(b);
+        if (length < 1e-6) {
+            return;
+        }
+        const gp_Dir dir(gp_Vec(a, b));
+        // Puntas de tamaño fijo en pantalla (algo menores si la flecha es corta).
+        const double head = std::min(18.0 * pixelSize(), 0.4 * length);
+        const double radius = std::max(1.2 * pixelSize(), 1e-6);
+        BRep_Builder builder;
+        TopoDS_Compound arrow;
+        builder.MakeCompound(arrow);
+        const double shaft = std::max(length - 2.0 * head, 1e-6);
+        builder.Add(arrow, BRepPrimAPI_MakeCylinder(gp_Ax2(a.Translated(gp_Vec(dir) * head), dir), radius, shaft).Shape());
+        builder.Add(arrow, BRepPrimAPI_MakeCone(gp_Ax2(a.Translated(gp_Vec(dir) * head), dir.Reversed()), head * 0.36, 0.0, head).Shape());
+        builder.Add(arrow, BRepPrimAPI_MakeCone(gp_Ax2(b.Translated(gp_Vec(dir) * -head), dir), head * 0.36, 0.0, head).Shape());
+        dimArrow = new AIS_Shape(arrow);
+        dimArrow->SetColor(rgb(0x3F, 0xD0, 0xE0));
+        dimArrow->Attributes()->SetFaceBoundaryDraw(false);
+        dimArrow->SetZLayer(Graphic3d_ZLayerId_Topmost);
+        context->Display(dimArrow, AIS_Shaded, -1, false);
+    }
+
+    void hideDimensionArrow()
+    {
+        if (!dimArrow.IsNull()) {
+            context->Remove(dimArrow, false);
+            dimArrow.Nullify();
+        }
+    }
+
     void removeHandle()
     {
         if (!handle.IsNull()) {
@@ -1225,6 +1262,7 @@ public:
     double originSize = 0.0;
     std::array<double, 3> originSigns{1.0, 1.0, 1.0};
     Handle(AIS_Shape) handle;  // flecha de distancia
+    Handle(AIS_Shape) dimArrow;  // flecha de doble punta de la medida en edición
     double handleDistance = 0.0;
     bool handleDragging = false;
     double handleGrab = 0.0;  // parámetro del eje donde se agarró, menos la distancia

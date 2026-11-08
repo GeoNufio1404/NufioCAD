@@ -449,4 +449,8 @@ public:
     std::vector<FeatureId> dependencies() const override { return {}; }
 };
 
+// El plano en el que está colocada una operación (origen, plano de construcción o cara), tal como lo calcularía
+// ella; si ya no se encuentra, el último que tuvo. Para que la interfaz dibuje ayudas sobre él.
+sketch::Plane attachmentPlane(const ModelState& state, const SketchAttachment& attachment);
+
 } // namespace nuf::document

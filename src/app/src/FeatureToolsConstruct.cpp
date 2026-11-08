@@ -236,6 +236,20 @@ std::unique_ptr<document::Feature> PlaneTool::build() const
     return f;
 }
 
+std::optional<FeatureTool::Arrow> PlaneTool::dimensionArrow(const std::string& key) const
+{
+    if (key != "offset") {
+        return std::nullopt;
+    }
+    const auto feature = build();
+    const auto* plane = dynamic_cast<const document::ConstructionPlaneFeature*>(feature.get());
+    if (plane == nullptr) {
+        return std::nullopt;
+    }
+    const sketch::Plane base = document::attachmentPlane(before(), plane->base);
+    return arrowAlong(base.origin, base.normal, offset_->value());
+}
+
 QString PlaneTool::inputsText() const
 {
     if (base_->currentIndex() == 3 && face_.empty()) {
@@ -572,6 +586,30 @@ bool BoxTool::removesMaterial() const
     return operation_ != nullptr && operation_->currentIndex() == 2;
 }
 
+std::optional<FeatureTool::Arrow> BoxTool::dimensionArrow(const std::string& key) const
+{
+    const sketch::Plane plane = document::attachmentPlane(before(), placementAttachment(placement_));
+    const sketch::Vec3 point = plane.toWorld({placement_.x->value(), placement_.y->value()});
+    const double height = height_->value();
+    if (key == "z") {
+        return arrowAlong(point, plane.normal, z_->value());
+    }
+    sketch::Vec3 corner = moved(point, plane.normal, z_->value() - (symmetric_->isChecked() ? height / 2.0 : 0.0));
+    if (centered_->isChecked()) {
+        corner = moved(moved(corner, plane.xAxis, -width_->value() / 2.0), plane.yAxis, -depth_->value() / 2.0);
+    }
+    if (key == "width") {
+        return arrowAlong(corner, plane.xAxis, width_->value());
+    }
+    if (key == "depth") {
+        return arrowAlong(corner, plane.yAxis, depth_->value());
+    }
+    if (key == "height") {
+        return arrowAlong(corner, plane.normal, height);
+    }
+    return std::nullopt;
+}
+
 QString BoxTool::inputsText() const
 {
     const Units& units = Units::instance();
@@ -635,6 +673,24 @@ std::unique_ptr<document::Feature> CylinderTool::build() const
     f->symmetric = symmetric_->isChecked();
     f->operation = primitiveOperation(operation_->currentIndex());
     return f;
+}
+
+std::optional<FeatureTool::Arrow> CylinderTool::dimensionArrow(const std::string& key) const
+{
+    const sketch::Plane plane = document::attachmentPlane(before(), placementAttachment(placement_));
+    const sketch::Vec3 point = plane.toWorld({placement_.x->value(), placement_.y->value()});
+    const double height = height_->value();
+    if (key == "z") {
+        return arrowAlong(point, plane.normal, z_->value());
+    }
+    const sketch::Vec3 center = moved(point, plane.normal, z_->value() - (symmetric_->isChecked() ? height / 2.0 : 0.0));
+    if (key == "diameter") {
+        return arrowAlong(moved(center, plane.xAxis, -diameter_->value() / 2.0), plane.xAxis, diameter_->value());
+    }
+    if (key == "height") {
+        return arrowAlong(center, plane.normal, height);
+    }
+    return std::nullopt;
 }
 
 bool CylinderTool::removesMaterial() const

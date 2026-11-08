@@ -245,6 +245,20 @@ void Viewport::showDistanceHandle(const sketch::Vec3& origin, const sketch::Vec3
     update();
 }
 
+void Viewport::showDimensionArrow(const sketch::Vec3& from, const sketch::Vec3& to)
+{
+    impl_->showDimensionArrow(from, to);
+    impl_->view->Invalidate();
+    update();
+}
+
+void Viewport::hideDimensionArrow()
+{
+    impl_->hideDimensionArrow();
+    impl_->view->Invalidate();
+    update();
+}
+
 void Viewport::hideDistanceHandle()
 {
     impl_->hideDistanceHandle();

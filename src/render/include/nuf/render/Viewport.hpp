@@ -152,6 +152,10 @@ public:
     // distanceHandleDragged con la nueva distancia.
     void showDistanceHandle(const sketch::Vec3& origin, const sketch::Vec3& direction, double distance);
     void hideDistanceHandle();
+    // Flecha de doble punta entre dos puntos del modelo: señala la medida que se está escribiendo en el panel de una
+    // herramienta. No se puede arrastrar ni seleccionar.
+    void showDimensionArrow(const sketch::Vec3& from, const sketch::Vec3& to);
+    void hideDimensionArrow();
     bool isSketching() const;
 
     // Herramienta de navegación (barra inferior): mientras está activa, el
