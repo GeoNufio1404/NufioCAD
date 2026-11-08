@@ -2,6 +2,8 @@
 # QOpenGLWidget. Junto con geometry/, es el único módulo que incluye OCCT.
 nuf_add_library(render SOURCES
     src/Viewport.cpp
+    src/ViewportImpl.hpp
+    src/ViewportDrawing.hpp
     include/nuf/render/Viewport.hpp)   # listada para que AUTOMOC la procese
 
 set_target_properties(nuf_render PROPERTIES AUTOMOC ON)

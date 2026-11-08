@@ -6,6 +6,9 @@ set(CMAKE_AUTORCC ON)
 add_executable(nuf_app
     src/main.cpp
     src/MainWindow.cpp
+    src/MainWindowMenus.cpp
+    src/MainWindowView.cpp
+    src/MainWindowCommon.hpp
     src/MainWindowFiles.cpp
     src/MainWindow.hpp
     src/FeatureTools.cpp

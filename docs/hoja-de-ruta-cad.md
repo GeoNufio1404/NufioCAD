@@ -468,7 +468,7 @@ Resumen de todo lo pendiente que no son pruebas manuales; el detalle sigue en el
 - [ ] Prueba de interfaz en el CI (Xvfb) y que compruebe también cómo se ve.
 - [ ] Medir en Release (bloqueado por Smart App Control; probar en otra máquina o firmar).
 - [x] Partir `FeatureTools.cpp` (en 4 archivos más `FeatureToolsCommon.hpp`) y `Features.cpp` (en 2 más `FeaturesCommon.hpp`): solo se movió código, sin cambiar nada.
-- [ ] Partir `Viewport.cpp` (2750 líneas; su `Impl` en el espacio anónimo lo comparte todo, hay que sacarlo a una cabecera privada) y `MainWindow.cpp` (1800).
+- [x] Partir `Viewport.cpp` (queda el widget, ~600 líneas; el `Impl` y los dibujos pasaron a `ViewportImpl.hpp` y `ViewportDrawing.hpp`, privadas) y `MainWindow.cpp` (en `MainWindowMenus.cpp`, `MainWindowView.cpp` y `MainWindowCommon.hpp`). Solo se movió código; pruebas y prueba de interfaz pasan. Pendiente: partir `ViewportImpl.hpp` (1700 líneas) por responsabilidades (sketch, selección, vista previa).
 - [x] `hasHeavySurface`/`hasMesh` sin recorrer todas las caras en cada refresco: el resultado se guarda en la propia forma (`Shape::Impl`, inmutable): «pesada» se calcula una vez y «con malla» se recuerda cuando es cierta.
 - [ ] Limitaciones de Fase 2 y 3 (ver tabla de Estado): lo proyectado y el texto bloqueados; recortar/extender/desfase solo con líneas, arcos y círculos; elegir qué cuerpos participan en unir/cortar; «hasta una cara» con caras no planas; flecha en la revolución.
 
