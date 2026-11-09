@@ -188,9 +188,12 @@ protected:
     void afterPreview(const document::ModelState& before) override;
     QString inputsText() const override;
     std::optional<Arrow> dimensionArrow(const std::string& key) const override;
+    std::optional<Arc> dimensionArc(const std::string& key) const override;
     bool removesMaterial() const override;
 
 private:
+    // Centro y normal de la base de la extrusión (el primer perfil o la cara elegida).
+    std::optional<std::pair<sketch::Vec3, sketch::Vec3>> baseOf() const;
     void updateVisibility();
     // Unir o cortar según hacia dónde va la extrusión (si no se eligió a mano).
     void chooseOperation();
@@ -234,6 +237,7 @@ protected:
     void createFields(QFormLayout* form) override;
     void selectionChanged(const render::ModelSelection& selection) override;
     QString inputsText() const override;
+    std::optional<Arc> dimensionArc(const std::string& key) const override;
     bool removesMaterial() const override;
 
 private:
@@ -433,6 +437,7 @@ protected:
     void selectionChanged(const render::ModelSelection& selection) override;
     QString inputsText() const override;
     std::optional<Arrow> dimensionArrow(const std::string& key) const override;
+    std::optional<Arc> dimensionArc(const std::string& key) const override;
     bool removesMaterial() const override { return false; }
 
 private:
@@ -621,11 +626,15 @@ protected:
     void createFields(QFormLayout* form) override;
     void selectionChanged(const render::ModelSelection& selection) override;
     QString inputsText() const override;
+    std::optional<Arrow> dimensionArrow(const std::string& key) const override;
+    std::optional<Arc> dimensionArc(const std::string& key) const override;
     bool removesMaterial() const override { return false; }
 
 private:
     void updateVisibility();
     QString faceText(const geometry::ElementRef& ref) const;
+    // Centro y normal de la cara fija (donde se miden la distancia, el ángulo y el desplazamiento).
+    std::optional<std::pair<sketch::Vec3, sketch::Plane>> fixedFace() const;
 
     geometry::ElementRef fixed_;
     geometry::ElementRef moving_;

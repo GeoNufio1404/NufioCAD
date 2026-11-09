@@ -89,9 +89,13 @@ public:
 
     std::map<std::string, ArrowSpec> arrows() const override
     {
+        const auto topCorner = [](const GeneratorValues& v) { return std::array<double, 3>{0.0, 0.0, v.at("profundidad")}; };
+        ArrowSpec corner{0, 'x', false};
+        corner.at = topCorner;  // el radio de la esquina, a lo largo del borde de arriba que sale de ella
         return {{"ancho", {0, 'x', false}}, {"diametro", {0, 'x', false}}, {"alto", {0, 'y', false}},
                 {"profundidad", {0, 'z', false}}, {"pared", {0, 'x', true}}, {"fondo", {0, 'z', false}},
-                {"frente", {3, 'z', false}}, {"labio", {2, 'z', false}}};
+                {"frente", {3, 'z', false}}, {"labio", {2, 'z', false}}, {"labio_pared", {2, 'x', false}},
+                {"esquina", corner}};
     }
 
     Recipe make(const GeneratorValues& values, const std::string& suffix) const override
@@ -272,8 +276,25 @@ public:
 
     std::map<std::string, ArrowSpec> arrows() const override
     {
+        // Los postes están en las cuatro esquinas, por dentro: se marca el de la esquina de X e Y máximos, en lo alto.
+        const auto post = [](const char* heightKey, int body) {
+            ArrowSpec spec{body, 'x', false, true};
+            spec.at = [heightKey](const GeneratorValues& v) {
+                const double inset = v.at("pared") + v.at("poste") / 2.0 - 0.5;
+                return std::array<double, 3>{v.at("ancho") - inset, v.at("fondo") - inset, v.at(heightKey)};
+            };
+            return spec;
+        };
+        ArrowSpec corner{0, 'x', false};
+        corner.at = [](const GeneratorValues& v) { return std::array<double, 3>{0.0, 0.0, v.at("alto")}; };
+        ArrowSpec lipWall{1, 'x', false};
+        lipWall.at = [](const GeneratorValues& v) {
+            return std::array<double, 3>{v.at("pared") + v.at("holgura"), kCenter, v.at("tapa") + v.at("labio") / 2.0};
+        };
         return {{"ancho", {0, 'x', false}}, {"fondo", {0, 'y', false}}, {"alto", {0, 'z', false}},
-                {"pared", {0, 'x', true}}, {"base", {0, 'z', false}}, {"tapa", {1, 'z', false}}, {"labio", {1, 'z', true}}};
+                {"pared", {0, 'x', true}}, {"base", {0, 'z', false}}, {"tapa", {1, 'z', false}}, {"labio", {1, 'z', true}},
+                {"esquina", corner}, {"labio_pared", lipWall}, {"poste", post("alto", 0)}, {"tornillo", post("alto", 0)},
+                {"pasante", post("tapa", 1)}};
     }
 
     Recipe make(const GeneratorValues& values, const std::string& suffix) const override
@@ -444,7 +465,24 @@ public:
                 length("agujero", "Agujero de la anilla", 5.0, 2.0, 40.0, {}, "tipo", 1)};
     }
 
-    std::map<std::string, ArrowSpec> arrows() const override { return {{"grosor", {0, 'z', false}}, {"relieve", {1, 'z', false}}}; }
+    std::map<std::string, ArrowSpec> arrows() const override
+    {
+        // En un llavero la placa empieza a la derecha de la anilla, que sobresale (anilla − 2 mm) por la izquierda.
+        ArrowSpec margin{0, 'x', false};
+        margin.at = [](const GeneratorValues& v) {
+            return std::array<double, 3>{v.at("tipo") >= 0.5 ? v.at("anilla") - 2.0 : 0.0, kCenter, v.at("grosor")};
+        };
+        ArrowSpec corner{0, 'x', false};
+        corner.at = [](const GeneratorValues& v) {
+            return std::array<double, 3>{v.at("tipo") >= 0.5 ? v.at("anilla") - 2.0 : 0.0, 0.0, v.at("grosor")};
+        };
+        ArrowSpec ring{0, 'x', false};
+        ring.at = [](const GeneratorValues& v) { return std::array<double, 3>{0.0, kCenter, v.at("grosor")}; };
+        ArrowSpec hole{0, 'x', false, true};
+        hole.at = [](const GeneratorValues& v) { return std::array<double, 3>{v.at("anilla") / 2.0, kCenter, v.at("grosor")}; };
+        return {{"grosor", {0, 'z', false}}, {"relieve", {1, 'z', false}}, {"margen", margin}, {"esquina", corner},
+                {"anilla", ring}, {"agujero", hole}};
+    }
 
     Recipe make(const GeneratorValues& values, const std::string& suffix) const override
     {
@@ -635,7 +673,19 @@ public:
 
     std::map<std::string, ArrowSpec> arrows() const override
     {
-        return {{"ancho_rueda", {0, 'z', false}}, {"agujero_1", {0, 'x', false, true}}, {"agujero_2", {1, 'x', false, true}}};
+        // Los diámetros van centrados en la rueda (los dientes son simétricos, así que el centro de la caja es el eje).
+        const auto centeredOn = [](int body, std::function<double(const GeneratorValues&)> length = {}) {
+            ArrowSpec spec{body, 'x', false, true};
+            spec.at = [](const GeneratorValues&) { return std::array<double, 3>{kCenter, kCenter, kCenter}; };
+            spec.length = std::move(length);
+            return spec;
+        };
+        const auto pitch = [](const char* teeth) {
+            return [teeth](const GeneratorValues& v) { return v.at("modulo") * v.at(teeth); };
+        };
+        return {{"ancho_rueda", {0, 'z', false}}, {"agujero_1", centeredOn(0)}, {"agujero_2", centeredOn(1)},
+                {"modulo", centeredOn(0, pitch("dientes_1"))}, {"dientes_1", centeredOn(0, pitch("dientes_1"))},
+                {"dientes_2", centeredOn(1, pitch("dientes_2"))}};
     }
 
     Recipe make(const GeneratorValues& values, const std::string& suffix) const override

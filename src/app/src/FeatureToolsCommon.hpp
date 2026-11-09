@@ -13,6 +13,7 @@
 #include <QDoubleSpinBox>
 
 #include <algorithm>
+#include <cmath>
 #include <initializer_list>
 #include <numbers>
 
@@ -90,6 +91,39 @@ inline sketch::Vec2 profileCenter(const sketch::Profile& profile)
 inline sketch::Vec3 moved(const sketch::Vec3& p, const sketch::Vec3& dir, double t)
 {
     return {p.x + dir.x * t, p.y + dir.y * t, p.z + dir.z * t};
+}
+
+inline sketch::Vec3 cross(const sketch::Vec3& a, const sketch::Vec3& b)
+{
+    return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
+}
+
+inline double dot(const sketch::Vec3& a, const sketch::Vec3& b)
+{
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+inline sketch::Vec3 normalized(const sketch::Vec3& v)
+{
+    const double length = std::sqrt(dot(v, v));
+    return length < 1e-12 ? v : sketch::Vec3{v.x / length, v.y / length, v.z / length};
+}
+
+inline sketch::Vec3 minus(const sketch::Vec3& a, const sketch::Vec3& b)
+{
+    return {a.x - b.x, a.y - b.y, a.z - b.z};
+}
+
+// El punto «p» girado «angle» (rad) alrededor de la recta que pasa por «center» con dirección «axis» (unitaria).
+inline sketch::Vec3 rotatedAbout(const sketch::Vec3& p, const sketch::Vec3& center, const sketch::Vec3& axis, double angle)
+{
+    const sketch::Vec3 v = minus(p, center);
+    const double c = std::cos(angle);
+    const double s = std::sin(angle);
+    const sketch::Vec3 k = cross(axis, v);
+    const double d = dot(axis, v) * (1.0 - c);
+    return {center.x + v.x * c + k.x * s + axis.x * d, center.y + v.y * c + k.y * s + axis.y * d,
+            center.z + v.z * c + k.z * s + axis.z * d};
 }
 
 } // namespace nuf::app

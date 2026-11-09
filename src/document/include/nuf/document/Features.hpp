@@ -453,4 +453,8 @@ public:
 // ella; si ya no se encuentra, el último que tuvo. Para que la interfaz dibuje ayudas sobre él.
 sketch::Plane attachmentPlane(const ModelState& state, const SketchAttachment& attachment);
 
+// La recta de un eje (de origen, de un sketch, de construcción o de una arista) tal como la usaría una revolución;
+// lanza FeatureError si ya no existe. Para que la interfaz dibuje ayudas alrededor de ella.
+geometry::Axis axisOf(const ModelState& state, const AxisRef& axis);
+
 } // namespace nuf::document

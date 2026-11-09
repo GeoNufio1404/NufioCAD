@@ -51,12 +51,14 @@ void ExtrudeTool::createFields(QFormLayout* form)
     distance1_ = lengthBox(1.0);
     field("distance", distance1_);
     taper1_ = angleBox(0.0, 89.0);
+    track("taper", taper1_);
     target1_ = new QPushButton(QStringLiteral("Elegir cara de destino"));
     extent2_ = extentCombo();
     distance2_ = lengthBox(1.0);
     field("distance2", distance2_);
     distance2_->setMinimum(0.0);
     taper2_ = angleBox(0.0, 89.0);
+    track("taper2", taper2_);
     target2_ = new QPushButton(QStringLiteral("Elegir cara de destino"));
     offset_ = lengthBox(0.0);
     field("startOffset", offset_);
@@ -295,7 +297,27 @@ void ExtrudeTool::afterPreview(const document::ModelState& state)
     viewport_.showDistanceHandle(origin, n, distance1_->value());
 }
 
-std::optional<FeatureTool::Arrow> ExtrudeTool::dimensionArrow(const std::string& key) const
+std::optional<FeatureTool::Arc> ExtrudeTool::dimensionArc(const std::string& key) const
+{
+    // La conicidad: el ángulo entre la normal (lo que subiría recto) y la pared inclinada.
+    if (key != "taper" && key != "taper2") {
+        return std::nullopt;
+    }
+    const auto base = baseOf();
+    if (!base) {
+        return std::nullopt;
+    }
+    const sketch::Vec3 n = base->second;
+    const sketch::Vec3 start = moved(base->first, n, offset_->value());
+    const double radius = arcRadius();
+    const bool second = key == "taper2";
+    const sketch::Vec3 dir = second ? sketch::Vec3{-n.x, -n.y, -n.z} : n;
+    // Un vector del plano de la base: la pared se inclina hacia él.
+    const sketch::Vec3 sideways = normalized(minus(perpendicularPoint(start, n, 1.0), start));
+    return Arc{start, normalized(cross(dir, sideways)), moved(start, dir, radius), (second ? taper2_ : taper1_)->value() * kDegree};
+}
+
+std::optional<std::pair<sketch::Vec3, sketch::Vec3>> ExtrudeTool::baseOf() const
 {
     // La misma base que la flecha de arrastre: centro del primer perfil (o de la cara) y su normal.
     const document::ModelState& state = before();
@@ -313,6 +335,12 @@ std::optional<FeatureTool::Arrow> ExtrudeTool::dimensionArrow(const std::string&
             base = std::pair{shape.faceCenter(hit->face), plane->normal};
         }
     }
+    return base;
+}
+
+std::optional<FeatureTool::Arrow> ExtrudeTool::dimensionArrow(const std::string& key) const
+{
+    const auto base = baseOf();
     if (!base) {
         return std::nullopt;
     }
@@ -498,6 +526,48 @@ std::unique_ptr<document::Feature> RevolveTool::build() const
     f->spec.angle2 = angle2_->value() * kDegree;
     f->operation = operationAt(operation_->currentIndex());
     return f;
+}
+
+std::optional<FeatureTool::Arc> RevolveTool::dimensionArc(const std::string& key) const
+{
+    if ((key != "angle" && key != "angle2") || profiles_.empty() || extent_->currentIndex() == int(geometry::RevolveExtent::Full)) {
+        return std::nullopt;
+    }
+    const std::unique_ptr<document::Feature> built = build();
+    const auto* revolve = dynamic_cast<const document::RevolveFeature*>(built.get());
+    if (revolve == nullptr) {
+        return std::nullopt;
+    }
+    geometry::Axis axis;
+    try {
+        axis = document::axisOf(before(), revolve->axis);
+    } catch (const std::exception&) {
+        return std::nullopt;
+    }
+    // El arco pasa por el centro del primer perfil, que es lo que gira.
+    const auto out = before().sketches.find(profiles_.front().sketch);
+    if (out == before().sketches.end()) {
+        return std::nullopt;
+    }
+    const auto profile = document::resolveProfile(sketch::findProfiles(*out->second.sketch), profiles_.front());
+    if (!profile) {
+        return std::nullopt;
+    }
+    const sketch::Vec3 direction = normalized(axis.direction);
+    const sketch::Vec3 point = out->second.plane.toWorld(profileCenter(*profile));
+    const sketch::Vec3 center = moved(axis.point, direction, dot(minus(point, axis.point), direction));
+    const sketch::Vec3 start = std::sqrt(dot(minus(point, center), minus(point, center))) > 1e-6
+                                   ? point
+                                   : perpendicularPoint(center, direction, arcRadius());
+    const double angle1 = revolve->spec.angle1;
+    if (key == "angle2") {
+        if (revolve->spec.direction != geometry::ExtrudeDirection::Two) {
+            return std::nullopt;
+        }
+        return Arc{center, direction, start, -revolve->spec.angle2};
+    }
+    const bool symmetric = revolve->spec.direction == geometry::ExtrudeDirection::Symmetric;
+    return Arc{center, direction, symmetric ? rotatedAbout(start, center, direction, -angle1 / 2.0) : start, angle1};
 }
 
 QString RevolveTool::inputsText() const

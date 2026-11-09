@@ -16,7 +16,9 @@
 #include <QTimer>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
+#include <cmath>
 
 namespace nuf::app {
 
@@ -348,11 +350,24 @@ std::optional<FeatureTool::Arrow> GeneratorTool::dimensionArrow(const std::strin
     if (box.empty) {
         return std::nullopt;
     }
-    const double value = static_cast<QDoubleSpinBox*>(row->widget)->value();
+    const document::GeneratorValues answers = values();
+    const double value = spec->second.length ? spec->second.length(answers) : static_cast<QDoubleSpinBox*>(row->widget)->value();
     const sketch::Vec3 center{(box.min.x + box.max.x) / 2.0, (box.min.y + box.max.y) / 2.0, (box.min.z + box.max.z) / 2.0};
     sketch::Vec3 from = center;
     sketch::Vec3 dir{};
     const bool centered = spec->second.centered;
+    if (spec->second.at) {
+        // Un punto concreto del cuerpo (un poste, un agujero): a partir de su esquina mínima; «kCenter» = su centro.
+        const std::array<double, 3> offset = spec->second.at(answers);
+        const auto place = [](double low, double middle, double shift) { return std::isnan(shift) ? middle : low + shift; };
+        from = {place(box.min.x, center.x, offset[0]), place(box.min.y, center.y, offset[1]), place(box.min.z, center.z, offset[2])};
+        const char axis = spec->second.axis;
+        dir = axis == 'x' ? sketch::Vec3{1.0, 0.0, 0.0} : axis == 'y' ? sketch::Vec3{0.0, 1.0, 0.0} : sketch::Vec3{0.0, 0.0, 1.0};
+        if (centered) {
+            return arrowAlong({from.x - dir.x * value / 2.0, from.y - dir.y * value / 2.0, from.z - dir.z * value / 2.0}, dir, value);
+        }
+        return arrowAlong(from, dir, value);
+    }
     switch (spec->second.axis) {
     case 'x':
         from.x = spec->second.fromMax ? box.max.x : box.min.x;

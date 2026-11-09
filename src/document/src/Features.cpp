@@ -378,6 +378,11 @@ geometry::Axis resolveAxis(const ModelState& state, const AxisRef& axis)
 
 } // namespace
 
+geometry::Axis axisOf(const ModelState& state, const AxisRef& axis)
+{
+    return resolveAxis(state, axis);
+}
+
 geometry::Shape RevolveFeature::tool(const ModelState& state, std::vector<std::string>* warnings) const
 {
     std::vector<std::string> local;

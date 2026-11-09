@@ -10,7 +10,9 @@
 #include <QAction>
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QDir>
 #include <QDockWidget>
+#include <QRegularExpression>
 #include <QColor>
 #include <optional>
 #include <QDoubleSpinBox>
@@ -411,6 +413,10 @@ int InterfaceCheck::run()
                 blocking(QStringLiteral("poner un valor"), [&] { box->setValue(*preset); });
                 waitIdle();
             }
+            // Como el usuario que se acerca a la pieza: una medida pequeña (el radio de una esquina) en una vista
+            // lejana serían un par de píxeles.
+            blocking(QStringLiteral("encuadrar"), [&] { window_.viewport_->fitAll(); });
+            settle(300);
             if (box != nullptr) {
                 window_.activateWindow();
                 window_.propertiesDock_->widget()->setFocus();
@@ -421,6 +427,12 @@ int InterfaceCheck::run()
                 const long with = turquoise();
                 expect(box->hasFocus(), QStringLiteral("el cuadro no recibió el foco"));
                 expect(with > without + 50, QStringLiteral("no se dibujó la flecha (píxeles turquesa: %1 sin foco, %2 con foco)").arg(without).arg(with));
+                if (with <= without + 50) {
+                    // Para ver qué pasó: la vista tal como quedó.
+                    QString file = name;
+                    file.replace(QRegularExpression(QStringLiteral("[^A-Za-z0-9]+")), QStringLiteral("_"));
+                    window_.viewport_->grabFramebuffer().save(QDir::temp().filePath(QStringLiteral("flecha-%1.png").arg(file)));
+                }
                 // Al escribir otro valor la flecha sigue ahí (se recoloca con la vista previa).
                 blocking(QStringLiteral("cambiar el valor"), [&] { box->setValue(std::min(box->maximum(), box->value() + 5.0)); });
                 settle(500);
@@ -448,9 +460,17 @@ int InterfaceCheck::run()
     arrowCheck(QStringLiteral("Mover cuerpo (X)"), window_.moveAction_, 0, true, 20.0);
     arrowCheck(QStringLiteral("Mover cuerpo (ángulo)"), window_.moveAction_, 3, true, 45.0);
     arrowCheck(QStringLiteral("Patrón (distancia)"), window_.patternAction_, 1, true);
+    arrowCheck(QStringLiteral("Caja (radio de esquinas)"), window_.boxAction_, 6, false, 3.0);
+    arrowCheck(QStringLiteral("Engranaje (ángulo de presión)"), window_.gearAction_, 5);
+    arrowCheck(QStringLiteral("Engranaje (giro inicial)"), window_.gearAction_, 4, false, 30.0);
+    arrowCheck(QStringLiteral("Engranaje (ángulo de hélice)"), window_.gearAction_, 8, false, 15.0);
     for (QAction* action : generators) {
-        if (action->text().contains(QStringLiteral("Caja con tapa")) || action->text().contains(QStringLiteral("Lightbox"))) {
-            arrowCheck(action->text(), action, 0);
+        const QString name = action->text();
+        if (name.contains(QStringLiteral("Caja con tapa")) || name.contains(QStringLiteral("Lightbox"))) {
+            arrowCheck(name, action, 0);
+        }
+        if (name.contains(QStringLiteral("Par de engranajes"))) {
+            arrowCheck(name + QStringLiteral(" (módulo)"), action, 0);
         }
     }
 

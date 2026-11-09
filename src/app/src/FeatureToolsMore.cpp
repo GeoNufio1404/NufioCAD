@@ -558,6 +558,46 @@ std::unique_ptr<document::Feature> JointTool::build() const
     return f;
 }
 
+std::optional<std::pair<sketch::Vec3, sketch::Plane>> JointTool::fixedFace() const
+{
+    const auto hit = before().findFace(fixed_);
+    if (!hit) {
+        return std::nullopt;
+    }
+    const geometry::Shape& shape = before().bodies[hit->body].shape;
+    const auto plane = shape.facePlane(hit->face);
+    if (!plane) {
+        return std::nullopt;
+    }
+    return std::pair{shape.faceCenter(hit->face), *plane};
+}
+
+std::optional<FeatureTool::Arrow> JointTool::dimensionArrow(const std::string& key) const
+{
+    const auto face = fixedFace();
+    if (!face) {
+        return std::nullopt;
+    }
+    if (key == "offset") {
+        return arrowAlong(face->first, face->second.normal, offset_->value());
+    }
+    if (key == "slide") {
+        return arrowAlong(face->first, face->second.xAxis, slide_->value());
+    }
+    return std::nullopt;
+}
+
+std::optional<FeatureTool::Arc> JointTool::dimensionArc(const std::string& key) const
+{
+    const auto face = fixedFace();
+    if (key != "angle" || !face) {
+        return std::nullopt;
+    }
+    // Girar alrededor de la normal de la cara fija.
+    const sketch::Vec3 normal = normalized(face->second.normal);
+    return Arc{face->first, normal, perpendicularPoint(face->first, normal, arcRadius()), angle_->value() * kDegree};
+}
+
 QString JointTool::inputsText() const
 {
     if (fixed_.empty()) {
@@ -729,6 +769,11 @@ std::optional<FeatureTool::Arrow> ThreadTool::dimensionArrow(const std::string& 
     }
     if (key == "diameter") {
         return arrowAlong(moved(origin, plane.xAxis, -diameter_->value() / 2.0), plane.xAxis, diameter_->value());
+    }
+    if (key == "clearance") {
+        // La holgura es de 0,15 mm: demasiado poco para verla. Se marca lo que resulta, el diámetro del agujero.
+        const double hole = diameter_->value() + 2.0 * clearance_->value();
+        return arrowAlong(moved(origin, plane.xAxis, -hole / 2.0), plane.xAxis, hole);
     }
     return std::nullopt;
 }

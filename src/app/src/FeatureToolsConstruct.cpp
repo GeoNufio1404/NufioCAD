@@ -512,6 +512,29 @@ std::optional<FeatureTool::Arrow> GearTool::dimensionArrow(const std::string& ke
     return std::nullopt;
 }
 
+std::optional<FeatureTool::Arc> GearTool::dimensionArc(const std::string& key) const
+{
+    if (key != "rotation" && key != "pressureAngle" && key != "helixAngle") {
+        return std::nullopt;
+    }
+    const sketch::Plane plane = document::attachmentPlane(before(), placementAttachment(placement_));
+    const sketch::Vec3 origin = plane.toWorld({placement_.x->value(), placement_.y->value()});
+    const double pitchRadius = module_->value() * teeth_->value() / 2.0;
+    const sketch::Vec3 onPitch = moved(origin, plane.xAxis, pitchRadius);
+    const double size = std::max(3.0 * module_->value(), 3.0);
+    if (key == "rotation") {
+        // Dónde queda el primer diente: el giro desde el eje X del plano.
+        return Arc{origin, plane.normal, onPitch, rotation_->value() * kDegree};
+    }
+    if (key == "pressureAngle") {
+        // En el punto primitivo: entre la tangente a la circunferencia primitiva y la línea de acción.
+        return Arc{onPitch, plane.normal, moved(onPitch, plane.yAxis, size), pressure_->value() * kDegree};
+    }
+    // La hélice: entre el eje del engranaje y la dirección del diente.
+    const double along = thickness_->value() < 0.0 ? -1.0 : 1.0;
+    return Arc{onPitch, plane.xAxis, moved(onPitch, plane.normal, along * 1.5 * size), helix_->value() * kDegree};
+}
+
 QString GearTool::inputsText() const
 {
     return QStringLiteral("%1 dientes, módulo %2: Ø primitivo %3%4")
@@ -640,6 +663,10 @@ std::optional<FeatureTool::Arrow> BoxTool::dimensionArrow(const std::string& key
     sketch::Vec3 corner = moved(point, plane.normal, z_->value() - (symmetric_->isChecked() ? height / 2.0 : 0.0));
     if (centered_->isChecked()) {
         corner = moved(moved(corner, plane.xAxis, -width_->value() / 2.0), plane.yAxis, -depth_->value() / 2.0);
+    }
+    if (key == "radius") {
+        // El radio de la esquina: lo que se redondea a lo largo de la arista que sale de ella.
+        return arrowAlong(corner, plane.xAxis, radius_->value());
     }
     if (key == "width") {
         return arrowAlong(corner, plane.xAxis, width_->value());
