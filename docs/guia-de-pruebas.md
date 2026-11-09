@@ -377,11 +377,10 @@ La app ya no se cuelga mientras recalcula: lo lento (una rosca cortante, un engr
 
 | # | Haz esto | Debe pasar |
 |---|---|---|
-| M.1 | Haz una **Caja** de 10 mm con **radio de esquinas** de 50 mm | El panel (en rojo) dice «No se pudo generar la caja: revisa que el radio de esquinas no sea mayor que la mitad del lado más corto», con el detalle técnico al final entre paréntesis |
-| M.2 | **Unir** o **Cortar** dos cuerpos que solo se toquen por una arista | El mensaje explica que pueden tocarse solo en una arista o un punto y sugiere moverlos una décima de milímetro |
-| M.3 | **Barrido** con el perfil lejos del inicio de la trayectoria | Dice que el perfil debe estar al inicio de la trayectoria y de frente a ella |
-| M.4 | **Agujero** con un diámetro mayor que la pieza | Dice que el diámetro y la profundidad deben caber en la pieza y que los centros estén sobre ella |
-| M.5 | Mira el historial después de uno de esos errores | La operación aparece con ⛔ y el mismo mensaje al pasar el ratón |
+| M.1 | **Redondeo** de una arista de una caja con un radio mayor que la caja | El panel (en rojo) dice «No se pudo redondear: prueba con un radio menor» (este y el de vaciado ya eran claros) |
+| M.2 | **Vaciado** con un espesor mayor que la mitad de la pieza | «No se pudo vaciar: prueba con un espesor menor» |
+| M.3 | Intenta provocar un fallo del kernel: **Unir** o **Cortar** dos cuerpos que solo se toquen por una arista, un **Barrido** con el perfil lejos del inicio de la trayectoria, o un **Agujero** enorme | Si el kernel falla, el mensaje empieza por «No se pudo …», dice qué probar y deja el detalle técnico al final entre paréntesis; ya no sale «Error del kernel…». Estos casos son difíciles de provocar (casi siempre una validación lo avisa antes), así que anótame si ves algún mensaje que siga siendo oscuro |
+| M.4 | Mira el historial después de un error | La operación aparece con ⛔ y el mismo mensaje al pasar el ratón |
 
 ---
 
