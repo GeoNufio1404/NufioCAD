@@ -341,11 +341,16 @@ public:
 class MoveFeature final : public Feature {
 public:
     std::string body;                     // clave del cuerpo
+    // Otros cuerpos que se mueven y giran junto con él, como un solo bloque (con «copy» solo vale uno).
+    std::vector<std::string> alsoMove;
     sketch::Vec3 translation;             // mm
     int axis = 2;                         // 0 = X, 1 = Y, 2 = Z
     FeatureId axisRef = 0;                // si no es 0, un eje de construcción
     bool aroundOrigin = false;            // eje de origen: por el origen (si no, por el centro del cuerpo)
-    double angle = 0.0;                   // rad
+    double angle = 0.0;                   // rad (un solo eje, con el que se podía girar antes)
+    // Giro alrededor de los ejes X, Y y Z del mundo (rad), en ese orden, por el centro del cuerpo (o el origen si
+    // «aroundOrigin»); es lo que dibujan los anillos de la vista. Se aplica después de «angle».
+    sketch::Vec3 rotation;
     bool copy = false;                    // deja el original y crea un cuerpo nuevo
 
     FeatureKind kind() const override { return FeatureKind::Move; }

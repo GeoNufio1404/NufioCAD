@@ -6,6 +6,7 @@
 #include <nuf/geometry/Modeling.hpp>
 #include <nuf/render/Viewport.hpp>
 
+#include <QButtonGroup>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
@@ -19,6 +20,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <numbers>
 #include "FeatureToolsCommon.hpp"
@@ -179,6 +181,13 @@ QString LoftTool::inputsText() const
 }
 
 // --- Mover cuerpo ---------------------------------------------------------------------------
+// Como en Orca Slicer: tres flechas para mover y tres anillos (con marcas cada 45°) para girar, o los cuadros
+// numéricos. Al arrastrar solo se mueve una sombra; el modelo se calcula al soltar.
+
+namespace {
+constexpr double kSnapDegrees = 45.0;   // las marcas de los anillos
+constexpr double kSnapTolerance = 3.0;  // a cuántos grados de una marca se pega
+}
 
 MoveTool::MoveTool(document::Document& document, render::Viewport& viewport,
                    std::optional<document::FeatureId> editing)
@@ -186,20 +195,44 @@ MoveTool::MoveTool(document::Document& document, render::Viewport& viewport,
 {
     if (const auto* m = dynamic_cast<const document::MoveFeature*>(original_.get())) {
         body_ = m->body;
+        alsoMove_ = m->alsoMove;
+        legacyAxis_ = m->axisRef != 0;
     }
+}
+
+MoveTool::~MoveTool()
+{
+    viewport_.hideGizmo();
+    viewport_.hideGhost();
+}
+
+void MoveTool::stopPreview()
+{
+    FeatureTool::stopPreview();
+    dragging_ = false;
+    viewport_.hideGizmo();
+    viewport_.hideGhost();
 }
 
 void MoveTool::createFields(QFormLayout* form)
 {
-    bodyBox_ = new QComboBox();
+    // Casillas: qué cuerpos se mueven juntos (un llavero son una placa y un texto). Con Shift + clic se eligen varios
+    // en la vista.
+    bodyList_ = new QListWidget();
     for (const document::Body& b : before().bodies) {
-        bodyBox_->addItem(QString::fromStdString(b.name), QString::fromStdString(b.key));
+        auto* item = new QListWidgetItem(QString::fromStdString(b.name), bodyList_);
+        item->setData(Qt::UserRole, QString::fromStdString(b.key));
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+        item->setCheckState(Qt::Unchecked);
     }
-    if (body_.empty() && bodyBox_->count() > 0) {
-        body_ = bodyBox_->itemData(0).toString().toStdString();
+    bodyList_->setMaximumHeight(110);
+    if (body_.empty() && bodyList_->count() > 0) {
+        body_ = bodyList_->item(0)->data(Qt::UserRole).toString().toStdString();
     }
-    if (const int at = bodyBox_->findData(QString::fromStdString(body_)); at >= 0) {
-        bodyBox_->setCurrentIndex(at);
+    {
+        std::vector<std::string> start{body_};
+        start.insert(start.end(), alsoMove_.begin(), alsoMove_.end());
+        choose(start);
     }
     x_ = lengthBox(0.0);
     field("x", x_);
@@ -207,60 +240,301 @@ void MoveTool::createFields(QFormLayout* form)
     field("y", y_);
     z_ = lengthBox(0.0);
     field("z", z_);
-    axis_ = combo({QStringLiteral("Eje X"), QStringLiteral("Eje Y"), QStringLiteral("Eje Z")});
-    for (const auto& [id, line] : before().axes) {
-        const document::Feature* f = document_.findFeature(id);
-        axis_->addItem(f ? QString::fromStdString(f->name()) : QStringLiteral("Eje"));
-        axisIds_.push_back(id);
-    }
-    axis_->setCurrentIndex(2);
+    rx_ = angleBox(0.0, 360.0);
+    field("rx", rx_);
+    ry_ = angleBox(0.0, 360.0);
+    field("ry", ry_);
+    rz_ = angleBox(0.0, 360.0);
+    field("rz", rz_);
     around_ = combo({QStringLiteral("Centro del cuerpo"), QStringLiteral("Origen")});
-    angle_ = angleBox(0.0, 360.0);
-    field("angle", angle_);
     copy_ = new QCheckBox(QStringLiteral("Crear una copia (deja el original)"));
+    // El giro sobre un eje de construcción (lo único que los anillos no hacen) solo se ofrece si el diseño ya lo usaba.
+    if (legacyAxis_) {
+        axis_ = combo({QStringLiteral("Eje X"), QStringLiteral("Eje Y"), QStringLiteral("Eje Z")});
+        for (const auto& [id, line] : before().axes) {
+            const document::Feature* f = document_.findFeature(id);
+            axis_->addItem(f ? QString::fromStdString(f->name()) : QStringLiteral("Eje"));
+            axisIds_.push_back(id);
+        }
+        axis_->setCurrentIndex(2);
+        angle_ = angleBox(0.0, 360.0);
+        field("angle", angle_);
+    }
     if (const auto* m = dynamic_cast<const document::MoveFeature*>(original_.get())) {
         x_->setValue(m->translation.x);
         y_->setValue(m->translation.y);
         z_->setValue(m->translation.z);
-        int at = m->axis;
-        if (m->axisRef != 0) {
+        rx_->setValue(m->rotation.x / kDegree);
+        ry_->setValue(m->rotation.y / kDegree);
+        rz_->setValue(m->rotation.z / kDegree);
+        if (legacyAxis_) {
             const auto it = std::ranges::find(axisIds_, m->axisRef);
-            at = it != axisIds_.end() ? 3 + int(it - axisIds_.begin()) : 2;
+            axis_->setCurrentIndex(it != axisIds_.end() ? 3 + int(it - axisIds_.begin()) : 2);
+            angle_->setValue(m->angle / kDegree);
+        } else if (m->angle != 0.0) {
+            // Un giro de antes sobre X, Y o Z es el mismo que el del anillo de ese eje.
+            QDoubleSpinBox* ring = m->axis == 0 ? rx_ : m->axis == 1 ? ry_ : rz_;
+            ring->setValue(ring->value() + m->angle / kDegree);
         }
-        axis_->setCurrentIndex(at);
         around_->setCurrentIndex(m->aroundOrigin ? 1 : 0);
-        angle_->setValue(m->angle / kDegree);
         copy_->setChecked(m->copy);
     }
-    form->addRow(QStringLiteral("Cuerpo"), bodyBox_);
+    moveMode_ = new QPushButton(QStringLiteral("Mover"));
+    turnMode_ = new QPushButton(QStringLiteral("Girar"));
+    for (QPushButton* button : {moveMode_, turnMode_}) {
+        button->setCheckable(true);
+    }
+    moveMode_->setChecked(true);
+    auto* modes = new QButtonGroup(this);
+    modes->setExclusive(true);
+    modes->addButton(moveMode_);
+    modes->addButton(turnMode_);
+    auto* modeRow = new QHBoxLayout();
+    modeRow->addWidget(moveMode_);
+    modeRow->addWidget(turnMode_);
+    auto* hint = new QLabel(QStringLiteral("Arrastra las flechas (o los anillos, con marcas cada 45°) en la vista; la pieza "
+                                           "se recalcula al soltar. También puedes escribir los valores."));
+    hint->setWordWrap(true);
+    hint->setStyleSheet(QStringLiteral("color: #8B93A0;"));
+    form->addRow(QStringLiteral("Cuerpos"), bodyList_);
+    form->addRow(modeRow);
+    form->addRow(hint);
     form->addRow(QStringLiteral("Mover en X"), x_);
     form->addRow(QStringLiteral("Mover en Y"), y_);
     form->addRow(QStringLiteral("Mover en Z"), z_);
-    form->addRow(QStringLiteral("Girar alrededor de"), axis_);
-    form->addRow(QStringLiteral("El eje pasa por"), around_);
-    form->addRow(QStringLiteral("Ángulo"), angle_);
+    form->addRow(QStringLiteral("Girar en X"), rx_);
+    form->addRow(QStringLiteral("Girar en Y"), ry_);
+    form->addRow(QStringLiteral("Girar en Z"), rz_);
+    form->addRow(QStringLiteral("Girar por"), around_);
+    if (legacyAxis_) {
+        form->addRow(QStringLiteral("Girar alrededor de"), axis_);
+        form->addRow(QStringLiteral("Ángulo"), angle_);
+    }
     form->addRow(QString(), copy_);
-    connect(bodyBox_, &QComboBox::currentIndexChanged, this, [this] {
-        body_ = bodyBox_->currentData().toString().toStdString();
+    connect(bodyList_, &QListWidget::itemChanged, this, [this](QListWidgetItem*) {
+        std::vector<std::string> keys;
+        for (int i = 0; i < bodyList_->count(); ++i) {
+            if (bodyList_->item(i)->checkState() == Qt::Checked) {
+                keys.push_back(bodyList_->item(i)->data(Qt::UserRole).toString().toStdString());
+            }
+        }
+        if (keys.empty()) {
+            return;  // siempre hay uno (si se desmarca el último, se vuelve a marcar al elegir otro)
+        }
+        body_ = keys.front();
+        alsoMove_.assign(keys.begin() + 1, keys.end());
+        copy_->setEnabled(keys.size() == 1);
         updatePreview();
     });
     for (QComboBox* box : {axis_, around_}) {
-        connect(box, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
+        if (box != nullptr) {
+            connect(box, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
+        }
     }
-    for (QDoubleSpinBox* box : {x_, y_, z_, angle_}) {
-        connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
+    for (QDoubleSpinBox* box : {x_, y_, z_, rx_, ry_, rz_, angle_}) {
+        if (box != nullptr) {
+            connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
+        }
     }
     connect(copy_, &QCheckBox::toggled, this, [this] { updatePreview(); });
+    connect(moveMode_, &QPushButton::toggled, this, [this] { refreshGizmo(); });
+    connect(&viewport_, &render::Viewport::gizmoPressed, this, &MoveTool::gizmoPressed);
+    connect(&viewport_, &render::Viewport::gizmoDragged, this, &MoveTool::gizmoDragged);
+    connect(&viewport_, &render::Viewport::gizmoReleased, this, [this](int) { gizmoReleased(); });
+}
+
+std::array<double, 3> MoveTool::positionValues() const
+{
+    return {x_->value(), y_->value(), z_->value()};
+}
+
+std::array<double, 3> MoveTool::turnValues() const
+{
+    return {rx_->value(), ry_->value(), rz_->value()};
+}
+
+std::vector<std::string> MoveTool::chosen() const
+{
+    std::vector<std::string> keys{body_};
+    keys.insert(keys.end(), alsoMove_.begin(), alsoMove_.end());
+    return keys;
+}
+
+void MoveTool::choose(const std::vector<std::string>& keys)
+{
+    if (keys.empty()) {
+        return;
+    }
+    body_ = keys.front();
+    alsoMove_.assign(keys.begin() + 1, keys.end());
+    const QSignalBlocker block(bodyList_);
+    for (int i = 0; i < bodyList_->count(); ++i) {
+        const std::string key = bodyList_->item(i)->data(Qt::UserRole).toString().toStdString();
+        bodyList_->item(i)->setCheckState(std::ranges::find(keys, key) != keys.end() ? Qt::Checked : Qt::Unchecked);
+    }
+    if (copy_ != nullptr) {
+        copy_->setEnabled(keys.size() == 1);
+        if (keys.size() > 1) {
+            copy_->setChecked(false);
+        }
+    }
+}
+
+std::optional<sketch::Vec3> MoveTool::bodiesCenter() const
+{
+    std::optional<geometry::Box> all;
+    for (const std::string& key : chosen()) {
+        for (const document::Body& b : before().bodies) {
+            if (b.key != key || b.shape.isNull()) {
+                continue;
+            }
+            const geometry::Box box = b.shape.bounds();
+            if (!all) {
+                all = box;
+            } else {
+                all->min = {std::min(all->min.x, box.min.x), std::min(all->min.y, box.min.y), std::min(all->min.z, box.min.z)};
+                all->max = {std::max(all->max.x, box.max.x), std::max(all->max.y, box.max.y), std::max(all->max.z, box.max.z)};
+            }
+        }
+    }
+    if (!all) {
+        return std::nullopt;
+    }
+    return sketch::Vec3{(all->min.x + all->max.x) / 2.0, (all->min.y + all->max.y) / 2.0, (all->min.z + all->max.z) / 2.0};
+}
+
+std::optional<sketch::Vec3> MoveTool::pivot() const
+{
+    if (around_->currentIndex() == 1) {
+        return sketch::Vec3{0.0, 0.0, 0.0};
+    }
+    return bodiesCenter();
+}
+
+void MoveTool::afterPreview(const document::ModelState& /*before*/)
+{
+    refreshGizmo();
+}
+
+void MoveTool::refreshGizmo()
+{
+    if (dragging_ || moveMode_ == nullptr) {
+        return;
+    }
+    const auto center = pivot();
+    if (!center || body_.empty()) {
+        viewport_.hideGizmo();
+        return;
+    }
+    // Las flechas y los anillos van donde queda el cuerpo (el pivote, desplazado).
+    const std::array<double, 3> at = positionValues();
+    viewport_.showGizmo(moveMode_->isChecked() ? render::Viewport::GizmoKind::Move : render::Viewport::GizmoKind::Rotate,
+                        {center->x + at[0], center->y + at[1], center->z + at[2]});
+}
+
+void MoveTool::moveGhost(const std::array<double, 3>& position, const std::array<double, 3>& turns)
+{
+    const auto center = pivot();
+    if (!center) {
+        return;
+    }
+    viewport_.setGhostMotion(*center, {turns[0] * kDegree, turns[1] * kDegree, turns[2] * kDegree},
+                             {position[0], position[1], position[2]});
+}
+
+void MoveTool::gizmoPressed(int /*axis*/)
+{
+    dragging_ = true;
+    dragPosition_ = positionValues();
+    dragTurns_ = turnValues();
+    // La sombra parte del cuerpo de antes de la operación, con la pose de los cuadros.
+    std::vector<geometry::Shape> shapes;
+    const std::vector<std::string> keys = chosen();
+    for (const document::Body& b : before().bodies) {
+        if (std::ranges::find(keys, b.key) != keys.end()) {
+            shapes.push_back(b.shape);
+        }
+    }
+    viewport_.showGhost(shapes);
+    moveGhost(dragPosition_, dragTurns_);
+}
+
+void MoveTool::gizmoDragged(int axis, double amount)
+{
+    if (!dragging_ || axis < 0 || axis > 2) {
+        return;
+    }
+    std::array<double, 3> position = dragPosition_;
+    std::array<double, 3> turns = dragTurns_;
+    QString text;
+    if (moveMode_->isChecked()) {
+        position[std::size_t(axis)] = std::round((dragPosition_[std::size_t(axis)] + amount) * 100.0) / 100.0;
+        text = QStringLiteral("Mover en %1: %2").arg(QLatin1Char("XYZ"[axis]))
+                   .arg(Units::instance().formatWithUnit(position[std::size_t(axis)]));
+    } else {
+        // Lo que se gira en este arrastre, sobre el eje del mundo que dibuja el anillo (se pega a las marcas
+        // conocidas, 0, 45, 90, 180, 270…, si se pasa cerca).
+        double angle = std::remainder(amount / kDegree, 360.0);
+        const double mark = std::round(angle / kSnapDegrees) * kSnapDegrees;
+        const bool snapped = std::abs(angle - mark) < kSnapTolerance;
+        if (snapped) {
+            angle = mark;
+        }
+        // Se compone con la orientación que ya tenía (primero la de antes, después este giro sobre el eje del mundo)
+        // y se vuelve a los tres giros X, Y, Z de la operación.
+        const Mat3 start = fromTurns(dragTurns_[0] * kDegree, dragTurns_[1] * kDegree, dragTurns_[2] * kDegree);
+        const auto now = toTurns(multiply(rotationAbout(axis, angle * kDegree), start));
+        for (std::size_t i = 0; i < 3; ++i) {
+            turns[i] = std::round(now[i] / kDegree * 10.0) / 10.0;
+        }
+        text = QStringLiteral("Girar en %1: %2°%3").arg(QLatin1Char("XYZ"[axis])).arg(angle, 0, 'f', 1)
+                   .arg(snapped ? QStringLiteral("  (marca)") : QString());
+    }
+    // Los cuadros siguen al arrastre, sin pedir una vista previa a cada paso.
+    updating_ = true;
+    x_->setValue(position[0]);
+    y_->setValue(position[1]);
+    z_->setValue(position[2]);
+    rx_->setValue(turns[0]);
+    ry_->setValue(turns[1]);
+    rz_->setValue(turns[2]);
+    updating_ = false;
+    moveGhost(position, turns);
+    statusLabel_->setText(QStringLiteral("<span style='color:#6CA6FF'>%1</span>").arg(text.toHtmlEscaped()));
+    if (const auto center = pivot()) {
+        viewport_.showGizmo(moveMode_->isChecked() ? render::Viewport::GizmoKind::Move : render::Viewport::GizmoKind::Rotate,
+                            {center->x + position[0], center->y + position[1], center->z + position[2]});
+    }
+}
+
+void MoveTool::gizmoReleased()
+{
+    if (!dragging_) {
+        return;
+    }
+    dragging_ = false;
+    viewport_.hideGhost();
+    statusLabel_->clear();
+    updatePreview();  // aquí sí se calcula el cuerpo (en segundo plano)
+    refreshGizmo();
 }
 
 void MoveTool::selectionChanged(const render::ModelSelection& selection)
 {
-    // Un clic en una cara elige su cuerpo.
-    if (!selection.faces.empty()) {
-        const int at = bodyBox_->findData(QString::fromStdString(selection.faces.front().body));
-        if (at >= 0) {
-            bodyBox_->setCurrentIndex(at);
+    // Un clic en una cara elige su cuerpo; con Shift + clic en caras de varios cuerpos, todos esos se mueven juntos.
+    std::vector<std::string> keys;
+    for (const render::ModelSelection::Face& face : selection.faces) {
+        if (std::ranges::find(keys, face.body) == keys.end() &&
+            std::ranges::any_of(before().bodies, [&](const document::Body& b) { return b.key == face.body; })) {
+            keys.push_back(face.body);
         }
+    }
+    if (!keys.empty() && keys != chosen()) {
+        choose(keys);
+        if (dragging_) {
+            return;
+        }
+        updatePreview();
     }
 }
 
@@ -274,21 +548,25 @@ std::unique_ptr<document::Feature> MoveTool::build() const
         f->setName(original_->name());
     }
     f->body = body_;
+    f->alsoMove = alsoMove_;
     f->translation = {x_->value(), y_->value(), z_->value()};
-    if (axis_->currentIndex() >= 3) {
-        f->axisRef = axisIds_[std::size_t(axis_->currentIndex() - 3)];
-    } else {
-        f->axis = axis_->currentIndex();
+    f->rotation = {rx_->value() * kDegree, ry_->value() * kDegree, rz_->value() * kDegree};
+    if (legacyAxis_) {
+        if (axis_->currentIndex() >= 3) {
+            f->axisRef = axisIds_[std::size_t(axis_->currentIndex() - 3)];
+        } else {
+            f->axis = axis_->currentIndex();
+        }
+        f->angle = angle_->value() * kDegree;
     }
     f->aroundOrigin = around_->currentIndex() == 1;
-    f->angle = angle_->value() * kDegree;
     f->copy = copy_->isChecked();
     return f;
 }
 
 std::optional<FeatureTool::Arrow> MoveTool::dimensionArrow(const std::string& key) const
 {
-    const auto center = bodyCenter(body_);
+    const auto center = bodiesCenter();
     if (!center) {
         return std::nullopt;
     }
@@ -306,7 +584,19 @@ std::optional<FeatureTool::Arrow> MoveTool::dimensionArrow(const std::string& ke
 
 std::optional<FeatureTool::Arc> MoveTool::dimensionArc(const std::string& key) const
 {
-    if (key != "angle") {
+    // Los giros de los anillos: el arco sale de la marca 0 del anillo (la misma que dibuja el visor).
+    const int ring = key == "rx" ? 0 : key == "ry" ? 1 : key == "rz" ? 2 : -1;
+    if (ring >= 0) {
+        const auto center = pivot();
+        if (!center) {
+            return std::nullopt;
+        }
+        const sketch::Vec3 axes[3] = {{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}};
+        const sketch::Vec3 refs[3] = {{0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}, {1.0, 0.0, 0.0}};
+        const double value = (ring == 0 ? rx_ : ring == 1 ? ry_ : rz_)->value();
+        return Arc{*center, axes[ring], moved(*center, refs[ring], arcRadius()), value * kDegree};
+    }
+    if (key != "angle" || !legacyAxis_) {
         return std::nullopt;
     }
     sketch::Vec3 point{};
@@ -324,23 +614,18 @@ std::optional<FeatureTool::Arc> MoveTool::dimensionArc(const std::string& key) c
         point = it->second.point;
         axis = it->second.direction;
     }
-    // Alrededor del centro del cuerpo (el eje pasa por él) o del origen / del eje elegido.
-    if (around_->currentIndex() == 0) {
-        const auto center = bodyCenter(body_);
-        if (!center) {
-            return std::nullopt;
-        }
-        point = *center;
-    }
     return Arc{point, axis, perpendicularPoint(point, axis, arcRadius()), angle_->value() * kDegree};
 }
 
 QString MoveTool::inputsText() const
 {
-    if (bodyBox_->count() == 0) {
+    if (bodyList_->count() == 0) {
         return QStringLiteral("No hay cuerpos que mover");
     }
-    return QStringLiteral("Mover «%1» (o haz clic en una de sus caras para elegirlo)").arg(bodyBox_->currentText());
+    if (alsoMove_.empty()) {
+        return QStringLiteral("Marca los cuerpos que se mueven, o haz clic en una cara (Shift + clic para varios cuerpos)");
+    }
+    return QStringLiteral("Se mueven %1 cuerpos juntos, como un bloque").arg(1 + alsoMove_.size());
 }
 
 // --- Combinar cuerpos -------------------------------------------------------------------------

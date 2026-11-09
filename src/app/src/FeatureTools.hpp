@@ -563,29 +563,61 @@ class MoveTool final : public FeatureTool {
 
 public:
     MoveTool(document::Document& document, render::Viewport& viewport, std::optional<document::FeatureId> editing);
+    ~MoveTool() override;
 
     std::unique_ptr<document::Feature> build() const override;
+    void stopPreview() override;
 
 protected:
     QString title() const override { return QStringLiteral("Mover cuerpo"); }
     void createFields(QFormLayout* form) override;
     void selectionChanged(const render::ModelSelection& selection) override;
+    void afterPreview(const document::ModelState& before) override;
     QString inputsText() const override;
     std::optional<Arrow> dimensionArrow(const std::string& key) const override;
     std::optional<Arc> dimensionArc(const std::string& key) const override;
     bool removesMaterial() const override { return false; }
 
 private:
+    // El punto por el que giran los ejes: el centro de los cuerpos elegidos (juntos) o el origen.
+    std::optional<sketch::Vec3> pivot() const;
+    // Los cuerpos elegidos: «body_» y los que se mueven con él.
+    std::vector<std::string> chosen() const;
+    // El centro de la caja de los cuerpos elegidos juntos.
+    std::optional<sketch::Vec3> bodiesCenter() const;
+    // Elige estos cuerpos (el primero es el principal) y marca las casillas de la lista.
+    void choose(const std::vector<std::string>& keys);
+    // Las flechas o los anillos del visor, en el lugar donde queda el cuerpo.
+    void refreshGizmo();
+    void gizmoPressed(int axis);
+    void gizmoDragged(int axis, double amount);
+    void gizmoReleased();
+    // La sombra con los valores de los cuadros (o de los que se están arrastrando).
+    void moveGhost(const std::array<double, 3>& position, const std::array<double, 3>& turns);
+    std::array<double, 3> positionValues() const;
+    std::array<double, 3> turnValues() const;  // grados
+
     std::string body_;
+    std::vector<std::string> alsoMove_;         // los que se mueven y giran junto con «body_»
     std::vector<document::FeatureId> axisIds_;  // ejes de construcción tras X, Y, Z
-    QComboBox* bodyBox_ = nullptr;
+    QListWidget* bodyList_ = nullptr;           // casillas: qué cuerpos se mueven
     QDoubleSpinBox* x_ = nullptr;
     QDoubleSpinBox* y_ = nullptr;
     QDoubleSpinBox* z_ = nullptr;
+    QDoubleSpinBox* rx_ = nullptr;
+    QDoubleSpinBox* ry_ = nullptr;
+    QDoubleSpinBox* rz_ = nullptr;
     QComboBox* axis_ = nullptr;
     QComboBox* around_ = nullptr;
     QDoubleSpinBox* angle_ = nullptr;
     QCheckBox* copy_ = nullptr;
+    QPushButton* moveMode_ = nullptr;
+    QPushButton* turnMode_ = nullptr;
+    bool legacyAxis_ = false;  // gira sobre un eje de construcción (lo que se podía hacer antes de los anillos)
+    // Arrastre en curso: los valores de los cuadros al agarrar.
+    bool dragging_ = false;
+    std::array<double, 3> dragPosition_{};
+    std::array<double, 3> dragTurns_{};
 };
 
 // Combinar cuerpos: destino, herramientas (casillas) y operación.

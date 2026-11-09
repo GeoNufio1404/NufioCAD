@@ -152,6 +152,19 @@ public:
     // distanceHandleDragged con la nueva distancia.
     void showDistanceHandle(const sketch::Vec3& origin, const sketch::Vec3& direction, double distance);
     void hideDistanceHandle();
+    // --- Mover y girar con el ratón (como Orca Slicer) ---
+    // Tres flechas (X rojo, Y verde, Z azul) para mover, o tres anillos con marcas cada 45° para girar, centrados en
+    // «origin». Al arrastrar uno se emite gizmoDragged(eje, cantidad): lo que se ha desplazado (mm) o girado (rad,
+    // acumulado) desde que se agarró; el modelo no se recalcula, quien escucha mueve una «sombra» (showGhost) y
+    // al soltar (gizmoReleased) calcula.
+    enum class GizmoKind { None, Move, Rotate };
+    void showGizmo(GizmoKind kind, const sketch::Vec3& origin);
+    void hideGizmo();
+    // Una copia translúcida del cuerpo, que se coloca con setGhostMotion sin recalcular nada: gira alrededor de
+    // los ejes X, Y y Z (en ese orden) por «pivot» y luego se desplaza.
+    void showGhost(const std::vector<geometry::Shape>& bodies);
+    void setGhostMotion(const sketch::Vec3& pivot, const sketch::Vec3& rotation, const sketch::Vec3& translation);
+    void hideGhost();
     // Flecha de doble punta entre dos puntos del modelo: señala la medida que se está escribiendo en el panel de una
     // herramienta. No se puede arrastrar ni seleccionar.
     void showDimensionArrow(const sketch::Vec3& from, const sketch::Vec3& to);
@@ -214,6 +227,10 @@ signals:
                            const nuf::document::SketchAttachment& attachment);
     void distanceHandleDragged(double distance);
     void distanceHandleReleased();
+    // Se agarró la flecha (o el anillo) «axis» (0 = X, 1 = Y, 2 = Z), se está arrastrando y se soltó.
+    void gizmoPressed(int axis);
+    void gizmoDragged(int axis, double amount);
+    void gizmoReleased(int axis);
     // Posición del cursor en coordenadas del sketch (mm); hasPoint = false
     // si el cursor no corta el plano (vista de canto o fuera del visor).
     void sketchCursorMoved(bool hasPoint, double x, double y);

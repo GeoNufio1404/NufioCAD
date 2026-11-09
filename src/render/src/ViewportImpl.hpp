@@ -598,6 +598,285 @@ public:
         handleDragging = false;
     }
 
+    // --- Mover y girar con el ratón ---------------------------------------------
+
+    static gp_Dir gizmoAxis(int k) { return k == 0 ? gp_Dir(1, 0, 0) : k == 1 ? gp_Dir(0, 1, 0) : gp_Dir(0, 0, 1); }
+    // De dónde se mide el ángulo de cada anillo: X de Y hacia Z, Y de Z hacia X, Z de X hacia Y.
+    static gp_Dir gizmoRef(int k) { return k == 0 ? gp_Dir(0, 1, 0) : k == 1 ? gp_Dir(0, 0, 1) : gp_Dir(1, 0, 0); }
+
+    Viewport::GizmoKind gizmoKind = Viewport::GizmoKind::None;
+    Handle(AIS_Shape) gizmoShapes[3];
+    gp_Pnt gizmoOrigin;
+    double gizmoBuiltSize = 0.0;
+    int gizmoActive = -1;  // el eje que se está arrastrando
+    gp_Pnt gizmoDragOrigin;  // dónde estaba el centro al agarrar (el arrastre se mide desde ahí)
+    double gizmoGrab = 0.0;  // mover: parámetro sobre el eje al agarrar; girar: ángulo anterior
+    double gizmoTotal = 0.0;
+    bool gizmoHiddenForZoom = false;
+    double gizmoLastPixel = 0.0;
+    QTimer* gizmoSettle = nullptr;
+    Handle(AIS_Shape) ghost;
+
+    void clearGizmoShapes()
+    {
+        for (Handle(AIS_Shape)& shape : gizmoShapes) {
+            if (!shape.IsNull()) {
+                context->Remove(shape, false);
+                shape.Nullify();
+            }
+        }
+        gizmoBuiltSize = 0.0;
+    }
+
+    void hideGizmo()
+    {
+        clearGizmoShapes();
+        gizmoKind = Viewport::GizmoKind::None;
+        gizmoActive = -1;
+        gizmoHiddenForZoom = false;
+        if (gizmoSettle != nullptr) {
+            gizmoSettle->stop();
+        }
+    }
+
+    // Las flechas y los anillos guardan su tamaño en pantalla, pero rehacerlos a cada cuadro de un zoom (decenas de
+    // sólidos) deja la vista a 1 imagen por segundo: al cambiar el zoom se quitan y se vuelven a dibujar cuando la
+    // vista lleva un momento quieta.
+    void updateGizmoForZoom()
+    {
+        if (gizmoKind == Viewport::GizmoKind::None || gizmoActive >= 0) {
+            return;
+        }
+        const double pixel = pixelSize();
+        const bool zooming = std::abs(pixel - gizmoLastPixel) > 1e-9 * std::max(pixel, 1e-12);
+        gizmoLastPixel = pixel;
+        if (!gizmoShapes[0].IsNull() && std::abs(90.0 * pixel - gizmoBuiltSize) > 0.08 * gizmoBuiltSize) {
+            clearGizmoShapes();
+            gizmoHiddenForZoom = true;
+        }
+        if (!gizmoHiddenForZoom) {
+            return;
+        }
+        if (gizmoSettle == nullptr) {
+            gizmoSettle = new QTimer(&widget_);
+            gizmoSettle->setSingleShot(true);
+            QObject::connect(gizmoSettle, &QTimer::timeout, &widget_, [this] {
+                if (gizmoHiddenForZoom && gizmoKind != Viewport::GizmoKind::None) {
+                    gizmoHiddenForZoom = false;
+                    showGizmo(gizmoKind, {gizmoOrigin.X(), gizmoOrigin.Y(), gizmoOrigin.Z()});
+                    widget_.update();
+                }
+            });
+        }
+        if (zooming || !gizmoSettle->isActive()) {
+            gizmoSettle->start(900);  // otra vez a esperar mientras el zoom siga moviéndose
+        }
+    }
+
+    void showGizmo(Viewport::GizmoKind kind, const sketch::Vec3& origin)
+    {
+        if (kind == Viewport::GizmoKind::None) {
+            hideGizmo();
+            return;
+        }
+        gizmoOrigin = toPnt(origin);
+        const double size = 90.0 * pixelSize();
+        gp_Trsf shift;
+        shift.SetTranslation(gp_Vec(gp_Pnt(0.0, 0.0, 0.0), gizmoOrigin));
+        const TopLoc_Location place(shift);
+        // Mientras se arrastra solo cambia de lugar (rehacerlo cortaría el arrastre).
+        if (!gizmoShapes[0].IsNull() && gizmoKind == kind && (gizmoActive >= 0 || std::abs(size - gizmoBuiltSize) < 0.05 * gizmoBuiltSize)) {
+            for (const Handle(AIS_Shape)& shape : gizmoShapes) {
+                context->SetLocation(shape, place);
+            }
+            return;
+        }
+        clearGizmoShapes();
+        gizmoKind = kind;
+        gizmoHiddenForZoom = false;
+        gizmoBuiltSize = size;
+        const Quantity_Color colors[3] = {rgb(0xE5, 0x48, 0x4D), rgb(0x46, 0xC4, 0x6E), rgb(0x4C, 0x8D, 0xF6)};
+        for (int k = 0; k < 3; ++k) {
+            BRep_Builder builder;
+            TopoDS_Compound shape;
+            builder.MakeCompound(shape);
+            const gp_Dir axis = gizmoAxis(k);
+            if (kind == Viewport::GizmoKind::Move) {
+                builder.Add(shape, BRepPrimAPI_MakeCylinder(gp_Ax2(gp_Pnt(0, 0, 0), axis), 0.045 * size, 0.7 * size).Shape());
+                builder.Add(shape, BRepPrimAPI_MakeCone(gp_Ax2(gp_Pnt(0, 0, 0).Translated(gp_Vec(axis) * (0.7 * size)), axis),
+                                                        0.13 * size, 0.0, 0.3 * size).Shape());
+            } else {
+                const double radius = 0.85 * size;
+                builder.Add(shape, BRepPrimAPI_MakeTorus(gp_Ax2(gp_Pnt(0, 0, 0), axis), radius, 0.026 * size).Shape());
+                // Marcas en los ángulos conocidos (cada 45°; más largas en 0, 90, 180 y 270).
+                const gp_Dir ref = gizmoRef(k);
+                for (int i = 0; i < 8; ++i) {
+                    const bool major = i % 2 == 0;
+                    gp_Vec radial(ref);
+                    radial.Rotate(gp_Ax1(gp_Pnt(0, 0, 0), axis), i * std::numbers::pi / 4.0);
+                    const double half = (major ? 0.13 : 0.085) * size;
+                    const gp_Pnt start = gp_Pnt(0, 0, 0).Translated(radial * (radius - half));
+                    builder.Add(shape, BRepPrimAPI_MakeCylinder(gp_Ax2(start, gp_Dir(radial)), (major ? 0.02 : 0.014) * size, 2.0 * half).Shape());
+                }
+            }
+            Handle(AIS_Shape) ais = new AIS_Shape(shape);
+            ais->SetColor(colors[k]);
+            ais->Attributes()->SetFaceBoundaryDraw(false);
+            // Formas pequeñas que se rehacen al cambiar el zoom: un mallado grueso (por defecto era muy fino, casi un
+            // segundo para tres anillos con sus marcas) se ve igual de bien a este tamaño.
+            ais->SetOwnDeviationCoefficient(0.05);
+            ais->SetOwnDeviationAngle(0.6);
+            ais->SetZLayer(Graphic3d_ZLayerId_Topmost);
+            ais->SetLocalTransformation(shift);
+            context->Display(ais, AIS_Shaded, 0, false);
+            gizmoShapes[k] = ais;
+        }
+    }
+
+    // Parámetro sobre el eje «k» que pasa por «origin» del punto más cercano al rayo del píxel.
+    std::optional<double> gizmoLineParameter(const Vec2i& pixel, const gp_Pnt& origin, int k) const
+    {
+        double x = 0, y = 0, z = 0, dx = 0, dy = 0, dz = 0;
+        view->ConvertWithProj(pixel.x(), pixel.y(), x, y, z, dx, dy, dz);
+        const gp_Vec ray(dx, dy, dz);
+        if (ray.Magnitude() < 1e-12) {
+            return std::nullopt;
+        }
+        const gp_Vec v = ray.Normalized();
+        const gp_Vec d(gizmoAxis(k));
+        const gp_Vec w(origin, gp_Pnt(x, y, z));
+        const double b = v.Dot(d);
+        const double denominator = 1.0 - b * b;
+        if (denominator < 1e-6) {
+            return std::nullopt;
+        }
+        return (w.Dot(d) - b * w.Dot(v)) / denominator;
+    }
+
+    // Ángulo del punto del plano del anillo «k» al que apunta el píxel, medido desde la marca 0 del anillo.
+    std::optional<double> gizmoRingAngle(const Vec2i& pixel, const gp_Pnt& origin, int k) const
+    {
+        double x = 0, y = 0, z = 0, dx = 0, dy = 0, dz = 0;
+        view->ConvertWithProj(pixel.x(), pixel.y(), x, y, z, dx, dy, dz);
+        const gp_Vec ray(dx, dy, dz);
+        const gp_Vec normal(gizmoAxis(k));
+        const double facing = ray.Dot(normal);
+        if (ray.Magnitude() < 1e-12 || std::abs(facing / ray.Magnitude()) < 0.05) {
+            return std::nullopt;  // el plano se ve de canto
+        }
+        const double t = gp_Vec(gp_Pnt(x, y, z), origin).Dot(normal) / facing;
+        const gp_Pnt hit = gp_Pnt(x, y, z).Translated(ray * t);
+        const gp_Vec from(origin, hit);
+        const gp_Vec ref(gizmoRef(k));
+        return std::atan2(from.Dot(normal.Crossed(ref)), from.Dot(ref));
+    }
+
+    bool startGizmoDrag(int k, const Vec2i& pixel)
+    {
+        gizmoDragOrigin = gizmoOrigin;
+        if (gizmoKind == Viewport::GizmoKind::Move) {
+            const auto t = gizmoLineParameter(pixel, gizmoDragOrigin, k);
+            if (!t) {
+                return false;
+            }
+            gizmoGrab = *t;
+        } else {
+            const auto a = gizmoRingAngle(pixel, gizmoDragOrigin, k);
+            if (!a) {
+                return false;
+            }
+            gizmoGrab = *a;
+            gizmoTotal = 0.0;
+        }
+        gizmoActive = k;
+        return true;
+    }
+
+    // Lo arrastrado hasta ahora (mm o rad), o nada si el ratón apunta a un lugar sin respuesta (plano de canto).
+    std::optional<double> gizmoDragAmount(const Vec2i& pixel)
+    {
+        if (gizmoKind == Viewport::GizmoKind::Move) {
+            const auto t = gizmoLineParameter(pixel, gizmoDragOrigin, gizmoActive);
+            return t ? std::optional<double>(*t - gizmoGrab) : std::nullopt;
+        }
+        const auto a = gizmoRingAngle(pixel, gizmoDragOrigin, gizmoActive);
+        if (!a) {
+            return std::nullopt;
+        }
+        // Acumula la diferencia (envuelta a ±180°) para poder dar más de una vuelta.
+        double delta = *a - gizmoGrab;
+        while (delta > std::numbers::pi) {
+            delta -= 2.0 * std::numbers::pi;
+        }
+        while (delta < -std::numbers::pi) {
+            delta += 2.0 * std::numbers::pi;
+        }
+        gizmoTotal += delta;
+        gizmoGrab = *a;
+        return gizmoTotal;
+    }
+
+    void hideGhost()
+    {
+        if (!ghost.IsNull()) {
+            context->Remove(ghost, false);
+            ghost.Nullify();
+        }
+    }
+
+    void showGhost(const std::vector<geometry::Shape>& list)
+    {
+        hideGhost();
+        BRep_Builder builder;
+        TopoDS_Compound shape;
+        builder.MakeCompound(shape);
+        bool any = false;
+        for (const geometry::Shape& body : list) {
+            if (body.isNull()) {
+                continue;
+            }
+            any = true;
+            // Un cuerpo pesado (una rosca) sin malla tardaría segundos en dibujarse aquí: su sombra es su caja.
+            if (geometry::hasHeavySurface(body) && !geometry::hasMesh(body)) {
+                const geometry::Box box = body.bounds();
+                builder.Add(shape, BRepPrimAPI_MakeBox(gp_Pnt(box.min.x, box.min.y, box.min.z),
+                                                       gp_Pnt(box.max.x, box.max.y, box.max.z)).Shape());
+            } else {
+                builder.Add(shape, geometry::occtShape(body));
+            }
+        }
+        if (!any) {
+            return;
+        }
+        ghost = new AIS_Shape(shape);
+        ghost->SetColor(rgb(0x6C, 0xA6, 0xFF));
+        ghost->SetTransparency(0.55);
+        ghost->Attributes()->SetFaceBoundaryDraw(false);
+        context->Display(ghost, AIS_Shaded, -1, false);
+    }
+
+    void setGhostMotion(const sketch::Vec3& pivot, const sketch::Vec3& rotation, const sketch::Vec3& translation)
+    {
+        if (ghost.IsNull()) {
+            return;
+        }
+        // Lo mismo que hace moveBody: giros X, Y, Z por el pivote y después el desplazamiento.
+        gp_Trsf total;
+        const double around[3] = {rotation.x, rotation.y, rotation.z};
+        for (int k = 0; k < 3; ++k) {
+            if (std::abs(around[k]) > 1e-12) {
+                gp_Trsf turn;
+                turn.SetRotation(gp_Ax1(toPnt(pivot), gizmoAxis(k)), around[k]);
+                total = turn * total;
+            }
+        }
+        gp_Trsf shift;
+        shift.SetTranslation(gp_Vec(translation.x, translation.y, translation.z));
+        total = shift * total;
+        context->SetLocation(ghost, TopLoc_Location(total));
+        context->UpdateCurrentViewer();
+    }
+
     // --- Flecha de medida (doble punta) -----------------------------------------
 
     void showDimensionArrow(const sketch::Vec3& from, const sketch::Vec3& to)
@@ -1339,6 +1618,7 @@ protected:
                 rebuildSketch();
             }
         }
+        updateGizmoForZoom();
         AIS_ViewController::handleViewRedraw(ctx, v);
         if (toAskNextFrame()) {
             widget_.update();

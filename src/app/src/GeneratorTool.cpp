@@ -131,7 +131,39 @@ void GeneratorTool::createFields(QFormLayout* form)
             track(f.key.c_str(), static_cast<QDoubleSpinBox*>(widget));
         }
     }
+    auto* reset = new QPushButton(QStringLiteral("Restablecer valores"));
+    reset->setToolTip(QStringLiteral("Vuelve todas las respuestas a las que trae el generador y olvida las que se recordaban"));
+    connect(reset, &QPushButton::clicked, this, [this] { resetValues(); });
+    form->addRow(QString(), reset);
     updateVisibility();
+}
+
+// Todas las respuestas vuelven a las del generador, y se olvidan las recordadas de formularios anteriores.
+void GeneratorTool::resetValues()
+{
+    QSettings settings;
+    settings.remove(QStringLiteral("generator/%1").arg(QString::fromStdString(generator_.id())));
+    updating_ = true;
+    for (const document::GeneratorField& f : generator_.fields()) {
+        const auto row = std::ranges::find_if(rows_, [&](const Row& r) { return r.field.key == f.key; });
+        if (row == rows_.end()) {
+            continue;
+        }
+        if (f.kind == document::GeneratorField::Kind::Text) {
+            static_cast<QLineEdit*>(row->widget)->setText(QString::fromStdString(f.text));
+        } else if (f.kind == document::GeneratorField::Kind::Font) {
+            if (!f.text.empty()) {
+                static_cast<QFontComboBox*>(row->widget)->setCurrentFont(QFont(QString::fromStdString(f.text)));
+            }
+        } else if (f.kind == document::GeneratorField::Kind::Choice) {
+            static_cast<QComboBox*>(row->widget)->setCurrentIndex(int(f.value));
+        } else {
+            static_cast<QDoubleSpinBox*>(row->widget)->setValue(f.value);
+        }
+    }
+    updating_ = false;
+    updateVisibility();
+    updatePreview();
 }
 
 void GeneratorTool::updateVisibility()

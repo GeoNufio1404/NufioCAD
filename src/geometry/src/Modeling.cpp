@@ -1459,7 +1459,7 @@ Shape loft(std::string_view tagView, const std::vector<SketchRegion>& sections, 
 }
 
 Shape moveBody(std::string_view tag, const Shape& body, const sketch::Vec3& translation, const Axis& axis, double angle,
-               bool copy)
+               bool copy, const sketch::Vec3& turns, const sketch::Vec3& turnsAround)
 {
     if (body.isNull()) {
         throw GeometryError("No hay cuerpo que mover");
@@ -1468,6 +1468,16 @@ Shape moveBody(std::string_view tag, const Shape& body, const sketch::Vec3& tran
         gp_Trsf total;
         if (std::abs(angle) > 1e-12) {
             total.SetRotation(gp_Ax1(toPnt(axis.point), toDir(axis.direction)), angle);
+        }
+        // Los giros alrededor de X, Y y Z (el de X primero) por un mismo punto.
+        const double around[3] = {turns.x, turns.y, turns.z};
+        const gp_Dir directions[3] = {gp_Dir(1, 0, 0), gp_Dir(0, 1, 0), gp_Dir(0, 0, 1)};
+        for (int k = 0; k < 3; ++k) {
+            if (std::abs(around[k]) > 1e-12) {
+                gp_Trsf turn;
+                turn.SetRotation(gp_Ax1(toPnt(turnsAround), directions[k]), around[k]);
+                total = turn * total;
+            }
         }
         gp_Trsf shift;
         shift.SetTranslation(gp_Vec(translation.x, translation.y, translation.z));

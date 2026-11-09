@@ -525,7 +525,7 @@ FeatureRow rowOf(const Feature& f)
         row.type = "move";
         params = {{"body", m.body}, {"translation", {m.translation.x, m.translation.y, m.translation.z}},
                   {"axis", m.axis}, {"axisRef", m.axisRef}, {"aroundOrigin", m.aroundOrigin},
-                  {"angle", m.angle}, {"copy", m.copy}};
+                  {"angle", m.angle}, {"copy", m.copy}, {"rotation", {m.rotation.x, m.rotation.y, m.rotation.z}}, {"alsoMove", m.alsoMove}};
         break;
     }
     case FeatureKind::Combine: {
@@ -706,6 +706,15 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         m->aroundOrigin = p.at("aroundOrigin").get<bool>();
         m->angle = number(p, "angle");
         m->copy = p.at("copy").get<bool>();
+        if (p.contains("rotation")) {  // los diseños anteriores no lo traen: sin giro
+            const Json& r = p.at("rotation");
+            m->rotation = {r.at(0).get<double>(), r.at(1).get<double>(), r.at(2).get<double>()};
+        }
+        if (p.contains("alsoMove")) {  // los anteriores mueven un solo cuerpo
+            for (const Json& key : p.at("alsoMove")) {
+                m->alsoMove.push_back(key.get<std::string>());
+            }
+        }
         feature = std::move(m);
     } else if (row.type == "combine") {
         auto c = std::make_unique<CombineFeature>();

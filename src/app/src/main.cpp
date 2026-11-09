@@ -80,6 +80,9 @@ int main(int argc, char* argv[])
     if (interfaceCheck) {
         QStandardPaths::setTestModeEnabled(true);
         QSettings::setDefaultFormat(QSettings::IniFormat);
+        // Cada prueba parte de cero: lo que una vez recordaron los generadores (cada paso acepta valores cambiados)
+        // deformaba las cajas de las pruebas siguientes.
+        QDir(QDir::tempPath() + QStringLiteral("/NufioCAD-prueba")).removeRecursively();
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, QDir::tempPath() + QStringLiteral("/NufioCAD-prueba"));
         if (reportPath.isEmpty()) {
             reportPath = QDir::tempPath() + QStringLiteral("/NufioCAD-prueba-interfaz.txt");

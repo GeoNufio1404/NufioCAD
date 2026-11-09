@@ -13,6 +13,7 @@
 #include <QDoubleSpinBox>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <initializer_list>
 #include <numbers>
@@ -112,6 +113,53 @@ inline sketch::Vec3 normalized(const sketch::Vec3& v)
 inline sketch::Vec3 minus(const sketch::Vec3& a, const sketch::Vec3& b)
 {
     return {a.x - b.x, a.y - b.y, a.z - b.z};
+}
+
+// Una rotación como matriz 3×3 (por filas), para combinar los giros de los anillos.
+using Mat3 = std::array<double, 9>;
+
+inline Mat3 multiply(const Mat3& a, const Mat3& b)
+{
+    Mat3 r{};
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) {
+            for (int k = 0; k < 3; ++k) {
+                r[std::size_t(3 * i + j)] += a[std::size_t(3 * i + k)] * b[std::size_t(3 * k + j)];
+            }
+        }
+    }
+    return r;
+}
+
+// Giro de «angle» (rad) alrededor del eje X (0), Y (1) o Z (2) del mundo.
+inline Mat3 rotationAbout(int axis, double angle)
+{
+    const double c = std::cos(angle);
+    const double s = std::sin(angle);
+    if (axis == 0) {
+        return {1, 0, 0, 0, c, -s, 0, s, c};
+    }
+    if (axis == 1) {
+        return {c, 0, s, 0, 1, 0, -s, 0, c};
+    }
+    return {c, -s, 0, s, c, 0, 0, 0, 1};
+}
+
+// Lo que hace la operación Mover con sus tres giros: primero X, luego Y y luego Z (todos sobre los ejes del mundo).
+inline Mat3 fromTurns(double x, double y, double z)
+{
+    return multiply(rotationAbout(2, z), multiply(rotationAbout(1, y), rotationAbout(0, x)));
+}
+
+// Los tres giros (X, Y, Z, rad) que dan esa rotación; la inversa de fromTurns.
+inline std::array<double, 3> toTurns(const Mat3& r)
+{
+    const double sinY = std::clamp(-r[6], -1.0, 1.0);
+    if (std::abs(sinY) > 0.999999) {
+        // Con Y a ±90° los giros X y Z son el mismo: todo el giro va a X.
+        return {std::atan2(sinY > 0 ? r[1] : -r[1], r[4]), std::asin(sinY), 0.0};
+    }
+    return {std::atan2(r[7], r[8]), std::asin(sinY), std::atan2(r[3], r[0])};
 }
 
 // El punto «p» girado «angle» (rad) alrededor de la recta que pasa por «center» con dirección «axis» (unitaria).

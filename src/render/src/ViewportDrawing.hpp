@@ -55,7 +55,11 @@
 #include <gp_Elips.hxx>
 #include <TopoDS_Compound.hxx>
 #include <gp_Circ.hxx>
+#include <QTimer>
+
+#include <BRepPrimAPI_MakeBox.hxx>
 #include <BRepPrimAPI_MakeCone.hxx>
+#include <BRepPrimAPI_MakeTorus.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
 #include <Bnd_Box.hxx>
 #include <Font_FontMgr.hxx>

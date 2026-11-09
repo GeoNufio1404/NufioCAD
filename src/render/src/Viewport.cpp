@@ -238,6 +238,36 @@ void Viewport::selectProfiles(const std::vector<ModelSelection::Profile>& profil
 
 void Viewport::setAdditiveSelection(bool on) { impl_->setAdditiveSelection(on); }
 
+void Viewport::showGizmo(GizmoKind kind, const sketch::Vec3& origin)
+{
+    impl_->showGizmo(kind, origin);
+    update();
+}
+
+void Viewport::hideGizmo()
+{
+    impl_->hideGizmo();
+    update();
+}
+
+void Viewport::showGhost(const std::vector<geometry::Shape>& bodies)
+{
+    impl_->showGhost(bodies);
+    update();
+}
+
+void Viewport::setGhostMotion(const sketch::Vec3& pivot, const sketch::Vec3& rotation, const sketch::Vec3& translation)
+{
+    impl_->setGhostMotion(pivot, rotation, translation);
+    update();
+}
+
+void Viewport::hideGhost()
+{
+    impl_->hideGhost();
+    update();
+}
+
 void Viewport::showDistanceHandle(const sketch::Vec3& origin, const sketch::Vec3& direction, double distance)
 {
     impl_->showDistanceHandle(origin, direction, distance);
@@ -362,7 +392,8 @@ Qt::MouseButtons Viewport::navigationButtons(Qt::MouseButtons buttons) const
     if (impl_->navMode != NavigationMode::Default) {
         return buttons;
     }
-    if (((impl_->sketchToolActive || impl_->sketchDragging) && isSketching()) || impl_->handleDragging) {
+    if (((impl_->sketchToolActive || impl_->sketchDragging) && isSketching()) || impl_->handleDragging ||
+        impl_->gizmoActive >= 0) {
         buttons &= ~Qt::MouseButtons(Qt::LeftButton);
     }
     return buttons;
@@ -451,6 +482,18 @@ void Viewport::mousePressEvent(QMouseEvent* event)
     const qreal ratio = devicePixelRatioF();
     const Vec2i point(int(event->position().x() * ratio), int(event->position().y() * ratio));
     const bool navigating = impl_->navMode != NavigationMode::Default;
+    if (event->button() == Qt::LeftButton && !navigating && !isSketching() && impl_->gizmoKind != GizmoKind::None) {
+        // ¿Se agarra una flecha o un anillo?
+        impl_->context->MoveTo(point.x(), point.y(), impl_->view, false);
+        if (impl_->context->HasDetected()) {
+            for (int k = 0; k < 3; ++k) {
+                if (impl_->context->DetectedInteractive() == impl_->gizmoShapes[k] && impl_->startGizmoDrag(k, point)) {
+                    emit gizmoPressed(k);
+                    break;
+                }
+            }
+        }
+    }
     if (event->button() == Qt::LeftButton && !navigating && !isSketching() && !impl_->handle.IsNull()) {
         // ¿Se agarra la flecha de distancia?
         impl_->context->MoveTo(point.x(), point.y(), impl_->view, false);
@@ -482,7 +525,11 @@ void Viewport::mouseReleaseEvent(QMouseEvent* event)
 {
     const qreal ratio = devicePixelRatioF();
     const Vec2i point(int(event->position().x() * ratio), int(event->position().y() * ratio));
-    if (event->button() == Qt::LeftButton && impl_->handleDragging) {
+    if (event->button() == Qt::LeftButton && impl_->gizmoActive >= 0) {
+        const int axis = impl_->gizmoActive;
+        impl_->gizmoActive = -1;
+        emit gizmoReleased(axis);
+    } else if (event->button() == Qt::LeftButton && impl_->handleDragging) {
         impl_->handleDragging = false;
         emit distanceHandleReleased();
     } else if (event->button() == Qt::LeftButton && impl_->sketchDragging) {
@@ -560,6 +607,12 @@ void Viewport::mouseMoveEvent(QMouseEvent* event)
 {
     const qreal ratio = devicePixelRatioF();
     const Vec2i point(int(event->position().x() * ratio), int(event->position().y() * ratio));
+    if (impl_->gizmoActive >= 0) {
+        if (const auto amount = impl_->gizmoDragAmount(point)) {
+            emit gizmoDragged(impl_->gizmoActive, *amount);
+        }
+        return;
+    }
     if (impl_->handleDragging) {
         if (const auto t = impl_->handleParameterAt(point)) {
             emit distanceHandleDragged(*t - impl_->handleGrab);

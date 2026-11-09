@@ -183,9 +183,10 @@ Shape loft(std::string_view tag, const std::vector<SketchRegion>& sections, bool
 // Mueve un cuerpo: primero lo gira «angle» (rad) alrededor de «axis» y luego lo
 // desplaza «translation» (mm). Con «copy» las caras de la copia se llaman
 // «tag:copia:<nombre original>»; si no, conservan su nombre (es el mismo cuerpo, en
-// otro sitio).
+// otro sitio). Con «turns» (rad) además lo gira alrededor de los ejes X, Y y Z del mundo, en ese orden, por el punto
+// «turnsAround» (después del giro de «angle» y antes del desplazamiento).
 Shape moveBody(std::string_view tag, const Shape& body, const sketch::Vec3& translation, const Axis& axis, double angle,
-               bool copy);
+               bool copy, const sketch::Vec3& turns = {}, const sketch::Vec3& turnsAround = {});
 
 // Mueve el cuerpo de modo que el sistema de ejes «from» (origen, ejes X e Y, normal)
 // quede sobre «to». Las caras conservan su nombre.

@@ -1870,6 +1870,127 @@ TEST_CASE("El recálculo en segundo plano da lo mismo que el inmediato y no bloq
     REQUIRE(changes >= 3);
 }
 
+TEST_CASE("Mover gira un cuerpo alrededor de X, Y y Z por su centro y se guarda", "[move]")
+{
+    Document doc = boxDocument(5.0);  // 20 × 10 × 5
+    const std::string key = doc.result().bodies.front().key;
+    const geometry::Box original = doc.result().bodies.front().shape.bounds();
+    const double cx = 0.5 * (original.min.x + original.max.x);
+    const double cy = 0.5 * (original.min.y + original.max.y);
+
+    auto move = std::make_unique<MoveFeature>();
+    move->body = key;
+    move->rotation = {0.0, 0.0, kPi / 2.0};  // un cuarto de vuelta alrededor de Z
+    const FeatureId id = doc.addFeature(std::move(move));
+    REQUIRE(doc.status(id).health == Health::Ok);
+    const geometry::Box turned = doc.result().bodies.front().shape.bounds();
+    // 20 × 10 pasa a 10 × 20, con el mismo centro.
+    REQUIRE_THAT(turned.max.x - turned.min.x, Catch::Matchers::WithinAbs(10.0, 0.05));
+    REQUIRE_THAT(turned.max.y - turned.min.y, Catch::Matchers::WithinAbs(20.0, 0.05));
+    REQUIRE_THAT(0.5 * (turned.min.x + turned.max.x), Catch::Matchers::WithinAbs(cx, 0.05));
+    REQUIRE_THAT(0.5 * (turned.min.y + turned.max.y), Catch::Matchers::WithinAbs(cy, 0.05));
+
+    // Alrededor de X: el alto (5) y el fondo (10) se cambian.
+    auto flip = std::make_unique<MoveFeature>(*static_cast<const MoveFeature*>(doc.findFeature(id)));
+    flip->rotation = {kPi / 2.0, 0.0, 0.0};
+    doc.replaceFeature(id, std::move(flip));
+    const geometry::Box rolled = doc.result().bodies.front().shape.bounds();
+    REQUIRE_THAT(rolled.max.y - rolled.min.y, Catch::Matchers::WithinAbs(5.0, 0.05));
+    REQUIRE_THAT(rolled.max.z - rolled.min.z, Catch::Matchers::WithinAbs(10.0, 0.05));
+
+    // Los giros y el desplazamiento se guardan en el archivo.
+    auto both = std::make_unique<MoveFeature>(*static_cast<const MoveFeature*>(doc.findFeature(id)));
+    both->rotation = {0.0, kPi / 2.0, kPi / 4.0};
+    both->translation = {3.0, 0.0, 0.0};
+    doc.replaceFeature(id, std::move(both));
+    const auto path = std::filesystem::temp_directory_path() / "nuf_giro.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    const auto* loaded = static_cast<const MoveFeature*>(reopened.findFeature(id));
+    REQUIRE(loaded != nullptr);
+    REQUIRE_THAT(loaded->rotation.y, Catch::Matchers::WithinAbs(kPi / 2.0, 1e-9));
+    REQUIRE_THAT(loaded->rotation.z, Catch::Matchers::WithinAbs(kPi / 4.0, 1e-9));
+    REQUIRE_THAT(loaded->translation.x, Catch::Matchers::WithinAbs(3.0, 1e-9));
+    const geometry::Box a = doc.result().bodies.front().shape.bounds();
+    const geometry::Box b = reopened.result().bodies.front().shape.bounds();
+    REQUIRE_THAT(b.max.x - b.min.x, Catch::Matchers::WithinAbs(a.max.x - a.min.x, 1e-6));
+    REQUIRE_THAT(b.max.z - b.min.z, Catch::Matchers::WithinAbs(a.max.z - a.min.z, 1e-6));
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("Mover varios cuerpos a la vez los mueve y los gira como un solo bloque", "[move]")
+{
+    Document doc;
+    const auto addBox = [&](double x) {
+        auto box = std::make_unique<BoxFeature>();
+        box->base.origin = OriginPlane::XY;
+        box->x = x;
+        box->width = 10.0;
+        box->depth = 10.0;
+        box->height = 5.0;
+        box->operation = Operation::NewBody;
+        doc.addFeature(std::move(box));
+        return doc.result().bodies.back().key;
+    };
+    const std::string a = addBox(0.0);
+    const std::string b = addBox(30.0);  // los dos cuerpos, separados (como la placa y el texto de un llavero)
+    REQUIRE(doc.result().bodies.size() == 2);
+    const auto centerOf = [&](const std::string& key) {
+        for (const Body& body : doc.result().bodies) {
+            if (body.key == key) {
+                const geometry::Box box = body.shape.bounds();
+                return sketch::Vec3{0.5 * (box.min.x + box.max.x), 0.5 * (box.min.y + box.max.y), 0.5 * (box.min.z + box.max.z)};
+            }
+        }
+        return sketch::Vec3{};
+    };
+    const sketch::Vec3 ca = centerOf(a);
+    const sketch::Vec3 cb = centerOf(b);
+    const sketch::Vec3 pivot{0.5 * (ca.x + cb.x), 0.5 * (ca.y + cb.y), 0.5 * (ca.z + cb.z)};
+
+    auto move = std::make_unique<MoveFeature>();
+    move->body = a;
+    move->alsoMove = {b};
+    move->translation = {0.0, 0.0, 7.0};
+    move->rotation = {0.0, 0.0, kPi / 2.0};  // un cuarto de vuelta alrededor de Z por el centro de los dos
+    const FeatureId id = doc.addFeature(std::move(move));
+    REQUIRE(doc.status(id).health == Health::Ok);
+    // Cada centro gira 90° alrededor del pivote común y sube 7: (dx, dy) → (−dy, dx).
+    const sketch::Vec3 na = centerOf(a);
+    const sketch::Vec3 nb = centerOf(b);
+    REQUIRE_THAT(na.x, Catch::Matchers::WithinAbs(pivot.x - (ca.y - pivot.y), 0.05));
+    REQUIRE_THAT(na.y, Catch::Matchers::WithinAbs(pivot.y + (ca.x - pivot.x), 0.05));
+    REQUIRE_THAT(nb.x, Catch::Matchers::WithinAbs(pivot.x - (cb.y - pivot.y), 0.05));
+    REQUIRE_THAT(nb.y, Catch::Matchers::WithinAbs(pivot.y + (cb.x - pivot.x), 0.05));
+    REQUIRE_THAT(na.z, Catch::Matchers::WithinAbs(ca.z + 7.0, 0.05));
+    REQUIRE_THAT(nb.z, Catch::Matchers::WithinAbs(cb.z + 7.0, 0.05));
+    // La distancia entre los dos no cambia.
+    REQUIRE_THAT(std::hypot(na.x - nb.x, na.y - nb.y), Catch::Matchers::WithinAbs(std::hypot(ca.x - cb.x, ca.y - cb.y), 0.05));
+    // Depende de los dos cuerpos.
+    REQUIRE(doc.findFeature(id)->dependencies().size() >= 2);
+
+    // Se guarda en el archivo.
+    const auto path = std::filesystem::temp_directory_path() / "nuf_varios.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    const auto* loaded = static_cast<const MoveFeature*>(reopened.findFeature(id));
+    REQUIRE(loaded != nullptr);
+    REQUIRE(loaded->alsoMove == std::vector<std::string>{b});
+    std::filesystem::remove(path);
+
+    // Copiar varios a la vez todavía no se puede: avisa en vez de hacer algo a medias.
+    auto copy = std::make_unique<MoveFeature>(*static_cast<const MoveFeature*>(doc.findFeature(id)));
+    copy->copy = true;
+    doc.replaceFeature(id, std::move(copy));
+    REQUIRE(doc.status(id).health == Health::Error);
+}
+
 TEST_CASE("Un cambio nuevo cancela el cálculo en curso y solo vale el último", "[background]")
 {
     MainQueue queue;

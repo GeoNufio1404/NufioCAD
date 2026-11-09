@@ -384,6 +384,42 @@ La app ya no se cuelga mientras recalcula: lo lento (una rosca cortante, un engr
 
 ---
 
+## Mover y girar arrastrando (estilo Orca) — EN PRUEBA
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| O.1 | Crea una caja, Sólido › **Mover cuerpo** | Sobre la caja salen tres flechas (X rojo, Y verde, Z azul) en su centro; el panel tiene botones **Mover** y **Girar** |
+| O.2 | Arrastra la flecha roja con el ratón | Una **sombra azul translúcida** de la caja se desplaza por X; la caja de verdad se queda; el cuadro «Mover en X» va cambiando; la app no se pausa |
+| O.3 | Suelta el ratón | La sombra desaparece, la caja se coloca ahí (se recalcula) y las flechas se van con ella |
+| O.4 | Pulsa **Girar** | Aparecen tres anillos con marcas cada 45° (más largas en 0°, 90°, 180°, 270°) |
+| O.5 | Arrastra un anillo despacio | La sombra gira; al pasar cerca de una marca (a menos de 3°) se pega y la barra del panel dice «(marca)»; entre marcas gira libre |
+| O.6 | Da una vuelta completa o más con el anillo | No se rompe: el valor se mantiene entre −180° y 180° |
+| O.7 | Gira con el anillo azul (Z) 45° y luego con el rojo (X) 30° y con el verde (Y), sin aceptar | Cada anillo gira la pieza sobre **su propio eje del mundo** (el que dibuja el anillo), aunque ya esté girada por otro; la pieza no «se tuerce» sobre ejes que no son los del anillo. Los cuadros «Girar en X/Y/Z» muestran los tres giros equivalentes (pueden cambiar los tres a la vez) |
+| O.8 | Teclea valores en los cuadros (Mover en X…, Girar en Z…) | La vista previa se actualiza como siempre; las flechas o los anillos siguen al cuerpo |
+| O.9 | Con otro cuerpo en la escena, mueve el primero | El otro cuerpo se queda a la vista como referencia |
+| O.10 | Gira la vista con el ratón fuera de las flechas y los anillos | La vista orbita normal (no se agarra el gizmo) |
+| O.10b | Haz zoom con la rueda con los anillos (o las flechas) puestos, rápido y despacio | La vista va fluida; las flechas o los anillos **desaparecen mientras haces zoom** y reaparecen (con su tamaño de siempre) cerca de 1 s después de parar el último zoom; si haces zoom a ráfagas, no reaparecen entre una y otra |
+| O.11 | Acepta, guarda, cierra, abre y haz doble clic en el Mover del historial | Vuelven los mismos valores de movimiento y giro; deshacer deja el cuerpo como estaba |
+| O.12 | Abre un diseño de antes con un Mover que giraba (ángulo) sobre Z | Se ve ese giro en «Girar en Z» y el cuerpo queda igual |
+| O.13 | Un cuerpo con rosca: mover o girar arrastrando | La sombra es una caja (no se dibuja la rosca mientras arrastras) y no se cuelga |
+| O.14 | Haz un **Llavero** (Herramientas › Letrero o llavero), selecciona la placa y el texto con **Shift + clic** en una cara de cada uno y abre **Mover cuerpo** | La lista «Cuerpos» tiene marcados los dos y dice «Se mueven 2 cuerpos juntos»; las flechas salen en el centro de los dos |
+| O.15 | Arrastra una flecha y suelta | Placa y texto se mueven **juntos** (la sombra los muestra a los dos) |
+| O.16 | Gira con un anillo | Los dos giran como un bloque, por el centro de los dos |
+| O.17 | Marca y desmarca cuerpos en la lista de «Cuerpos» | La vista previa y el gizmo se ajustan a los marcados; con más de uno la casilla de «Crear una copia» queda desactivada |
+| O.18 | Guarda, cierra, abre y edita el Mover del historial | Vuelven marcados los mismos cuerpos |
+
+---
+
+## Restablecer valores de los generadores
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| R.1 | Abre un generador (Caja con tapa, Lightbox, Letrero), cambia varios valores y acepta; abre el mismo generador otra vez | El formulario parte de lo último que aceptaste |
+| R.2 | Pulsa **Restablecer valores** (al final del formulario) | Todas las respuestas vuelven a las de fábrica y la vista previa se actualiza |
+| R.3 | Cancela, y abre el generador otra vez | Parte de los valores de fábrica (se olvidó lo recordado) |
+
+---
+
 ## Vista previa translúcida y «Calculando…»
 
 | # | Haz esto | Debe pasar |

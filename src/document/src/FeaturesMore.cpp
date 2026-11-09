@@ -302,29 +302,58 @@ std::vector<FeatureId> LoftFeature::dependencies() const
 
 std::optional<std::string> MoveFeature::compute(ModelState& state) const
 {
-    const auto source = std::ranges::find_if(state.bodies, [&](const Body& b) { return b.key == body; });
-    if (source == state.bodies.end()) {
-        throw FeatureError("El cuerpo que se iba a mover ya no existe");
+    // El cuerpo y los que se mueven con él (un llavero son una placa y un texto): todos como una sola pieza.
+    std::vector<std::vector<Body>::iterator> sources;
+    for (const std::string& key : [&] {
+             std::vector<std::string> keys{body};
+             keys.insert(keys.end(), alsoMove.begin(), alsoMove.end());
+             return keys;
+         }()) {
+        const auto found = std::ranges::find_if(state.bodies, [&](const Body& b) { return b.key == key; });
+        if (found == state.bodies.end()) {
+            throw FeatureError(key == body ? "El cuerpo que se iba a mover ya no existe"
+                                           : "Uno de los cuerpos que se iban a mover ya no existe");
+        }
+        sources.push_back(found);
     }
-    geometry::Axis rotation;
-    rotation.direction = {axis == 0 ? 1.0 : 0.0, axis == 1 ? 1.0 : 0.0, axis == 2 ? 1.0 : 0.0};
+    if (copy && sources.size() > 1) {
+        throw FeatureError("Todavía no se pueden copiar varios cuerpos a la vez: muévelos, o copia de uno en uno");
+    }
+    const auto source = sources.front();
+    geometry::Axis rotationAxis;
+    rotationAxis.direction = {axis == 0 ? 1.0 : 0.0, axis == 1 ? 1.0 : 0.0, axis == 2 ? 1.0 : 0.0};
+    sketch::Vec3 center{};
+    if (!aroundOrigin) {
+        // El centro de todos juntos: giran como un solo bloque.
+        geometry::Box box = source->shape.bounds();
+        for (const auto& other : sources) {
+            const geometry::Box b = other->shape.bounds();
+            box.min = {std::min(box.min.x, b.min.x), std::min(box.min.y, b.min.y), std::min(box.min.z, b.min.z)};
+            box.max = {std::max(box.max.x, b.max.x), std::max(box.max.y, b.max.y), std::max(box.max.z, b.max.z)};
+        }
+        center = {(box.min.x + box.max.x) / 2.0, (box.min.y + box.max.y) / 2.0, (box.min.z + box.max.z) / 2.0};
+    }
+    rotationAxis.point = center;
     if (axisRef != 0) {
         const auto line = state.axes.find(axisRef);
         if (line == state.axes.end()) {
             throw FeatureError("El eje de construcción del giro ya no existe");
         }
-        rotation.point = line->second.point;
-        rotation.direction = line->second.direction;
-    } else if (!aroundOrigin) {
-        const geometry::Box box = source->shape.bounds();
-        rotation.point = {(box.min.x + box.max.x) / 2.0, (box.min.y + box.max.y) / 2.0, (box.min.z + box.max.z) / 2.0};
+        rotationAxis.point = line->second.point;
+        rotationAxis.direction = line->second.direction;
     }
     try {
-        geometry::Shape moved = geometry::moveBody(tag(), source->shape, translation, rotation, angle, copy);
+        // Primero todo se calcula y luego se coloca (si una falla, no se mueve ninguno).
+        std::vector<geometry::Shape> results;
+        for (const auto& item : sources) {
+            results.push_back(geometry::moveBody(tag(), item->shape, translation, rotationAxis, angle, copy, rotation, center));
+        }
         if (copy) {
-            state.bodies.push_back({tag(), "Cuerpo" + std::to_string(++state.bodiesCreated), std::move(moved)});
+            state.bodies.push_back({tag(), "Cuerpo" + std::to_string(++state.bodiesCreated), std::move(results.front())});
         } else {
-            source->shape = std::move(moved);
+            for (std::size_t i = 0; i < sources.size(); ++i) {
+                sources[i]->shape = std::move(results[i]);
+            }
         }
     } catch (const geometry::GeometryError& e) {
         throw FeatureError(e.what());
@@ -336,6 +365,9 @@ std::vector<FeatureId> MoveFeature::dependencies() const
 {
     std::vector<FeatureId> ids;
     addAll(ids, geometry::ElementRef{body + ":", 0});
+    for (const std::string& other : alsoMove) {
+        addAll(ids, geometry::ElementRef{other + ":", 0});
+    }
     if (axisRef != 0) {
         ids.push_back(axisRef);
     }
@@ -345,7 +377,9 @@ std::vector<FeatureId> MoveFeature::dependencies() const
 std::vector<Feature::NumericField> MoveFeature::numericFields()
 {
     return {field("x", "Desplazamiento X", translation.x), field("y", "Desplazamiento Y", translation.y),
-            field("z", "Desplazamiento Z", translation.z), field("angle", "Ángulo", angle, kRadiansPerDegree)};
+            field("z", "Desplazamiento Z", translation.z), field("angle", "Ángulo", angle, kRadiansPerDegree),
+            field("rx", "Giro X", rotation.x, kRadiansPerDegree), field("ry", "Giro Y", rotation.y, kRadiansPerDegree),
+            field("rz", "Giro Z", rotation.z, kRadiansPerDegree)};
 }
 
 std::optional<std::string> CombineFeature::compute(ModelState& state) const

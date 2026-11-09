@@ -53,6 +53,7 @@ private:
     };
     void showResult(const Calculation& calculation, bool first);
     document::GeneratorValues values() const;
+    void resetValues();
     void updateVisibility();
     std::optional<Arrow> dimensionArrow(const std::string& key) const override;
 

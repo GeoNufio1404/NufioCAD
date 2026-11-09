@@ -1,6 +1,7 @@
 #include "InterfaceCheck.hpp"
 
 #include "FeatureTools.hpp"
+#include "FeatureToolsCommon.hpp"
 #include "MainWindow.hpp"
 #include "Units.hpp"
 
@@ -11,6 +12,7 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
+#include <QWheelEvent>
 #include <QLabel>
 #include <QDockWidget>
 #include <QRegularExpression>
@@ -20,7 +22,9 @@
 #include <QImage>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QListWidget>
 #include <QPushButton>
+#include <QSettings>
 #include <QTextStream>
 #include <QEvent>
 #include <QThread>
@@ -29,6 +33,7 @@
 #include <chrono>
 #include <cstring>
 #include <exception>
+#include <numbers>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -285,6 +290,8 @@ int InterfaceCheck::openChangeAccept(QAction* action, int spinIndex)
     }
     expect(waitFor([this] { return window_.tool_ == nullptr; }, 10000), QStringLiteral("la herramienta no se cerró al aceptar"));
     waitIdle();
+    // Los generadores recuerdan lo aceptado (aquí, valores cambiados a propósito): la prueba siguiente parte de los de fábrica.
+    QSettings().remove(QStringLiteral("generator"));
     return int(window_.document_.featureCount() - before);
 }
 
@@ -459,7 +466,7 @@ int InterfaceCheck::run()
     arrowCheck(QStringLiteral("Engranaje"), window_.gearAction_, 2);
     arrowCheck(QStringLiteral("Plano (ángulo)"), window_.planeAction_, 1, false, 30.0);
     arrowCheck(QStringLiteral("Mover cuerpo (X)"), window_.moveAction_, 0, true, 20.0);
-    arrowCheck(QStringLiteral("Mover cuerpo (ángulo)"), window_.moveAction_, 3, true, 45.0);
+    arrowCheck(QStringLiteral("Mover cuerpo (giro en X)"), window_.moveAction_, 3, true, 45.0);
     arrowCheck(QStringLiteral("Patrón (distancia)"), window_.patternAction_, 1, true);
     arrowCheck(QStringLiteral("Caja (radio de esquinas)"), window_.boxAction_, 6, false, 3.0);
     arrowCheck(QStringLiteral("Engranaje (ángulo de presión)"), window_.gearAction_, 5);
@@ -510,6 +517,234 @@ int InterfaceCheck::run()
         }
         waitFor([this] { return window_.tool_ == nullptr; }, 10000);
         waitIdle();
+    });
+
+    // Mover y girar con el ratón: se simulan las señales del visor (agarrar, arrastrar, soltar) para comprobar que los
+    // cuadros siguen al arrastre sin calcular, que el giro se pega a las marcas de 45° y que al soltar se calcula.
+    step(QStringLiteral("Mover y girar arrastrando (con sombra)"), [&] {
+        expect(openChangeAccept(window_.boxAction_, 3) == 1, QStringLiteral("no se creó la caja de apoyo"));
+        blocking(QStringLiteral("abrir Mover"), [&] { window_.moveAction_->trigger(); });
+        expect(window_.tool_ != nullptr, QStringLiteral("no se abrió Mover"));
+        waitIdle();
+        QDoubleSpinBox* x = spin(0);
+        QDoubleSpinBox* rz = spin(5);
+        expect(x != nullptr && rz != nullptr, QStringLiteral("faltan los cuadros de mover y girar"));
+        if (x != nullptr && rz != nullptr && window_.tool_ != nullptr) {
+            // Las flechas (rojo, verde y azul del gizmo) se ven en la vista; la captura queda en %TEMP% para mirarla.
+            const auto gizmoPixels = [&](const QString& file) {
+                blocking(QStringLiteral("encuadrar"), [&] { window_.viewport_->fitAll(); });
+                settle(1500);  // el gizmo se quita mientras cambia el zoom y vuelve cuando la vista lleva 900 ms quieta
+                const QImage image = window_.viewport_->grabFramebuffer();
+                image.save(QDir::temp().filePath(file));
+                long red = 0, green = 0, blue = 0;
+                for (int py = 0; py < image.height(); ++py) {
+                    for (int px = 0; px < image.width(); ++px) {
+                        const QColor c = image.pixelColor(px, py);
+                        red += c.red() > 190 && c.green() < 110 && c.blue() < 120;
+                        green += c.green() > 160 && c.red() < 110 && c.blue() < 150 && c.green() - c.blue() > 50;
+                        blue += c.blue() > 200 && c.red() < 120 && c.green() > 100 && c.green() < 180;
+                    }
+                }
+                return std::array<long, 3>{red, green, blue};
+            };
+            const auto arrows = gizmoPixels(QStringLiteral("gizmo-mover.png"));
+            expect(arrows[0] > 80 && arrows[1] > 80 && arrows[2] > 80,
+                   QStringLiteral("no se ven las tres flechas (rojo %1, verde %2, azul %3)").arg(arrows[0]).arg(arrows[1]).arg(arrows[2]));
+            if (QPushButton* turn = button(QStringLiteral("Girar"))) {
+                turn->click();
+            }
+            const auto rings = gizmoPixels(QStringLiteral("gizmo-girar.png"));
+            expect(rings[0] > 80 && rings[1] > 80 && rings[2] > 80,
+                   QStringLiteral("no se ven los tres anillos (rojo %1, verde %2, azul %3)").arg(rings[0]).arg(rings[1]).arg(rings[2]));
+            if (current_ != nullptr) {
+                current_->detail += QStringLiteral(" flechas %1/%2/%3 anillos %4/%5/%6")
+                                        .arg(arrows[0]).arg(arrows[1]).arg(arrows[2]).arg(rings[0]).arg(rings[1]).arg(rings[2]);
+            }
+            // Lo que cuesta dibujar de nuevo los anillos (es lo que se paga al volver a aparecer tras un zoom).
+            {
+                long rebuild = 0;
+                for (int i = 0; i < 5; ++i) {
+                    window_.viewport_->hideGizmo();
+                    QElapsedTimer timer;
+                    timer.start();
+                    blocking(QStringLiteral("dibujar los anillos"), [&] {
+                        window_.viewport_->showGizmo(render::Viewport::GizmoKind::Rotate, {0.0, 0.0, 0.0});
+                        window_.viewport_->grabFramebuffer();  // fuerza el dibujo del cuadro, que es donde se mallan
+                    });
+                    rebuild = std::max<long>(rebuild, timer.elapsed());
+                }
+                expect(rebuild < 400, QStringLiteral("dibujar los anillos tardó %1 ms").arg(rebuild));
+                if (current_ != nullptr) {
+                    current_->detail += QStringLiteral(" anillos %1 ms").arg(rebuild);
+                }
+            }
+            // Zoom con la rueda con los anillos puestos: antes se rehacían a cada cuadro y la vista iba a 1 imagen por
+            // segundo. Ahora se quitan mientras cambia el zoom y vuelven al quedar quieta la vista.
+            {
+                long slowest = 0;
+                const QPointF center(window_.viewport_->width() / 2.0, window_.viewport_->height() / 2.0);
+                const double pixelBefore = window_.viewport_->sketchPixelSize();
+                for (int i = 0; i < 12; ++i) {
+                    if (i == 6) {
+                        expect(std::abs(window_.viewport_->sketchPixelSize() - pixelBefore) > 1e-6 * pixelBefore,
+                               QStringLiteral("la rueda no cambió el zoom (la prueba no mide nada)"));
+                    }
+                    QElapsedTimer one;
+                    one.start();
+                    blocking(QStringLiteral("zoom con la rueda"), [&] {
+                        QWheelEvent wheel(center, window_.viewport_->mapToGlobal(center), QPoint(), QPoint(0, i < 6 ? 120 : -120),
+                                          Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+                        QCoreApplication::sendEvent(window_.viewport_, &wheel);
+                    });
+                    settle(40);  // deja que se dibuje el cuadro
+                    slowest = std::max<long>(slowest, one.elapsed());
+                }
+                expect(slowest < 700, QStringLiteral("un paso de zoom con los anillos tardó %1 ms").arg(slowest));
+                if (current_ != nullptr) {
+                    current_->detail += QStringLiteral(" zoom máx. %1 ms").arg(slowest);
+                }
+                settle(1300);  // vuelven los anillos
+            }
+            if (QPushButton* move = button(QStringLiteral("Mover"))) {
+                move->click();
+            }
+            // Mover: arrastrar la flecha X 12,5 mm.
+            blocking(QStringLiteral("arrastrar la flecha X"), [&] {
+                emit window_.viewport_->gizmoPressed(0);
+                emit window_.viewport_->gizmoDragged(0, 12.5);
+            });
+            settle(400);
+            expect(std::abs(x->value() - 12.5) < 0.01, QStringLiteral("el cuadro X no siguió al arrastre (%1)").arg(x->value()));
+            expect(!window_.tool_->previewing(), QStringLiteral("se calculó la vista previa durante el arrastre"));
+            blocking(QStringLiteral("soltar la flecha X"), [&] { emit window_.viewport_->gizmoReleased(0); });
+            waitIdle();
+            // Girar: el anillo Z, 43,5° (cerca de la marca de 45°) y luego 60° (sin marca cerca).
+            if (QPushButton* turn = button(QStringLiteral("Girar"))) {
+                turn->click();
+            }
+            blocking(QStringLiteral("arrastrar el anillo Z"), [&] {
+                emit window_.viewport_->gizmoPressed(2);
+                emit window_.viewport_->gizmoDragged(2, 43.5 * std::numbers::pi / 180.0);
+            });
+            expect(std::abs(rz->value() - 45.0) < 0.01, QStringLiteral("el giro no se pegó a la marca de 45° (%1)").arg(rz->value()));
+            blocking(QStringLiteral("seguir arrastrando el anillo Z"),
+                     [&] { emit window_.viewport_->gizmoDragged(2, 60.0 * std::numbers::pi / 180.0); });
+            expect(std::abs(rz->value() - 60.0) < 0.11, QStringLiteral("fuera de las marcas el giro debía ser libre (%1)").arg(rz->value()));
+            blocking(QStringLiteral("soltar el anillo Z"), [&] { emit window_.viewport_->gizmoReleased(2); });
+            waitIdle();
+            // Después de girar en Z, el anillo X gira sobre el eje X del MUNDO (el que dibuja el anillo), no sobre el de
+            // la pieza ya girada: la orientación debe ser Rx(30°)·Rz(60°).
+            blocking(QStringLiteral("arrastrar el anillo X"), [&] {
+                emit window_.viewport_->gizmoPressed(0);
+                emit window_.viewport_->gizmoDragged(0, 30.0 * std::numbers::pi / 180.0);
+            });
+            const std::array<QDoubleSpinBox*, 3> turns{spin(3), spin(4), spin(5)};
+            if (turns[0] != nullptr && turns[1] != nullptr && turns[2] != nullptr) {
+                const double deg = std::numbers::pi / 180.0;
+                const auto got = nuf::app::fromTurns(turns[0]->value() * deg, turns[1]->value() * deg, turns[2]->value() * deg);
+                const auto wanted = nuf::app::multiply(nuf::app::rotationAbout(0, 30.0 * deg), nuf::app::rotationAbout(2, 60.0 * deg));
+                double worst = 0.0;
+                for (std::size_t i = 0; i < 9; ++i) {
+                    worst = std::max(worst, std::abs(got[i] - wanted[i]));
+                }
+                expect(worst < 0.005, QStringLiteral("el anillo X no giró sobre el eje X del mundo (diferencia %1; giros %2 %3 %4)")
+                                          .arg(worst).arg(turns[0]->value()).arg(turns[1]->value()).arg(turns[2]->value()));
+            }
+            blocking(QStringLiteral("soltar el anillo X"), [&] { emit window_.viewport_->gizmoReleased(0); });
+            waitIdle();
+            // Se vuelve a la orientación de antes (solo Z = 60°) para el resto de la comprobación.
+            if (turns[0] != nullptr && turns[1] != nullptr && turns[2] != nullptr) {
+                blocking(QStringLiteral("deshacer el giro en X"), [&] {
+                    turns[0]->setValue(0.0);
+                    turns[1]->setValue(0.0);
+                    turns[2]->setValue(60.0);
+                });
+                waitIdle();
+            }
+            expect(window_.tool_->previewing() == false, QStringLiteral("la vista previa no terminó al soltar"));
+            if (QPushButton* ok = button(QStringLiteral("Aceptar")); ok != nullptr && ok->isEnabled()) {
+                blocking(QStringLiteral("aceptar"), [&] { ok->click(); });
+            }
+            waitFor([this] { return window_.tool_ == nullptr; }, 10000);
+            waitIdle();
+            const auto* move = window_.document_.featureCount() >= 2
+                                   ? dynamic_cast<const document::MoveFeature*>(&window_.document_.feature(1))
+                                   : nullptr;
+            expect(move != nullptr, QStringLiteral("no se creó la operación Mover"));
+            if (move != nullptr) {
+                expect(std::abs(move->translation.x - 12.5) < 0.01, QStringLiteral("el desplazamiento guardado es %1").arg(move->translation.x));
+                expect(std::abs(move->rotation.z - 60.0 * std::numbers::pi / 180.0) < 0.003,
+                       QStringLiteral("el giro guardado es %1 rad").arg(move->rotation.z));
+            }
+        }
+        if (window_.tool_ != nullptr) {
+            if (QPushButton* cancel = button(QStringLiteral("Cancelar"))) {
+                cancel->click();
+            }
+            waitFor([this] { return window_.tool_ == nullptr; }, 10000);
+        }
+        undoAll();
+    });
+
+    // Un llavero son dos cuerpos (placa y texto): mover con los dos marcados los lleva juntos.
+    step(QStringLiteral("Mover los dos cuerpos de un letrero a la vez"), [&] {
+        QAction* sign = nullptr;
+        for (QAction* action : generators) {
+            if (action->text().contains(QStringLiteral("Letrero"))) {
+                sign = action;
+            }
+        }
+        expect(sign != nullptr, QStringLiteral("no hay generador Letrero"));
+        if (sign == nullptr) {
+            return;
+        }
+        expect(openChangeAccept(sign, 0) >= 1, QStringLiteral("no se creó el letrero"));
+        const auto centers = [&] {
+            std::vector<double> xs;
+            for (const document::Body& body : window_.document_.result().bodies) {
+                const geometry::Box box = body.shape.bounds();
+                xs.push_back(0.5 * (box.min.x + box.max.x));
+            }
+            return xs;
+        };
+        const std::vector<double> before = centers();
+        expect(before.size() >= 2, QStringLiteral("el letrero debía tener al menos dos cuerpos (%1)").arg(before.size()));
+        blocking(QStringLiteral("abrir Mover"), [&] { window_.moveAction_->trigger(); });
+        waitIdle();
+        auto* list = window_.propertiesDock_->widget() != nullptr ? window_.propertiesDock_->widget()->findChild<QListWidget*>() : nullptr;
+        expect(list != nullptr && list->count() == int(before.size()), QStringLiteral("la lista de cuerpos de Mover no coincide"));
+        if (list != nullptr && window_.tool_ != nullptr) {
+            blocking(QStringLiteral("marcar todos los cuerpos"), [&] {
+                for (int i = 0; i < list->count(); ++i) {
+                    list->item(i)->setCheckState(Qt::Checked);
+                }
+            });
+            waitIdle();
+            blocking(QStringLiteral("arrastrar la flecha X"), [&] {
+                emit window_.viewport_->gizmoPressed(0);
+                emit window_.viewport_->gizmoDragged(0, 15.0);
+                emit window_.viewport_->gizmoReleased(0);
+            });
+            waitIdle();
+            if (QPushButton* ok = button(QStringLiteral("Aceptar")); ok != nullptr && ok->isEnabled()) {
+                blocking(QStringLiteral("aceptar"), [&] { ok->click(); });
+            }
+            waitFor([this] { return window_.tool_ == nullptr; }, 10000);
+            waitIdle();
+            const std::vector<double> after = centers();
+            expect(after.size() == before.size(), QStringLiteral("cambió el número de cuerpos"));
+            for (std::size_t i = 0; i < std::min(before.size(), after.size()); ++i) {
+                expect(std::abs(after[i] - before[i] - 15.0) < 0.1,
+                       QStringLiteral("el cuerpo %1 se movió %2 mm en vez de 15").arg(i + 1).arg(after[i] - before[i]));
+            }
+        }
+        if (window_.tool_ != nullptr) {
+            if (QPushButton* cancel = button(QStringLiteral("Cancelar"))) {
+                cancel->click();
+            }
+            waitFor([this] { return window_.tool_ == nullptr; }, 10000);
+        }
+        undoAll();
     });
 
     // Sección y medición con un cuerpo.
