@@ -75,11 +75,21 @@ private:
             return;
         }
         const int width = label_->fontMetrics().horizontalAdvance(label_->text()) + 8;
-        edit->setTextMargins(0, 0, width, 0);
-        label_->setGeometry(edit->geometry().right() - width - 2, edit->geometry().top(), width,
-                            edit->geometry().height());
-        label_->raise();
-        label_->setVisible(!label_->text().isEmpty());
+        // Solo se toca lo que cambió: setTextMargins() pide un nuevo layout aunque el margen sea el mismo, y como este
+        // método se ejecuta justo al recibir cada pedido de layout, el cuadro se repintaba sin parar (cientos de veces
+        // por segundo con la herramienta abierta, que es lo que hacía lenta la vista).
+        if (edit->textMargins().right() != width) {
+            edit->setTextMargins(0, 0, width, 0);
+        }
+        const QRect wanted(edit->geometry().right() - width - 2, edit->geometry().top(), width, edit->geometry().height());
+        if (label_->geometry() != wanted) {
+            label_->setGeometry(wanted);
+            label_->raise();
+        }
+        const bool visible = !label_->text().isEmpty();
+        if (label_->isVisibleTo(box_) != visible) {
+            label_->setVisible(visible);
+        }
     }
 
     QPointer<QAbstractSpinBox> box_;

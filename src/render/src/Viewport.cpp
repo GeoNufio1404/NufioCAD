@@ -268,6 +268,18 @@ void Viewport::hideGhost()
     update();
 }
 
+void Viewport::showAngleSweep(const sketch::Vec3& center, const sketch::Vec3& axis, const sketch::Vec3& start, double angle)
+{
+    impl_->showAngleSweep(center, axis, start, angle);
+    update();
+}
+
+void Viewport::hideAngleSweep()
+{
+    impl_->hideAngleSweep();
+    update();
+}
+
 void Viewport::showDistanceHandle(const sketch::Vec3& origin, const sketch::Vec3& direction, double distance)
 {
     impl_->showDistanceHandle(origin, direction, distance);
@@ -477,6 +489,18 @@ void Viewport::changeEvent(QEvent* event)
     }
 }
 
+void Viewport::flushGizmoDrag()
+{
+    if (impl_->gizmoFlush != nullptr) {
+        impl_->gizmoFlush->stop();
+    }
+    if (impl_->gizmoHasPending && impl_->gizmoActive >= 0) {
+        impl_->gizmoHasPending = false;
+        impl_->gizmoClock.restart();
+        emit gizmoDragged(impl_->gizmoActive, impl_->gizmoPending);
+    }
+}
+
 void Viewport::mousePressEvent(QMouseEvent* event)
 {
     const qreal ratio = devicePixelRatioF();
@@ -526,6 +550,7 @@ void Viewport::mouseReleaseEvent(QMouseEvent* event)
     const qreal ratio = devicePixelRatioF();
     const Vec2i point(int(event->position().x() * ratio), int(event->position().y() * ratio));
     if (event->button() == Qt::LeftButton && impl_->gizmoActive >= 0) {
+        flushGizmoDrag();  // lo último que se movió llega antes de soltar
         const int axis = impl_->gizmoActive;
         impl_->gizmoActive = -1;
         emit gizmoReleased(axis);
@@ -609,7 +634,20 @@ void Viewport::mouseMoveEvent(QMouseEvent* event)
     const Vec2i point(int(event->position().x() * ratio), int(event->position().y() * ratio));
     if (impl_->gizmoActive >= 0) {
         if (const auto amount = impl_->gizmoDragAmount(point)) {
-            emit gizmoDragged(impl_->gizmoActive, *amount);
+            // El ratón manda eventos más deprisa de lo que se dibuja: se agrupan (a unos 40 por segundo) y vale el último.
+            impl_->gizmoPending = *amount;
+            impl_->gizmoHasPending = true;
+            constexpr qint64 kInterval = 25;
+            if (!impl_->gizmoClock.isValid() || impl_->gizmoClock.elapsed() >= kInterval) {
+                flushGizmoDrag();
+            } else if (impl_->gizmoFlush == nullptr || !impl_->gizmoFlush->isActive()) {
+                if (impl_->gizmoFlush == nullptr) {
+                    impl_->gizmoFlush = new QTimer(this);
+                    impl_->gizmoFlush->setSingleShot(true);
+                    connect(impl_->gizmoFlush, &QTimer::timeout, this, [this] { flushGizmoDrag(); });
+                }
+                impl_->gizmoFlush->start(int(kInterval - impl_->gizmoClock.elapsed()));
+            }
         }
         return;
     }

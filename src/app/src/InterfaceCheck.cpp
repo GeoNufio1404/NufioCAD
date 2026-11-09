@@ -23,6 +23,7 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QListWidget>
+#include <QMap>
 #include <QPushButton>
 #include <QSettings>
 #include <QTextStream>
@@ -443,7 +444,7 @@ int InterfaceCheck::run()
                 }
                 // Al escribir otro valor la flecha sigue ahí (se recoloca con la vista previa).
                 blocking(QStringLiteral("cambiar el valor"), [&] { box->setValue(std::min(box->maximum(), box->value() + 5.0)); });
-                settle(500);
+                waitIdle();  // la vista previa del engranaje tarda ~0,7 s en Debug y la flecha se recoloca al terminar
                 const long changed = turquoise();
                 expect(changed > 50, QStringLiteral("la flecha desapareció al cambiar el valor (%1 píxeles)").arg(changed));
                 if (current_ != nullptr) {
@@ -627,8 +628,84 @@ int InterfaceCheck::run()
                 emit window_.viewport_->gizmoDragged(2, 43.5 * std::numbers::pi / 180.0);
             });
             expect(std::abs(rz->value() - 45.0) < 0.01, QStringLiteral("el giro no se pegó a la marca de 45° (%1)").arg(rz->value()));
+            // Cuánto cuesta cada paso de un arrastre de anillo (señal + dibujar el cuadro), como con el ratón real.
+            {
+                long slotTotal = 0;
+                long paintTotal = 0;
+                long worstStep = 0;
+                constexpr int kSteps = 40;
+                for (int i = 1; i <= kSteps; ++i) {
+                    QElapsedTimer slot;
+                    slot.start();
+                    emit window_.viewport_->gizmoDragged(2, (i * 3.0) * std::numbers::pi / 180.0);
+                    const long slotMs = slot.elapsed();
+                    QElapsedTimer paint;
+                    paint.start();
+                    QCoreApplication::processEvents(QEventLoop::AllEvents, 50);  // el cuadro que se dibuja
+                    window_.viewport_->update();
+                    QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+                    slotTotal += slotMs;
+                    paintTotal += paint.elapsed();
+                    worstStep = std::max<long>(worstStep, slotMs + paint.elapsed());
+                }
+                // Lo mismo sin arrastrar: lo que cuesta dibujar la vista sola.
+                long idleTotal = 0;
+                for (int i = 0; i < kSteps; ++i) {
+                    QElapsedTimer idle;
+                    idle.start();
+                    QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+                    window_.viewport_->update();
+                    QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+                    idleTotal += idle.elapsed();
+                }
+                // Con el panel de la herramienta abierto y sin tocar nada, la vista no debe repintarse sin parar: un bucle de
+                // layout en los cuadros numéricos llegó a repintar el panel cientos de veces por segundo y dejaba la vista a
+                // unas 9 imágenes por segundo (un cuadro de 110 ms en vez de 16).
+                {
+                    struct Counter : QObject {
+                        int paints = 0;
+                        bool eventFilter(QObject*, QEvent* event) override
+                        {
+                            paints += event->type() == QEvent::Paint ? 1 : 0;
+                            return false;
+                        }
+                    } counter;
+                    QList<QWidget*> watched = window_.propertiesDock_->widget()->findChildren<QWidget*>();
+                    watched.append(window_.propertiesDock_->widget());
+                    for (QWidget* child : watched) {
+                        child->installEventFilter(&counter);
+                    }
+                    settle(1000);
+                    for (QWidget* child : watched) {
+                        child->removeEventFilter(&counter);
+                    }
+                    expect(counter.paints < 200, QStringLiteral("el panel se repinta sin parar (%1 pinturas en 1 s sin tocar nada)").arg(counter.paints));
+                    long idleFrame = 0;
+                    for (int i = 0; i < 20; ++i) {
+                        QElapsedTimer one;
+                        one.start();
+                        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+                        window_.viewport_->update();
+                        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+                        idleFrame += one.elapsed();
+                    }
+                    idleFrame /= 20;
+                    expect(idleFrame < 60, QStringLiteral("un cuadro de la vista con el panel abierto tarda %1 ms").arg(idleFrame));
+                    expect(paintTotal / kSteps < 200, QStringLiteral("un paso de arrastre tarda %1 ms en dibujarse").arg(paintTotal / kSteps));
+                    if (current_ != nullptr) {
+                        current_->detail += QStringLiteral(" arrastre: gestión %1 ms + dibujo %2 ms por paso (peor %3 ms); cuadro sin arrastrar %4 ms; %5 pinturas del panel en 1 s")
+                                                .arg(slotTotal / kSteps).arg(paintTotal / kSteps).arg(worstStep).arg(idleFrame).arg(counter.paints);
+                    }
+                }
+                // Vuelve a 60° para lo que sigue.
+                emit window_.viewport_->gizmoDragged(2, 43.5 * std::numbers::pi / 180.0);
+            }
+            QElapsedTimer dragStep;
+            dragStep.start();
             blocking(QStringLiteral("seguir arrastrando el anillo Z"),
                      [&] { emit window_.viewport_->gizmoDragged(2, 60.0 * std::numbers::pi / 180.0); });
+            settle(60);  // dibuja el cuadro con el arco del ángulo
+            expect(dragStep.elapsed() < 500, QStringLiteral("un paso de arrastre del anillo (con el arco) tardó %1 ms").arg(dragStep.elapsed()));
             expect(std::abs(rz->value() - 60.0) < 0.11, QStringLiteral("fuera de las marcas el giro debía ser libre (%1)").arg(rz->value()));
             blocking(QStringLiteral("soltar el anillo Z"), [&] { emit window_.viewport_->gizmoReleased(2); });
             waitIdle();
@@ -797,6 +874,24 @@ int InterfaceCheck::run()
         waitIdle();
         expect(window_.document_.status(threadId).health != document::Health::Error, QStringLiteral("la rosca falló al final"));
         undoAll();
+    });
+
+    // Lo que cuesta dibujar un cuadro de la vista vacía (el coste de base de la vista, sin pieza ni herramienta).
+    step(QStringLiteral("Coste de dibujar la vista vacía"), [&] {
+        waitIdle();
+        long total = 0;
+        constexpr int kFrames = 30;
+        for (int i = 0; i < kFrames; ++i) {
+            QElapsedTimer frame;
+            frame.start();
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+            window_.viewport_->update();
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+            total += frame.elapsed();
+        }
+        if (current_ != nullptr) {
+            current_->detail += QStringLiteral(" cuadro de la vista vacía: %1 ms").arg(total / kFrames);
+        }
     });
 
     step(QStringLiteral("Al final todo está limpio"), [&] {

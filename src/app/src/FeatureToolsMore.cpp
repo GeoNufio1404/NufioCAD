@@ -204,6 +204,7 @@ MoveTool::~MoveTool()
 {
     viewport_.hideGizmo();
     viewport_.hideGhost();
+    viewport_.hideAngleSweep();
 }
 
 void MoveTool::stopPreview()
@@ -212,6 +213,7 @@ void MoveTool::stopPreview()
     dragging_ = false;
     viewport_.hideGizmo();
     viewport_.hideGhost();
+    viewport_.hideAngleSweep();
 }
 
 void MoveTool::createFields(QFormLayout* form)
@@ -292,10 +294,16 @@ void MoveTool::createFields(QFormLayout* form)
     auto* modeRow = new QHBoxLayout();
     modeRow->addWidget(moveMode_);
     modeRow->addWidget(turnMode_);
-    auto* hint = new QLabel(QStringLiteral("Arrastra las flechas (o los anillos, con marcas cada 45°) en la vista; la pieza "
-                                           "se recalcula al soltar. También puedes escribir los valores."));
+    auto* hint = new QLabel(QStringLiteral("Arrastra las flechas en la vista, o los anillos: el ángulo se mide desde la perilla "
+                                           "(0°) y se pega a las marcas cada 45°. La pieza se recalcula al soltar. También "
+                                           "puedes escribir los valores."));
     hint->setWordWrap(true);
-    hint->setStyleSheet(QStringLiteral("color: #8B93A0;"));
+    {
+        // Sin hoja de estilos (cada una obliga a Qt a calcular el estilo de todo el panel en cada repintado).
+        QPalette palette = hint->palette();
+        palette.setColor(QPalette::WindowText, QColor(0x8B, 0x93, 0xA0));
+        hint->setPalette(palette);
+    }
     form->addRow(QStringLiteral("Cuerpos"), bodyList_);
     form->addRow(modeRow);
     form->addRow(hint);
@@ -472,8 +480,9 @@ void MoveTool::gizmoDragged(int axis, double amount)
         text = QStringLiteral("Mover en %1: %2").arg(QLatin1Char("XYZ"[axis]))
                    .arg(Units::instance().formatWithUnit(position[std::size_t(axis)]));
     } else {
-        // Lo que se gira en este arrastre, sobre el eje del mundo que dibuja el anillo (se pega a las marcas
-        // conocidas, 0, 45, 90, 180, 270…, si se pasa cerca).
+        // Lo que se gira en este arrastre, sobre el eje del mundo que dibuja el anillo: el ángulo del cursor sobre el
+        // anillo desde su marca 0 (como Orca Slicer), que se pega a las marcas (0, 45, 90, 180, 270…) si se pasa
+        // cerca: con el cursor sobre una marca, el giro es exactamente ese ángulo.
         double angle = std::remainder(amount / kDegree, 360.0);
         const double mark = std::round(angle / kSnapDegrees) * kSnapDegrees;
         const bool snapped = std::abs(angle - mark) < kSnapTolerance;
@@ -490,19 +499,33 @@ void MoveTool::gizmoDragged(int axis, double amount)
         text = QStringLiteral("Girar en %1: %2°%3").arg(QLatin1Char("XYZ"[axis])).arg(angle, 0, 'f', 1)
                    .arg(snapped ? QStringLiteral("  (marca)") : QString());
     }
-    // Los cuadros siguen al arrastre, sin pedir una vista previa a cada paso.
+    // Los cuadros siguen al arrastre, sin pedir una vista previa a cada paso (y solo se tocan los que cambian: cada
+    // uno reformatea su texto y avisa a quien lo escucha).
     updating_ = true;
-    x_->setValue(position[0]);
-    y_->setValue(position[1]);
-    z_->setValue(position[2]);
-    rx_->setValue(turns[0]);
-    ry_->setValue(turns[1]);
-    rz_->setValue(turns[2]);
+    const std::array<QDoubleSpinBox*, 6> boxes{x_, y_, z_, rx_, ry_, rz_};
+    const std::array<double, 6> values{position[0], position[1], position[2], turns[0], turns[1], turns[2]};
+    for (std::size_t i = 0; i < boxes.size(); ++i) {
+        if (std::abs(boxes[i]->value() - values[i]) > 1e-9) {
+            boxes[i]->setValue(values[i]);
+        }
+    }
     updating_ = false;
     moveGhost(position, turns);
-    statusLabel_->setText(QStringLiteral("<span style='color:#6CA6FF'>%1</span>").arg(text.toHtmlEscaped()));
-    if (const auto center = pivot()) {
-        viewport_.showGizmo(moveMode_->isChecked() ? render::Viewport::GizmoKind::Move : render::Viewport::GizmoKind::Rotate,
+    // El texto va a la barra de estado: cambiar el del panel (con varias líneas) obliga a recalcular todo su layout a
+    // cada paso del ratón (la mitad del coste de un paso de arrastre).
+    emit message(text);
+    if (!moveMode_->isChecked()) {
+        // El arco desde la marca 0 hasta donde se gira: se ve cuánto se lleva y dónde cae entre las marcas.
+        if (const auto center = pivot()) {
+            const sketch::Vec3 axes[3] = {{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}};
+            const sketch::Vec3 refs[3] = {{0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}, {1.0, 0.0, 0.0}};
+            const sketch::Vec3 at{center->x + position[0], center->y + position[1], center->z + position[2]};
+            const double radius = 0.85 * 90.0 * viewport_.sketchPixelSize();  // el del anillo
+            viewport_.showAngleSweep(at, axes[axis], moved(at, refs[axis], radius), std::remainder(amount, 2.0 * std::numbers::pi));
+        }
+    } else if (const auto center = pivot()) {
+        // Al girar, el centro no se mueve: solo las flechas de mover siguen a la pieza.
+        viewport_.showGizmo(render::Viewport::GizmoKind::Move,
                             {center->x + position[0], center->y + position[1], center->z + position[2]});
     }
 }
@@ -514,7 +537,10 @@ void MoveTool::gizmoReleased()
     }
     dragging_ = false;
     viewport_.hideGhost();
+    viewport_.hideAngleSweep();
+    viewport_.hideDimensionArrow();
     statusLabel_->clear();
+    refreshArrow();   // si algún cuadro tiene el foco, vuelve su flecha de medida
     updatePreview();  // aquí sí se calcula el cuerpo (en segundo plano)
     refreshGizmo();
 }

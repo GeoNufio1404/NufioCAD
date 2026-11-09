@@ -165,6 +165,10 @@ public:
     void showGhost(const std::vector<geometry::Shape>& bodies);
     void setGhostMotion(const sketch::Vec3& pivot, const sketch::Vec3& rotation, const sketch::Vec3& translation);
     void hideGhost();
+    // El arco de lo que se lleva girado en un arrastre (de «start» a «angle» rad alrededor del eje por «center»): una
+    // sola arista gruesa, lo bastante barata para rehacerla a cada paso del ratón.
+    void showAngleSweep(const sketch::Vec3& center, const sketch::Vec3& axis, const sketch::Vec3& start, double angle);
+    void hideAngleSweep();
     // Flecha de doble punta entre dos puntos del modelo: señala la medida que se está escribiendo en el panel de una
     // herramienta. No se puede arrastrar ni seleccionar.
     void showDimensionArrow(const sketch::Vec3& from, const sketch::Vec3& to);
@@ -256,6 +260,8 @@ signals:
     void sketchToolDragReleased(double x0, double y0, double x, double y);
 
 protected:
+    // Entrega al que escucha el último movimiento pendiente de un arrastre de flecha o de anillo.
+    void flushGizmoDrag();
     void initializeGL() override;
     void paintGL() override;
     void changeEvent(QEvent* event) override;

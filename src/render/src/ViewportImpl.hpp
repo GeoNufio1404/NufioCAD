@@ -710,6 +710,8 @@ public:
                 builder.Add(shape, BRepPrimAPI_MakeTorus(gp_Ax2(gp_Pnt(0, 0, 0), axis), radius, 0.026 * size).Shape());
                 // Marcas en los ángulos conocidos (cada 45°; más largas en 0, 90, 180 y 270).
                 const gp_Dir ref = gizmoRef(k);
+                // La perilla del 0°: de aquí se miden los ángulos (y es donde está la marca larga de partida).
+                builder.Add(shape, BRepPrimAPI_MakeSphere(gp_Pnt(0, 0, 0).Translated(gp_Vec(ref) * radius), 0.07 * size).Shape());
                 for (int i = 0; i < 8; ++i) {
                     const bool major = i % 2 == 0;
                     gp_Vec radial(ref);
@@ -774,6 +776,8 @@ public:
     bool startGizmoDrag(int k, const Vec2i& pixel)
     {
         gizmoDragOrigin = gizmoOrigin;
+        gizmoClock.restart();
+        gizmoHasPending = false;
         if (gizmoKind == Viewport::GizmoKind::Move) {
             const auto t = gizmoLineParameter(pixel, gizmoDragOrigin, k);
             if (!t) {
@@ -785,8 +789,10 @@ public:
             if (!a) {
                 return false;
             }
+            // El giro es el ángulo del cursor sobre el anillo medido desde su marca 0 (como en Orca Slicer), no lo
+            // girado desde donde se agarró: así el cursor sobre una marca es exactamente ese ángulo.
             gizmoGrab = *a;
-            gizmoTotal = 0.0;
+            gizmoTotal = *a;
         }
         gizmoActive = k;
         return true;
@@ -803,7 +809,8 @@ public:
         if (!a) {
             return std::nullopt;
         }
-        // Acumula la diferencia (envuelta a ±180°) para poder dar más de una vuelta.
+        // Ángulo absoluto del cursor, seguido de forma continua (la diferencia con el anterior envuelta a ±180°, para
+        // poder dar más de una vuelta sin saltos).
         double delta = *a - gizmoGrab;
         while (delta > std::numbers::pi) {
             delta -= 2.0 * std::numbers::pi;
@@ -874,8 +881,45 @@ public:
         shift.SetTranslation(gp_Vec(translation.x, translation.y, translation.z));
         total = shift * total;
         context->SetLocation(ghost, TopLoc_Location(total));
-        context->UpdateCurrentViewer();
     }
+
+    // El arco de lo que se lleva girado en un arrastre: una sola arista gruesa desde «start» hasta «angle» (rad), alrededor
+    // del eje que pasa por «center». Se rehace a cada paso del ratón, así que tiene que ser barata (el arco con
+    // cilindros y puntas del dimensionamiento son decenas de sólidos).
+    Handle(AIS_Shape) sweepShape;
+
+    void hideAngleSweep()
+    {
+        if (!sweepShape.IsNull()) {
+            context->Remove(sweepShape, false);
+            sweepShape.Nullify();
+        }
+    }
+
+    void showAngleSweep(const sketch::Vec3& centerPoint, const sketch::Vec3& axisDir, const sketch::Vec3& startPoint, double angle)
+    {
+        hideAngleSweep();
+        const gp_Pnt c = toPnt(centerPoint);
+        const gp_Vec radial(c, toPnt(startPoint));
+        if (std::abs(angle) < 1e-4 || radial.Magnitude() < 1e-9) {
+            return;
+        }
+        const gp_Circ circle(gp_Ax2(c, toDir(axisDir), gp_Dir(radial)), radial.Magnitude());
+        const double a0 = std::min(0.0, angle);
+        const double a1 = std::max(0.0, angle);
+        const TopoDS_Edge arc = BRepBuilderAPI_MakeEdge(circle, a0, a1).Edge();
+        sweepShape = new AIS_Shape(arc);
+        sweepShape->SetColor(rgb(0x3F, 0xD0, 0xE0));
+        sweepShape->Attributes()->WireAspect()->SetWidth(5.0);
+        sweepShape->SetZLayer(Graphic3d_ZLayerId_Topmost);
+        context->Display(sweepShape, AIS_WireFrame, -1, false);
+    }
+
+    // Los movimientos del ratón de un arrastre llegan más deprisa de lo que se dibuja: se agrupan (el último vale).
+    QTimer* gizmoFlush = nullptr;
+    QElapsedTimer gizmoClock;
+    double gizmoPending = 0.0;
+    bool gizmoHasPending = false;
 
     // --- Flecha de medida (doble punta) -----------------------------------------
 
