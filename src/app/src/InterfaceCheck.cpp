@@ -640,10 +640,27 @@ int InterfaceCheck::run()
             if (QPushButton* turn = button(QStringLiteral("Girar"))) {
                 turn->click();
             }
+            // Mientras se arrastra el anillo Z, los anillos X (rojo) e Y (verde) se quitan para dejar la vista limpia, y al
+            // soltar vuelven.
+            const auto ringRed = [](const QColor& c) { return c.red() > 190 && c.green() < 110 && c.blue() < 120; };
+            const auto ringGreen = [](const QColor& c) { return c.green() > 160 && c.red() < 110 && c.blue() < 150 && c.green() - c.blue() > 50; };
+            settle(200);
+            const long redBefore = countPixels(ringRed);
+            const long greenBefore = countPixels(ringGreen);
             blocking(QStringLiteral("arrastrar el anillo Z"), [&] {
                 emit window_.viewport_->gizmoPressed(2);
                 emit window_.viewport_->gizmoDragged(2, 43.5 * std::numbers::pi / 180.0);
             });
+            settle(250);
+            const long redDuring = countPixels(ringRed);
+            const long greenDuring = countPixels(ringGreen);
+            expect(redBefore - redDuring > 400 && greenBefore - greenDuring > 400,
+                   QStringLiteral("los otros anillos no se quitaron al arrastrar uno (rojo %1→%2, verde %3→%4)")
+                       .arg(redBefore).arg(redDuring).arg(greenBefore).arg(greenDuring));
+            if (current_ != nullptr) {
+                current_->detail += QStringLiteral(" otros anillos al arrastrar: rojo %1→%2, verde %3→%4")
+                                        .arg(redBefore).arg(redDuring).arg(greenBefore).arg(greenDuring);
+            }
             expect(std::abs(rz->value() - 45.0) < 0.01, QStringLiteral("el giro no se pegó a la marca de 45° (%1)").arg(rz->value()));
             // Pegado a la marca: se dibuja la recta amarilla de «alineado» y el giro se queda ahí (softblock) aunque el
             // cursor se aleje un poco (51° está a 6° de la marca: se mantiene; más lejos, a 60°, se suelta).
@@ -741,6 +758,9 @@ int InterfaceCheck::run()
             expect(leftoverLine < 10, QStringLiteral("la recta de alineación sigue dibujada fuera de las marcas (%1 píxeles)").arg(leftoverLine));
             blocking(QStringLiteral("soltar el anillo Z"), [&] { emit window_.viewport_->gizmoReleased(2); });
             waitIdle();
+            settle(250);
+            const long redAfter = countPixels(ringRed);
+            expect(redAfter > redBefore * 0.8, QStringLiteral("los otros anillos no volvieron al soltar (rojo %1, antes %2)").arg(redAfter).arg(redBefore));
             // Después de girar en Z, el anillo X gira sobre el eje X del MUNDO (el que dibuja el anillo), no sobre el de
             // la pieza ya girada: la orientación debe ser Rx(30°)·Rz(60°).
             blocking(QStringLiteral("arrastrar el anillo X"), [&] {

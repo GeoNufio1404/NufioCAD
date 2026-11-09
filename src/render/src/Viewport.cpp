@@ -254,6 +254,17 @@ void Viewport::hideGizmo()
     update();
 }
 
+void Viewport::isolateGizmo(int axis)
+{
+    if (axis >= 0) {
+        impl_->hideOtherGizmoShapes(axis);
+    } else {
+        impl_->restoreGizmoShapes();
+    }
+    impl_->view->Invalidate();
+    update();
+}
+
 void Viewport::showGhost(const std::vector<geometry::Shape>& bodies)
 {
     impl_->showGhost(bodies);

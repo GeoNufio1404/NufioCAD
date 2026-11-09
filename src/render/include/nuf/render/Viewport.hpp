@@ -160,6 +160,9 @@ public:
     enum class GizmoKind { None, Move, Rotate };
     void showGizmo(GizmoKind kind, const sketch::Vec3& origin);
     void hideGizmo();
+    // Deja solo la flecha o el anillo «axis» (0 = X, 1 = Y, 2 = Z) y quita los otros dos, para ver el efecto sin
+    // estorbos mientras se arrastra uno; con -1 vuelven todos.
+    void isolateGizmo(int axis);
     // Una copia translúcida del cuerpo, que se coloca con setGhostMotion sin recalcular nada: gira alrededor de
     // los ejes X, Y y Z (en ese orden) por «pivot» y luego se desplaza.
     void showGhost(const std::vector<geometry::Shape>& bodies);

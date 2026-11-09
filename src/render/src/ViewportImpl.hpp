@@ -773,6 +773,26 @@ public:
         return std::atan2(from.Dot(normal.Crossed(ref)), from.Dot(ref));
     }
 
+    // Mientras se arrastra una flecha o un anillo, los otros dos se quitan (la vista queda limpia para ver cómo quedaría);
+    // al soltar vuelven. Quitarlos de la vista no los destruye: se vuelven a mostrar tal cual.
+    void hideOtherGizmoShapes(int keep)
+    {
+        for (int k = 0; k < 3; ++k) {
+            if (k != keep && !gizmoShapes[k].IsNull() && context->IsDisplayed(gizmoShapes[k])) {
+                context->Erase(gizmoShapes[k], false);
+            }
+        }
+    }
+
+    void restoreGizmoShapes()
+    {
+        for (const Handle(AIS_Shape)& shape : gizmoShapes) {
+            if (!shape.IsNull() && !context->IsDisplayed(shape)) {
+                context->Display(shape, AIS_Shaded, 0, false);
+            }
+        }
+    }
+
     bool startGizmoDrag(int k, const Vec2i& pixel)
     {
         gizmoDragOrigin = gizmoOrigin;

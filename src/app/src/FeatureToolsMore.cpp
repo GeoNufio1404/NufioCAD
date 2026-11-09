@@ -453,9 +453,10 @@ void MoveTool::moveGhost(const std::array<double, 3>& position, const std::array
                              {position[0], position[1], position[2]});
 }
 
-void MoveTool::gizmoPressed(int /*axis*/)
+void MoveTool::gizmoPressed(int axis)
 {
     dragging_ = true;
+    viewport_.isolateGizmo(axis);  // los otros dos se quitan mientras se arrastra este
     heldMark_.reset();
     dragPosition_ = positionValues();
     dragTurns_ = turnValues();
@@ -563,6 +564,7 @@ void MoveTool::gizmoReleased()
     }
     dragging_ = false;
     heldMark_.reset();
+    viewport_.isolateGizmo(-1);  // vuelven los demás
     viewport_.hideGhost();
     viewport_.hideAngleSweep();
     viewport_.hideAlignmentLine();
