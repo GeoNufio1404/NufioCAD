@@ -11,6 +11,7 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
+#include <QLabel>
 #include <QDockWidget>
 #include <QRegularExpression>
 #include <QColor>
@@ -473,6 +474,43 @@ int InterfaceCheck::run()
             arrowCheck(name + QStringLiteral(" (módulo)"), action, 0);
         }
     }
+
+    // La vista previa de un generador es azul translúcida y, al terminar de calcular, no queda el «Calculando…».
+    step(QStringLiteral("Vista previa translúcida de un generador"), [&] {
+        QAction* lightbox = nullptr;
+        for (QAction* action : generators) {
+            if (action->text().contains(QStringLiteral("Lightbox"))) {
+                lightbox = action;
+            }
+        }
+        expect(lightbox != nullptr && lightbox->isEnabled(), QStringLiteral("no hay generador Lightbox"));
+        if (lightbox == nullptr) {
+            return;
+        }
+        blocking(QStringLiteral("abrir la herramienta"), [&] { lightbox->trigger(); });
+        waitIdle();
+        settle(300);
+        const QImage image = window_.viewport_->grabFramebuffer();
+        long bluish = 0;
+        for (int y = 0; y < image.height(); ++y) {
+            for (int x = 0; x < image.width(); ++x) {
+                const QColor c = image.pixelColor(x, y);
+                if (c.blue() > c.red() + 55 && c.blue() > c.green() + 25 && c.green() < 170) {
+                    ++bluish;
+                }
+            }
+        }
+        expect(bluish > 500, QStringLiteral("la vista previa no se ve azul translúcida (%1 píxeles azulados)").arg(bluish));
+        expect(window_.busyBadge_ != nullptr && !window_.busyBadge_->isVisible(), QStringLiteral("«Calculando…» sigue a la vista al terminar"));
+        if (current_ != nullptr) {
+            current_->detail += QStringLiteral(" azulados %1").arg(bluish);
+        }
+        if (QPushButton* cancel = button(QStringLiteral("Cancelar"))) {
+            cancel->click();
+        }
+        waitFor([this] { return window_.tool_ == nullptr; }, 10000);
+        waitIdle();
+    });
 
     // Sección y medición con un cuerpo.
     step(QStringLiteral("Sección y medición con un cuerpo"), [&] {

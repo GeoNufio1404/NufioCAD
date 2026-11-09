@@ -73,6 +73,8 @@ signals:
     void accepted();
     void cancelled();
     void message(const QString& text);
+    // La vista previa empezó (true) o terminó de calcularse (false): la ventana muestra «Calculando…» sobre la vista.
+    void computingChanged(bool computing);
 
 protected:
     // «Extruir», «Revolución».

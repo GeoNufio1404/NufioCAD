@@ -37,6 +37,7 @@
 #include <QActionGroup>
 #include <QCloseEvent>
 #include <QDockWidget>
+#include <QEvent>
 #include <QFileDialog>
 #include <QInputDialog>
 #include <QKeySequence>
@@ -74,6 +75,14 @@ MainWindow::MainWindow(QWidget* parent)
 {
     viewport_ = new render::Viewport(this);
     setCentralWidget(viewport_);
+    // «Calculando…» sobre la vista, abajo a la izquierda (se recoloca al cambiar el tamaño de la vista).
+    busyBadge_ = new QLabel(QStringLiteral("⏳ Calculando…"), viewport_);
+    busyBadge_->setStyleSheet(QStringLiteral(
+        "QLabel { background: rgba(20, 24, 31, 215); color: #E6EAF0; border: 1px solid #3A4250; border-radius: 12px;"
+        " padding: 5px 14px; }"));
+    busyBadge_->adjustSize();
+    busyBadge_->hide();
+    viewport_->installEventFilter(this);
     createDocks();
     createMenus();
 
@@ -202,6 +211,7 @@ MainWindow::MainWindow(QWidget* parent)
         }
         updateSketchActions();
         updateExportAction();
+        updateBusyBadge();
     });
     document_.changed.connect([this] {
         updateTitle();
@@ -240,6 +250,27 @@ MainWindow::~MainWindow()
 {
     // Los hilos de cálculo avisan a esta ventana: se paran antes de que empiece a destruirse.
     document_.stopBackground();
+}
+
+bool MainWindow::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched == viewport_ && busyBadge_ != nullptr && event->type() == QEvent::Resize) {
+        busyBadge_->move(16, viewport_->height() - busyBadge_->height() - 16);
+    }
+    return QMainWindow::eventFilter(watched, event);
+}
+
+void MainWindow::updateBusyBadge()
+{
+    const bool busy = toolComputing_ || document_.computing();
+    if (busyBadge_ == nullptr || busyBadge_->isVisible() == busy) {
+        return;
+    }
+    busyBadge_->move(16, viewport_->height() - busyBadge_->height() - 16);
+    busyBadge_->setVisible(busy);
+    if (busy) {
+        busyBadge_->raise();
+    }
 }
 
 bool MainWindow::modelBusy()
@@ -473,6 +504,10 @@ void MainWindow::startTool(std::unique_ptr<FeatureTool> tool)
     connect(tool_.get(), &FeatureTool::accepted, this, [this] { finishTool(true); });
     connect(tool_.get(), &FeatureTool::cancelled, this, [this] { finishTool(false); });
     connect(tool_.get(), &FeatureTool::message, this, [this](const QString& text) { statusBar()->showMessage(text, 6000); });
+    connect(tool_.get(), &FeatureTool::computingChanged, this, [this](bool computing) {
+        toolComputing_ = computing;
+        updateBusyBadge();
+    });
     refreshModel();  // al editar: el modelo hasta esa operación
     tool_->start();
     propertiesDock_->setWidget(tool_->panel());
@@ -540,6 +575,8 @@ void MainWindow::finishTool(bool accepted)
     const std::optional<document::FeatureId> editing = tool_->editing();
     const document::FeatureId id = tool_->featureId();
     tool_->stopPreview();
+    toolComputing_ = false;
+    updateBusyBadge();
     // Se destruye después: esta llamada viene de una señal de la herramienta.
     propertiesDock_->setWidget(propertiesPlaceholder_);
     propertiesDock_->hide();  // como los diálogos de Fusion: solo mientras hay un comando

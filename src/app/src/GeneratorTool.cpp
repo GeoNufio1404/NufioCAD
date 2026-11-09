@@ -190,6 +190,7 @@ document::Recipe GeneratorTool::recipe() const
 void GeneratorTool::stopPreview()
 {
     previewRun_.cancel();
+    emit computingChanged(false);
     if (timer_ != nullptr) {
         timer_->stop();
     }
@@ -254,6 +255,7 @@ void GeneratorTool::updatePreview()
         calculation->problem = "No se pudo calcular con esos valores";
     }
     const auto present = [this, calculation, first] {
+        emit computingChanged(false);
         if (panel_) {
             showResult(*calculation, first);
         }
@@ -269,6 +271,7 @@ void GeneratorTool::updatePreview()
             statusLabel_->setText(QStringLiteral("<span style='color:#8B93A0'>Calculando…</span>"));
         }
     });
+    emit computingChanged(true);
     previewRun_.start(
         [calculation] {
             document::Document& scratch = calculation->scratch;

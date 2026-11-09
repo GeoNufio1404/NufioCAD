@@ -309,6 +309,12 @@ public:
             Handle(AIS_Shape) ais = new AIS_Shape(geometry::occtShape(body.shape));
             ais->SetMaterial(Graphic3d_MaterialAspect(Graphic3d_NameOfMaterial_Plastified));
             ais->SetColor(rgb(0xB7, 0xBE, 0xC7));
+            if (body.key.rfind("gen:", 0) == 0) {
+                // La vista previa de un generador (todavía no está en el diseño): azul translúcido, como la de lo que
+                // una herramienta quita o añade, para no confundirla con lo que ya existe.
+                ais->SetColor(rgb(0x6C, 0xA6, 0xFF));
+                ais->SetTransparency(0.45);
+            }
             if (geometry::hasHeavySurface(body.shape)) {
                 // Una superficie spline con miles de puntos de control (una rosca) con el mallado normal
                 // (relativo, 0,001 del tamaño) daba cientos de miles de triángulos y minutos de espera:

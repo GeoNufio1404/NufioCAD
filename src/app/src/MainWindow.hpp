@@ -23,6 +23,7 @@
 class QAction;
 class QDragEnterEvent;
 class QDropEvent;
+class QEvent;
 class QActionGroup;
 class QDockWidget;
 class QCheckBox;
@@ -70,6 +71,7 @@ protected:
     void closeEvent(QCloseEvent* event) override;
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dropEvent(QDropEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     void createMenus();
@@ -126,6 +128,8 @@ private:
     void startTool(std::unique_ptr<FeatureTool> tool);
     // El modelo se recalcula en segundo plano: lo que necesita el resultado nuevo espera (avisa y devuelve true).
     bool modelBusy();
+    // «Calculando…» sobre la vista mientras el modelo o la vista previa de una herramienta se calculan.
+    void updateBusyBadge();
     // Ejecuta «what» ya, o en cuanto termine el cálculo en segundo plano.
     void whenComputed(std::function<void()> what);
     void finishTool(bool accepted);
@@ -177,6 +181,8 @@ private:
     QComboBox* sectionPlane_ = nullptr;
     QDoubleSpinBox* sectionOffset_ = nullptr;
     QCheckBox* sectionFlip_ = nullptr;
+    QLabel* busyBadge_ = nullptr;     // «Calculando…», sobre la vista
+    bool toolComputing_ = false;      // la vista previa de la herramienta abierta se está calculando
     QLabel* measurePanel_ = nullptr;  // resultado de la medición, sobre la vista
     QAction* exportAction_ = nullptr;
     QAction* printAction_ = nullptr;

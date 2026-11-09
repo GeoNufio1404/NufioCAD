@@ -167,6 +167,7 @@ std::unique_ptr<document::Feature> FeatureTool::make() const
 void FeatureTool::stopPreview()
 {
     previewRun_.cancel();
+    emit computingChanged(false);
     if (previewTimer_ != nullptr) {
         previewTimer_->stop();
     }
@@ -346,6 +347,7 @@ void FeatureTool::updatePreview()
     std::unique_ptr<document::Feature> feature = make();
     if (!feature) {
         previewRun_.cancel();
+        emit computingChanged(false);
         viewport_.showBodies(before().bodies);
         showPlanes(viewport_, document_, before(), nullptr);
         viewport_.clearToolPreview();
@@ -371,11 +373,13 @@ void FeatureTool::updatePreview()
             statusLabel_->setText(QStringLiteral("<span style='color:#8B93A0'>Calculando…</span>"));
         }
     });
+    emit computingChanged(true);
     previewRun_.start(
         [calculation, state = before(), lookup = document_.snapshotLookup()] {
             calculation->result = document::preview(state, *calculation->feature, lookup);
         },
         [this, calculation] {
+            emit computingChanged(false);
             if (panel_ && !updating_) {
                 showPreview(*calculation->feature, calculation->result);
             }

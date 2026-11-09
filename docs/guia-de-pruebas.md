@@ -384,6 +384,18 @@ La app ya no se cuelga mientras recalcula: lo lento (una rosca cortante, un engr
 
 ---
 
+## Vista previa translúcida y «Calculando…»
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| T.1 | Herramientas › **Lightbox** (o cualquier generador) | La pieza de la vista previa se ve **azul y translúcida**, distinta de lo que ya hay en el diseño (gris) |
+| T.2 | Cambia un valor del formulario | Sale «⏳ Calculando…» abajo a la izquierda de la vista si tarda, y desaparece al terminar |
+| T.3 | Acepta el generador | Las piezas pasan a verse grises y opacas, como cualquier cuerpo |
+| T.4 | Reabre el generador (clic derecho › Reabrir) | Lo anterior se oculta y se ve la vista previa azul en su lugar |
+| T.5 | Cambia el diámetro de un cilindro con una rosca encima | Mientras recalcula sale «Calculando…» sobre la vista y desaparece al terminar |
+
+---
+
 ## Prueba automática y fuentes
 
 ### Prueba automática de la interfaz
