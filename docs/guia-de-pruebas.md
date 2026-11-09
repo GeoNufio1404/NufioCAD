@@ -373,6 +373,18 @@ La app ya no se cuelga mientras recalcula: lo lento (una rosca cortante, un engr
 
 ---
 
+## Errores de geometría en lenguaje claro
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| M.1 | Haz una **Caja** de 10 mm con **radio de esquinas** de 50 mm | El panel (en rojo) dice «No se pudo generar la caja: revisa que el radio de esquinas no sea mayor que la mitad del lado más corto», con el detalle técnico al final entre paréntesis |
+| M.2 | **Unir** o **Cortar** dos cuerpos que solo se toquen por una arista | El mensaje explica que pueden tocarse solo en una arista o un punto y sugiere moverlos una décima de milímetro |
+| M.3 | **Barrido** con el perfil lejos del inicio de la trayectoria | Dice que el perfil debe estar al inicio de la trayectoria y de frente a ella |
+| M.4 | **Agujero** con un diámetro mayor que la pieza | Dice que el diámetro y la profundidad deben caber en la pieza y que los centros estén sobre ella |
+| M.5 | Mira el historial después de uno de esos errores | La operación aparece con ⛔ y el mismo mensaje al pasar el ratón |
+
+---
+
 ## Prueba automática y fuentes
 
 ### Prueba automática de la interfaz

@@ -84,6 +84,13 @@ std::string kernelMessage(const Standard_Failure& e)
 #endif
 }
 
+// Un fallo del kernel en lenguaje claro: qué se intentaba, qué probar y, al final, el detalle técnico.
+GeometryError kernelFailure(const std::string& action, const std::string& hint, const Standard_Failure& e)
+{
+    const std::string detail = kernelMessage(e);
+    return GeometryError("No se pudo " + action + ": " + hint + (detail.empty() ? std::string() : " (detalle técnico: " + detail + ")"));
+}
+
 // Une las caras coplanares (y aristas colineales) que dejan las booleanas.
 Shape unify(const Shape& input, const std::string& tag)
 {
@@ -383,7 +390,7 @@ Shape extrude(std::string_view tag, const SketchRegion& region, const ExtrudeSpe
     try {
         return extrudeFaces(std::string(tag), regionFaces(region), toDir(region.plane.normal), spec, context);
     } catch (const Standard_Failure& e) {
-        throw GeometryError(std::string("Error del kernel al extruir: ") + kernelMessage(e));
+        throw kernelFailure("extruir el perfil", "revisa que el perfil esté cerrado y no se cruce consigo mismo, y que la distancia no sea enorme", e);
     }
 }
 
@@ -394,7 +401,7 @@ Shape extrudeFace(std::string_view tag, const Shape& body, int faceIndex, const 
         const sketch::Plane plane = body.facePlane(faceIndex).value_or(sketch::Plane{});
         return extrudeFaces(std::string(tag), {bodyFace(body, faceIndex)}, toDir(plane.normal), spec, context);
     } catch (const Standard_Failure& e) {
-        throw GeometryError(std::string("Error del kernel al extruir: ") + kernelMessage(e));
+        throw kernelFailure("extruir el perfil", "revisa que el perfil esté cerrado y no se cruce consigo mismo, y que la distancia no sea enorme", e);
     }
 }
 
@@ -463,7 +470,7 @@ Shape revolve(std::string_view tagView, const SketchRegion& region, const Axis& 
         }
         throw GeometryError("Revolución no válida");
     } catch (const Standard_Failure& e) {
-        throw GeometryError(std::string("Error del kernel al revolucionar: ") + kernelMessage(e));
+        throw kernelFailure("revolucionar el perfil", "revisa que el eje no cruce el perfil y que el perfil esté cerrado", e);
     }
 }
 
@@ -509,7 +516,7 @@ Shape boolean(BooleanOp op, const Shape& target, const Shape& tool)
             throw GeometryError("Cálculo cancelado");
         }
         if (!algo->IsDone() || algo->HasErrors()) {
-            throw GeometryError("La operación booleana falló");
+            throw GeometryError("No se pudo combinar los cuerpos: puede que solo se toquen en una arista o un punto, o que tengan caras casi coincidentes; prueba a moverlos una décima de milímetro");
         }
         Namer namer(algo->Shape());
         namer.inherit(target, *algo->History());
@@ -528,7 +535,7 @@ Shape boolean(BooleanOp op, const Shape& target, const Shape& tool)
         };
         return sound(unified) || !sound(result) ? unified : result;
     } catch (const Standard_Failure& e) {
-        throw GeometryError(std::string("Error del kernel en la booleana: ") + kernelMessage(e));
+        throw kernelFailure("combinar los cuerpos", "puede que solo se toquen en una arista o un punto, o que tengan caras casi coincidentes; prueba a moverlos una décima de milímetro", e);
     }
 }
 
@@ -681,7 +688,7 @@ Shape mirror(std::string_view tag, const Shape& body, const sketch::Plane& plane
         namer.nameUnnamed(std::string(tag) + ":espejo");
         return namer.finish(std::string(tag));
     } catch (const Standard_Failure& e) {
-        throw GeometryError(std::string("Error del kernel al reflejar: ") + kernelMessage(e));
+        throw kernelFailure("reflejar el cuerpo", "revisa que el plano de simetría no sea tangente al cuerpo", e);
     }
 }
 
@@ -735,7 +742,7 @@ std::vector<Shape> pattern(std::string_view tag, const Shape& body, const Patter
         }
         return copies;
     } catch (const Standard_Failure& e) {
-        throw GeometryError(std::string("Error del kernel al repetir el cuerpo: ") + kernelMessage(e));
+        throw kernelFailure("repetir el cuerpo", "prueba con menos copias o con otra distancia entre ellas", e);
     }
 }
 
@@ -1001,7 +1008,7 @@ Shape gear(std::string_view tagView, const sketch::Plane& plane, const GearSpec&
         }
         return result;
     } catch (const Standard_Failure& e) {
-        throw GeometryError(std::string("Error del kernel al generar el engranaje: ") + kernelMessage(e));
+        throw kernelFailure("generar el engranaje", "prueba con otro módulo, otro número de dientes o menos ángulo de presión y de hélice", e);
     }
 }
 
@@ -1086,7 +1093,7 @@ Shape box(std::string_view tagView, const sketch::Plane& plane, double width, do
         namer.name(maker.TopFace(), tag + ":cara:+z");
         return namer.finish(tag);
     } catch (const Standard_Failure& e) {
-        throw GeometryError(std::string("Error del kernel al generar la caja: ") + kernelMessage(e));
+        throw kernelFailure("generar la caja", "revisa que el radio de esquinas no sea mayor que la mitad del lado más corto", e);
     }
 }
 
@@ -1120,7 +1127,7 @@ Shape cylinder(std::string_view tagView, const sketch::Plane& plane, double diam
         }
         return namer.finish(tag);
     } catch (const Standard_Failure& e) {
-        throw GeometryError(std::string("Error del kernel al generar el cilindro: ") + kernelMessage(e));
+        throw kernelFailure("generar el cilindro", "revisa que el diámetro y el alto sean mayores que cero", e);
     }
 }
 
@@ -1324,7 +1331,7 @@ Shape thread(std::string_view tagView, const sketch::Plane& plane, const ThreadS
         }
         return result;
     } catch (const Standard_Failure& e) {
-        throw GeometryError(std::string("Error del kernel al generar la rosca: ") + kernelMessage(e));
+        throw kernelFailure("generar la rosca", "revisa el paso y el diámetro: el diámetro menor (diámetro − 1,23 × paso) debe ser positivo", e);
     }
 }
 
@@ -1406,7 +1413,7 @@ Shape sweep(std::string_view tagView, const SketchRegion& profile, const sketch:
         }
         return result;
     } catch (const Standard_Failure& e) {
-        throw GeometryError(std::string("Error del kernel al barrer: ") + kernelMessage(e));
+        throw kernelFailure("barrer el perfil", "revisa que el perfil esté al inicio de la trayectoria y de frente a ella, y que el camino no tenga esquinas muy cerradas", e);
     }
 }
 
@@ -1447,7 +1454,7 @@ Shape loft(std::string_view tagView, const std::vector<SketchRegion>& sections, 
         }
         return result;
     } catch (const Standard_Failure& e) {
-        throw GeometryError(std::string("Error del kernel en el loft: ") + kernelMessage(e));
+        throw kernelFailure("hacer el loft", "revisa que los perfiles tengan una forma parecida y estén en el orden correcto", e);
     }
 }
 
@@ -1480,7 +1487,7 @@ Shape moveBody(std::string_view tag, const Shape& body, const sketch::Vec3& tran
         namer.nameUnnamed(std::string(tag) + ":copia");
         return namer.finish(std::string(tag));
     } catch (const Standard_Failure& e) {
-        throw GeometryError(std::string("Error del kernel al mover el cuerpo: ") + kernelMessage(e));
+        throw kernelFailure("mover el cuerpo", "revisa que el desplazamiento y el ángulo sean razonables", e);
     }
 }
 
@@ -1506,7 +1513,7 @@ Shape placeBody(std::string_view tag, const Shape& body, const sketch::Plane& fr
         namer.nameUnnamed(std::string(tag) + ":colocado");
         return namer.finish(std::string(tag));
     } catch (const Standard_Failure& e) {
-        throw GeometryError(std::string("Error del kernel al colocar el cuerpo: ") + kernelMessage(e));
+        throw kernelFailure("colocar el cuerpo", "revisa que las dos caras elegidas sean planas y de cuerpos distintos", e);
     }
 }
 
@@ -1583,7 +1590,7 @@ Shape holeTool(std::string_view tag, const sketch::Plane& plane, const std::vect
         namer.nameUnnamed(std::string(tag) + ":pared");
         return namer.finish(std::string(tag));
     } catch (const Standard_Failure& e) {
-        throw GeometryError(std::string("Error del kernel al hacer el agujero: ") + kernelMessage(e));
+        throw kernelFailure("hacer el agujero", "revisa que el diámetro y la profundidad quepan en la pieza y que los centros estén sobre ella", e);
     }
 }
 

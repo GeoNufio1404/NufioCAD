@@ -101,7 +101,7 @@ std::pair<ModelState, FeatureStatus> computeOn(const ModelState& before, const F
     } catch (const geometry::GeometryError& e) {
         return {before, {Health::Error, e.what()}};
     } catch (const std::exception& e) {
-        return {before, {Health::Error, std::string("Error inesperado: ") + e.what()}};
+        return {before, {Health::Error, std::string("Algo salió mal al calcular esta operación; prueba con otros valores o deshaz el último cambio (detalle técnico: ") + e.what() + ")"}};
     }
 }
 
