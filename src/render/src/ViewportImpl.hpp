@@ -915,6 +915,32 @@ public:
         context->Display(sweepShape, AIS_WireFrame, -1, false);
     }
 
+    Handle(AIS_Shape) alignShape;
+
+    void hideAlignmentLine()
+    {
+        if (!alignShape.IsNull()) {
+            context->Remove(alignShape, false);
+            alignShape.Nullify();
+        }
+    }
+
+    // La guía de alineación: una recta entre dos puntos (a través del centro del anillo, en el plano del anillo).
+    void showAlignmentLine(const sketch::Vec3& from, const sketch::Vec3& to)
+    {
+        hideAlignmentLine();
+        const gp_Pnt a = toPnt(from);
+        const gp_Pnt b = toPnt(to);
+        if (a.Distance(b) < 1e-9) {
+            return;
+        }
+        alignShape = new AIS_Shape(BRepBuilderAPI_MakeEdge(a, b).Edge());
+        alignShape->SetColor(rgb(0xFF, 0xD8, 0x4C));
+        alignShape->Attributes()->WireAspect()->SetWidth(4.0);
+        alignShape->SetZLayer(Graphic3d_ZLayerId_Topmost);
+        context->Display(alignShape, AIS_WireFrame, -1, false);
+    }
+
     // Los movimientos del ratón de un arrastre llegan más deprisa de lo que se dibuja: se agrupan (el último vale).
     QTimer* gizmoFlush = nullptr;
     QElapsedTimer gizmoClock;

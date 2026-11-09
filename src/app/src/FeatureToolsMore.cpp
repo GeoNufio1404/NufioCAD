@@ -186,7 +186,8 @@ QString LoftTool::inputsText() const
 
 namespace {
 constexpr double kSnapDegrees = 45.0;   // las marcas de los anillos
-constexpr double kSnapTolerance = 3.0;  // a cuántos grados de una marca se pega
+constexpr double kSnapTolerance = 4.0;  // a cuántos grados de una marca se pega
+constexpr double kHoldTolerance = 9.0;  // y a cuántos se despega (el «softblock»: se queda en la marca un buen trecho)
 }
 
 MoveTool::MoveTool(document::Document& document, render::Viewport& viewport,
@@ -205,6 +206,7 @@ MoveTool::~MoveTool()
     viewport_.hideGizmo();
     viewport_.hideGhost();
     viewport_.hideAngleSweep();
+    viewport_.hideAlignmentLine();
 }
 
 void MoveTool::stopPreview()
@@ -214,6 +216,7 @@ void MoveTool::stopPreview()
     viewport_.hideGizmo();
     viewport_.hideGhost();
     viewport_.hideAngleSweep();
+    viewport_.hideAlignmentLine();
 }
 
 void MoveTool::createFields(QFormLayout* form)
@@ -453,6 +456,7 @@ void MoveTool::moveGhost(const std::array<double, 3>& position, const std::array
 void MoveTool::gizmoPressed(int /*axis*/)
 {
     dragging_ = true;
+    heldMark_.reset();
     dragPosition_ = positionValues();
     dragTurns_ = turnValues();
     // La sombra parte del cuerpo de antes de la operación, con la pose de los cuadros.
@@ -475,6 +479,8 @@ void MoveTool::gizmoDragged(int axis, double amount)
     std::array<double, 3> position = dragPosition_;
     std::array<double, 3> turns = dragTurns_;
     QString text;
+    bool snapped = false;  // pegado a una marca de un anillo
+    double turnsAngle = 0.0;  // el ángulo de ese giro (grados)
     if (moveMode_->isChecked()) {
         position[std::size_t(axis)] = std::round((dragPosition_[std::size_t(axis)] + amount) * 100.0) / 100.0;
         text = QStringLiteral("Mover en %1: %2").arg(QLatin1Char("XYZ"[axis]))
@@ -485,10 +491,22 @@ void MoveTool::gizmoDragged(int axis, double amount)
         // cerca: con el cursor sobre una marca, el giro es exactamente ese ángulo.
         double angle = std::remainder(amount / kDegree, 360.0);
         const double mark = std::round(angle / kSnapDegrees) * kSnapDegrees;
-        const bool snapped = std::abs(angle - mark) < kSnapTolerance;
-        if (snapped) {
-            angle = mark;
+        if (heldMark_) {
+            // Softblock: ya pegado a una marca, el giro se queda en ella mientras el cursor siga cerca (más que lo
+            // que hizo falta para pegarse); solo se suelta cuando se aleja claramente.
+            if (std::abs(std::remainder(angle - *heldMark_, 360.0)) < kHoldTolerance) {
+                angle = *heldMark_;
+                snapped = true;
+            } else {
+                heldMark_.reset();
+            }
         }
+        if (!snapped && std::abs(angle - mark) < kSnapTolerance) {
+            heldMark_ = mark;
+            angle = mark;
+            snapped = true;
+        }
+        turnsAngle = angle;
         // Se compone con la orientación que ya tenía (primero la de antes, después este giro sobre el eje del mundo)
         // y se vuelve a los tres giros X, Y, Z de la operación.
         const Mat3 start = fromTurns(dragTurns_[0] * kDegree, dragTurns_[1] * kDegree, dragTurns_[2] * kDegree);
@@ -521,7 +539,15 @@ void MoveTool::gizmoDragged(int axis, double amount)
             const sketch::Vec3 refs[3] = {{0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}, {1.0, 0.0, 0.0}};
             const sketch::Vec3 at{center->x + position[0], center->y + position[1], center->z + position[2]};
             const double radius = 0.85 * 90.0 * viewport_.sketchPixelSize();  // el del anillo
-            viewport_.showAngleSweep(at, axes[axis], moved(at, refs[axis], radius), std::remainder(amount, 2.0 * std::numbers::pi));
+            viewport_.showAngleSweep(at, axes[axis], moved(at, refs[axis], radius), turnsAngle * kDegree);
+            // Pegado a una marca: una recta por el centro del anillo, en su plano y en la dirección de esa marca, que
+            // confirma «estás alineado con 90°, 180°…».
+            if (snapped) {
+                const sketch::Vec3 direction = rotatedAbout(refs[axis], {0.0, 0.0, 0.0}, axes[axis], turnsAngle * kDegree);
+                viewport_.showAlignmentLine(moved(at, direction, -1.3 * radius), moved(at, direction, 1.3 * radius));
+            } else {
+                viewport_.hideAlignmentLine();
+            }
         }
     } else if (const auto center = pivot()) {
         // Al girar, el centro no se mueve: solo las flechas de mover siguen a la pieza.
@@ -536,8 +562,10 @@ void MoveTool::gizmoReleased()
         return;
     }
     dragging_ = false;
+    heldMark_.reset();
     viewport_.hideGhost();
     viewport_.hideAngleSweep();
+    viewport_.hideAlignmentLine();
     viewport_.hideDimensionArrow();
     statusLabel_->clear();
     refreshArrow();   // si algún cuadro tiene el foco, vuelve su flecha de medida

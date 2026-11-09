@@ -616,6 +616,8 @@ private:
     bool legacyAxis_ = false;  // gira sobre un eje de construcción (lo que se podía hacer antes de los anillos)
     // Arrastre en curso: los valores de los cuadros al agarrar.
     bool dragging_ = false;
+    // «Softblock»: la marca a la que está pegado el giro (se queda en ella hasta que el cursor se aleja claramente).
+    std::optional<double> heldMark_;
     std::array<double, 3> dragPosition_{};
     std::array<double, 3> dragTurns_{};
 };

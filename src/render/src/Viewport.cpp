@@ -238,45 +238,68 @@ void Viewport::selectProfiles(const std::vector<ModelSelection::Profile>& profil
 
 void Viewport::setAdditiveSelection(bool on) { impl_->setAdditiveSelection(on); }
 
+// Cambiar la ubicación de un objeto del contexto (SetLocation) o mostrarlo sin actualizar no marca la vista como
+// cambiada: sin Invalidate() la pantalla seguía con el cuadro anterior y la sombra no se veía.
 void Viewport::showGizmo(GizmoKind kind, const sketch::Vec3& origin)
 {
     impl_->showGizmo(kind, origin);
+    impl_->view->Invalidate();
     update();
 }
 
 void Viewport::hideGizmo()
 {
     impl_->hideGizmo();
+    impl_->view->Invalidate();
     update();
 }
 
 void Viewport::showGhost(const std::vector<geometry::Shape>& bodies)
 {
     impl_->showGhost(bodies);
+    impl_->view->Invalidate();
     update();
 }
 
 void Viewport::setGhostMotion(const sketch::Vec3& pivot, const sketch::Vec3& rotation, const sketch::Vec3& translation)
 {
     impl_->setGhostMotion(pivot, rotation, translation);
+    impl_->view->Invalidate();
     update();
 }
 
 void Viewport::hideGhost()
 {
     impl_->hideGhost();
+    impl_->view->Invalidate();
     update();
 }
 
 void Viewport::showAngleSweep(const sketch::Vec3& center, const sketch::Vec3& axis, const sketch::Vec3& start, double angle)
 {
     impl_->showAngleSweep(center, axis, start, angle);
+    impl_->view->Invalidate();
     update();
 }
 
 void Viewport::hideAngleSweep()
 {
     impl_->hideAngleSweep();
+    impl_->view->Invalidate();
+    update();
+}
+
+void Viewport::showAlignmentLine(const sketch::Vec3& from, const sketch::Vec3& to)
+{
+    impl_->showAlignmentLine(from, to);
+    impl_->view->Invalidate();
+    update();
+}
+
+void Viewport::hideAlignmentLine()
+{
+    impl_->hideAlignmentLine();
+    impl_->view->Invalidate();
     update();
 }
 

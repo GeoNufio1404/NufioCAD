@@ -169,6 +169,9 @@ public:
     // sola arista gruesa, lo bastante barata para rehacerla a cada paso del ratón.
     void showAngleSweep(const sketch::Vec3& center, const sketch::Vec3& axis, const sketch::Vec3& start, double angle);
     void hideAngleSweep();
+    // Una recta gruesa y brillante entre dos puntos: la guía de «estás alineado con esta marca» al girar con un anillo.
+    void showAlignmentLine(const sketch::Vec3& from, const sketch::Vec3& to);
+    void hideAlignmentLine();
     // Flecha de doble punta entre dos puntos del modelo: señala la medida que se está escribiendo en el panel de una
     // herramienta. No se puede arrastrar ni seleccionar.
     void showDimensionArrow(const sketch::Vec3& from, const sketch::Vec3& to);

@@ -615,6 +615,23 @@ int InterfaceCheck::run()
                 emit window_.viewport_->gizmoDragged(0, 12.5);
             });
             settle(400);
+            // La sombra (azul translúcida) se ve mientras se arrastra: antes de quitar el redibujado forzado se veía, y al
+            // quitarlo la vista no se enteraba de que había cambiado (771 píxeles azulados, solo las flechas, contra 137 000).
+            const auto countPixels = [&](const std::function<bool(const QColor&)>& wanted) {
+                const QImage image = window_.viewport_->grabFramebuffer();
+                long count = 0;
+                for (int py = 0; py < image.height(); ++py) {
+                    for (int px = 0; px < image.width(); ++px) {
+                        count += wanted(image.pixelColor(px, py)) ? 1 : 0;
+                    }
+                }
+                return count;
+            };
+            const long ghostPixels = countPixels([](const QColor& c) { return c.blue() > c.red() + 40 && c.blue() > c.green() + 15 && c.green() < 190; });
+            expect(ghostPixels > 8000, QStringLiteral("no se ve la sombra durante el arrastre (%1 píxeles azulados)").arg(ghostPixels));
+            if (current_ != nullptr) {
+                current_->detail += QStringLiteral(" sombra: %1 px").arg(ghostPixels);
+            }
             expect(std::abs(x->value() - 12.5) < 0.01, QStringLiteral("el cuadro X no siguió al arrastre (%1)").arg(x->value()));
             expect(!window_.tool_->previewing(), QStringLiteral("se calculó la vista previa durante el arrastre"));
             blocking(QStringLiteral("soltar la flecha X"), [&] { emit window_.viewport_->gizmoReleased(0); });
@@ -628,6 +645,18 @@ int InterfaceCheck::run()
                 emit window_.viewport_->gizmoDragged(2, 43.5 * std::numbers::pi / 180.0);
             });
             expect(std::abs(rz->value() - 45.0) < 0.01, QStringLiteral("el giro no se pegó a la marca de 45° (%1)").arg(rz->value()));
+            // Pegado a la marca: se dibuja la recta amarilla de «alineado» y el giro se queda ahí (softblock) aunque el
+            // cursor se aleje un poco (51° está a 6° de la marca: se mantiene; más lejos, a 60°, se suelta).
+            const auto yellow = [](const QColor& c) { return c.red() > 230 && c.green() > 190 && c.blue() < 130; };
+            settle(200);
+            window_.viewport_->grabFramebuffer().save(QDir::temp().filePath(QStringLiteral("gizmo-alineado.png")));  // para mirarla
+            const long alignedPixels = countPixels(yellow);
+            expect(alignedPixels > 30, QStringLiteral("no se dibuja la recta de alineación en la marca (%1 píxeles amarillos)").arg(alignedPixels));
+            blocking(QStringLiteral("alejarse un poco de la marca"), [&] { emit window_.viewport_->gizmoDragged(2, 51.0 * std::numbers::pi / 180.0); });
+            expect(std::abs(rz->value() - 45.0) < 0.01, QStringLiteral("el giro no se quedó pegado a la marca al alejarse 6° (%1)").arg(rz->value()));
+            if (current_ != nullptr) {
+                current_->detail += QStringLiteral(" recta de alineación: %1 px").arg(alignedPixels);
+            }
             // Cuánto cuesta cada paso de un arrastre de anillo (señal + dibujar el cuadro), como con el ratón real.
             {
                 long slotTotal = 0;
@@ -707,6 +736,9 @@ int InterfaceCheck::run()
             settle(60);  // dibuja el cuadro con el arco del ángulo
             expect(dragStep.elapsed() < 500, QStringLiteral("un paso de arrastre del anillo (con el arco) tardó %1 ms").arg(dragStep.elapsed()));
             expect(std::abs(rz->value() - 60.0) < 0.11, QStringLiteral("fuera de las marcas el giro debía ser libre (%1)").arg(rz->value()));
+            settle(200);
+            const long leftoverLine = countPixels(yellow);
+            expect(leftoverLine < 10, QStringLiteral("la recta de alineación sigue dibujada fuera de las marcas (%1 píxeles)").arg(leftoverLine));
             blocking(QStringLiteral("soltar el anillo Z"), [&] { emit window_.viewport_->gizmoReleased(2); });
             waitIdle();
             // Después de girar en Z, el anillo X gira sobre el eje X del MUNDO (el que dibuja el anillo), no sobre el de
