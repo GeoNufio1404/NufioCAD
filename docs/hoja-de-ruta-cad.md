@@ -465,9 +465,9 @@ Guía paso a paso para probar cada fase y dar feedback: [`guia-de-pruebas.md`](g
 
 **Convención:** cada bloque termina con su línea «**Pendiente de …**» (lo que no se hizo, lo que no se probó a mano, límites conocidos). Todo pendiente nuevo se documenta ahí al cerrar el bloque, y al hacer la segunda auditoría de código se repasan todos.
 
-## Backlog consolidado (revisión del 7 nov. 2026)
+## Backlog consolidado (revisión del 9 nov. 2026, versión 0.1.0)
 
-Resumen de todo lo pendiente que no son pruebas manuales; el detalle sigue en el «Pendiente de …» de cada bloque. Se trabaja por oleadas y al cerrar cada punto se tacha aquí y en su bloque.
+Resumen de todo lo pendiente que no son pruebas manuales; el detalle sigue en el «Pendiente de …» de cada bloque. Se trabaja por oleadas y al cerrar cada punto se tacha aquí y en su bloque. Lo ya hecho está marcado con [x]; al final hay un resumen de lo pendiente (nuevo, de lo último que se hizo) y la lista de pruebas manuales que faltan.
 
 **Oleada 1 — Cimientos (hacer antes de ampliar generadores)**
 - [x] Cotas del sketch ligadas a parámetros (6c). Falta probarlo a mano (guía 6.20–6.24).
@@ -483,12 +483,15 @@ Resumen de todo lo pendiente que no son pruebas manuales; el detalle sigue en el
 - [x] Partir `FeatureTools.cpp` (en 4 archivos más `FeatureToolsCommon.hpp`) y `Features.cpp` (en 2 más `FeaturesCommon.hpp`): solo se movió código, sin cambiar nada.
 - [x] Partir `Viewport.cpp` (queda el widget, ~600 líneas; el `Impl` y los dibujos pasaron a `ViewportImpl.hpp` y `ViewportDrawing.hpp`, privadas) y `MainWindow.cpp` (en `MainWindowMenus.cpp`, `MainWindowView.cpp` y `MainWindowCommon.hpp`). Solo se movió código; pruebas y prueba de interfaz pasan. Pendiente: partir `ViewportImpl.hpp` (1700 líneas) por responsabilidades (sketch, selección, vista previa).
 - [x] `hasHeavySurface`/`hasMesh` sin recorrer todas las caras en cada refresco: el resultado se guarda en la propia forma (`Shape::Impl`, inmutable): «pesada» se calcula una vez y «con malla» se recuerda cuando es cierta.
-- [ ] Limitaciones de Fase 2 y 3 (ver tabla de Estado): lo proyectado y el texto bloqueados; recortar/extender/desfase solo con líneas, arcos y círculos; elegir qué cuerpos participan en unir/cortar; «hasta una cara» con caras no planas; flecha en la revolución.
+- [x] **Cálculo del historial y de las vistas previas en segundo plano** (pedido en las pruebas: una rosca cortante colgaba la app al cambiar el diámetro del cilindro): hilo aparte sobre copias, un cambio nuevo cancela el cálculo en curso, las booleanas se interrumpen a media operación, «Calculando…» sobre la vista. Falta probarlo a mano (guía B.1–B.8).
+- [x] **Bucle de repintado en los cuadros numéricos** (la etiqueta de unidad pedía un layout sin parar y dejaba la vista a ~9 imágenes por segundo con cualquier herramienta abierta): corregido, el cuadro de la vista pasó de 110 ms a 14 ms (Debug).
+- [ ] Limitaciones de Fase 2 y 3 (ver tabla de Estado): lo proyectado y el texto bloqueados; recortar/extender/desfase solo con líneas, arcos y círculos; elegir qué cuerpos participan en unir/cortar; «hasta una cara» con caras no planas. (La flecha de la revolución ya está: arcos de ángulo.)
 
 **Oleada 3 — Usabilidad**
-- [x] Generadores: la ayuda de cada campo sale como tooltip (se probó un texto fijo bajo el campo y no gustó) y las últimas respuestas se recuerdan por generador (`QSettings`, `generator/<id>/<clave>`; se guardan al aceptar un diseño nuevo). Falta probarlo a mano (guía G.17–G.18; la flecha de medida ya lo comprueba la prueba de interfaz). **Pendiente:** agrupar los campos por secciones (medidas, tapa, cable…) con títulos plegables; un botón «Restablecer valores».
+- [x] Generadores: la ayuda de cada campo sale como tooltip (se probó un texto fijo bajo el campo y no gustó) y las últimas respuestas se recuerdan por generador (`QSettings`, `generator/<id>/<clave>`; se guardan al aceptar un diseño nuevo). Falta probarlo a mano (guía G.17–G.18; la flecha de medida ya lo comprueba la prueba de interfaz). **Hecho después:** botón «Restablecer valores» (guía R.1–R.3). **Pendiente:** agrupar los campos por secciones (medidas, tapa, cable…) con títulos plegables.
 - [x] Vista previa de generadores en azul translúcido y «⏳ Calculando…» sobre la vista: los cuerpos con clave `gen:` (la vista previa de un generador, que aún no está en el diseño) se dibujan en azul con 45 % de transparencia; el distintivo (abajo a la izquierda de la vista) sale mientras el historial se recalcula o se calcula la vista previa de una herramienta (`FeatureTool::computingChanged`, `MainWindow::updateBusyBadge`). La prueba de interfaz comprueba por píxeles que la vista previa de Lightbox es azulada y que el distintivo no queda al terminar. **Pendiente:** el azul es fijo (no sigue el tema), no hay opción para verla opaca, y el distintivo no dice cuánto falta ni deja cancelar; las vistas previas de las demás herramientas (Caja, Rosca…) siguen siendo opacas y grises; el «Preparando el dibujo de la pieza…» del visor sigue en la barra de estado.
 - [x] Errores de geometría en lenguaje claro: los fallos del kernel de OpenCASCADE («Error del kernel al extruir: …») ahora dicen qué se intentaba, qué probar y, al final y entre paréntesis, el detalle técnico (`kernelFailure` en `Modeling.cpp`: extruir, revolucionar, combinar cuerpos, reflejar, repetir, engranaje, caja, cilindro, rosca, barrer, loft, mover, colocar, agujero); la booleana que falla explica que puede ser por cuerpos que solo se tocan en una arista o por caras casi coincidentes; el «Error inesperado» del documento sugiere probar otros valores o deshacer. Los mensajes que ya eran claros (validaciones de medidas, redondeo, vaciado) no cambian. **Pendiente:** las sugerencias son fijas por operación (no distinguen la causa concreta que dio el kernel); sin traducir el detalle técnico, que sigue en inglés; las ayudas con «mm» fijo en los textos de los generadores («M3: 2,5») no siguen la unidad elegida.
+- [x] **Mover y girar con el ratón, estilo Orca Slicer** (pedido del usuario): sobre el cuerpo salen flechas X/Y/Z para mover y anillos con marcas cada 45° para girar; al arrastrar solo se mueve una **sombra azul translúcida** y el modelo se calcula al soltar; los anillos miden el ángulo absoluto desde su perilla (0°), se pegan a las marcas con **softblock** (se pegan a menos de 4° y se sueltan a más de 9°) y dibujan una **recta amarilla de alineación**; mientras se arrastra uno se quitan los otros dos; cada anillo gira sobre su eje del mundo; se pueden mover y girar **varios cuerpos a la vez** como un bloque (Shift + clic, o casillas; un llavero son placa y texto). Falta probarlo a mano (guía O.1–O.18). Detalle y pendientes en la Fase 8.
 - [ ] Selector de unidad en la barra de estado; atajos para Caja, Cilindro y generadores.
 - [ ] Ocultar la pestaña HERRAMIENTAS dentro de un sketch; aviso de recuperación menos molesto.
 - [ ] Unidades restantes: Medir, avisos de impresión, lista de parámetros, área/volumen, por documento.
@@ -502,7 +505,7 @@ Resumen de todo lo pendiente que no son pruebas manuales; el detalle sigue en el
 - [ ] Repetir y reflejar operaciones (no solo cuerpos); patrón por trayectoria; espejo de varios cuerpos.
 - [ ] Redondeo/chaflán: dos distancias, ángulo, radio variable, redondear una cara entera.
 - [ ] Vaciado cerrado y espesores por cara; agujeros con punto y clic en cara; roscas sobre caras cilíndricas.
-- [ ] Barrido y loft con guías, torsión y tangencias; mover con gizmo; dividir cuerpos; componentes con origen propio; uniones cilíndricas.
+- [ ] Barrido y loft con guías, torsión y tangencias; (mover con gizmo: hecho, falta arrastrar sobre un plano); dividir cuerpos; componentes con origen propio; uniones cilíndricas.
 - [ ] Medir con línea dibujada y copiar; Sección con caras y planos de construcción; voladizos y soportes en la revisión.
 - [ ] STEP: pulgadas, colores, nombres y ensamblajes (XDE); reimportar; guardar la cámara; calidad de malla «Personalizada».
 
@@ -512,10 +515,21 @@ Resumen de todo lo pendiente que no son pruebas manuales; el detalle sigue en el
 - [ ] Letrero: varias líneas, alineación y cambio de texto sin rehacer. Engranajes: internos, cremallera, pocos dientes, aviso de compatibilidad.
 - [ ] Tarjeta «Herramientas» sobre el lienzo vacío; control de calidad de malla al exportar.
 
+**Resumen de lo pendiente de lo último que se hizo (9 nov. 2026)**
+- **Mover y girar con el ratón:** probar a mano (O.1–O.18); arrastre libre sobre un plano; ajuste a rejilla y a otros cuerpos; copiar varios cuerpos a la vez; elegir un componente entero desde el navegador; gizmo con tamaño constante sin parpadeo al hacer zoom (`Graphic3d_TransformPers`, sin probar); gizmo para Patrón, Espejo y Unión; texto del ángulo junto a la recta de alineación; el 0° del anillo es una dirección fija del mundo.
+- **Cálculo en segundo plano:** solo se interrumpe dentro de las booleanas (la construcción de la rosca o del engranaje helicoidal no se puede cancelar); sin barra de progreso ni botón «Cancelar»; el dibujo del resultado sigue en el hilo de la interfaz (generadores grandes paran 1–2 s); el hilo de cálculo comparte con el visor los cuerpos ya dibujados (solo lectura): no se ha probado con piezas muy grandes ni en Release.
+- **Flechas de medida:** sin flecha holgura y agujero del cable de los generadores, ángulo de presión y de hélice del par, tamaño del texto del Letrero y ángulo de la cabeza del Agujero; sin probar a mano Revolución, conicidad de Extruir, Unión, holgura de la Rosca, postes y agujeros de Caja con tapa y la anilla del Letrero.
+- **Errores en lenguaje claro:** las sugerencias son fijas por operación y el detalle técnico sigue en inglés; las ayudas con «mm» fijo en los generadores no siguen la unidad.
+- **Vista previa translúcida:** el azul es fijo (no sigue el tema); las demás herramientas siguen con vista previa opaca.
+- **Rendimiento en Release:** nada de lo anterior se ha medido en Release (Smart App Control bloquea las DLL sin firmar de OCCT en esta PC).
+
+**Pruebas manuales que faltan (guía [`guia-de-pruebas.md`](guia-de-pruebas.md)):** 5.12–5.14 (cantidad del patrón), 6.17–6.24 (parámetros), G.12–G.18 (generadores reabribles y valores recordados), F.1–F.16 (flechas de medida), B.1–B.8 (cálculo en segundo plano), M.1–M.4 (errores en lenguaje claro), O.1–O.18 (mover y girar con el ratón), R.1–R.3 (restablecer valores), T.1–T.5 (vista previa translúcida) y las de las fases 1–9 que siguen sin marcar.
+
 ## Notas de planificación
 
 - **Orden:** la Fase 4 va justo después del modelado básico para tener un flujo útil de punta a punta lo antes posible; cada fase siguiente agrega valor real.
 - **Esfuerzo:** las Fases 1–3 son alcanzables en semanas; las Fases 4–5 bien hechas (incluyendo robustez del historial) concentran la mayor parte del esfuerzo.
+- **Versiones y ramas (desde la v0.1.0, 9 nov. 2026):** `main` solo guarda versiones estables (la primera es la etiqueta `v0.1.0`); `develop` es la rama de integración; cada cambio o funcionalidad nueva va en `feature/<nombre>`, que sale de `develop` y vuelve a ella. `main` recibe `develop` solo al sacar una versión, con su etiqueta.
 
 ## Estado
 
@@ -525,15 +539,18 @@ Resumen de todo lo pendiente que no son pruebas manuales; el detalle sigue en el
 | Fase 0 | ✅ Completa — mockups, formatos de archivo, arquitectura, entorno (repositorio con CMake, vcpkg, pruebas y CI) y nombre de trabajo NufioCAD |
 | Fase 1 | ✅ Implementada y probada en Linux (Fedora) y Windows (MSVC + vcpkg + Qt 6.8.3, build Debug): visor OCCT en Qt, órbita/pan/zoom estilo Fusion, ViewCube, resaltado y selección de caras y aristas, barra de navegación con Orbitar/Desplazar/Zoom |
 | Interfaz Fusion | 🚧 Iconos, cinta con pestañas Sólido/Sketch, barra de navegación y tema en caliente hechos (ver sección «Interfaz estilo Fusion 360»). Pendiente: menú radial, valores junto al cursor en Extruir, y verificar en Fedora |
-| Windows | 🚧 Compila (MSVC), las pruebas pasan y la app abre y funciona en Debug. Pendiente: pasar las pruebas manuales 1–30 en Windows y el build Release (Smart App Control bloquea las DLL sin firmar de OCCT en esta PC) |
+| Windows | 🚧 Compila (MSVC), las 205 pruebas unitarias y los 33 pasos de la prueba de interfaz pasan y la app abre y funciona en Debug. Pendiente: pasar las pruebas manuales en Windows y el build Release (Smart App Control bloquea las DLL sin firmar de OCCT en esta PC) |
 | Fase 2 | 🚧 Implementada (2a–2d) — sketch completo: dibujo con variantes, elipse, spline y cónica; restricciones (incluida G2), cotas y valores junto al cursor; selección (también por rectángulo), deshacer, arrastre y perfiles; edición (recortar, extender, partir, empalme, chaflán, desfase, simetría, patrones, mover/copiar/girar/escalar); proyectar aristas, intersección, texto, imagen de referencia e importar DXF; los sketches terminados se guardan, sus perfiles y curvas se seleccionan en la vista 3D y se reabren con doble clic. Pendiente: las pruebas manuales de abajo y probar en Windows. Limitaciones: lo proyectado y el texto quedan bloqueados (no se actualizan con la pieza ni se editan como texto hasta la Fase 3); recortar/extender/partir y desfase trabajan con líneas, arcos y círculos; los patrones son copias independientes |
 | Fase 3 | 🚧 Implementada (3a–3c) — núcleo paramétrico con nombres estables de caras y aristas; sketches en el historial (sobre planos de origen o caras que siguen a la pieza); Extruir (todas sus variantes, empujar una cara) y Revolución con vista previa y flecha; timeline editable (editar, marcador, reordenar, suprimir, borrar, renombrar), navegador y deshacer/rehacer; lo proyectado sigue a su arista. Pendiente: las pruebas manuales 20–30 y probar en Windows. Limitaciones: los cuerpos que participan en unir/cortar son todos los que toca (sin elegirlos); «hasta una cara» solo con caras planas; el ángulo de la revolución se escribe en el panel (sin flecha) |
 | Fase 4 | ✅ 4a (Exportar), 4b (serialización), 4c (Nuevo/Abrir/Guardar/Guardar como con aviso de cambios), 4d (importar STEP), 4e (pantalla de inicio con recientes) y 4f (recuperación) implementadas. Pendiente: probar a mano las pruebas 31–38 y compilar en Fedora/CI |
 | Fase 5 | ✅ 5a (redondeo y chaflán), 5b (shell), 5c (agujeros), 5d (patrones de cuerpos) y 5e (espejo de cuerpos) implementadas; pendiente repetir/reflejar operaciones |
 | Fase 6 | ✅ 6a (planos de construcción), 6b (ejes de construcción) y 6c (parámetros con nombre y expresiones) implementadas. Pendiente: cotas del sketch ligadas a parámetros. Siguiente paso: Fase 7 |
 | Fase 7 | ✅ 7a (engranajes), 7b (roscas), 7c (barrido) y 7d (loft) implementadas. Siguiente paso: Fase 8 |
-| Fase 8 | ✅ 8a (mover/copiar/combinar cuerpos), 8b (nombres y componentes) y 8c (uniones entre caras planas) implementadas |
+| Fase 8 | ✅ 8a (mover/copiar/combinar cuerpos, ahora **con flechas y anillos arrastrables, sombra, softblock y varios cuerpos a la vez**), 8b (nombres y componentes) y 8c (uniones entre caras planas) implementadas |
 | Fase 9 | ✅ 9a (revisión antes de exportar), 9b (Imprimir), 9c (Medir) y 9d (Sección) implementadas; sin calidad de malla ni línea de medida dibujada |
 | Fase 10 | ✅ 10a (base), 10b (Lightbox), 10c (Caja con tapa), 10d (Letrero o llavero) y 10e (Par de engranajes) implementadas; ver [`generadores.md`](generadores.md) |
-| Pruebas manuales | ⏳ Guía en [`guia-de-pruebas.md`](guia-de-pruebas.md) (fases 1 a 9b); **faltan por añadir a la guía** 9c, 9d, unidades, colocación de roscas/engranajes y la Fase 10. El usuario irá probando fase por fase y dando feedback |
+| Cálculo en segundo plano | ✅ El historial y las vistas previas de herramientas y generadores se calculan en un hilo aparte, con cancelación y «Calculando…» sobre la vista; falta probarlo a mano (B.1–B.8) |
+| Flechas de medida | ✅ En casi todas las herramientas y generadores (flechas rectas y arcos para ángulos); ver sus pendientes arriba |
+| Versión | 🏷️ **v0.1.0** (9 nov. 2026): primera versión de NufioCAD en `main`; el trabajo sigue en `develop` y `feature/*` |
+| Pruebas manuales | ⏳ Guía en [`guia-de-pruebas.md`](guia-de-pruebas.md), completa hasta la última función; el usuario irá probando y dando feedback (lista de lo que falta, en el backlog consolidado) |
 | Auditoría de código | ✅ Segunda auditoría hecha: [`auditoria-2.md`](auditoria-2.md) (hallazgos arreglados, pendientes por prioridad, usabilidad y rendimiento) |
