@@ -116,7 +116,7 @@ void ExtrudeTool::createFields(QFormLayout* form)
             pickingTarget_ = on ? side : 0;
             (side == 1 ? target2_ : target1_)->setChecked(false);
             if (on) {
-                emit message(QStringLiteral("Haz clic en la cara plana hasta la que llega la extrusión"));
+                emit message(QStringLiteral("Haz clic en la cara (plana, cilíndrica, esférica o toroidal) hasta la que llega la extrusión"));
             }
         });
     }

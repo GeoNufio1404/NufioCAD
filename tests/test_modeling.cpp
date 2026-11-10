@@ -3,6 +3,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -56,6 +57,51 @@ std::optional<int> faceStarting(const Shape& shape, const std::string& prefix)
         }
     }
     return std::nullopt;
+}
+
+// Primera cara no plana del cuerpo (la pared curva de un cilindro, esfera, toro o cono).
+std::optional<int> curvedFace(const Shape& shape)
+{
+    for (int i = 0; i < shape.faceCount(); ++i) {
+        if (!shape.facePlane(i)) {
+            return i;
+        }
+    }
+    return std::nullopt;
+}
+
+// Integral numérica (punto medio) de f(x, z) sobre [-h, h]².
+template <class F>
+double integrate(double h, F f)
+{
+    constexpr int n = 400;
+    const double step = 2.0 * h / n;
+    double sum = 0.0;
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+            sum += f(-h + (i + 0.5) * step, -h + (j + 0.5) * step) * step * step;
+        }
+    }
+    return sum;
+}
+
+// Cuerpo de revolución completa alrededor de Z a partir de un sketch dibujado en XZ.
+Shape revolveAroundZ(const sketch::Sketch& s)
+{
+    RevolveSpec full;
+    full.extent = RevolveExtent::Full;
+    return revolve("f1", {&s, sketch::Plane::xz(), sketch::findProfiles(s)}, Axis{{0, 0, 0}, {0, 0, 1}}, full);
+}
+
+// Extruye un cuadrado de 4 mm desde (0, y0, 0) en el sentido «dir» (±Y) hasta la cara «face».
+Shape squareToFace(const ElementRef& face, double y0, double dir, const Shape& body)
+{
+    sketch::Sketch square;
+    rectangle(square, -2, -2, 2, 2);
+    ExtrudeSpec spec;
+    spec.side1.extent = Extent::ToFace;
+    spec.side1.face = face;
+    return extrude("f2", allProfiles(square, sketch::Plane::fromPointAndNormal({0, y0, 0}, {0, dir, 0})), spec, {body});
 }
 
 } // namespace
@@ -264,6 +310,117 @@ TEST_CASE("Extruir hasta una cara y empujar una cara", "[geometry][modeling]")
     const Shape extra = extrudeFace("f4", block, *faceStarting(block, "f3:fin:"), distance(3));
     REQUIRE_THAT(extra.volume(), WithinRel(600.0, 1e-9));
     REQUIRE(countNamed(extra, "f4:lado:f3:fin:" + e(first) + "|f3:lado:e") == 4);
+}
+
+TEST_CASE("Extruir hasta una cara cilíndrica, desde fuera y desde dentro", "[geometry][modeling]")
+{
+    // Cilindro de radio 10 sobre el eje Z.
+    sketch::Sketch circle;
+    circle.addCircle({0, 0}, 10);
+    const Shape cylinder = extrude("f1", allProfiles(circle), distance(40));
+    const ElementRef wall = cylinder.faceRef(*faceStarting(cylinder, "f1:lado:"));
+
+    sketch::Sketch square;
+    rectangle(square, -2, -2, 2, 2);
+    ExtrudeSpec spec;
+    spec.side1.extent = Extent::ToFace;
+    spec.side1.face = wall;
+    const double chord = 2.0 * (std::sqrt(96.0) + 50.0 * std::asin(0.2));  // ∫ sqrt(100 - x²) en [-2, 2]
+
+    // Desde y = -30 hacia el cilindro: se queda con lo que está antes de la pared.
+    const Shape outside = extrude("f2", allProfiles(square, sketch::Plane::fromPointAndNormal({0, -30, 0}, {0, 1, 0})),
+                                  spec, {cylinder});
+    REQUIRE(outside.solidCount() == 1);
+    REQUIRE_THAT(outside.volume(), WithinRel(4.0 * (120.0 - chord), 1e-3));
+    REQUIRE(countNamed(outside, "f2:fin:") == 1);
+
+    // Desde dentro hacia la pared.
+    const Shape inside = extrude("f3", allProfiles(square, sketch::Plane::fromPointAndNormal({0, 0, 0}, {0, 1, 0})),
+                                 spec, {cylinder});
+    REQUIRE_THAT(inside.volume(), WithinRel(4.0 * chord, 1e-3));
+}
+
+TEST_CASE("Extruir hasta una esfera, desde fuera y desde dentro", "[geometry][modeling]")
+{
+    // Esfera de radio 10 en el origen: medio disco en XZ girado alrededor de Z.
+    sketch::Sketch half;
+    half.addArc({0, 0}, 10, -std::numbers::pi / 2, std::numbers::pi / 2);
+    half.addLine({0, -10}, {0, 10});
+    const Shape sphere = revolveAroundZ(half);
+    REQUIRE_THAT(sphere.volume(), WithinRel(4.0 / 3.0 * std::numbers::pi * 1000.0, 1e-6));
+    const auto wall = curvedFace(sphere);
+    REQUIRE(wall);
+    const ElementRef ref = sphere.faceRef(*wall);
+
+    // Desde y = -30: llega a la superficie y se queda antes de ella.
+    const Shape outside = squareToFace(ref, -30.0, 1.0, sphere);
+    REQUIRE(outside.solidCount() == 1);
+    REQUIRE_THAT(outside.volume(), WithinRel(integrate(2.0, [](double x, double z) {
+                                                  return 30.0 - std::sqrt(100.0 - x * x - z * z);
+                                              }),
+                                              1e-3));
+
+    // Desde el centro: sale hasta la superficie.
+    const Shape inside = squareToFace(ref, 0.0, 1.0, sphere);
+    REQUIRE_THAT(inside.volume(), WithinRel(integrate(2.0, [](double x, double z) {
+                                                 return std::sqrt(100.0 - x * x - z * z);
+                                             }),
+                                             1e-3));
+}
+
+TEST_CASE("Extruir hasta un toro", "[geometry][modeling]")
+{
+    // Toro de radio mayor 20 y menor 5: un círculo en XZ girado alrededor de Z.
+    sketch::Sketch circle;
+    circle.addCircle({20, 0}, 5);
+    const Shape torus = revolveAroundZ(circle);
+    const auto wall = curvedFace(torus);
+    REQUIRE(wall);
+
+    // Desde x = -40 hacia el toro: llega a su cara exterior, hacia x = -25 (15 mm de largo).
+    sketch::Sketch square;
+    rectangle(square, -1, -1, 1, 1);
+    ExtrudeSpec spec;
+    spec.side1.extent = Extent::ToFace;
+    spec.side1.face = torus.faceRef(*wall);
+    const Shape post = extrude("f2", allProfiles(square, sketch::Plane::fromPointAndNormal({-40, 0, 0}, {1, 0, 0})), spec, {torus});
+    REQUIRE(post.solidCount() == 1);
+    REQUIRE(post.volume() > 4.0 * 14.9);
+    REQUIRE(post.volume() < 4.0 * 15.4);
+}
+
+TEST_CASE("Extruir hasta una cara curva que no se alcanza o no se admite da un mensaje claro", "[geometry][modeling]")
+{
+    sketch::Sketch half;
+    half.addArc({0, 0}, 10, -std::numbers::pi / 2, std::numbers::pi / 2);
+    half.addLine({0, -10}, {0, 10});
+    const Shape sphere = revolveAroundZ(half);
+    const ElementRef ref = sphere.faceRef(*curvedFace(sphere));
+
+    // Alejándose de la esfera nunca llega a ella.
+    REQUIRE_THROWS_WITH(squareToFace(ref, -30.0, -1.0, sphere), Catch::Matchers::ContainsSubstring("no llega"));
+
+    // Un cono no está entre las superficies admitidas.
+    sketch::Sketch triangle;
+    triangle.addLine({0, 0}, {10, 0});
+    triangle.addLine({10, 0}, {0, 10});
+    triangle.addLine({0, 10}, {0, 0});
+    const Shape cone = revolveAroundZ(triangle);
+    const auto coneWall = curvedFace(cone);
+    REQUIRE(coneWall);
+    REQUIRE_THROWS_WITH(squareToFace(cone.faceRef(*coneWall), -30.0, 1.0, cone), Catch::Matchers::ContainsSubstring("cono"));
+
+    // Paralela al eje de un cilindro: tampoco llega a su pared.
+    sketch::Sketch disc;
+    disc.addCircle({0, 0}, 10);
+    const Shape cylinder = extrude("f1", allProfiles(disc), distance(40));
+    sketch::Sketch small;
+    rectangle(small, -2, -2, 2, 2);
+    ExtrudeSpec spec;
+    spec.side1.extent = Extent::ToFace;
+    spec.side1.face = cylinder.faceRef(*faceStarting(cylinder, "f1:lado:"));
+    REQUIRE_THROWS_WITH(extrude("f2", allProfiles(small, sketch::Plane::fromPointAndNormal({0, 0, 50}, {0, 0, 1})), spec, {cylinder}),
+                        Catch::Matchers::ContainsSubstring("no llega"));
 }
 
 TEST_CASE("Errores de modelado con mensaje", "[geometry][modeling]")

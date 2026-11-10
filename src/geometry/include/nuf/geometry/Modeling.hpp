@@ -25,7 +25,7 @@ struct SketchRegion {
 enum class Extent {
     Distance,    // «distance» mm
     ThroughAll,  // atraviesa todos los cuerpos de «context»
-    ToFace,      // hasta el plano de una cara plana de «context»
+    ToFace,      // hasta una cara de «context»: plana, cilíndrica, esférica o toroidal
 };
 
 struct ExtrudeSide {

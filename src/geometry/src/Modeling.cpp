@@ -7,6 +7,7 @@
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepAlgoAPI_Common.hxx>
 #include <BRepBndLib.hxx>
+#include <BRepClass3d_SolidClassifier.hxx>
 #include <BRepCheck_Analyzer.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepBuilderAPI_MakeSolid.hxx>
@@ -46,6 +47,8 @@
 #include <BRepPrimAPI_MakeCone.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
 #include <BRepPrimAPI_MakeHalfSpace.hxx>
+#include <BRepPrimAPI_MakeSphere.hxx>
+#include <BRepPrimAPI_MakeTorus.hxx>
 #include <BRepPrimAPI_MakePrism.hxx>
 #include <BRepPrimAPI_MakeRevol.hxx>
 #include <BRep_Builder.hxx>
@@ -58,6 +61,10 @@
 #include <TopoDS_Compound.hxx>
 #include <TopoDS_Solid.hxx>
 #include <gp_Ax1.hxx>
+#include <gp_Ax2.hxx>
+#include <gp_Cylinder.hxx>
+#include <gp_Sphere.hxx>
+#include <gp_Torus.hxx>
 #include <gp_Trsf.hxx>
 #include <gp_Vec.hxx>
 #include <gp_Pln.hxx>
@@ -236,19 +243,149 @@ double throughLength(const std::vector<Shape>& context, const TopoDS_Shape& star
     return 2.0 * std::sqrt(dx * dx + dy * dy + dz * dz) + 10.0;
 }
 
-// Cara de «context» señalada por la referencia, que debe ser plana.
-gp_Pln targetPlane(const std::vector<Shape>& context, const ElementRef& ref)
+// Cara de «context» señalada por la referencia (de cualquier tipo de superficie).
+TopoDS_Face targetFace(const std::vector<Shape>& context, const ElementRef& ref)
 {
     for (const Shape& s : context) {
         if (const auto index = s.findFace(ref)) {
-            if (const auto plane = s.facePlane(*index)) {
-                return gp_Pln(toPnt(plane->origin), toDir(plane->normal));
-            }
-            throw GeometryError("La cara de destino no es plana");
+            return faceAt(s, *index);
         }
     }
     throw GeometryError("No se encuentra la cara de destino");
 }
+
+// ¿Tiene «solid» alguna cara sobre la misma superficie que la de destino (mismo radio y mismo eje o
+// centro)? Si no, la extrusión nunca llegó a ella y lo único que cierra el sólido son los topes
+// artificiales del cuerpo auxiliar.
+bool touchesSurface(const TopoDS_Shape& solid, const BRepAdaptor_Surface& target)
+{
+    constexpr double tol = 1e-6;
+    for (TopExp_Explorer ex(solid, TopAbs_FACE); ex.More(); ex.Next()) {
+        const BRepAdaptor_Surface face(TopoDS::Face(ex.Current()));
+        if (face.GetType() != target.GetType()) {
+            continue;
+        }
+        switch (target.GetType()) {
+        case GeomAbs_Cylinder:
+            if (std::abs(face.Cylinder().Radius() - target.Cylinder().Radius()) < tol
+                && face.Cylinder().Axis().IsCoaxial(target.Cylinder().Axis(), tol, tol)) {
+                return true;
+            }
+            break;
+        case GeomAbs_Sphere:
+            if (std::abs(face.Sphere().Radius() - target.Sphere().Radius()) < tol
+                && face.Sphere().Location().Distance(target.Sphere().Location()) < tol) {
+                return true;
+            }
+            break;
+        case GeomAbs_Torus:
+            if (std::abs(face.Torus().MajorRadius() - target.Torus().MajorRadius()) < tol
+                && std::abs(face.Torus().MinorRadius() - target.Torus().MinorRadius()) < tol
+                && face.Torus().Axis().IsCoaxial(target.Torus().Axis(), tol, tol)) {
+                return true;
+            }
+            break;
+        default:
+            break;
+        }
+    }
+    return false;
+}
+
+// Recorta «part» (un prisma largo que sale de «profile» hacia «direction») en la cara de destino.
+// Una cara plana divide el espacio en dos; una cilíndrica, esférica o toroidal, en el volumen que
+// encierra y el resto: se queda con el trozo que alcanza primero, del lado del perfil.
+std::pair<TopoDS_Shape, std::unique_ptr<BRepAlgoAPI_BooleanOperation>>
+trimToFace(const TopoDS_Shape& part, const Box& partBox, const TopoDS_Face& target, const TopoDS_Face& profile,
+           const gp_Dir& direction)
+{
+    BRepAdaptor_Surface surface(target);
+    const GeomAbs_SurfaceType type = surface.GetType();
+    // Punto del perfil (su centro) y, desde él, el rumbo de la extrusión: así decide bien aunque el
+    // perfil esté justo sobre la pared.
+    GProp_GProps props;
+    BRepGProp::SurfaceProperties(profile, props);
+    const gp_Pnt onProfile = props.CentreOfMass();
+    const gp_Pnt probe = onProfile.Translated(gp_Vec(direction) * 1e-3);
+
+    TopoDS_Shape limit;
+    bool keepInside = true;
+    if (type == GeomAbs_Plane) {
+        // Semiespacio del plano de la cara que contiene el perfil.
+        constexpr double big = 1e5;
+        const gp_Pnt inside = BRepAdaptor_Surface(profile).Plane().Location();
+        const TopoDS_Face bigFace = BRepBuilderAPI_MakeFace(surface.Plane(), -big, big, -big, big).Face();
+        limit = BRepPrimAPI_MakeHalfSpace(bigFace, inside).Solid();
+    } else {
+        // Cuerpos auxiliares del tamaño de la pieza (no enormes: con coordenadas muy grandes la
+        // booleana pierde precisión).
+        const gp_Pnt center((partBox.min.x + partBox.max.x) / 2.0, (partBox.min.y + partBox.max.y) / 2.0,
+                            (partBox.min.z + partBox.max.z) / 2.0);
+        const double reach = std::sqrt(std::pow(partBox.max.x - partBox.min.x, 2) + std::pow(partBox.max.y - partBox.min.y, 2)
+                                       + std::pow(partBox.max.z - partBox.min.z, 2)) + 1.0;
+        switch (type) {
+        case GeomAbs_Cylinder: {
+            const gp_Cylinder c = surface.Cylinder();
+            // El Ax2 se arma con Axis().Direction(): Position().Ax2() invierte el eje si el sistema de
+            // la cara es indirecto, y el cilindro auxiliar saldría fuera de sitio.
+            const gp_Dir axis = c.Axis().Direction();
+            const double t0 = gp_Vec(c.Location(), center).Dot(gp_Vec(axis));
+            const gp_Ax2 ax(c.Location().Translated(gp_Vec(axis) * (t0 - reach)), axis, c.Position().XDirection());
+            limit = BRepPrimAPI_MakeCylinder(ax, c.Radius(), 2.0 * reach).Shape();
+            break;
+        }
+        case GeomAbs_Sphere: {
+            const gp_Sphere sp = surface.Sphere();
+            limit = BRepPrimAPI_MakeSphere(sp.Location(), sp.Radius()).Shape();
+            break;
+        }
+        case GeomAbs_Torus: {
+            const gp_Torus t = surface.Torus();
+            limit = BRepPrimAPI_MakeTorus(gp_Ax2(t.Location(), t.Axis().Direction(), t.Position().XDirection()), t.MajorRadius(),
+                                           t.MinorRadius()).Shape();
+            break;
+        }
+        default:
+            throw GeometryError("«Hasta una cara» admite caras planas, cilíndricas, esféricas y toroidales; "
+                                "esta es de otro tipo (cono o superficie libre). Elige otra cara o usa una distancia");
+        }
+        BRepClass3d_SolidClassifier classifier(limit, probe, 1e-7);
+        keepInside = classifier.State() != TopAbs_OUT;
+    }
+
+    std::unique_ptr<BRepAlgoAPI_BooleanOperation> algo;
+    if (type == GeomAbs_Plane || keepInside) {
+        algo = std::make_unique<BRepAlgoAPI_Common>(part, limit);
+    } else {
+        algo = std::make_unique<BRepAlgoAPI_Cut>(part, limit);
+    }
+    if (cancelRequested()) {
+        throw GeometryError("Cálculo cancelado");
+    }
+    if (!algo->IsDone() || algo->HasErrors()) {
+        throw GeometryError("No se pudo extruir hasta la cara: prueba con otra cara de destino o con una distancia");
+    }
+
+    // Al salir de un volumen y volver a entrar puede quedar más de un sólido: se queda el que está
+    // más cerca del perfil.
+    TopoDS_Shape result = algo->Shape();
+    TopoDS_Shape nearest = result;
+    double best = 1e300;
+    int count = 0;
+    for (TopExp_Explorer ex(result, TopAbs_SOLID); ex.More(); ex.Next(), ++count) {
+        BRepExtrema_DistShapeShape distance(profile, ex.Current());
+        if (distance.IsDone() && distance.Value() < best) {
+            best = distance.Value();
+            nearest = ex.Current();
+        }
+    }
+    if (type != GeomAbs_Plane && count > 0 && !touchesSurface(nearest, surface)) {
+        throw GeometryError("La extrusión no llega a la cara de destino: comprueba que esté delante del perfil, "
+                            "en el sentido de la extrusión, y que no sea paralela a ella");
+    }
+    return {count > 1 ? nearest : result, std::move(algo)};
+}
+
 
 // Un lado de la extrusión: prisma de las caras a lo largo de «direction»
 // (unitaria) desde «offset», con su ángulo y su límite. «second» distingue
@@ -332,18 +469,11 @@ Shape extrudeSide(const std::string& tag, const std::vector<ProfileFace>& faces,
         }
 
         if (side.extent == Extent::ToFace) {
-            // Recorta el prisma largo con el semiespacio de la cara destino
-            // que contiene el perfil.
-            const gp_Pln target = targetPlane(context, side.face);
-            const gp_Pnt inside = BRepAdaptor_Surface(face).Plane().Location();
-            const TopoDS_Face big = BRepBuilderAPI_MakeFace(target, -1e5, 1e5, -1e5, 1e5).Face();
-            const TopoDS_Solid half = BRepPrimAPI_MakeHalfSpace(big, inside).Solid();
-            BRepAlgoAPI_Common common(occtShape(part), half);
-            if (!common.IsDone() || common.HasErrors()) {
-                throw GeometryError("No se pudo extruir hasta la cara");
-            }
-            Namer trimmed(common.Shape());
-            trimmed.inherit(part, *common.History());
+            // Recorta el prisma largo en la cara de destino, del lado del perfil.
+            const TopoDS_Face target = targetFace(context, side.face);
+            const auto [cut, algo] = trimToFace(occtShape(part), part.bounds(), target, face, direction);
+            Namer trimmed(cut);
+            trimmed.inherit(part, *algo->History());
             trimmed.nameUnnamed(endName + pf.key);  // la cara nueva viene del destino
             part = trimmed.finish(tag);
             if (part.solidCount() == 0) {
