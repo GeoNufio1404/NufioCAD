@@ -4,9 +4,17 @@
 
 #include "Naming.hpp"
 
+#include <Standard_Version.hxx>
+
+// ComputeNormals vive en BRepLib_ desde OCCT 7.7; antes estaba en StdPrs_.
+#if OCC_VERSION_HEX >= 0x070700
+#include <BRepLib_ToolTriangulatedShape.hxx>
+#else
+#include <StdPrs_ToolTriangulatedShape.hxx>
+#endif
+
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepBuilderAPI_Copy.hxx>
-#include <BRepLib_ToolTriangulatedShape.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRep_Builder.hxx>
 #include <BRep_Tool.hxx>
@@ -110,7 +118,11 @@ PreparedMesh prepareMesh(const Shape& shape, double deviation, double angle, con
             TopLoc_Location location;
             const occ::handle<Poly_Triangulation> triangulation = BRep_Tool::Triangulation(face, location);
             if (!triangulation.IsNull()) {
+#if OCC_VERSION_HEX >= 0x070700
                 BRepLib_ToolTriangulatedShape::ComputeNormals(face, triangulation);
+#else
+                StdPrs_ToolTriangulatedShape::ComputeNormals(face, triangulation);
+#endif
             }
         }
         auto impl = std::make_shared<PreparedMesh::Impl>();
