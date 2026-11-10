@@ -7,6 +7,7 @@
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepAlgoAPI_Common.hxx>
 #include <BRepBndLib.hxx>
+#include <BRepClass3d_SolidClassifier.hxx>
 #include <BRepCheck_Analyzer.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepBuilderAPI_MakeSolid.hxx>
@@ -20,6 +21,7 @@
 #include <Bnd_Box.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
+#include <BRepAlgoAPI_Splitter.hxx>
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeWire.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
@@ -46,6 +48,8 @@
 #include <BRepPrimAPI_MakeCone.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
 #include <BRepPrimAPI_MakeHalfSpace.hxx>
+#include <BRepPrimAPI_MakeSphere.hxx>
+#include <BRepPrimAPI_MakeTorus.hxx>
 #include <BRepPrimAPI_MakePrism.hxx>
 #include <BRepPrimAPI_MakeRevol.hxx>
 #include <BRep_Builder.hxx>
@@ -58,6 +62,10 @@
 #include <TopoDS_Compound.hxx>
 #include <TopoDS_Solid.hxx>
 #include <gp_Ax1.hxx>
+#include <gp_Ax2.hxx>
+#include <gp_Cylinder.hxx>
+#include <gp_Sphere.hxx>
+#include <gp_Torus.hxx>
 #include <gp_Trsf.hxx>
 #include <gp_Vec.hxx>
 #include <gp_Pln.hxx>
@@ -236,18 +244,178 @@ double throughLength(const std::vector<Shape>& context, const TopoDS_Shape& star
     return 2.0 * std::sqrt(dx * dx + dy * dy + dz * dz) + 10.0;
 }
 
-// Cara de «context» señalada por la referencia, que debe ser plana.
-gp_Pln targetPlane(const std::vector<Shape>& context, const ElementRef& ref)
+// Cara de «context» señalada por la referencia (de cualquier tipo de superficie).
+TopoDS_Face targetFace(const std::vector<Shape>& context, const ElementRef& ref)
 {
     for (const Shape& s : context) {
         if (const auto index = s.findFace(ref)) {
-            if (const auto plane = s.facePlane(*index)) {
-                return gp_Pln(toPnt(plane->origin), toDir(plane->normal));
-            }
-            throw GeometryError("La cara de destino no es plana");
+            return faceAt(s, *index);
         }
     }
     throw GeometryError("No se encuentra la cara de destino");
+}
+
+// ¿Está «face» sobre la misma superficie que la de destino (mismo tipo, radio y eje o centro)?
+bool onSurface(const TopoDS_Face& face, const BRepAdaptor_Surface& target)
+{
+    constexpr double tol = 1e-6;
+    const BRepAdaptor_Surface surface(face);
+    if (surface.GetType() != target.GetType()) {
+        return false;
+    }
+    switch (target.GetType()) {
+    case GeomAbs_Cylinder:
+        return std::abs(surface.Cylinder().Radius() - target.Cylinder().Radius()) < tol
+               && surface.Cylinder().Axis().IsCoaxial(target.Cylinder().Axis(), tol, tol);
+    case GeomAbs_Sphere:
+        return std::abs(surface.Sphere().Radius() - target.Sphere().Radius()) < tol
+               && surface.Sphere().Location().Distance(target.Sphere().Location()) < tol;
+    case GeomAbs_Torus:
+        return std::abs(surface.Torus().MajorRadius() - target.Torus().MajorRadius()) < tol
+               && std::abs(surface.Torus().MinorRadius() - target.Torus().MinorRadius()) < tol
+               && surface.Torus().Axis().IsCoaxial(target.Torus().Axis(), tol, tol);
+    default:
+        return false;
+    }
+}
+
+// ¿Cubre «cap» (un trozo de la superficie de destino) algo de la cara real «target»? La superficie es
+// la misma, pero la cara puede ser solo un trozo de ella. Si el kernel no puede decidirlo se da por
+// buena (como si la cara fuera la superficie entera).
+bool overlapsFace(const TopoDS_Face& cap, const TopoDS_Face& target)
+{
+    try {
+        BRepAlgoAPI_Common common(cap, target);
+        if (!common.IsDone() || common.HasErrors()) {
+            return true;
+        }
+        GProp_GProps props;
+        BRepGProp::SurfaceProperties(common.Shape(), props);
+        return props.Mass() > 1e-6;
+    } catch (const Standard_Failure&) {
+        return true;
+    }
+}
+
+// Hasta una cara plana: recorta el prisma largo «part» con el semiespacio del plano de la cara que
+// contiene el perfil (el plano se prolonga más allá de la cara).
+Shape trimToPlane(const std::string& tag, const std::string& endName, const Shape& part, const TopoDS_Face& target,
+                  const TopoDS_Face& profile)
+{
+    constexpr double big = 1e5;
+    const gp_Pnt inside = BRepAdaptor_Surface(profile).Plane().Location();
+    const TopoDS_Face bigFace = BRepBuilderAPI_MakeFace(BRepAdaptor_Surface(target).Plane(), -big, big, -big, big).Face();
+    const TopoDS_Solid half = BRepPrimAPI_MakeHalfSpace(bigFace, inside).Solid();
+    BRepAlgoAPI_Common common(occtShape(part), half);
+    if (cancelRequested()) {
+        throw GeometryError("Cálculo cancelado");
+    }
+    if (!common.IsDone() || common.HasErrors()) {
+        throw GeometryError("No se pudo extruir hasta la cara");
+    }
+    Namer trimmed(common.Shape());
+    trimmed.inherit(part, *common.History());
+    trimmed.nameUnnamed(endName);  // la cara nueva viene del destino
+    return trimmed.finish(tag);
+}
+
+// Hasta una cara cilíndrica, esférica o toroidal. El prisma largo «part» se parte con la superficie
+// completa en tramos (entra y sale de ella); la extrusión llega hasta el primer cruce que cae en el
+// trozo REAL de la cara (los cruces con la superficie fuera de ese trozo se atraviesan), y ahí
+// termina sobre la superficie.
+Shape trimToCurvedFace(const std::string& tag, const std::string& endName, const Shape& part,
+                       const TopoDS_Face& target, const TopoDS_Face& profile)
+{
+    const BRepAdaptor_Surface surface(target);
+    // Cuerpos auxiliares del tamaño de la pieza (no enormes: con coordenadas muy grandes la booleana
+    // pierde precisión).
+    const Box box = part.bounds();
+    const gp_Pnt center((box.min.x + box.max.x) / 2.0, (box.min.y + box.max.y) / 2.0, (box.min.z + box.max.z) / 2.0);
+    const double reach = std::sqrt(std::pow(box.max.x - box.min.x, 2) + std::pow(box.max.y - box.min.y, 2)
+                                   + std::pow(box.max.z - box.min.z, 2)) + 1.0;
+    TopoDS_Shape limit;
+    switch (surface.GetType()) {
+    case GeomAbs_Cylinder: {
+        const gp_Cylinder c = surface.Cylinder();
+        // El Ax2 se arma con Axis().Direction(): Position().Ax2() invierte el eje si el sistema de la
+        // cara es indirecto, y el cilindro auxiliar saldría fuera de sitio.
+        const gp_Dir axis = c.Axis().Direction();
+        const double t0 = gp_Vec(c.Location(), center).Dot(gp_Vec(axis));
+        const gp_Ax2 ax(c.Location().Translated(gp_Vec(axis) * (t0 - reach)), axis, c.Position().XDirection());
+        limit = BRepPrimAPI_MakeCylinder(ax, c.Radius(), 2.0 * reach).Shape();
+        break;
+    }
+    case GeomAbs_Sphere: {
+        const gp_Sphere sp = surface.Sphere();
+        limit = BRepPrimAPI_MakeSphere(sp.Location(), sp.Radius()).Shape();
+        break;
+    }
+    case GeomAbs_Torus: {
+        const gp_Torus t = surface.Torus();
+        limit = BRepPrimAPI_MakeTorus(gp_Ax2(t.Location(), t.Axis().Direction(), t.Position().XDirection()),
+                                      t.MajorRadius(), t.MinorRadius()).Shape();
+        break;
+    }
+    default:
+        throw GeometryError("«Hasta una cara» admite caras planas, cilíndricas, esféricas y toroidales; "
+                            "esta es de otro tipo (cono o superficie libre). Elige otra cara o usa una distancia");
+    }
+
+    NCollection_List<TopoDS_Shape> objects;
+    NCollection_List<TopoDS_Shape> tools;
+    objects.Append(occtShape(part));
+    tools.Append(limit);
+    BRepAlgoAPI_Splitter splitter;
+    splitter.SetArguments(objects);
+    splitter.SetTools(tools);
+    splitter.Build();
+    if (cancelRequested()) {
+        throw GeometryError("Cálculo cancelado");
+    }
+    if (!splitter.IsDone() || splitter.HasErrors()) {
+        throw GeometryError("No se pudo extruir hasta la cara: prueba con otra cara de destino o con una distancia");
+    }
+
+    // Los tramos, del perfil hacia fuera.
+    struct Piece {
+        double distance;
+        Shape shape;
+        TopoDS_Shape raw;
+    };
+    std::vector<Piece> pieces;
+    for (TopExp_Explorer ex(splitter.Shape(), TopAbs_SOLID); ex.More(); ex.Next()) {
+        BRepExtrema_DistShapeShape distance(profile, ex.Current());
+        Namer namer(ex.Current());
+        namer.inherit(part, *splitter.History());
+        namer.nameUnnamed(endName);
+        pieces.push_back({distance.IsDone() ? distance.Value() : 1e300, namer.finish(tag), ex.Current()});
+    }
+    std::ranges::sort(pieces, {}, &Piece::distance);
+
+    // Primer tramo cuyo extremo (una cara sobre la superficie) cae en la cara real.
+    std::optional<std::size_t> last;
+    for (std::size_t i = 0; i < pieces.size() && !last; ++i) {
+        for (TopExp_Explorer ex(pieces[i].raw, TopAbs_FACE); ex.More(); ex.Next()) {
+            const TopoDS_Face cap = TopoDS::Face(ex.Current());
+            if (onSurface(cap, surface) && overlapsFace(cap, target)) {
+                last = i;
+                break;
+            }
+        }
+    }
+    if (!last) {
+        if (pieces.size() <= 1) {
+            throw GeometryError("La extrusión no llega a la cara de destino: comprueba que esté delante del perfil, "
+                                "en el sentido de la extrusión, y que no sea paralela a ella");
+        }
+        throw GeometryError("La extrusión cruza la superficie de la cara de destino, pero no en el trozo que forma "
+                            "la cara: elige otra cara de destino o usa una distancia");
+    }
+    std::vector<Shape> kept;
+    for (std::size_t i = 0; i <= *last; ++i) {
+        kept.push_back(pieces[i].shape);
+    }
+    return fuseAll(kept, tag);
 }
 
 // Un lado de la extrusión: prisma de las caras a lo largo de «direction»
@@ -332,20 +500,13 @@ Shape extrudeSide(const std::string& tag, const std::vector<ProfileFace>& faces,
         }
 
         if (side.extent == Extent::ToFace) {
-            // Recorta el prisma largo con el semiespacio de la cara destino
-            // que contiene el perfil.
-            const gp_Pln target = targetPlane(context, side.face);
-            const gp_Pnt inside = BRepAdaptor_Surface(face).Plane().Location();
-            const TopoDS_Face big = BRepBuilderAPI_MakeFace(target, -1e5, 1e5, -1e5, 1e5).Face();
-            const TopoDS_Solid half = BRepPrimAPI_MakeHalfSpace(big, inside).Solid();
-            BRepAlgoAPI_Common common(occtShape(part), half);
-            if (!common.IsDone() || common.HasErrors()) {
-                throw GeometryError("No se pudo extruir hasta la cara");
+            // Recorta el prisma largo en la cara de destino, del lado del perfil.
+            const TopoDS_Face target = targetFace(context, side.face);
+            if (BRepAdaptor_Surface(target).GetType() == GeomAbs_Plane) {
+                part = trimToPlane(tag, endName + pf.key, part, target, face);
+            } else {
+                part = trimToCurvedFace(tag, endName + pf.key, part, target, face);
             }
-            Namer trimmed(common.Shape());
-            trimmed.inherit(part, *common.History());
-            trimmed.nameUnnamed(endName + pf.key);  // la cara nueva viene del destino
-            part = trimmed.finish(tag);
             if (part.solidCount() == 0) {
                 throw GeometryError("La cara de destino no está delante del perfil");
             }

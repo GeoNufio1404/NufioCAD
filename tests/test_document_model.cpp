@@ -6,6 +6,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <cmath>
 #include <numbers>
 
 using namespace nuf;
@@ -122,6 +123,48 @@ TEST_CASE("Documento: un sketch sobre una cara la sigue al editar la extrusión"
     REQUIRE(doc.status(sk2).health == Health::Ok);
     REQUIRE_THAT(doc.result().sketches.at(sk2).plane.origin.z, WithinAbs(25.0, 1e-9));
     REQUIRE_THAT(totalVolume(doc.result()), WithinRel(400.0 * 25.0 - hole, 1e-6));
+}
+
+TEST_CASE("Documento: extruir hasta una cara curva sigue a la pieza al editarla", "[document][model]")
+{
+    const auto cylinderSketch = [](double radius) {
+        sketch::Sketch circle;
+        circle.addCircle({0, 0}, radius);
+        return circle;
+    };
+    // ∫ sqrt(r² - x²) dx en [-2, 2]: lo que mide, a lo largo de Y, un cuadrado de 4 mm que sale del eje.
+    const auto expected = [](double r) { return 4.0 * (2.0 * std::sqrt(r * r - 4.0) + r * r * std::asin(2.0 / r)); };
+
+    Document doc;
+    const FeatureId base = doc.addFeature(sketchOn(cylinderSketch(10)));
+    const FeatureId cylinder = doc.addFeature(extrudeAll(doc, base, 40));
+    geometry::ElementRef wall;
+    const Body& body = doc.result().bodies.front();
+    const std::string prefix = "f" + std::to_string(cylinder) + ":lado:";
+    for (int i = 0; i < body.shape.faceCount(); ++i) {
+        if (body.shape.faceName(i).starts_with(prefix)) {
+            wall = body.shape.faceRef(i);
+        }
+    }
+    REQUIRE(!wall.name.empty());
+
+    // Un cuadrado en XZ (sobre el eje) que crece hasta la pared del cilindro, como cuerpo nuevo.
+    sketch::Sketch square = rectangleSketch(-2, -2, 2, 2);
+    const FeatureId sk = doc.addFeature(sketchOn(std::move(square), OriginPlane::XZ));
+    auto toWall = extrudeAll(doc, sk, 10, Operation::NewBody);
+    toWall->spec.side1.extent = geometry::Extent::ToFace;
+    toWall->spec.side1.face = wall;
+    const FeatureId post = doc.addFeature(std::move(toWall));
+    REQUIRE(doc.status(post).health == Health::Ok);
+    REQUIRE(doc.result().bodies.size() == 2);
+    REQUIRE_THAT(doc.result().bodies.back().shape.volume(), WithinRel(expected(10), 1e-3));
+    // La extrusión depende de la cara de destino (si su operación se suprime, se avisa).
+    REQUIRE_FALSE(doc.findFeature(post)->dependencies().empty());
+
+    // Ensanchar el cilindro: la extrusión llega ahora a la pared nueva.
+    doc.replaceFeature(base, sketchOn(cylinderSketch(15)));
+    REQUIRE(doc.status(post).health == Health::Ok);
+    REQUIRE_THAT(doc.result().bodies.back().shape.volume(), WithinRel(expected(15), 1e-3));
 }
 
 TEST_CASE("Documento: marcador, supresión y errores sin perder datos", "[document][model]")

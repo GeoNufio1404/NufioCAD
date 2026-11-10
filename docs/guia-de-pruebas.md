@@ -69,6 +69,24 @@ Las pruebas **20–30** están en la hoja de ruta («3a y 3b», «3c»). Cubren:
 
 **Fíjate en:** ¿editar una operación pasada es claro? ¿Los avisos (`!`) explican bien el problema? ¿El timeline se entiende?
 
+### Extruir hasta una cara curva
+
+Extruir › «Hasta una cara» admite caras planas, cilíndricas, esféricas y toroidales. En una cara curva la extrusión llega
+hasta el primer cruce que cae en el trozo **real** de la cara (los cruces con la superficie fuera de ese trozo se
+atraviesan) y termina sobre la superficie completa. En una cara plana sigue usando todo el plano. No admite conos ni
+superficies libres.
+
+| # | Qué hacer | Qué debe pasar |
+|---|---|---|
+| H.1 | Cilindro de 20 mm de diámetro. Sketch en un plano lateral (por ejemplo XZ desplazado 30 mm), un cuadrado de 4 mm → Extruir → Extensión «Hasta una cara» → «Elegir cara de destino» y clic en la pared curva | La vista previa llega justo hasta la pared del cilindro y se queda antes de ella (no entra) |
+| H.2 | Lo mismo con el sketch en el plano que pasa por el eje del cilindro (el perfil empieza dentro) | El sólido crece desde dentro hasta la pared |
+| H.3 | Repite con una esfera y con un toro (Revolución de un semicírculo y de un círculo fuera del eje) | Llega a la superficie; en el toro, a su cara exterior |
+| H.4 | Elige un cono como destino | Mensaje claro («admite caras planas, cilíndricas, esféricas y toroidales…»); la operación no se aplica |
+| H.5 | Extruye en sentido contrario a la pared, o paralelo al eje del cilindro | Mensaje «La extrusión no llega a la cara de destino…», sin un sólido con un extremo cortado a la mitad |
+| H.6 | Acepta, guarda, cierra y abre el `.nuf`; mueve el cilindro y mira la extrusión | Sigue llegando a la pared, y se recalcula al editar el cilindro |
+| H.7 | Medio cilindro (Revolución de un rectángulo, 180°). Un cuadrado que sale del eje, desde cada lado, hasta su pared curva | Desde el lado de la pared llega a ella; desde el otro lado cruza el cilindro por dentro y termina en la pared de enfrente (no se detiene en el aire donde no hay pared) |
+| H.8 | Un cuarto o un octavo de cilindro y un cuadrado que cruza la superficie solo por donde no hay pared | Mensaje «cruza la superficie de la cara de destino, pero no en el trozo que forma la cara» |
+
 ---
 
 ## Fase 4 — Archivos y exportación
