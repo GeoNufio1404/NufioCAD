@@ -521,7 +521,7 @@ Resumen de todo lo pendiente que no son pruebas manuales; el detalle sigue en el
 - **Flechas de medida:** sin flecha holgura y agujero del cable de los generadores, ángulo de presión y de hélice del par, tamaño del texto del Letrero y ángulo de la cabeza del Agujero; sin probar a mano Revolución, conicidad de Extruir, Unión, holgura de la Rosca, postes y agujeros de Caja con tapa y la anilla del Letrero.
 - **Errores en lenguaje claro:** las sugerencias son fijas por operación y el detalle técnico sigue en inglés; las ayudas con «mm» fijo en los generadores no siguen la unidad.
 - **Vista previa translúcida:** el azul es fijo (no sigue el tema); las demás herramientas siguen con vista previa opaca.
-- **Rendimiento en Release:** nada de lo anterior se ha medido en Release (Smart App Control bloquea las DLL sin firmar de OCCT en esta PC).
+- **Rendimiento en Release:** nada de lo anterior se ha medido en Release en Windows (Smart App Control bloquea las DLL sin firmar de OCCT en esta PC). En Fedora ya está medido Debug y Release (parada máxima 899 ms → 150 ms): ver [`mediciones-rendimiento.md`](mediciones-rendimiento.md), que deja una columna para rellenar con Windows.
 
 **Pruebas manuales que faltan (guía [`guia-de-pruebas.md`](guia-de-pruebas.md)):** 5.12–5.14 (cantidad del patrón), 6.17–6.24 (parámetros), G.12–G.18 (generadores reabribles y valores recordados), F.1–F.16 (flechas de medida), B.1–B.8 (cálculo en segundo plano), M.1–M.4 (errores en lenguaje claro), O.1–O.18 (mover y girar con el ratón), R.1–R.3 (restablecer valores), T.1–T.5 (vista previa translúcida) y las de las fases 1–9 que siguen sin marcar.
 
