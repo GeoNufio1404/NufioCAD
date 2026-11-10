@@ -389,6 +389,49 @@ TEST_CASE("Extruir hasta un toro", "[geometry][modeling]")
     REQUIRE(post.volume() < 4.0 * 15.4);
 }
 
+TEST_CASE("Extruir hasta una cara curva cuenta solo el trozo real de la cara", "[geometry][modeling]")
+{
+    // Medio cilindro de radio 10 (rectángulo en XZ girado 180° alrededor de Z): su pared es solo la mitad
+    // de la superficie cilíndrica.
+    sketch::Sketch rect;
+    rectangle(rect, 0, 0, 10, 40);
+    RevolveSpec half;
+    half.angle1 = std::numbers::pi;
+    const Shape body = revolve("f1", {&rect, sketch::Plane::xz(), sketch::findProfiles(rect)}, Axis{{0, 0, 0}, {0, 0, 1}}, half);
+    const auto wall = curvedFace(body);
+    REQUIRE(wall);
+    const ElementRef ref = body.faceRef(*wall);
+
+    // Un cuadrado de 4 mm que cruza el cilindro entero por el eje, desde cada lado. Desde un lado entra
+    // por la pared real; desde el otro, primero cruza la superficie donde ya no hay pared y sigue por
+    // dentro hasta la mitad que sí existe.
+    const double chord = 2.0 * std::sqrt(96.0) + 100.0 * std::asin(0.2);  // ∫ sqrt(100 - x²) en [-2, 2]
+    const double reachedFirst = 4.0 * (120.0 - chord);   // para en el primer cruce
+    const double crossedGhost = 4.0 * (120.0 + chord);   // atraviesa el cilindro y para en la pared de enfrente
+    std::vector<double> volumes;
+    for (const double side : {-1.0, 1.0}) {
+        volumes.push_back(squareToFace(ref, 30.0 * side, -side, body).volume());
+    }
+    std::ranges::sort(volumes);
+    REQUIRE_THAT(volumes[0], WithinRel(reachedFirst, 1e-3));
+    REQUIRE_THAT(volumes[1], WithinRel(crossedGhost, 1e-3));
+}
+
+TEST_CASE("Extruir hasta una cara curva que solo es un trozo y no se cruza da un mensaje claro", "[geometry][modeling]")
+{
+    // Un trozo de cilindro de radio 10 de 45°: la pared cubre un octavo de la superficie, hacia +X.
+    sketch::Sketch rect;
+    rectangle(rect, 0, 0, 10, 40);
+    RevolveSpec sliver;
+    sliver.angle1 = std::numbers::pi / 4.0;
+    const Shape body = revolve("f1", {&rect, sketch::Plane::xz(), sketch::findProfiles(rect)}, Axis{{0, 0, 0}, {0, 0, 1}}, sliver);
+    const ElementRef ref = body.faceRef(*curvedFace(body));
+
+    // Un cuadrado que sale del eje cruza el cilindro a 90° y a 270°: dos veces la superficie y ninguna
+    // en la cara.
+    REQUIRE_THROWS_WITH(squareToFace(ref, -30.0, 1.0, body), Catch::Matchers::ContainsSubstring("no en el trozo"));
+}
+
 TEST_CASE("Extruir hasta una cara curva que no se alcanza o no se admite da un mensaje claro", "[geometry][modeling]")
 {
     sketch::Sketch half;
