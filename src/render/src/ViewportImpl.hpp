@@ -1749,7 +1749,11 @@ private:
         if (navMode == Viewport::NavigationMode::Pan) {
             leftDrag = AIS_MouseGesture_Pan;
         } else if (navMode == Viewport::NavigationMode::Zoom) {
+#if OCC_VERSION_HEX >= 0x070700
             leftDrag = AIS_MouseGesture_ZoomVertical;
+#else
+            leftDrag = AIS_MouseGesture_Zoom; // OCCT < 7.7 no distingue el zoom vertical
+#endif
         }
         gestures.Bind(key(Aspect_VKeyMouse_LeftButton), leftDrag);
         gestures.Bind(key(Aspect_VKeyMouse_LeftButton, Aspect_VKeyFlags_SHIFT), AIS_MouseGesture_SelectRectangle);

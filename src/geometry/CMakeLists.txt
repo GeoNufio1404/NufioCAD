@@ -26,6 +26,12 @@ else()
     target_link_libraries(nuf_geometry PRIVATE TKSTEP TKXSBase)
 endif()
 
+# OCCT < 7.7: ComputeNormals está en StdPrs_ToolTriangulatedShape (TKV3d); desde 7.7,
+# en BRepLib_ToolTriangulatedShape (TKTopAlgo).
+if(OpenCASCADE_MAJOR_VERSION EQUAL 7 AND OpenCASCADE_MINOR_VERSION LESS 7)
+    target_link_libraries(nuf_geometry PRIVATE TKV3d)
+endif()
+
 # BREP binario (BinTools) para guardar los sólidos importados.
 if(TARGET TKBinL)
     target_link_libraries(nuf_geometry PRIVATE TKBinL)

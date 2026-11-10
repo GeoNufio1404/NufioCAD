@@ -15,6 +15,7 @@
 #include <STEPControl_Reader.hxx>
 #include <Standard_Failure.hxx>
 #include <STEPControl_Writer.hxx>
+#include <Standard_Version.hxx>
 #include <ShapeFix_Shape.hxx>
 #include <TopoDS_Solid.hxx>
 #include <TopAbs_Orientation.hxx>
@@ -236,12 +237,19 @@ void writeStep(const std::filesystem::path& path, const std::vector<Shape>& shap
     if (writer.Transfer(whole, STEPControl_AsIs) != IFSelect_RetDone) {
         throw GeometryError("No se pudo convertir el cuerpo a STEP");
     }
+#if OCC_VERSION_HEX >= 0x070700
     // Por flujo, no por nombre: así las rutas con acentos funcionan en Windows.
     std::ofstream out = openForWriting(path);
     if (writer.WriteStream(out) != IFSelect_RetDone) {
         throw GeometryError("No se pudo escribir el archivo STEP");
     }
     finish(out, path);
+#else
+    // OCCT < 7.7 no tiene WriteStream: se escribe por nombre (en Linux la ruta UTF-8 sirve tal cual).
+    if (writer.Write(utf8(path).c_str()) != IFSelect_RetDone) {
+        throw GeometryError("No se pudo escribir el archivo STEP");
+    }
+#endif
 }
 
 StepImport readStep(const std::filesystem::path& path)
