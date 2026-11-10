@@ -395,6 +395,10 @@ int InterfaceCheck::run()
     });
 
     // La flecha de doble punta de la medida que se edita: al enfocar un cuadro deben verse píxeles turquesa.
+    // Píxeles del color exacto de la flecha que tiene que sumar una flecha por pequeña que sea. Sin flecha el conteo es
+    // siempre 0 (no hay otra cosa de ese color), así que no hace falta un mínimo alto: la más pequeña (el ángulo de hélice
+    // del engranaje) suma unos 35.
+    constexpr long kMinArrowPixels = 15;
     const auto arrowCheck = [&](const QString& name, QAction* action, int spinIndex, bool needsBody = false,
                                 std::optional<double> preset = std::nullopt) {
         step(QStringLiteral("Flecha de la medida que se edita: %1").arg(name), [&] {
@@ -403,13 +407,19 @@ int InterfaceCheck::run()
             }
             blocking(QStringLiteral("abrir la herramienta"), [&] { action->trigger(); });
             waitIdle();
-            const auto turquoise = [&] {
+            // Píxeles turquesa de la flecha: «amplio» (cualquier turquesa, también el de un plano de construcción o un
+            // arco medio tapado) y «exacto» (el color de la flecha, 3FD0E0, sin mezclar con nada: solo lo que dibuja la
+            // flecha, aunque el fondo ya sea turquesa).
+            const auto turquoise = [&](bool exact = false) {
                 const QImage image = window_.viewport_->grabFramebuffer();
                 long count = 0;
                 for (int y = 0; y < image.height(); ++y) {
                     for (int x = 0; x < image.width(); ++x) {
                         const QColor c = image.pixelColor(x, y);
-                        if (c.red() < 140 && c.green() > 170 && c.blue() > 180 && c.green() - c.red() > 70) {
+                        const bool match = exact ? std::abs(c.red() - 0x3F) < 18 && std::abs(c.green() - 0xD0) < 18 &&
+                                                       std::abs(c.blue() - 0xE0) < 18
+                                                 : c.red() < 140 && c.green() > 170 && c.blue() > 180 && c.green() - c.red() > 70;
+                        if (match) {
                             ++count;
                         }
                     }
@@ -431,12 +441,28 @@ int InterfaceCheck::run()
                 window_.propertiesDock_->widget()->setFocus();
                 settle(200);
                 const long without = turquoise();
-                box->setFocus(Qt::OtherFocusReason);
+                const long withoutExact = turquoise(true);
+                // Windows no siempre deja que una ventana recién abierta tome el primer plano (y entonces el cuadro no
+                // tiene foco aunque se lo pidamos): se reintenta unas veces antes de dar el foco por perdido.
+                const auto focusBox = [&] {
+                    for (int attempt = 0; attempt < 8 && !box->hasFocus(); ++attempt) {
+                        window_.raise();
+                        window_.activateWindow();
+                        box->setFocus(Qt::OtherFocusReason);
+                        settle(150);
+                    }
+                };
+                focusBox();
                 settle(400);
                 const long with = turquoise();
+                const long withExact = turquoise(true);
                 expect(box->hasFocus(), QStringLiteral("el cuadro no recibió el foco"));
-                expect(with > without + 50, QStringLiteral("no se dibujó la flecha (píxeles turquesa: %1 sin foco, %2 con foco)").arg(without).arg(with));
-                if (with <= without + 50) {
+                // Se cuenta el color exacto de la flecha: así una flecha pequeña o sobre un plano que ya es turquesa se
+                // distingue igual (antes, contar cualquier turquesa sobre un mínimo fijo fallaba por 1–4 píxeles).
+                expect(withExact > withoutExact + kMinArrowPixels,
+                       QStringLiteral("no se dibujó la flecha (píxeles del color de la flecha: %1 sin foco, %2 con foco; turquesa en general %3 → %4)")
+                           .arg(withoutExact).arg(withExact).arg(without).arg(with));
+                if (withExact <= withoutExact + kMinArrowPixels) {
                     // Para ver qué pasó: la vista tal como quedó.
                     QString file = name;
                     file.replace(QRegularExpression(QStringLiteral("[^A-Za-z0-9]+")), QStringLiteral("_"));
@@ -445,10 +471,19 @@ int InterfaceCheck::run()
                 // Al escribir otro valor la flecha sigue ahí (se recoloca con la vista previa).
                 blocking(QStringLiteral("cambiar el valor"), [&] { box->setValue(std::min(box->maximum(), box->value() + 5.0)); });
                 waitIdle();  // la vista previa del engranaje tarda ~0,7 s en Debug y la flecha se recoloca al terminar
+                if (!box->hasFocus()) {
+                    // Si algo le quitó el foco a la ventana mientras se calculaba, la flecha (que sigue al foco) se quita
+                    // con razón: se le devuelve y se espera a que reaparezca.
+                    focusBox();
+                    settle(500);
+                }
                 const long changed = turquoise();
-                expect(changed > 50, QStringLiteral("la flecha desapareció al cambiar el valor (%1 píxeles)").arg(changed));
+                const long changedExact = turquoise(true);
+                expect(changedExact > withoutExact + kMinArrowPixels,
+                       QStringLiteral("la flecha desapareció al cambiar el valor (%1 píxeles del color de la flecha)").arg(changedExact));
                 if (current_ != nullptr) {
-                    current_->detail += QStringLiteral(" turquesa %1 → %2 → %3").arg(without).arg(with).arg(changed);
+                    current_->detail += QStringLiteral(" turquesa %1 → %2 → %3; color de la flecha %4 → %5 → %6")
+                                            .arg(without).arg(with).arg(changed).arg(withoutExact).arg(withExact).arg(changedExact);
                 }
             }
             if (QPushButton* cancel = button(QStringLiteral("Cancelar"))) {

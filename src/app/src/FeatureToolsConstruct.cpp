@@ -522,13 +522,16 @@ std::optional<FeatureTool::Arc> GearTool::dimensionArc(const std::string& key) c
     const double pitchRadius = module_->value() * teeth_->value() / 2.0;
     const sketch::Vec3 onPitch = moved(origin, plane.xAxis, pitchRadius);
     const double size = std::max(3.0 * module_->value(), 3.0);
+    // El arco del ángulo de presión es lo más pequeño de todas las flechas (con 6 mm apenas se veía): se hace de medio
+    // radio primitivo, que es proporcional a la rueda.
+    const double pressureSize = std::max(0.5 * pitchRadius, size);
     if (key == "rotation") {
         // Dónde queda el primer diente: el giro desde el eje X del plano.
         return Arc{origin, plane.normal, onPitch, rotation_->value() * kDegree};
     }
     if (key == "pressureAngle") {
         // En el punto primitivo: entre la tangente a la circunferencia primitiva y la línea de acción.
-        return Arc{onPitch, plane.normal, moved(onPitch, plane.yAxis, size), pressure_->value() * kDegree};
+        return Arc{onPitch, plane.normal, moved(onPitch, plane.yAxis, pressureSize), pressure_->value() * kDegree};
     }
     // La hélice: entre el eje del engranaje y la dirección del diente.
     const double along = thickness_->value() < 0.0 ? -1.0 : 1.0;
