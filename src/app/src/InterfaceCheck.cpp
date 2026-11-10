@@ -309,7 +309,7 @@ void InterfaceCheck::undoAll()
 
 void InterfaceCheck::step(const QString& name, const std::function<void()>& body)
 {
-    results_.push_back({name, true, {}, 0});
+    results_.push_back({name, true, {}, 0, {}});
     current_ = &results_.back();
     currentStep_ = int(results_.size()) - 1;
     try {

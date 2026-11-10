@@ -7,6 +7,8 @@
 #include <nuf/geometry/Shape.hpp>
 #include <nuf/sketch/Profiles.hpp>
 
+#include <Standard_Handle.hxx>
+#include <Standard_Version.hxx>
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
@@ -16,6 +18,31 @@
 
 #include <optional>
 #include <vector>
+
+// OCCT 8 trae `occ::handle<T>`; OCCT 7.x (Fedora) solo `opencascade::handle<T>`.
+// Con este alias el mismo código compila con las dos.
+#if OCC_VERSION_HEX < 0x080000
+namespace occ {
+using opencascade::handle;
+}
+#endif
+
+// Arrays con handle: `NCollection_HArray1<T>` en OCCT 8; en 7.x, las clases
+// con nombre TColgp_/TColStd_.
+#if OCC_VERSION_HEX >= 0x080000
+#include <NCollection_HArray1.hxx>
+namespace nuf::geometry {
+using HPntArray = NCollection_HArray1<gp_Pnt>;
+using HRealArray = NCollection_HArray1<double>;
+} // namespace nuf::geometry
+#else
+#include <TColStd_HArray1OfReal.hxx>
+#include <TColgp_HArray1OfPnt.hxx>
+namespace nuf::geometry {
+using HPntArray = TColgp_HArray1OfPnt;
+using HRealArray = TColStd_HArray1OfReal;
+} // namespace nuf::geometry
+#endif
 
 namespace nuf::geometry {
 

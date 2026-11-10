@@ -87,9 +87,9 @@ public:
         bool centered = false;  // la flecha va centrada en el punto de partida, de -valor/2 a +valor/2 (un diámetro)
         // Para lo que no está en un borde (un poste, un agujero): dónde empieza la flecha, a partir de la esquina mínima
         // de la caja del cuerpo, en X, Y y Z (kCenter = el centro del cuerpo en ese eje). Con esto puesto, «fromMax» no cuenta.
-        std::function<std::array<double, 3>(const GeneratorValues&)> at;
+        std::function<std::array<double, 3>(const GeneratorValues&)> at{};
         // Si la medida no es el valor de la pregunta sino un cálculo con las respuestas (el Ø primitivo de un engranaje).
-        std::function<double(const GeneratorValues&)> length;
+        std::function<double(const GeneratorValues&)> length{};
     };
     static constexpr double kCenter = std::numeric_limits<double>::quiet_NaN();
     virtual std::map<std::string, ArrowSpec> arrows() const { return {}; }

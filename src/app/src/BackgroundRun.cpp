@@ -100,9 +100,9 @@ void BackgroundRun::start(std::function<void()> work, std::function<void()> done
         QMetaObject::invokeMethod(
             QCoreApplication::instance(),
             [weak, owner] {
-                const auto task = weak.lock();
-                if (task && !task->abandoned.load() && !task->cancel.load()) {
-                    owner->finish(task);
+                const auto alive = weak.lock();
+                if (alive && !alive->abandoned.load() && !alive->cancel.load()) {
+                    owner->finish(alive);
                 }
             },
             Qt::QueuedConnection);

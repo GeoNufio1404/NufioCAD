@@ -801,7 +801,7 @@ Shape gear(std::string_view tagView, const sketch::Plane& plane, const GearSpec&
             return toPnt(plane.toWorld({r * std::cos(phi), r * std::sin(phi)}));
         };
         const auto spline = [&](const std::vector<gp_Pnt>& points) {
-            occ::handle<NCollection_HArray1<gp_Pnt>> array = new NCollection_HArray1<gp_Pnt>(1, int(points.size()));
+            occ::handle<HPntArray> array = new HPntArray(1, int(points.size()));
             for (std::size_t i = 0; i < points.size(); ++i) {
                 array->SetValue(int(i) + 1, points[i]);
             }
@@ -1178,7 +1178,7 @@ Shape thread(std::string_view tagView, const sketch::Plane& plane, const ThreadS
         // que viene después (comprobar, mallar, booleanas).
         constexpr int kPoints = 32;
         const double hand = spec.leftHanded ? -1.0 : 1.0;
-        occ::handle<NCollection_HArray1<gp_Pnt>> array = new NCollection_HArray1<gp_Pnt>(1, kPoints);
+        occ::handle<HPntArray> array = new HPntArray(1, kPoints);
         for (int i = 0; i < kPoints; ++i) {
             const double phi = 2.0 * kPi * i / kPoints;
             // Las esquinas del perfil se suavizan (promedio en una ventana de ±paso/24): la curva por
@@ -1223,13 +1223,13 @@ Shape thread(std::string_view tagView, const sketch::Plane& plane, const ThreadS
             const int k0 = int(std::lround(double(c) * sections / chunks));
             const int k1 = int(std::lround(double(c + 1) * sections / chunks));
             const int count = k1 - k0;
-            occ::handle<NCollection_HArray1<double>> parameters = new NCollection_HArray1<double>(1, count + 1);
+            occ::handle<HRealArray> parameters = new HRealArray(1, count + 1);
             for (int k = 0; k <= count; ++k) {
                 parameters->SetValue(k + 1, double(k) / count);
             }
             std::vector<occ::handle<Geom_BSplineCurve>> helices;
             for (int j = 1; j <= nPoles; ++j) {
-                occ::handle<NCollection_HArray1<gp_Pnt>> path = new NCollection_HArray1<gp_Pnt>(1, count + 1);
+                occ::handle<HPntArray> path = new HPntArray(1, count + 1);
                 for (int k = 0; k <= count; ++k) {
                     path->SetValue(k + 1, curve->Pole(j).Transformed(moves[std::size_t(k0 + k)]));
                 }

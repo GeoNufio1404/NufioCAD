@@ -119,7 +119,9 @@
 
 namespace nuf::render {
 
-namespace {
+// Con nombre y no anónimo: GCC no admite tipos de un namespace anónimo dentro de
+// un campo de Viewport::Impl declarado en una cabecera (-Wsubobject-linkage).
+namespace drawing {
 
 // Píxeles (OCCT 8 retira el alias Graphic3d_Vec2i).
 using Vec2i = NCollection_Vec2<int>;
@@ -482,6 +484,8 @@ private:
     std::vector<Label> texts_;
 };
 
-} // namespace
+} // namespace drawing
+
+using namespace drawing;
 
 } // namespace nuf::render
