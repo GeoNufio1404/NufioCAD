@@ -530,6 +530,7 @@ Resumen de todo lo pendiente que no son pruebas manuales; el detalle sigue en el
 - **Orden:** la Fase 4 va justo después del modelado básico para tener un flujo útil de punta a punta lo antes posible; cada fase siguiente agrega valor real.
 - **Esfuerzo:** las Fases 1–3 son alcanzables en semanas; las Fases 4–5 bien hechas (incluyendo robustez del historial) concentran la mayor parte del esfuerzo.
 - **Versiones y ramas (desde la v0.1.0, 9 nov. 2026):** `main` solo guarda versiones estables (la primera es la etiqueta `v0.1.0`); `develop` es la rama de integración; cada cambio o funcionalidad nueva va en `feature/<nombre>`, que sale de `develop` y vuelve a ella. `main` recibe `develop` solo al sacar una versión, con su etiqueta.
+- **Marcadores por sistema (desde el 9 nov. 2026):** `estable-windows` y `estable-fedora` no son copias del código: apuntan al último commit de `develop` que se probó a mano en ese sistema y no reciben commits propios. Se avanzan con `git switch estable-<sistema>` y `git merge --ff-only develop` (o `git branch -f estable-<sistema> <commit>`) tras probar. `git log estable-fedora..estable-windows` lista lo hecho en Windows que falta probar en Fedora. Lo que sea distinto entre sistemas va con `#if` o CMake en el mismo código, nunca en ramas. Un arreglo de un sistema se hace en `feature/…` desde `develop` y debe compilar en los dos (el CI de Windows y Linux lo comprueba). `main` solo recibe `develop` cuando los dos marcadores apuntan al mismo commit, con su etiqueta.
 
 ## Estado
 
