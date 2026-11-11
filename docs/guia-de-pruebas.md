@@ -449,6 +449,18 @@ Rama `feature/inferencias-sketch`. Solo la **alineación horizontal/vertical** c
 | I.15 | Empieza una línea nueva desde el **extremo de otra** línea que ya existe y haz lo de I.12 | También infiere con esa línea |
 | I.16 | Cerca de la horizontal o la vertical, o cerca de un punto existente, o con **Mayús/Ctrl** pulsada | Mandan la horizontal/vertical y los puntos antes que ⊥/∥; Mayús y Ctrl las suprimen |
 | I.11 | **Anota** qué te falta o molesta (sobre todo: si la guía aparece demasiado, si «tiembla» al pegarse y se suelta, si querías ver un anillo en el punto despierto) | Una nota por caso: son los pendientes de la entrega |
+## Tangente desde un arco e histéresis — EN PRUEBA
+
+Rama `feature/inferencias-sketch-2`.
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| L.1 | Dibuja un arco; con **Línea**, empieza en uno de sus extremos y lleva el cursor casi en la dirección en que seguiría el arco (a menos de 3°) | El tramo se endereza a la tangente y sale una **T**; al clic, restricción **tangente** (icono T) |
+| L.2 | Lo mismo yendo hacia atrás (hacia el arco) o con un ángulo claro | Sin T; el tramo sigue al cursor |
+| L.3 | Lleva el cursor despacio hasta la guía naranja horizontal de un punto y sepárate poco a poco | La guía se queda pegada hasta unos 10 px y luego se suelta, sin parpadear en el borde |
+
+---
+
 ## Ajustes tras la primera prueba — EN PRUEBA
 
 Rama `feature/ajustes-sketch`.

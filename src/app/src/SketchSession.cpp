@@ -99,6 +99,7 @@ constexpr double kSnapRadiusPx = 8.0;
 // A cuántos píxeles de la recta horizontal o vertical de un punto el cursor se
 // pega a ella (alineación inferida, la «línea naranja»).
 constexpr double kAlignRadiusPx = 6.0;
+constexpr double kAlignReleasePx = 10.0;  // histéresis: se suelta más lejos de lo que se pega
 
 sketch::Geometry translated(sketch::Geometry geometry, sketch::Vec2 d)
 {
@@ -302,6 +303,11 @@ sketch::Snap SketchSession::snapAt(sketch::Vec2 point) const
     // herramienta de dibujo: sin ella, Mayús es para seleccionar.
     if (tool_ && !(QGuiApplication::keyboardModifiers() & Qt::ShiftModifier)) {
         options.alignTolerance = kAlignRadiusPx * viewport_.sketchPixelSize();
+        options.alignRelease = kAlignReleasePx * viewport_.sketchPixelSize();
+        if (cursor_) {
+            options.stickyX = cursor_->alignX;
+            options.stickyY = cursor_->alignY;
+        }
         options.alignPoints.push_back({{0.0, 0.0}, sketch::Ref::of(sketch::Sketch::kOrigin)});
         for (const sketch::Ref& ref : awake_) {
             if (const auto position = sketch_.point(ref)) {

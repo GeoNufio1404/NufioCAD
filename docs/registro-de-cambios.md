@@ -43,6 +43,23 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 - **Pruebas:** 221 unitarias y 34 pasos de la prueba de interfaz, en verde en Windows (Debug). La prueba de interfaz **aún no cuenta los píxeles naranjas** de la guía (pendiente I8).
 - **Riesgos al volver atrás:** ninguno en archivos guardados: las restricciones creadas son las horizontal/vertical de siempre.
+## Tangente desde un arco e histéresis de la guía — 11 nov. 2026
+
+- **Rama:** `feature/inferencias-sketch-2` (sale de `develop`). **Sin fusionar** hasta la prueba manual (guía L.1–L.3).
+- **Qué hace:** (1) con **Línea**, si el primer tramo sale del extremo de un **arco** y queda a ≤3° de su tangente (hacia delante), se endereza, sale «T» y al clic se crea la restricción Tangente (que ya une los extremos, así que no se añade además la coincidencia). (2) La guía naranja de alineación se **mantiene hasta ~10 px** una vez pegada (se pega a 6 px), para que no tiemble al borde.
+
+| Parte | Dónde (para deshacerla a mano) |
+|---|---|
+| Tangente | `arcExit_`, `relateEnd` y parámetro `tangent` de `commit` en `LineTool` (`src/sketch/src/Tools.cpp`) |
+| Histéresis | `stickyX`, `stickyY`, `alignRelease` en `SnapOptions` (`Snap.hpp`), bucle de alineación de `snap` (`Snap.cpp`) y `SketchSession::snapAt` |
+| Pruebas | 2 casos nuevos en `tests/test_sketch_inference.cpp` |
+
+- **Pruebas:** 235 unitarias en verde en Windows (Debug).
+- **Pendiente:** arco tangente a una línea desde la herramienta Arco; tangente con referencia lejana; la histéresis no cubre aún la alineación sobre curvas.
+- **Riesgos al volver atrás:** ninguno en archivos guardados.
+
+---
+
 ## Ajustes tras la primera prueba manual — 11 nov. 2026
 
 - **Rama:** `feature/ajustes-sketch` (sale de la rama local de prueba que junta `feature/inferencias-sketch` y `feature/cotas-sin-solaparse`; esas dos deben fusionarse antes). **Sin fusionar** hasta la prueba manual (guía J.1–J.7).
