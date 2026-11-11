@@ -1,4 +1,4 @@
-# Guía de pruebas manuales — NufioCAD
+﻿# Guía de pruebas manuales — NufioCAD
 
 Para ir probando fase por fase cuando haya tiempo. Cada prueba dice **qué hacer** y **qué debería pasar**; si algo no es así (o no te gusta cómo se siente), anótalo con la plantilla del final y mándamelo.
 
@@ -464,6 +464,15 @@ Rama `feature/figuras-abiertas`.
 | M.7 | Crea una figura, cámbiala y pulsa **Deshacer** | Vuelve al paso anterior; si sigues escribiendo no pasa nada raro |
 | M.8 | **Círculo por 2 y 3 puntos**, **rectángulo por 3 puntos** y **ranura**: termina la figura y escribe un valor (diámetro, longitud/alto, ancho) | Cambia la misma figura; con Deshacer vuelve a antes de crearla (un solo paso) |
 | M.9 | **Anota** qué te falta o molesta | Son los pendientes |
+## Tangente desde un arco e histéresis — EN PRUEBA
+
+Rama `feature/inferencias-sketch-2`.
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| L.1 | Dibuja un arco; con **Línea**, empieza en uno de sus extremos y lleva el cursor casi en la dirección en que seguiría el arco (a menos de 3°) | El tramo se endereza a la tangente y sale una **T**; al clic, restricción **tangente** (icono T) |
+| L.2 | Lo mismo yendo hacia atrás (hacia el arco) o con un ángulo claro | Sin T; el tramo sigue al cursor |
+| L.3 | Lleva el cursor despacio hasta la guía naranja horizontal de un punto y sepárate poco a poco | La guía se queda pegada hasta unos 10 px y luego se suelta, sin parpadear en el borde |
 
 ---
 
