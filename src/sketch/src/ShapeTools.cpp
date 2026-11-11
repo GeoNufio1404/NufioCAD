@@ -198,6 +198,7 @@ public:
 
     bool click(Sketch& sketch, const Snap& cursor) override
     {
+        open_.reset();  // un clic nuevo da por buena la figura abierta
         if (!center_) {
             center_ = cursor;
             return false;
@@ -207,11 +208,15 @@ public:
 
     std::vector<std::string> valueFields() const override
     {
-        return center_ ? std::vector<std::string>{"Ancho", "Alto"} : std::vector<std::string>{};
+        return center_ || open_ ? std::vector<std::string>{"Ancho", "Alto"} : std::vector<std::string>{};
     }
 
     std::vector<double> currentValues() const override
     {
+        if (open_) {
+            return {2.0 * std::abs(open_->second.point.x - open_->first.point.x),
+                    2.0 * std::abs(open_->second.point.y - open_->first.point.y)};
+        }
         if (!center_) {
             return {};
         }
@@ -220,6 +225,28 @@ public:
 
     bool applyValues(Sketch& sketch, const std::vector<std::optional<double>>& values) override
     {
+        if (open_) {
+            if (values.size() < 2 || (!values[0] && !values[1])) {
+                open_.reset();  // Enter sin valores: queda como está
+                return false;
+            }
+            const OpenFigure old = *open_;
+            const Vec2 o = old.first.point;
+            const double sx = old.second.point.x >= o.x ? 1.0 : -1.0;
+            const double sy = old.second.point.y >= o.y ? 1.0 : -1.0;
+            const double width = values[0].value_or(2.0 * std::abs(old.second.point.x - o.x));
+            const double height = values[1].value_or(2.0 * std::abs(old.second.point.y - o.y));
+            if (!(width > 2.0 * kMinLength && height > 2.0 * kMinLength)) {
+                return false;
+            }
+            if (!discardEntities(sketch, old.ids)) {
+                open_.reset();
+                return false;
+            }
+            center_ = old.first;
+            return create(sketch, Snap{{o.x + sx * width / 2.0, o.y + sy * height / 2.0}},
+                          values[0] ? values[0] : old.typed[0], values[1] ? values[1] : old.typed[1]);
+        }
         if (!center_ || values.size() < 2) {
             return false;
         }
@@ -233,6 +260,10 @@ public:
 
     bool cancel() override
     {
+        if (open_) {
+            open_.reset();
+            return true;
+        }
         const bool active = center_.has_value();
         center_.reset();
         return active;
@@ -248,6 +279,9 @@ public:
 
     std::string hint() const override
     {
+        if (open_) {
+            return "Rectángulo creado: escribe ancho, Tab, alto y Enter para cambiarlo · clic o Esc para terminar";
+        }
         return center_ ? "Clic para una esquina (o escribe ancho, Tab, alto)" : "Clic para el centro del rectángulo";
     }
 
@@ -267,6 +301,7 @@ private:
         if (std::abs(corner.point.x - c.x) < kMinLength || std::abs(corner.point.y - c.y) < kMinLength) {
             return false;
         }
+        const std::size_t mark = sketch.entities().size();
         const auto pts = corners(corner.point);
         const auto lines = closedPolyline(sketch, pts);
         sketch.addConstraint(Constraint::horizontal(lines[0]));
@@ -287,12 +322,14 @@ private:
         if (height) {
             sketch.addConstraint(Constraint::length(lines[1], *height));
         }
+        open_ = OpenFigure{entitiesSince(sketch, mark), *center_, corner, {width, height}};
         center_.reset();
         return true;
     }
 
     Snap cursor_;
     std::optional<Snap> center_;
+    std::optional<OpenFigure> open_;
 };
 
 // --- Polígono regular ------------------------------------------------------------------
@@ -305,6 +342,7 @@ public:
 
     bool click(Sketch& sketch, const Snap& cursor) override
     {
+        open_.reset();  // un clic nuevo da por buena la figura abierta
         if (!first_) {
             first_ = cursor;
             return false;
@@ -314,7 +352,7 @@ public:
 
     std::vector<std::string> valueFields() const override
     {
-        if (!first_) {
+        if (!first_ && !open_) {
             return {"Lados"};
         }
         return {"Lados", mode_ == PolygonMode::Edge ? "Lado" : "Diámetro"};
@@ -322,6 +360,10 @@ public:
 
     std::vector<double> currentValues() const override
     {
+        if (open_) {
+            const double d = distance(open_->first.point, open_->second.point);
+            return {double(sides_), mode_ == PolygonMode::Edge ? d : 2.0 * d};
+        }
         if (!first_) {
             return {double(sides_)};
         }
@@ -331,6 +373,9 @@ public:
 
     bool applyValues(Sketch& sketch, const std::vector<std::optional<double>>& values) override
     {
+        if (open_) {
+            return reopen(sketch, values);
+        }
         if (!values.empty() && values[0]) {
             sides_ = std::clamp(int(std::lround(*values[0])), 3, 64);
         }
@@ -348,6 +393,10 @@ public:
 
     bool cancel() override
     {
+        if (open_) {
+            open_.reset();
+            return true;
+        }
         const bool active = first_.has_value();
         first_.reset();
         return active;
@@ -370,6 +419,9 @@ public:
     std::string hint() const override
     {
         const std::string sides = std::to_string(sides_) + " lados";
+        if (open_) {
+            return "Polígono creado (" + sides + "): escribe lados, Tab, tamaño y Enter para cambiarlos · clic o Esc para terminar";
+        }
         if (!first_) {
             return mode_ == PolygonMode::Edge ? "Polígono (" + sides + "): clic para el primer vértice · escribe el número de lados"
                                               : "Polígono (" + sides + "): clic para el centro · escribe el número de lados";
@@ -436,12 +488,42 @@ private:
         return shape;
     }
 
+    // Figura abierta: la rehace con otro número de lados o tamaño.
+    bool reopen(Sketch& sketch, const std::vector<std::optional<double>>& values)
+    {
+        if (values.empty() || (!values[0] && (values.size() < 2 || !values[1]))) {
+            open_.reset();  // Enter sin valores: queda como está
+            return false;
+        }
+        const OpenFigure old = *open_;
+        const int oldSides = sides_;
+        if (values[0]) {
+            sides_ = std::clamp(int(std::lround(*values[0])), 3, 64);
+        }
+        const bool typedSize = values.size() >= 2 && values[1].has_value();
+        const double size = typedSize ? (mode_ == PolygonMode::Edge ? *values[1] : *values[1] / 2.0)
+                                      : distance(old.first.point, old.second.point);
+        const Vec2 second = add(old.first.point, scale(size, unit(sub(old.second.point, old.first.point))));
+        first_ = old.first;
+        if (!layout(second) || !discardEntities(sketch, old.ids)) {
+            const bool gone = !layout(second) ? false : true;  // layout válido pero ya no existe: se cierra
+            sides_ = oldSides;
+            first_.reset();
+            if (gone) {
+                open_.reset();
+            }
+            return false;
+        }
+        return create(sketch, Snap{second}, typedSize ? values[1] : old.typed[0]);
+    }
+
     bool create(Sketch& sketch, const Snap& second, std::optional<double> typedSize)
     {
         const auto shape = layout(second.point);
         if (!shape) {
             return false;
         }
+        const std::size_t mark = sketch.entities().size();
         const auto lines = closedPolyline(sketch, shape->vertices);
         for (std::size_t k = 1; k < lines.size(); ++k) {
             sketch.addConstraint(Constraint::equal(lines[0], lines[k]));
@@ -477,6 +559,7 @@ private:
                 sketch.addConstraint(Constraint::diameter(circle, *typedSize));
             }
         }
+        open_ = OpenFigure{entitiesSince(sketch, mark), *first_, second, {typedSize}};
         first_.reset();
         return true;
     }
@@ -485,6 +568,7 @@ private:
     int sides_ = 6;
     Snap cursor_;
     std::optional<Snap> first_;
+    std::optional<OpenFigure> open_;
 };
 
 // --- Ranura ---------------------------------------------------------------------------------

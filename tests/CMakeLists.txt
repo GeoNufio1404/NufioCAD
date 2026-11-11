@@ -23,6 +23,7 @@ add_executable(nuf_tests
     test_sketch_tools_curves.cpp
     test_sketch_tools_2b.cpp
     test_sketch_inference.cpp
+    test_sketch_open_figures.cpp
     test_annotations_overlap.cpp)
 
 nuf_set_warnings(nuf_tests)

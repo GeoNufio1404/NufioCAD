@@ -247,6 +247,7 @@ public:
 
     bool click(Sketch& sketch, const Snap& cursor) override
     {
+        open_.reset();  // un clic nuevo da por buena la figura abierta
         if (!corner_) {
             corner_ = cursor;
             return false;
@@ -256,7 +257,7 @@ public:
 
     std::vector<std::string> valueFields() const override
     {
-        if (!corner_) {
+        if (!corner_ && !open_) {
             return {};
         }
         return {"Ancho", "Alto"};
@@ -264,6 +265,10 @@ public:
 
     std::vector<double> currentValues() const override
     {
+        if (open_) {
+            return {std::abs(open_->second.point.x - open_->first.point.x),
+                    std::abs(open_->second.point.y - open_->first.point.y)};
+        }
         if (!corner_) {
             return {};
         }
@@ -272,6 +277,9 @@ public:
 
     bool applyValues(Sketch& sketch, const std::vector<std::optional<double>>& values) override
     {
+        if (open_) {
+            return reopen(sketch, values);
+        }
         if (!corner_ || values.size() < 2) {
             return false;
         }
@@ -285,6 +293,31 @@ public:
     }
 
 private:
+    // Figura abierta: la rehace con el ancho o el alto escritos.
+    bool reopen(Sketch& sketch, const std::vector<std::optional<double>>& values)
+    {
+        if (values.size() < 2 || (!values[0] && !values[1])) {
+            open_.reset();  // Enter sin valores: queda como está
+            return false;
+        }
+        const OpenFigure old = *open_;
+        const Vec2 a = old.first.point;
+        const double sx = old.second.point.x >= a.x ? 1.0 : -1.0;
+        const double sy = old.second.point.y >= a.y ? 1.0 : -1.0;
+        const double width = values[0].value_or(std::abs(old.second.point.x - a.x));
+        const double height = values[1].value_or(std::abs(old.second.point.y - a.y));
+        if (!(width > kMinLength && height > kMinLength)) {
+            return false;
+        }
+        if (!discardEntities(sketch, old.ids)) {
+            open_.reset();
+            return false;
+        }
+        corner_ = old.first;
+        return create(sketch, Snap{{a.x + sx * width, a.y + sy * height}}, values[0] ? values[0] : old.typed[0],
+                      values[1] ? values[1] : old.typed[1]);
+    }
+
     bool create(Sketch& sketch, const Snap& cursor, std::optional<double> width, std::optional<double> height)
     {
         const Vec2 a = corner_->point;
@@ -292,6 +325,7 @@ private:
         if (std::abs(c.x - a.x) < kMinLength || std::abs(c.y - a.y) < kMinLength) {
             return false;
         }
+        const std::size_t mark = sketch.entities().size();
         const Vec2 b{c.x, a.y};
         const Vec2 d{a.x, c.y};
         const EntityId ab = sketch.addLine(a, b);
@@ -314,6 +348,7 @@ private:
         if (height) {
             sketch.addConstraint(Constraint::length(bc, *height));
         }
+        open_ = OpenFigure{entitiesSince(sketch, mark), *corner_, cursor, {width, height}};
         corner_.reset();
         return true;
     }
@@ -321,6 +356,10 @@ private:
 public:
     bool cancel() override
     {
+        if (open_) {
+            open_.reset();
+            return true;
+        }
         const bool active = corner_.has_value();
         corner_.reset();
         return active;
@@ -340,6 +379,9 @@ public:
 
     std::string hint() const override
     {
+        if (open_) {
+            return "Rectángulo creado: escribe ancho, Tab, alto y Enter para cambiarlo · clic o Esc para terminar";
+        }
         return corner_ ? "Clic para la esquina opuesta (o escribe ancho, Tab, alto)"
                        : "Clic para la primera esquina del rectángulo";
     }
@@ -347,6 +389,7 @@ public:
 private:
     Snap cursor_;
     std::optional<Snap> corner_;
+    std::optional<OpenFigure> open_;
 };
 
 // --- Círculo -----------------------------------------------------------------
@@ -357,6 +400,7 @@ public:
 
     bool click(Sketch& sketch, const Snap& cursor) override
     {
+        open_.reset();  // un clic nuevo da por buena la figura abierta
         if (!center_) {
             center_ = cursor;
             return false;
@@ -366,7 +410,7 @@ public:
 
     std::vector<std::string> valueFields() const override
     {
-        if (!center_) {
+        if (!center_ && !open_) {
             return {};
         }
         return {"Diámetro"};
@@ -374,6 +418,9 @@ public:
 
     std::vector<double> currentValues() const override
     {
+        if (open_) {
+            return {2.0 * distance(open_->first.point, open_->second.point)};
+        }
         if (!center_) {
             return {};
         }
@@ -382,6 +429,23 @@ public:
 
     bool applyValues(Sketch& sketch, const std::vector<std::optional<double>>& values) override
     {
+        if (open_) {
+            // Círculo abierto: se rehace con el diámetro escrito.
+            if (values.empty() || !values[0]) {
+                open_.reset();
+                return false;
+            }
+            const OpenFigure old = *open_;
+            if (!(*values[0] / 2.0 > kMinLength)) {
+                return false;
+            }
+            if (!discardEntities(sketch, old.ids)) {
+                open_.reset();
+                return false;
+            }
+            center_ = old.first;
+            return create(sketch, *values[0] / 2.0, values[0]);
+        }
         if (!center_ || values.empty()) {
             return false;
         }
@@ -395,11 +459,14 @@ private:
         if (radius < kMinLength) {
             return false;
         }
+        const std::size_t mark = sketch.entities().size();
         const EntityId circle = sketch.addCircle(center_->point, radius);
         attach(sketch, Ref::center(circle), *center_);
         if (diameter) {
             sketch.addConstraint(Constraint::diameter(circle, *diameter));
         }
+        open_ = OpenFigure{entitiesSince(sketch, mark), *center_,
+                           Snap{{center_->point.x + radius, center_->point.y}}, {diameter}};
         center_.reset();
         return true;
     }
@@ -408,6 +475,10 @@ public:
 
     bool cancel() override
     {
+        if (open_) {
+            open_.reset();
+            return true;
+        }
         const bool active = center_.has_value();
         center_.reset();
         return active;
@@ -427,12 +498,16 @@ public:
 
     std::string hint() const override
     {
+        if (open_) {
+            return "Círculo creado: escribe el diámetro y Enter para cambiarlo · clic o Esc para terminar";
+        }
         return center_ ? "Clic para fijar el tamaño (o escribe el diámetro)" : "Clic para el centro del círculo";
     }
 
 private:
     Snap cursor_;
     std::optional<Snap> center_;
+    std::optional<OpenFigure> open_;
 };
 
 // --- Arco por 3 puntos -------------------------------------------------------------

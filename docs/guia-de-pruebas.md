@@ -449,6 +449,23 @@ Rama `feature/inferencias-sketch`. Solo la **alineación horizontal/vertical** c
 | I.15 | Empieza una línea nueva desde el **extremo de otra** línea que ya existe y haz lo de I.12 | También infiere con esa línea |
 | I.16 | Cerca de la horizontal o la vertical, o cerca de un punto existente, o con **Mayús/Ctrl** pulsada | Mandan la horizontal/vertical y los puntos antes que ⊥/∥; Mayús y Ctrl las suprimen |
 | I.11 | **Anota** qué te falta o molesta (sobre todo: si la guía aparece demasiado, si «tiembla» al pegarse y se suelta, si querías ver un anillo en el punto despierto) | Una nota por caso: son los pendientes de la entrega |
+## Figuras abiertas — EN PRUEBA
+
+Rama `feature/figuras-abiertas`.
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| M.1 | **Círculo**: clic en el centro y clic en el borde | El círculo queda dibujado y el recuadro sigue enseñando **Diámetro** con su valor |
+| M.2 | Escribe otro diámetro y Enter | El mismo círculo cambia de tamaño (no aparece otro) y queda cotado |
+| M.3 | **Rectángulo** (esquinas y por centro): dos clics; escribe solo el **alto** y Enter | Cambia el alto, el ancho se conserva |
+| M.4 | **Polígono** (los tres modos): dos clics; escribe **8** en Lados y Enter; luego otro tamaño | Pasa a 8 lados y luego cambia de tamaño, sin figuras repetidas |
+| M.5 | Con una figura abierta, haz **clic** en otro sitio | La figura se queda y empieza otra |
+| M.6 | Con una figura abierta pulsa **Esc**; luego otra vez **Esc** | El primero cierra la edición (la figura se queda); el segundo sale de la herramienta |
+| M.7 | Crea una figura, cámbiala y pulsa **Deshacer** | Vuelve al paso anterior; si sigues escribiendo no pasa nada raro |
+| M.8 | **Anota** qué te falta o molesta | Son los pendientes |
+
+---
+
 ## Ajustes tras la primera prueba — EN PRUEBA
 
 Rama `feature/ajustes-sketch`.
