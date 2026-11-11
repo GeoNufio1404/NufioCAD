@@ -449,6 +449,23 @@ Rama `feature/inferencias-sketch`. Solo la **alineación horizontal/vertical** c
 | I.15 | Empieza una línea nueva desde el **extremo de otra** línea que ya existe y haz lo de I.12 | También infiere con esa línea |
 | I.16 | Cerca de la horizontal o la vertical, o cerca de un punto existente, o con **Mayús/Ctrl** pulsada | Mandan la horizontal/vertical y los puntos antes que ⊥/∥; Mayús y Ctrl las suprimen |
 | I.11 | **Anota** qué te falta o molesta (sobre todo: si la guía aparece demasiado, si «tiembla» al pegarse y se suelta, si querías ver un anillo en el punto despierto) | Una nota por caso: son los pendientes de la entrega |
+## Ajustes tras la primera prueba — EN PRUEBA
+
+Rama `feature/ajustes-sketch`.
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| J.1 | Entra a un sketch con el fondo **gris** y activa **Línea** | La cruz del cursor es blanca con borde oscuro y se ve en cualquier fondo |
+| J.2 | Dibuja una línea inclinada y un punto aparte; con **Línea**, lleva el cursor **hacia la línea** hasta quedar a la altura del punto | Sale la guía naranja discontinua y el cursor se pega a la línea en esa altura; al clic, queda sobre la línea y alineado |
+| J.3 | Igual con un **eje** (X o Y) y con un círculo | También sale la guía y se pega |
+| J.4 | Pasa el cursor por el **punto medio** de una línea | Punto amarillo y **cuadrado naranja discontinuo** a su alrededor, bien visible |
+| J.5 | Guarda como `Prueba2.nuf`, ábrelo en otra sesión y también «Guardar como…» | El título de la ventana muestra el nombre del archivo |
+| J.6 | Acota **5–6 círculos** juntos (distintos centros y concéntricos) | Los textos y las líneas de cota no se pisan entre sí |
+| J.7 | Acota ángulos de 90° y otros (dibujando las líneas en ambos sentidos: llegando al vértice y saliendo de él) | El arco y el número están en la **esquina** de las dos líneas, dentro del ángulo que se mide |
+| J.8 | **Anota** lo que siga mal (captura) | Son los pendientes |
+
+---
+
 ## Cotas que no se pisan — EN PRUEBA
 
 Rama `feature/cotas-sin-solaparse`. Usa los casos que anotaste en C.16.

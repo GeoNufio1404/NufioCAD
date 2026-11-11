@@ -40,6 +40,34 @@ std::optional<Vec2> nearestOnPolyline(const std::vector<Vec2>& points, Vec2 p)
     return best;
 }
 
+// Busca, entre los puntos de referencia, el corte de la curva con su
+// horizontal o su vertical más cercano al cursor (a menos de alignTolerance) y,
+// si lo hay, lleva el ajuste hasta allí con su guía.
+void alignOnCurve(const Curve& curve, Vec2 cursor, const SnapOptions& options, Snap& snap)
+{
+    double bestDistance = options.alignTolerance;
+    for (const AlignPoint& ref : options.alignPoints) {
+        for (const bool horizontal : {true, false}) {
+            Curve axis;
+            axis.isLine = true;
+            axis.infinite = true;
+            axis.a = horizontal ? Vec2{0.0, ref.position.y} : Vec2{ref.position.x, 0.0};
+            axis.b = horizontal ? Vec2{1.0, ref.position.y} : Vec2{ref.position.x, 1.0};
+            for (const Vec2& p : intersections(curve, axis)) {
+                const double d = distance(cursor, p);
+                if (d < bestDistance && distance(p, ref.position) > 1e-6) {
+                    bestDistance = d;
+                    snap.point = p;
+                    snap.alignX = {};
+                    snap.alignY = {};
+                    (horizontal ? snap.alignY : snap.alignX) = ref.ref;
+                    snap.guides = {{ref.position, p}};
+                }
+            }
+        }
+    }
+}
+
 } // namespace
 
 Snap snap(const Sketch& sketch, Vec2 cursor, const SnapOptions& options)
@@ -150,7 +178,14 @@ Snap snap(const Sketch& sketch, Vec2 cursor, const SnapOptions& options)
             p = nearestOnPolyline(polyline(closest->geometry), cursor);
         }
         if (p) {
-            return {*p, SnapKind::OnCurve, Ref::of(closest->id)};
+            Snap onCurve{*p, SnapKind::OnCurve, Ref::of(closest->id)};
+            // Sobre una recta o circunferencia también se alinea: el punto se
+            // desliza hasta donde la curva corta la horizontal o la vertical
+            // de un punto de referencia.
+            if (options.alignTolerance > 0.0 && isSimpleCurve(*closest)) {
+                alignOnCurve(curveOf(*closest), cursor, options, onCurve);
+            }
+            return onCurve;
         }
     }
 

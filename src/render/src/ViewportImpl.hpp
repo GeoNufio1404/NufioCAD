@@ -1456,9 +1456,18 @@ public:
 
     void showSketchPreview(const std::vector<sketch::Geometry>& geometry, std::optional<sketch::Vec2> snapPoint,
                            const std::vector<std::pair<sketch::Vec2, sketch::Vec2>>& guides,
-                           const std::string& badge, sketch::Vec2 badgeAt)
+                           const std::string& badge, sketch::Vec2 badgeAt, bool markerSquare)
     {
         preview->clear();
+        if (snapPoint && markerSquare) {
+            // Cuadrado naranja discontinuo (7 px de semilado) alrededor del punto.
+            const double h = 7.0 * pixelSize();
+            const sketch::Vec2 c = *snapPoint;
+            const sketch::Vec2 corners[4] = {{c.x - h, c.y - h}, {c.x + h, c.y - h}, {c.x + h, c.y + h}, {c.x - h, c.y + h}};
+            for (int i = 0; i < 4; ++i) {
+                preview->addGeometry(sketch::Line{corners[i], corners[(i + 1) % 4]}, constructionStroke());
+            }
+        }
         if (!badge.empty()) {
             preview->addText(badgeAt, badge, rgb(0xF2, 0xA3, 0x4B), rgb(0x1F, 0x23, 0x29), 16.0);
         }

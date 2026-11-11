@@ -21,6 +21,8 @@ constexpr double kArrowPx = 9.0;
 constexpr double kTextGapPx = 11.0;
 constexpr double kRowPx = 18.0;           // salto al apartar una anotación de otra
 constexpr int kMaxLevels = 8;             // posiciones que se prueban por anotación
+constexpr int kMaxRadialLevels = 12;      // las radiales dan la vuelta entera (12 × 30°)
+constexpr double kLineSamplePx = 6.0;     // paso de las cajas con que se representa una línea de cota
 constexpr double kCharWidthPx = 8.0;      // ancho aproximado de un carácter del texto
 constexpr double kTextHeightPx = 18.0;
 
@@ -264,8 +266,39 @@ std::optional<Annotation> dimensionAnnotation(const Sketch& sketch, const Constr
         const Vec2 w = l2->start - l1->start;
         const double t = (w.x * d2.y - w.y * d2.x) / denom;
         const Vec2 vertex = l1->start + t * d1;
-        const double from = std::atan2(d1.y, d1.x);
-        const double sweep = std::atan2(denom, d1.x * d2.x + d1.y * d2.y);
+        // El ángulo de la restricción va de d1 a d2, pero la esquina que se ve
+        // es la de los segmentos dibujados. Entre las esquinas posibles
+        // (±d1, ±d2) con ese mismo valor (todas si es de 90°) se usa la que
+        // cae sobre los segmentos: así el arco queda en el vértice, dentro de
+        // la esquina, y no en el cuadrante opuesto ni en el complementario.
+        const auto ray = [&](const Line& l) {
+            const Vec2 tip = length(l.start - vertex) > length(l.end - vertex) ? l.start : l.end;
+            return unit(tip - vertex);
+        };
+        const Vec2 r1 = ray(*l1);
+        const Vec2 r2 = ray(*l2);
+        const Vec2 u1 = unit(d1);
+        const Vec2 u2 = unit(d2);
+        const double value = std::abs(std::atan2(denom, d1.x * d2.x + d1.y * d2.y));
+        double bestScore = -10.0;
+        double from = std::atan2(u1.y, u1.x);
+        double sweep = std::atan2(denom, d1.x * d2.x + d1.y * d2.y);
+        for (const double sa : {1.0, -1.0}) {
+            for (const double sb : {1.0, -1.0}) {
+                const Vec2 ra = sa * u1;
+                const Vec2 rb = sb * u2;
+                const double corner = std::atan2(ra.x * rb.y - ra.y * rb.x, ra.x * rb.x + ra.y * rb.y);
+                if (std::abs(std::abs(corner) - value) > 1e-6) {
+                    continue;
+                }
+                const double score = ra.x * r1.x + ra.y * r1.y + rb.x * r2.x + rb.y * r2.y;
+                if (score > bestScore + 1e-9) {
+                    bestScore = score;
+                    from = std::atan2(ra.y, ra.x);
+                    sweep = corner;
+                }
+            }
+        }
         const double radius = (3.0 * kDimensionOffsetPx + level * kRowPx) * px;
         const double start = sweep >= 0.0 ? from : from + sweep;
         note->lines.push_back(Arc{vertex, radius, start, start + std::abs(sweep)});
@@ -463,28 +496,66 @@ private:
     std::unordered_map<long long, std::vector<int>> cells_;
 };
 
+// Cajas pequeñas a lo largo de las líneas de una cota (la de radio o diámetro
+// cruza el dibujo y no debe pasar por encima de otros textos ni de otras cotas
+// radiales).
+std::vector<Box> lineBoxes(const Annotation& note, double px)
+{
+    std::vector<Box> boxes;
+    const double half = 0.5 * kLineSamplePx * px;
+    for (const Geometry& g : note.lines) {
+        const auto* line = std::get_if<Line>(&g);
+        if (line == nullptr) {
+            continue;
+        }
+        const double len = std::hypot(line->end.x - line->start.x, line->end.y - line->start.y);
+        const int steps = std::clamp(int(std::ceil(len / (kLineSamplePx * px))), 1, 64);
+        for (int i = 0; i <= steps; ++i) {
+            const double t = double(i) / double(steps);
+            const double x = line->start.x + t * (line->end.x - line->start.x);
+            const double y = line->start.y + t * (line->end.y - line->start.y);
+            boxes.push_back({x - half, y - half, x + half, y + half});
+        }
+    }
+    return boxes;
+}
+
 // Prueba las posiciones de una anotación (make(nivel)) hasta dar con una que no
 // pise a ninguna ya colocada; si ninguna queda libre, la menos solapada.
+// «radial»: también cuentan las líneas de la cota (radio, diámetro).
 template <class Make>
-std::optional<Annotation> placeAnnotation(Placed& placed, double px, Make&& make)
+std::optional<Annotation> placeAnnotation(Placed& placed, double px, Make&& make, bool radial = false)
 {
     std::optional<Annotation> best;
+    std::vector<Box> bestLines;
     double bestOverlap = 0.0;
-    for (int level = 0; level < kMaxLevels; ++level) {
+    const int levels = radial ? kMaxRadialLevels : kMaxLevels;
+    for (int level = 0; level < levels; ++level) {
         std::optional<Annotation> note = make(level);
         if (!note) {
             return std::nullopt;
         }
-        const double overlap = placed.overlap(textBox(*note, px));
+        double overlap = placed.overlap(textBox(*note, px));
+        std::vector<Box> lines;
+        if (radial) {
+            lines = lineBoxes(*note, px);
+            for (const Box& box : lines) {
+                overlap += placed.overlap(box);
+            }
+        }
         if (!best || overlap < bestOverlap) {
             bestOverlap = overlap;
             best = std::move(note);
+            bestLines = std::move(lines);
         }
         if (bestOverlap <= 0.0) {
             break;
         }
     }
     placed.add(textBox(*best, px));
+    for (const Box& box : bestLines) {
+        placed.add(box);
+    }
     return best;
 }
 
@@ -507,9 +578,10 @@ std::vector<Annotation> layoutAnnotations(const Sketch& sketch, double pixelSize
         if (!isDimensional(c.type)) {
             continue;
         }
-        if (auto note = placeAnnotation(placed, pixelSize, [&](int level) {
-                return dimensionAnnotation(sketch, c, pixelSize, level);
-            })) {
+        const bool radial = c.type == ConstraintType::Radius || c.type == ConstraintType::Diameter;
+        if (auto note = placeAnnotation(
+                placed, pixelSize, [&](int level) { return dimensionAnnotation(sketch, c, pixelSize, level); },
+                radial)) {
             ordered.emplace_back(order, std::move(*note));
         }
     }

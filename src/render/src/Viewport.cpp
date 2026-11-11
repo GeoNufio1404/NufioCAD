@@ -1,6 +1,38 @@
+#include <QColor>
+#include <QCursor>
+#include <QPainter>
+#include <QPen>
+#include <QPixmap>
 #include "ViewportImpl.hpp"
 
 namespace nuf::render {
+
+namespace {
+
+// Cruz con núcleo blanco y contorno oscuro: se ve sobre el fondo gris, el
+// claro y el oscuro (la del sistema es negra y se pierde en el gris).
+QCursor crossCursor()
+{
+    constexpr int size = 33;
+    constexpr int mid = size / 2;
+    constexpr int gap = 3;  // hueco en el centro para ver el punto exacto
+    QPixmap pixmap(size, size);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    const auto cross = [&](const QPen& pen) {
+        painter.setPen(pen);
+        painter.drawLine(0, mid, mid - gap, mid);
+        painter.drawLine(mid + gap, mid, size - 1, mid);
+        painter.drawLine(mid, 0, mid, mid - gap);
+        painter.drawLine(mid, mid + gap, mid, size - 1);
+    };
+    cross(QPen(QColor(0x10, 0x12, 0x16), 3, Qt::SolidLine, Qt::FlatCap));
+    cross(QPen(QColor(0xFF, 0xFF, 0xFF), 1, Qt::SolidLine, Qt::FlatCap));
+    painter.end();
+    return QCursor(pixmap, mid, mid);
+}
+
+} // namespace
 
 Viewport::Viewport(QWidget* parent)
     : QOpenGLWidget(parent)
@@ -379,10 +411,10 @@ void Viewport::showSketch(const sketch::Sketch& sketch, const std::vector<sketch
 
 void Viewport::showSketchPreview(const std::vector<sketch::Geometry>& geometry, std::optional<sketch::Vec2> snapPoint,
                                  const std::vector<std::pair<sketch::Vec2, sketch::Vec2>>& guides,
-                                 const std::string& badge, sketch::Vec2 badgeAt)
+                                 const std::string& badge, sketch::Vec2 badgeAt, bool markerSquare)
 {
     if (isSketching()) {
-        impl_->showSketchPreview(geometry, snapPoint, guides, badge, badgeAt);
+        impl_->showSketchPreview(geometry, snapPoint, guides, badge, badgeAt, markerSquare);
         update();
     }
 }
@@ -391,7 +423,7 @@ void Viewport::setSketchToolActive(bool active)
 {
     impl_->sketchToolActive = active;
     impl_->leftPressed = false;
-    setCursor(active ? Qt::CrossCursor : Qt::ArrowCursor);
+    setCursor(active ? crossCursor() : QCursor(Qt::ArrowCursor));
 }
 
 void Viewport::setSketchProjectMode(bool on)

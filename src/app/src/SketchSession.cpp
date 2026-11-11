@@ -1210,7 +1210,8 @@ void SketchSession::showPreview()
             guides.emplace_back(guide.from, guide.to);
         }
     }
-    viewport_.showSketchPreview(geometry, marker, guides, badge, badgeAt);
+    const bool square = marker && cursor_->kind == sketch::SnapKind::Midpoint;
+    viewport_.showSketchPreview(geometry, marker, guides, badge, badgeAt, square);
 }
 
 } // namespace nuf::app

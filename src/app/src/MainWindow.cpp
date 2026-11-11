@@ -362,7 +362,11 @@ void MainWindow::updateUndoActions()
 
 void MainWindow::updateTitle()
 {
-    setWindowTitle(QString::fromStdString(document_.name()) + QStringLiteral("[*]"));
+    // Con archivo, el título es su nombre (el que se ve al abrir y guardar);
+    // sin él, el nombre interno del documento.
+    const QString name = path_.empty() ? QString::fromStdString(document_.name())
+                                       : QString::fromStdU16String(path_.stem().u16string());
+    setWindowTitle(name + QStringLiteral("[*]"));
     setWindowModified(hasUnsavedWork());
     updateStartScreen();
 }

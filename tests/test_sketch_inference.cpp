@@ -197,3 +197,27 @@ TEST_CASE("Inferencias: un ángulo lejos de 0° y 90° no infiere nada, y la vis
     tool->move(snap(t, {firstEnd.x + 10 * std::cos(angle), firstEnd.y + 10 * std::sin(angle)}, options));
     REQUIRE(tool->preview().badge.empty());
 }
+
+TEST_CASE("Inferencias: sobre una recta el punto se desliza hasta la horizontal de un punto de referencia", "[sketch][inference]")
+{
+    Sketch s;
+    s.addLine({0, 0}, {20, 20});
+    const EntityId p = s.addPoint({-5, 6});
+    const Snap snapped = snap(s, {6.2, 5.9}, alignedTo({{{-5, 6}, Ref::of(p)}}));
+    REQUIRE(snapped.kind == SnapKind::OnCurve);
+    REQUIRE_THAT(snapped.point.x, WithinAbs(6.0, 1e-9));
+    REQUIRE_THAT(snapped.point.y, WithinAbs(6.0, 1e-9));
+    REQUIRE(snapped.alignY == Ref::of(p));
+    REQUIRE(snapped.guides.size() == 1);
+}
+
+TEST_CASE("Inferencias: sobre un eje también hay guía vertical", "[sketch][inference]")
+{
+    Sketch s;
+    const EntityId p = s.addPoint({7, 12});
+    const Snap snapped = snap(s, {7.2, 0.1}, alignedTo({{{7, 12}, Ref::of(p)}}));
+    REQUIRE(snapped.kind == SnapKind::OnCurve);
+    REQUIRE_THAT(snapped.point.x, WithinAbs(7.0, 1e-9));
+    REQUIRE_THAT(snapped.point.y, WithinAbs(0.0, 1e-9));
+    REQUIRE(snapped.alignX == Ref::of(p));
+}

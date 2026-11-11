@@ -1,4 +1,4 @@
-# Registro de cambios — NufioCAD
+﻿# Registro de cambios — NufioCAD
 
 Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo sale mal. Las entregas nuevas van arriba. Para el detalle de lo pendiente, ver la [hoja de ruta](hoja-de-ruta-cad.md); para probarlas, la [guía de pruebas](guia-de-pruebas.md).
 
@@ -43,6 +43,33 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 - **Pruebas:** 221 unitarias y 34 pasos de la prueba de interfaz, en verde en Windows (Debug). La prueba de interfaz **aún no cuenta los píxeles naranjas** de la guía (pendiente I8).
 - **Riesgos al volver atrás:** ninguno en archivos guardados: las restricciones creadas son las horizontal/vertical de siempre.
+## Ajustes tras la primera prueba manual — 11 nov. 2026
+
+- **Rama:** `feature/ajustes-sketch` (sale de la rama local de prueba que junta `feature/inferencias-sketch` y `feature/cotas-sin-solaparse`; esas dos deben fusionarse antes). **Sin fusionar** hasta la prueba manual (guía J.1–J.7).
+- **Qué cambia:**
+  1. **Cursor visible:** la cruz del sketch es ahora blanca con contorno oscuro y un hueco en el centro (la del sistema era negra y se perdía en el gris).
+  2. **Guía naranja sobre líneas y ejes:** al llevar el cursor a una recta o circunferencia (ejes incluidos) el punto se desliza hasta donde esa curva corta la horizontal o la vertical de un punto de referencia, con su guía; al clic, restricción de punto sobre la curva y horizontal/vertical.
+  3. **Punto medio:** además del punto amarillo, un **cuadrado naranja discontinuo** alrededor.
+  4. **Título de la ventana:** muestra el nombre del archivo al abrir o guardar (antes el nombre interno del documento).
+  5. **Cotas de radio/diámetro:** prueban hasta 12 posiciones (vuelta entera) y cuentan también sus líneas de cota, no solo el texto, para no pasar por encima de otros textos ni de otras cotas radiales.
+  6. **Cotas de ángulo:** el arco se dibuja en la esquina de los segmentos dibujados (el vértice), y no en el cuadrante opuesto o complementario cuando las líneas se dibujaron «de cara» o «de espaldas».
+
+| Parte | Dónde (para deshacerla a mano) |
+|---|---|
+| Cursor | `crossCursor()` y `Viewport::setSketchToolActive` en `src/render/src/Viewport.cpp` |
+| Guía sobre curvas | `alignOnCurve` y rama «Sobre la curva más cercana» de `snap` en `src/sketch/src/Snap.cpp` |
+| Cuadrado del punto medio | parámetro `markerSquare` de `showSketchPreview` (`Viewport.hpp/.cpp`, `ViewportImpl.hpp`) y `SketchSession::showPreview` |
+| Título | `MainWindow::updateTitle` en `src/app/src/MainWindow.cpp` |
+| Cotas radiales | `lineBoxes` y parámetro `radial` de `placeAnnotation` en `src/sketch/src/Annotations.cpp` |
+| Cotas de ángulo | caso `ConstraintType::Angle` de `dimensionAnnotation` en el mismo archivo |
+| Pruebas | 4 casos nuevos: 2 en `tests/test_sketch_inference.cpp`, 2 en `tests/test_annotations_overlap.cpp` |
+
+- **Pruebas:** 233 unitarias (1969 aserciones) y 34 pasos de la prueba de interfaz, en verde en Windows (Debug).
+- **Pendiente:** el cursor y el cuadrado solo se han comprobado por código, no a la vista; las cotas radiales aún no evitan las líneas del dibujo; el ángulo usa el valor de la restricción (no se «corrige» si el valor es el suplementario de la esquina visible).
+- **Riesgos al volver atrás:** ninguno en archivos guardados.
+
+---
+
 ## Cotas que no se pisan — 11 nov. 2026
 
 - **Rama:** `feature/cotas-sin-solaparse` (sale de `develop`, independiente de las inferencias). **Sin fusionar** hasta la prueba manual (guía K.1–K.8).
