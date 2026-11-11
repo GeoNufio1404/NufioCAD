@@ -166,6 +166,9 @@ private:
     std::unique_ptr<sketch::SketchTool> tool_;
     Tool toolKind_ = Tool::None;
     std::optional<sketch::Snap> cursor_;
+    // Los dos últimos puntos sobre los que pasó el cursor con una herramienta
+    // de dibujo: «despiertos», sirven de referencia para las alineaciones.
+    std::vector<sketch::Ref> awake_;
     std::vector<sketch::EntityId> underconstrained_;
     std::vector<sketch::Ref> selection_;
     sketch::Ref hovered_;

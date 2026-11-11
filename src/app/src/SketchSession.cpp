@@ -96,6 +96,9 @@ namespace {
 
 // Distancia, en píxeles, a la que el cursor se ajusta a un punto.
 constexpr double kSnapRadiusPx = 8.0;
+// A cuántos píxeles de la recta horizontal o vertical de un punto el cursor se
+// pega a ella (alineación inferida, la «línea naranja»).
+constexpr double kAlignRadiusPx = 6.0;
 
 sketch::Geometry translated(sketch::Geometry geometry, sketch::Vec2 d)
 {
@@ -163,6 +166,7 @@ void SketchSession::setTool(Tool tool)
     const bool needsSelection = tool == Tool::Mirror || tool == Tool::Move || tool == Tool::Copy
                                 || tool == Tool::Rotate || tool == Tool::Scale || tool == Tool::PatternRectangular
                                 || tool == Tool::PatternCircular;
+    awake_.clear();
     const std::vector<sketch::EntityId> selected = selectedEntities();
     if (needsSelection && selected.empty()) {
         emit message(QStringLiteral("Selecciona primero lo que quieras transformar"));
@@ -294,6 +298,17 @@ sketch::Snap SketchSession::snapAt(sketch::Vec2 point) const
     options.gridStep = viewport_.sketchGridStep();
     // Con Ctrl se dibuja libre: sin snap ni restricciones automáticas.
     options.enabled = !(QGuiApplication::keyboardModifiers() & Qt::ControlModifier);
+    // Mayús suprime las inferencias (como en Onshape). Solo con una
+    // herramienta de dibujo: sin ella, Mayús es para seleccionar.
+    if (tool_ && !(QGuiApplication::keyboardModifiers() & Qt::ShiftModifier)) {
+        options.alignTolerance = kAlignRadiusPx * viewport_.sketchPixelSize();
+        options.alignPoints.push_back({{0.0, 0.0}, sketch::Ref::of(sketch::Sketch::kOrigin)});
+        for (const sketch::Ref& ref : awake_) {
+            if (const auto position = sketch_.point(ref)) {
+                options.alignPoints.push_back({*position, ref});
+            }
+        }
+    }
     return sketch::snap(sketch_, point, options);
 }
 
@@ -305,6 +320,16 @@ void SketchSession::cursorMoved(bool hasPoint, double x, double y)
         cursor_ = snapAt({x, y});
         if (tool_) {
             tool_->move(*cursor_);
+            // Pasar por un punto lo «despierta»: luego se puede alinear con él
+            // desde lejos. Se recuerdan los dos últimos.
+            if ((cursor_->kind == sketch::SnapKind::Point || cursor_->kind == sketch::SnapKind::Center)
+                && cursor_->ref.entity != sketch::Sketch::kOrigin
+                && std::ranges::find(awake_, cursor_->ref) == awake_.end()) {
+                awake_.push_back(cursor_->ref);
+                if (awake_.size() > 2) {
+                    awake_.erase(awake_.begin());
+                }
+            }
         }
     }
     // Sin herramienta, se resalta lo que se seleccionaría con un clic (los
@@ -1169,7 +1194,23 @@ void SketchSession::showPreview()
     if (tool_ && cursor_ && cursor_->kind != sketch::SnapKind::None && cursor_->kind != sketch::SnapKind::Grid) {
         marker = cursor_->point;
     }
-    viewport_.showSketchPreview(geometry, marker);
+    std::vector<std::pair<sketch::Vec2, sketch::Vec2>> guides;
+    std::string badge;
+    sketch::Vec2 badgeAt;
+    if (tool_) {
+        const sketch::Preview preview = tool_->preview();
+        for (const sketch::Guide& guide : preview.guides) {
+            guides.emplace_back(guide.from, guide.to);
+        }
+        badge = preview.badge;
+        badgeAt = preview.badgeAt;
+    }
+    if (tool_ && cursor_) {
+        for (const sketch::Guide& guide : cursor_->guides) {
+            guides.emplace_back(guide.from, guide.to);
+        }
+    }
+    viewport_.showSketchPreview(geometry, marker, guides, badge, badgeAt);
 }
 
 } // namespace nuf::app

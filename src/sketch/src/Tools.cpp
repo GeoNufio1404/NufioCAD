@@ -24,13 +24,27 @@ public:
         if (!start_) {
             start_ = cursor;
             first_ = cursor;
+            // Si empieza en el extremo de una línea, esa es la referencia para
+            // inferir perpendicular o paralela.
+            reference_.reset();
+            if (cursor.kind == SnapKind::Point && (cursor.ref.part == Part::Start || cursor.ref.part == Part::End)) {
+                if (const Entity* e = sketch.entity(cursor.ref.entity)) {
+                    if (const auto* line = std::get_if<Line>(&e->geometry)) {
+                        reference_ = Reference{e->id, *line};
+                    }
+                }
+            }
             // Si empieza en el extremo de una curva, se puede seguir con un arco tangente.
             direction_ = cursor.kind == SnapKind::Point ? exitDirection(sketch, cursor.ref) : std::nullopt;
             return false;
         }
         Snap end = cursor;
         const Straight straight = straighten(start_->point, end);
-        return commit(sketch, end, straight, std::nullopt, std::nullopt);
+        Relation relation = Relation::None;
+        if (straight == Straight::None && reference_) {
+            relation = relate(start_->point, reference_->line, end);
+        }
+        return commit(sketch, end, straight, std::nullopt, std::nullopt, relation);
     }
 
     // Arrastrar desde el punto actual de la cadena dibuja un arco tangente
@@ -78,7 +92,9 @@ public:
             return {};
         }
         Snap end = cursor_;
-        straighten(start_->point, end);
+        if (straighten(start_->point, end) == Straight::None && reference_) {
+            relate(start_->point, reference_->line, end);
+        }
         const double dx = end.point.x - start_->point.x;
         const double dy = end.point.y - start_->point.y;
         return {std::hypot(dx, dy), std::atan2(dy, dx) * 180.0 / std::numbers::pi};
@@ -121,8 +137,13 @@ public:
     }
 
 private:
+    struct Reference {
+        EntityId id;
+        Line line;
+    };
+
     bool commit(Sketch& sketch, const Snap& end, Straight straight, std::optional<double> length,
-                std::optional<double> angle)
+                std::optional<double> angle, Relation relation = Relation::None)
     {
         if (distance(start_->point, end.point) < kMinLength) {
             return false;
@@ -135,12 +156,20 @@ private:
         } else if (straight == Straight::Vertical) {
             sketch.addConstraint(Constraint::vertical(line));
         }
+        if (relation != Relation::None && reference_) {
+            const Constraint c = relation == Relation::Parallel ? Constraint::parallel(line, reference_->id)
+                                                                : Constraint::perpendicular(line, reference_->id);
+            if (sketch.canAdd(c)) {
+                sketch.addConstraint(c);
+            }
+        }
         if (length) {
             sketch.addConstraint(Constraint::length(line, *length));
         }
         if (angle) {
             sketch.addConstraint(Constraint::angle(Sketch::kAxisX, line, *angle));
         }
+        reference_ = Reference{line, Line{start_->point, end.point}};
 
         // Cerrar en el primer punto de la cadena la termina.
         const bool closed = end.kind == SnapKind::Point && distance(end.point, first_->point) < kMinLength;
@@ -167,6 +196,7 @@ public:
         first_.reset();
         direction_.reset();
         dragArc_.reset();
+        reference_.reset();
         return active;
     }
 
@@ -175,12 +205,23 @@ public:
         if (!start_) {
             return {};
         }
+        Preview result;
         if (dragArc_) {
-            return {{dragArc_->arc}};
+            result.geometry = {dragArc_->arc};
+            return result;
         }
         Snap end = cursor_;
-        straighten(start_->point, end);
-        return {{Line{start_->point, end.point}}};
+        Relation relation = Relation::None;
+        if (straighten(start_->point, end) == Straight::None && reference_) {
+            relation = relate(start_->point, reference_->line, end);
+        }
+        result.geometry = {Line{start_->point, end.point}};
+        if (relation != Relation::None) {
+            result.guides.push_back({reference_->line.start, reference_->line.end});
+            result.badge = relation == Relation::Parallel ? "∥" : "⊥";
+            result.badgeAt = {(start_->point.x + end.point.x) / 2, (start_->point.y + end.point.y) / 2};
+        }
+        return result;
     }
 
     std::string hint() const override
@@ -195,6 +236,7 @@ private:
     std::optional<Snap> first_;
     std::optional<Vec2> direction_;  // con la que llega la cadena a start_
     std::optional<ArcFit> dragArc_;  // arco tangente mientras se arrastra
+    std::optional<Reference> reference_;  // línea anterior de la cadena (o la que se continúa)
 };
 
 // --- Rectángulo ----------------------------------------------------------------

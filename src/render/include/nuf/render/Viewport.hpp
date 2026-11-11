@@ -197,7 +197,10 @@ public:
     void showSketch(const sketch::Sketch& sketch, const std::vector<sketch::EntityId>& underconstrained,
                     const SketchHighlight& highlight = {});
     // Vista previa de la herramienta activa y marcador del punto de ajuste.
-    void showSketchPreview(const std::vector<sketch::Geometry>& geometry, std::optional<sketch::Vec2> snapPoint);
+    // «guides»: rectas de las inferencias (alineaciones), discontinuas y naranjas.
+    void showSketchPreview(const std::vector<sketch::Geometry>& geometry, std::optional<sketch::Vec2> snapPoint,
+                           const std::vector<std::pair<sketch::Vec2, sketch::Vec2>>& guides = {},
+                           const std::string& badge = {}, sketch::Vec2 badgeAt = {});
     // En el sketch, un clic izquierdo (sin arrastrar) emite sketchClicked y
     // un doble clic, sketchDoubleClicked. Con una herramienta de dibujo
     // activa, además, el arrastre izquierdo no orbita.

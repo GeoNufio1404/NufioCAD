@@ -19,6 +19,11 @@ namespace nuf::sketch {
 // Geometría provisional que la UI dibuja mientras se usa la herramienta.
 struct Preview {
     std::vector<Geometry> geometry;
+    // Inferencias de la herramienta (perpendicular, paralela): la recta de
+    // referencia a resaltar y el símbolo («⊥», «∥») junto a la esquina.
+    std::vector<Guide> guides;
+    std::string badge;
+    Vec2 badgeAt;
 };
 
 class SketchTool {

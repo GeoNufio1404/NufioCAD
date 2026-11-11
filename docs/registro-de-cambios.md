@@ -10,6 +10,42 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Perpendicular y paralela al dibujar líneas (entrega 2, segunda parte) — 11 nov. 2026
+
+- **Rama:** `feature/inferencias-sketch` (sobre la parte anterior). **Sin fusionar** hasta la prueba manual (guía I.12–I.16).
+- **Qué hace:** en la herramienta **Línea**, si el tramo nuevo queda a menos de 3° de la **perpendicular** o de la **paralela** al tramo anterior de la cadena (o a la línea de cuyo extremo se parte), se endereza, se resalta la línea de referencia en naranja discontinuo y sale el símbolo **⊥** o **∥**; al clic se crea la restricción Perpendicular o Paralela (solo si `canAdd`). La horizontal/vertical, las alineaciones con puntos y los puntos existentes tienen prioridad; Mayús y Ctrl las suprimen (el endereza a H/V de siempre no cambia).
+
+| Parte | Dónde (para deshacerla a mano) |
+|---|---|
+| Cálculo | `detail::relate` y `enum class Relation` en `src/sketch/src/ToolSupport.cpp/.hpp` |
+| Herramienta Línea | `LineTool` en `src/sketch/src/Tools.cpp`: miembro `reference_`, parámetro `relation` de `commit`, `preview()` y `currentValues()` |
+| Vista previa | `Preview` gana `guides`, `badge` y `badgeAt` (`Tools.hpp`); `Viewport::showSketchPreview` gana `badge` y `badgeAt` (`Viewport.hpp/.cpp`, `ViewportImpl.hpp`); `SketchSession::showPreview` |
+| Pruebas | 3 casos nuevos en `tests/test_sketch_inference.cpp` |
+
+- **Pruebas:** 224 unitarias y 34 pasos de la prueba de interfaz en verde en Windows (Debug).
+- **Pendiente:** solo la herramienta Línea (no el rectángulo ni el arco); no usa una línea «despierta» lejana como referencia; el símbolo es un texto, no un icono dibujado; la prueba de interfaz no cuenta aún los píxeles.
+- **Riesgos al volver atrás:** ninguno en archivos guardados: son las restricciones Perpendicular y Paralela de siempre.
+
+---
+
+## Alineaciones con línea naranja, estilo Onshape (entrega 2, primera parte) — 11 nov. 2026
+
+- **Rama:** `feature/inferencias-sketch` (sale de `develop` en `7ae4c23`). **Sin fusionar** hasta la prueba manual (guía I.1–I.11).
+- **Qué hace:** con una herramienta de dibujo, el cursor se **pega** (≈6 px) a la recta horizontal o vertical del origen o de los dos últimos puntos sobre los que pasó el cursor («despiertos»), y se dibuja esa recta **discontinua y naranja**. Con dos rectas, se pega al cruce. Al hacer clic se crea la restricción horizontal/vertical entre el punto nuevo y el de referencia. **Mayús** las suprime; **Ctrl** sigue dibujando libre; un punto existente cerca gana a la alineación.
+
+| Parte | Dónde (para deshacerla a mano) |
+|---|---|
+| Motor | `Snap` gana `alignX`, `alignY` y `guides`; `SnapOptions` gana `alignPoints` y `alignTolerance`; bloque «Alineación» antes de la rejilla en `snap()` (`src/sketch/include/nuf/sketch/Snap.hpp`, `src/sketch/src/Snap.cpp`) |
+| Restricción al clic | final de `detail::attach` y primer bloque de `detail::straighten` (`src/sketch/src/ToolSupport.cpp`): la restricción solo se añade si `canAdd`; no se duplica si la recta es la del propio inicio de la línea |
+| Puntos despiertos y Mayús | `SketchSession::snapAt`, `cursorMoved`, `awake_` y `setTool` (`src/app/src/SketchSession.cpp/.hpp`) |
+| Dibujo de la guía | `Viewport::showSketchPreview` gana el parámetro `guides` (`Viewport.hpp/.cpp`, `ViewportImpl.hpp`): usa el trazo discontinuo naranja que ya tenía la geometría de construcción |
+| Pruebas | `tests/test_sketch_inference.cpp` (7 casos, añadido a `tests/CMakeLists.txt`) |
+
+- **Pruebas:** 221 unitarias y 34 pasos de la prueba de interfaz, en verde en Windows (Debug). La prueba de interfaz **aún no cuenta los píxeles naranjas** de la guía (pendiente I8).
+- **Riesgos al volver atrás:** ninguno en archivos guardados: las restricciones creadas son las horizontal/vertical de siempre.
+
+---
+
 ## Cotas sobre el lienzo, estilo Onshape (entrega 1) — 10 nov. 2026
 
 - **Rama:** `feature/cotas-en-el-lienzo` (sale de `develop` en `d7e3ffa`). **Sin fusionar** hasta que pase la prueba manual (guía C.1–C.16).

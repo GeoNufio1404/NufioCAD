@@ -31,11 +31,37 @@ void attach(Sketch& sketch, Ref created, const Snap& snapped)
     case SnapKind::Grid:
         break;
     }
+    // Alineación inferida con otro punto: horizontal o vertical entre ambos.
+    if (!snapped.alignY.empty() && !(snapped.alignY == created)) {
+        const Constraint c = Constraint::horizontal(created, snapped.alignY);
+        if (sketch.canAdd(c)) {
+            sketch.addConstraint(c);
+        }
+    }
+    if (!snapped.alignX.empty() && !(snapped.alignX == created)) {
+        const Constraint c = Constraint::vertical(created, snapped.alignX);
+        if (sketch.canAdd(c)) {
+            sketch.addConstraint(c);
+        }
+    }
 }
 
 Straight straighten(Vec2 start, Snap& end)
 {
     if (end.free || (end.kind != SnapKind::None && end.kind != SnapKind::Grid)) {
+        return Straight::None;
+    }
+    // Pegado a la recta de otro punto: no se mueve (la guía lo muestra). Si esa
+    // recta es justo la del inicio, basta con la restricción de la línea.
+    if (!end.alignY.empty() || !end.alignX.empty()) {
+        if (!end.alignY.empty() && std::abs(end.point.y - start.y) < kMinLength) {
+            end.alignY = {};
+            return Straight::Horizontal;
+        }
+        if (!end.alignX.empty() && std::abs(end.point.x - start.x) < kMinLength) {
+            end.alignX = {};
+            return Straight::Vertical;
+        }
         return Straight::None;
     }
     const double dx = end.point.x - start.x;
@@ -50,6 +76,36 @@ Straight straighten(Vec2 start, Snap& end)
         return Straight::Vertical;
     }
     return Straight::None;
+}
+
+Relation relate(Vec2 start, const Line& reference, Snap& end)
+{
+    if (end.free || (end.kind != SnapKind::None && end.kind != SnapKind::Grid) || !end.alignX.empty()
+        || !end.alignY.empty()) {
+        return Relation::None;
+    }
+    const double rx = reference.end.x - reference.start.x;
+    const double ry = reference.end.y - reference.start.y;
+    const double rlen = std::hypot(rx, ry);
+    const double vx = end.point.x - start.x;
+    const double vy = end.point.y - start.y;
+    const double vlen = std::hypot(vx, vy);
+    if (rlen < kMinLength || vlen < kMinLength) {
+        return Relation::None;
+    }
+    const Vec2 d{rx / rlen, ry / rlen};
+    const double along = vx * d.x + vy * d.y;     // componente paralela
+    const double across = -vx * d.y + vy * d.x;   // componente perpendicular
+    const double tolerance = std::tan(kStraightenAngle);
+    if (std::abs(across) <= tolerance * std::abs(along)) {
+        end.point = {start.x + d.x * along, start.y + d.y * along};
+        return Relation::Parallel;
+    }
+    if (std::abs(along) <= tolerance * std::abs(across)) {
+        end.point = {start.x - d.y * across, start.y + d.x * across};
+        return Relation::Perpendicular;
+    }
+    return Relation::None;
 }
 
 std::optional<ArcFit> fitArc(Vec2 a, Vec2 b, Vec2 through)
