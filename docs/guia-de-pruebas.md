@@ -427,6 +427,26 @@ La app ya no se cuelga mientras recalcula: lo lento (una rosca cortante, un engr
 
 ---
 
+## Alineaciones con línea naranja («softblocks») — EN PRUEBA
+
+Rama `feature/inferencias-sketch`. Solo la **alineación horizontal/vertical** con el origen y con los puntos «despiertos»; perpendicular, paralela y tangente vienen después.
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| I.1 | Abre un sketch, elige **Línea** y mueve el cursor hacia la derecha, a la altura del origen (sin hacer clic) | El cursor se **pega** a la altura del origen y aparece una **línea discontinua naranja** del origen al cursor; con el cursor a más de ~6 px de esa altura la guía desaparece |
+| I.2 | Haz lo mismo hacia arriba, sobre la vertical del origen | Igual, con la guía vertical |
+| I.3 | Haz clic estando pegado a la horizontal del origen | La línea empieza ahí; en el sketch hay una restricción **horizontal entre ese punto y el origen** (selecciona el punto: se ve el icono H) |
+| I.4 | Dibuja una línea; con **Línea** o **Rectángulo** pasa el cursor sobre su extremo (se marca amarillo) y aléjate hacia la derecha a su misma altura | Aparece la guía naranja desde ese extremo (el punto quedó «despierto»); un clic crea la restricción con él |
+| I.5 | Despierta dos puntos distintos y lleva el cursor a la altura de uno y la vertical del otro | El cursor se pega al **cruce** y salen **dos guías** |
+| I.6 | Mantén **Mayús** mientras mueves el cursor | No hay alineaciones ni guías (como en Onshape); al soltarla vuelven |
+| I.7 | Mantén **Ctrl** | Dibujo libre, sin guías (como antes) |
+| I.8 | Cerca de un punto existente (a menos de 8 px) | Gana el punto: el cursor se pega a él, sin guía |
+| I.9 | Línea cuyo inicio ya está a la altura del origen y que acabas **horizontal** | Una sola restricción horizontal en la línea; el sketch no marca restricciones redundantes ni en conflicto |
+| I.10 | Deshacer (Ctrl+Z) tras un clic con guía; guardar y reabrir | Desaparece la línea y su restricción; el archivo guarda las restricciones como cualquier otra |
+| I.11 | **Anota** qué te falta o molesta (sobre todo: si la guía aparece demasiado, si «tiembla» al pegarse y se suelta, si querías ver un anillo en el punto despierto) | Una nota por caso: son los pendientes de la entrega |
+
+---
+
 ## Mover y girar arrastrando (estilo Orca) — EN PRUEBA
 
 | # | Haz esto | Debe pasar |

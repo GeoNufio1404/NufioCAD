@@ -31,11 +31,37 @@ void attach(Sketch& sketch, Ref created, const Snap& snapped)
     case SnapKind::Grid:
         break;
     }
+    // Alineación inferida con otro punto: horizontal o vertical entre ambos.
+    if (!snapped.alignY.empty() && !(snapped.alignY == created)) {
+        const Constraint c = Constraint::horizontal(created, snapped.alignY);
+        if (sketch.canAdd(c)) {
+            sketch.addConstraint(c);
+        }
+    }
+    if (!snapped.alignX.empty() && !(snapped.alignX == created)) {
+        const Constraint c = Constraint::vertical(created, snapped.alignX);
+        if (sketch.canAdd(c)) {
+            sketch.addConstraint(c);
+        }
+    }
 }
 
 Straight straighten(Vec2 start, Snap& end)
 {
     if (end.free || (end.kind != SnapKind::None && end.kind != SnapKind::Grid)) {
+        return Straight::None;
+    }
+    // Pegado a la recta de otro punto: no se mueve (la guía lo muestra). Si esa
+    // recta es justo la del inicio, basta con la restricción de la línea.
+    if (!end.alignY.empty() || !end.alignX.empty()) {
+        if (!end.alignY.empty() && std::abs(end.point.y - start.y) < kMinLength) {
+            end.alignY = {};
+            return Straight::Horizontal;
+        }
+        if (!end.alignX.empty() && std::abs(end.point.x - start.x) < kMinLength) {
+            end.alignX = {};
+            return Straight::Vertical;
+        }
         return Straight::None;
     }
     const double dx = end.point.x - start.x;

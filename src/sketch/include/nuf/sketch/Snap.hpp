@@ -16,6 +16,12 @@ enum class SnapKind : std::uint8_t {
     OnCurve,       // punto sobre una curva (el más cercano al cursor)
 };
 
+// Recta guía de una inferencia (la UI la dibuja discontinua y naranja).
+struct Guide {
+    Vec2 from;
+    Vec2 to;
+};
+
 struct Snap {
     Snap() = default;
     Snap(Vec2 p, SnapKind k = SnapKind::None, Ref r = {})
@@ -33,6 +39,19 @@ struct Snap {
     Ref ref2;
     // Sin inferencias (Ctrl): las herramientas no enderezan ni restringen.
     bool free = false;
+    // Inferencias de alineación: si el cursor se pegó a la horizontal o la
+    // vertical de un punto de referencia, ese punto (alignY: misma Y →
+    // horizontal; alignX: misma X → vertical) y las rectas guía a dibujar.
+    // Al hacer clic se crea la restricción correspondiente.
+    Ref alignX;
+    Ref alignY;
+    std::vector<Guide> guides;
+};
+
+// Punto de referencia para las alineaciones (el origen, un punto «despierto»).
+struct AlignPoint {
+    Vec2 position;
+    Ref ref;
 };
 
 struct SnapOptions {
@@ -42,10 +61,15 @@ struct SnapOptions {
     double gridStep = 0.0;
     // false: devuelve el cursor tal cual (kind None, free = true).
     bool enabled = true;
+    // Puntos con los que se infiere la alineación horizontal/vertical, y a
+    // qué distancia (en mm) el cursor se pega a su recta. Sin puntos o con
+    // alignTolerance 0 no hay alineaciones.
+    std::vector<AlignPoint> alignPoints;
+    double alignTolerance = 0.0;
 };
 
 // Prioridad: puntos y centros, intersecciones, puntos medios, sobre una
-// curva y por último la rejilla.
+// curva, alineaciones con los puntos de referencia y por último la rejilla.
 Snap snap(const Sketch& sketch, Vec2 cursor, const SnapOptions& options);
 
 } // namespace nuf::sketch

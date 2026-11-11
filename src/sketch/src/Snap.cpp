@@ -154,6 +154,49 @@ Snap snap(const Sketch& sketch, Vec2 cursor, const SnapOptions& options)
         }
     }
 
+    // Alineación horizontal/vertical con los puntos de referencia (softblock):
+    // el cursor se pega a la recta; con dos, al cruce de ambas.
+    if (options.alignTolerance > 0.0) {
+        const AlignPoint* sameY = nullptr;
+        const AlignPoint* sameX = nullptr;
+        double bestY = options.alignTolerance;
+        double bestX = options.alignTolerance;
+        for (const AlignPoint& ref : options.alignPoints) {
+            const double dy = std::abs(cursor.y - ref.position.y);
+            const double dx = std::abs(cursor.x - ref.position.x);
+            if (dy <= bestY && dx > options.alignTolerance) {
+                bestY = dy;
+                sameY = &ref;
+            }
+            if (dx <= bestX && dy > options.alignTolerance) {
+                bestX = dx;
+                sameX = &ref;
+            }
+        }
+        if (sameX || sameY) {
+            Snap aligned{cursor, SnapKind::None, {}};
+            if (options.gridStep > 0.0) {
+                const double step = options.gridStep;
+                aligned.point = {std::round(cursor.x / step) * step, std::round(cursor.y / step) * step};
+            }
+            if (sameY) {
+                aligned.point.y = sameY->position.y;
+                aligned.alignY = sameY->ref;
+            }
+            if (sameX) {
+                aligned.point.x = sameX->position.x;
+                aligned.alignX = sameX->ref;
+            }
+            if (sameY) {
+                aligned.guides.push_back({sameY->position, aligned.point});
+            }
+            if (sameX) {
+                aligned.guides.push_back({sameX->position, aligned.point});
+            }
+            return aligned;
+        }
+    }
+
     if (options.gridStep > 0.0) {
         const double step = options.gridStep;
         return {{std::round(cursor.x / step) * step, std::round(cursor.y / step) * step}, SnapKind::Grid, {}};

@@ -1454,9 +1454,13 @@ public:
         context->Redisplay(drawing, false);
     }
 
-    void showSketchPreview(const std::vector<sketch::Geometry>& geometry, std::optional<sketch::Vec2> snapPoint)
+    void showSketchPreview(const std::vector<sketch::Geometry>& geometry, std::optional<sketch::Vec2> snapPoint,
+                           const std::vector<std::pair<sketch::Vec2, sketch::Vec2>>& guides)
     {
         preview->clear();
+        for (const auto& [from, to] : guides) {
+            preview->addGeometry(sketch::Line{from, to}, constructionStroke());
+        }
         SketchStroke stroke = freeStroke();
         stroke.width = 1.5;
         for (const sketch::Geometry& g : geometry) {
