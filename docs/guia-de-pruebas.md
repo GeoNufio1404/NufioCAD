@@ -443,6 +443,11 @@ Rama `feature/inferencias-sketch`. Solo la **alineación horizontal/vertical** c
 | I.8 | Cerca de un punto existente (a menos de 8 px) | Gana el punto: el cursor se pega a él, sin guía |
 | I.9 | Línea cuyo inicio ya está a la altura del origen y que acabas **horizontal** | Una sola restricción horizontal en la línea; el sketch no marca restricciones redundantes ni en conflicto |
 | I.10 | Deshacer (Ctrl+Z) tras un clic con guía; guardar y reabrir | Desaparece la línea y su restricción; el archivo guarda las restricciones como cualquier otra |
+| I.12 | Con **Línea**, dibuja un primer tramo inclinado (por ejemplo a 30°) y, desde su final, lleva el cursor casi a **90°** de él (a menos de 3°) | El segundo tramo se endereza a 90°, el primer tramo se resalta en **naranja discontinuo** y aparece el símbolo **⊥** en medio del tramo; al clic, la restricción **perpendicular** (icono ⊥ en el sketch) |
+| I.13 | Igual, pero llevando el cursor casi en **la misma dirección** que el primer tramo | Se endereza, se resalta el primero y sale **∥**; al clic, restricción **paralela** |
+| I.14 | Con un ángulo claramente distinto (45°, 60°…) | Sin símbolo ni guía, el tramo sigue al cursor |
+| I.15 | Empieza una línea nueva desde el **extremo de otra** línea que ya existe y haz lo de I.12 | También infiere con esa línea |
+| I.16 | Cerca de la horizontal o la vertical, o cerca de un punto existente, o con **Mayús/Ctrl** pulsada | Mandan la horizontal/vertical y los puntos antes que ⊥/∥; Mayús y Ctrl las suprimen |
 | I.11 | **Anota** qué te falta o molesta (sobre todo: si la guía aparece demasiado, si «tiembla» al pegarse y se suelta, si querías ver un anillo en el punto despierto) | Una nota por caso: son los pendientes de la entrega |
 
 ---

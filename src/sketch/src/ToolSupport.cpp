@@ -78,6 +78,36 @@ Straight straighten(Vec2 start, Snap& end)
     return Straight::None;
 }
 
+Relation relate(Vec2 start, const Line& reference, Snap& end)
+{
+    if (end.free || (end.kind != SnapKind::None && end.kind != SnapKind::Grid) || !end.alignX.empty()
+        || !end.alignY.empty()) {
+        return Relation::None;
+    }
+    const double rx = reference.end.x - reference.start.x;
+    const double ry = reference.end.y - reference.start.y;
+    const double rlen = std::hypot(rx, ry);
+    const double vx = end.point.x - start.x;
+    const double vy = end.point.y - start.y;
+    const double vlen = std::hypot(vx, vy);
+    if (rlen < kMinLength || vlen < kMinLength) {
+        return Relation::None;
+    }
+    const Vec2 d{rx / rlen, ry / rlen};
+    const double along = vx * d.x + vy * d.y;     // componente paralela
+    const double across = -vx * d.y + vy * d.x;   // componente perpendicular
+    const double tolerance = std::tan(kStraightenAngle);
+    if (std::abs(across) <= tolerance * std::abs(along)) {
+        end.point = {start.x + d.x * along, start.y + d.y * along};
+        return Relation::Parallel;
+    }
+    if (std::abs(along) <= tolerance * std::abs(across)) {
+        end.point = {start.x - d.y * across, start.y + d.x * across};
+        return Relation::Perpendicular;
+    }
+    return Relation::None;
+}
+
 std::optional<ArcFit> fitArc(Vec2 a, Vec2 b, Vec2 through)
 {
     const auto c = circumcenter(a, b, through);

@@ -1195,12 +1195,22 @@ void SketchSession::showPreview()
         marker = cursor_->point;
     }
     std::vector<std::pair<sketch::Vec2, sketch::Vec2>> guides;
+    std::string badge;
+    sketch::Vec2 badgeAt;
+    if (tool_) {
+        const sketch::Preview preview = tool_->preview();
+        for (const sketch::Guide& guide : preview.guides) {
+            guides.emplace_back(guide.from, guide.to);
+        }
+        badge = preview.badge;
+        badgeAt = preview.badgeAt;
+    }
     if (tool_ && cursor_) {
         for (const sketch::Guide& guide : cursor_->guides) {
             guides.emplace_back(guide.from, guide.to);
         }
     }
-    viewport_.showSketchPreview(geometry, marker, guides);
+    viewport_.showSketchPreview(geometry, marker, guides, badge, badgeAt);
 }
 
 } // namespace nuf::app

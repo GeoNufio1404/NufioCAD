@@ -27,6 +27,13 @@ void attachOnCurve(Sketch& sketch, EntityId curve, const Snap& snapped);
 enum class Straight { None, Horizontal, Vertical };
 Straight straighten(Vec2 start, Snap& end);
 
+// Relación inferida de un segmento nuevo con una línea de referencia: si el
+// segmento start→end queda a menos de kStraightenAngle de la paralela o de la
+// perpendicular a «reference», lo endereza (conserva el largo proyectado) y la
+// devuelve. No si el extremo se apoya en algo, está alineado o es libre.
+enum class Relation { None, Parallel, Perpendicular };
+Relation relate(Vec2 start, const Line& reference, Snap& end);
+
 // Curva (línea, círculo o arco, incluidos los ejes) sobre la que se hizo
 // clic, según el snap. 0 si no hay ninguna.
 EntityId curveAt(const Sketch& sketch, const Snap& snapped);

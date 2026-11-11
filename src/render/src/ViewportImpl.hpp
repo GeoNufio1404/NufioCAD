@@ -1455,9 +1455,13 @@ public:
     }
 
     void showSketchPreview(const std::vector<sketch::Geometry>& geometry, std::optional<sketch::Vec2> snapPoint,
-                           const std::vector<std::pair<sketch::Vec2, sketch::Vec2>>& guides)
+                           const std::vector<std::pair<sketch::Vec2, sketch::Vec2>>& guides,
+                           const std::string& badge, sketch::Vec2 badgeAt)
     {
         preview->clear();
+        if (!badge.empty()) {
+            preview->addText(badgeAt, badge, rgb(0xF2, 0xA3, 0x4B), rgb(0x1F, 0x23, 0x29), 16.0);
+        }
         for (const auto& [from, to] : guides) {
             preview->addGeometry(sketch::Line{from, to}, constructionStroke());
         }
