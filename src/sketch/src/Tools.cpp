@@ -277,8 +277,10 @@ public:
 
     bool applyValues(Sketch& sketch, const std::vector<std::optional<double>>& values) override
     {
+        amended_ = false;
         if (open_) {
-            return reopen(sketch, values);
+            amended_ = reopen(sketch, values);
+            return amended_;
         }
         if (!corner_ || values.size() < 2) {
             return false;
@@ -348,7 +350,7 @@ private:
         if (height) {
             sketch.addConstraint(Constraint::length(bc, *height));
         }
-        open_ = OpenFigure{entitiesSince(sketch, mark), *corner_, cursor, {width, height}};
+        open_ = OpenFigure{entitiesSince(sketch, mark), *corner_, cursor, {}, 0.0, {width, height}};
         corner_.reset();
         return true;
     }
@@ -390,6 +392,10 @@ private:
     Snap cursor_;
     std::optional<Snap> corner_;
     std::optional<OpenFigure> open_;
+    bool amended_ = false;
+
+public:
+    bool amendedLast() const override { return amended_; }
 };
 
 // --- Círculo -----------------------------------------------------------------
@@ -429,6 +435,7 @@ public:
 
     bool applyValues(Sketch& sketch, const std::vector<std::optional<double>>& values) override
     {
+        amended_ = false;
         if (open_) {
             // Círculo abierto: se rehace con el diámetro escrito.
             if (values.empty() || !values[0]) {
@@ -444,7 +451,8 @@ public:
                 return false;
             }
             center_ = old.first;
-            return create(sketch, *values[0] / 2.0, values[0]);
+            amended_ = create(sketch, *values[0] / 2.0, values[0]);
+            return amended_;
         }
         if (!center_ || values.empty()) {
             return false;
@@ -466,7 +474,7 @@ private:
             sketch.addConstraint(Constraint::diameter(circle, *diameter));
         }
         open_ = OpenFigure{entitiesSince(sketch, mark), *center_,
-                           Snap{{center_->point.x + radius, center_->point.y}}, {diameter}};
+                           Snap{{center_->point.x + radius, center_->point.y}}, {}, 0.0, {diameter}};
         center_.reset();
         return true;
     }
@@ -508,6 +516,10 @@ private:
     Snap cursor_;
     std::optional<Snap> center_;
     std::optional<OpenFigure> open_;
+    bool amended_ = false;
+
+public:
+    bool amendedLast() const override { return amended_; }
 };
 
 // --- Arco por 3 puntos -------------------------------------------------------------

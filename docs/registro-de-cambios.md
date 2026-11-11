@@ -45,18 +45,21 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 - **Riesgos al volver atrás:** ninguno en archivos guardados: las restricciones creadas son las horizontal/vertical de siempre.
 ## Figuras abiertas — 11 nov. 2026
 
-- **Rama:** `feature/figuras-abiertas` (sale de `develop`). **Sin fusionar** hasta la prueba manual (guía M.1–M.8).
-- **Qué hace:** tras el **último clic** de un **polígono** (los tres modos), un **círculo** (centro y radio), un **rectángulo** (por esquinas y por centro), la figura ya queda creada pero **abierta**: el recuadro junto al cursor sigue enseñando sus campos (lados y tamaño, diámetro, ancho y alto) con su valor actual. Escribiendo y pulsando Enter se **rehace** con los nuevos valores (se fijan con cotas solo los que escribes; los demás se conservan). Se cierra con un **clic nuevo** (que ya empieza otra figura), con **Esc** (la figura se queda; otro Esc sale de la herramienta) o con **Enter sin escribir**.
+- **Rama:** `feature/figuras-abiertas` (sale de `develop`). **Sin fusionar** hasta la prueba manual (guía M.1–M.9).
+- **Qué hace:** tras el **último clic** de un **polígono** (los tres modos), un **círculo** (centro y radio, por 2 y por 3 puntos), un **rectángulo** (por esquinas, por centro y por 3 puntos) y una **ranura**, la figura ya queda creada pero **abierta**: el recuadro junto al cursor sigue enseñando sus campos (lados y tamaño, diámetro, ancho y alto, longitud y alto, ancho de ranura) con su valor actual. Escribiendo y pulsando Enter se **rehace** con los nuevos valores (se fijan con cotas solo los que escribes; los demás se conservan). Se cierra con un **clic nuevo** (que ya empieza otra figura), con **Esc** (la figura se queda; otro Esc sale de la herramienta) o con **Enter sin escribir**.
 
 | Parte | Dónde (para deshacerla a mano) |
 |---|---|
 | Estado común | `OpenFigure`, `entitiesSince` y `discardEntities` en `src/sketch/src/ToolSupport.hpp/.cpp` |
 | Rectángulo y círculo | `RectangleTool` y `CircleTool` en `src/sketch/src/Tools.cpp` (`open_`, `reopen`) |
-| Rectángulo por centro y polígono | `CenterRectangleTool` y `PolygonTool` en `src/sketch/src/ShapeTools.cpp` |
+| Rectángulo por centro, por 3 puntos, polígono y ranura | `CenterRectangleTool`, `ThreePointRectangleTool`, `PolygonTool` y `SlotTool` en `src/sketch/src/ShapeTools.cpp` |
+| Círculo por 2 y 3 puntos | `TwoPointCircleTool` y `ThreePointCircleTool` en `src/sketch/src/CircleTools.cpp` |
+| Un solo paso en Deshacer | `SketchTool::amendedLast()` (`Tools.hpp`) y `SketchSession::applyTypedValues` |
 | Pruebas | `tests/test_sketch_open_figures.cpp` (6 casos, añadido a `tests/CMakeLists.txt`) |
 
-- **Pruebas:** 239 unitarias (2033 aserciones) y 34 pasos de la prueba de interfaz, en verde en Windows (Debug). Nota: tras cambiar de rama hizo falta recompilar `nuf_sketch` y `nuf_tests` desde cero; con objetos viejos las pruebas fallaban con «Stack around the variable corrupted».
-- **Pendiente:** el resto de herramientas (círculo por 2 y 3 puntos, rectángulo por 3 puntos, ranuras, elipse); cada cambio de valores deja su propio paso en Deshacer; al redimensionar se pierden las uniones del segundo clic con puntos existentes (las del primero se conservan).
+- **Pruebas:** 241 unitarias (2060 aserciones) y 34 pasos de la prueba de interfaz, en verde en Windows (Debug). Nota: el compilador sale en español y ninja no rastrea las cabeceras; tras cambiar un `.hpp` o de rama hay que limpiar `nuf_sketch` y `nuf_tests` (con objetos viejos salían «Stack around the variable corrupted» y SIGSEGV falsos).
+- **Un solo paso en Deshacer:** corregir la figura recién creada no añade otro paso: Deshacer vuelve a antes de crearla.
+- **Pendiente:** la elipse y el arco de ranura no tienen campos que editar (no cambia nada); al redimensionar se pierden las uniones del segundo clic con puntos existentes (las del primero se conservan).
 - **Riesgos al volver atrás:** ninguno en archivos guardados.
 
 ---

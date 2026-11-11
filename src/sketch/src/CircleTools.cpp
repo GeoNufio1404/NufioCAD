@@ -27,6 +27,7 @@ public:
 
     bool click(Sketch& sketch, const Snap& cursor) override
     {
+        open_.reset();  // un clic nuevo da por buena la figura abierta
         if (!first_) {
             first_ = cursor;
             return false;
@@ -36,16 +37,42 @@ public:
 
     std::vector<std::string> valueFields() const override
     {
-        return first_ ? std::vector<std::string>{"Diámetro"} : std::vector<std::string>{};
+        return first_ || open_ ? std::vector<std::string>{"Diámetro"} : std::vector<std::string>{};
     }
 
     std::vector<double> currentValues() const override
     {
+        if (open_) {
+            return {distance(open_->first.point, open_->second.point)};
+        }
         return first_ ? std::vector<double>{distance(first_->point, cursor_.point)} : std::vector<double>{};
     }
 
     bool applyValues(Sketch& sketch, const std::vector<std::optional<double>>& values) override
     {
+        amended_ = false;
+        if (open_) {
+            // Círculo abierto: se rehace con el diámetro escrito, en la misma dirección.
+            if (values.empty() || !values[0]) {
+                open_.reset();
+                return false;
+            }
+            const OpenFigure old = *open_;
+            if (!(*values[0] > kMinLength)) {
+                return false;
+            }
+            if (!discardEntities(sketch, old.ids)) {
+                open_.reset();
+                return false;
+            }
+            const Vec2 a = old.first.point;
+            const double len = distance(a, old.second.point);
+            const Vec2 u = len > kMinLength ? Vec2{(old.second.point.x - a.x) / len, (old.second.point.y - a.y) / len}
+                                            : Vec2{1.0, 0.0};
+            first_ = old.first;
+            amended_ = create(sketch, Snap{{a.x + *values[0] * u.x, a.y + *values[0] * u.y}}, values[0]);
+            return amended_;
+        }
         if (!first_ || values.empty() || !values[0] || !(*values[0] > kMinLength)) {
             return false;
         }
@@ -58,6 +85,10 @@ public:
 
     bool cancel() override
     {
+        if (open_) {
+            open_.reset();
+            return true;
+        }
         const bool active = first_.has_value();
         first_.reset();
         return active;
@@ -73,6 +104,9 @@ public:
 
     std::string hint() const override
     {
+        if (open_) {
+            return "Círculo creado: escribe el diámetro y Enter para cambiarlo · clic o Esc para terminar";
+        }
         return first_ ? "Clic para el otro extremo del diámetro (o escribe el diámetro)"
                       : "Clic para un extremo del diámetro";
     }
@@ -88,6 +122,7 @@ private:
         if (distance(first_->point, second.point) < kMinLength) {
             return false;
         }
+        const std::size_t mark = sketch.entities().size();
         const Circle c = circleThrough(first_->point, second.point);
         const EntityId circle = sketch.addCircle(c.center, c.radius);
         attachOnCurve(sketch, circle, *first_);
@@ -95,12 +130,18 @@ private:
         if (diameter) {
             sketch.addConstraint(Constraint::diameter(circle, *diameter));
         }
+        open_ = OpenFigure{entitiesSince(sketch, mark), *first_, second, {}, 0.0, {diameter}};
         first_.reset();
         return true;
     }
 
     Snap cursor_;
     std::optional<Snap> first_;
+    std::optional<OpenFigure> open_;
+    bool amended_ = false;
+
+public:
+    bool amendedLast() const override { return amended_; }
 };
 
 // --- Círculo por 3 puntos -----------------------------------------------------------
@@ -111,6 +152,7 @@ public:
 
     bool click(Sketch& sketch, const Snap& cursor) override
     {
+        open_.reset();  // un clic nuevo da por buena la figura abierta
         if (points_.size() < 2) {
             if (points_.empty() || distance(points_.back().point, cursor.point) >= kMinLength) {
                 points_.push_back(cursor);
@@ -121,16 +163,66 @@ public:
         if (!center) {
             return false;
         }
-        const EntityId circle = sketch.addCircle(*center, distance(*center, cursor.point));
+        const std::size_t mark = sketch.entities().size();
+        const double radius = distance(*center, cursor.point);
+        const EntityId circle = sketch.addCircle(*center, radius);
         attachOnCurve(sketch, circle, points_[0]);
         attachOnCurve(sketch, circle, points_[1]);
         attachOnCurve(sketch, circle, cursor);
+        open_ = OpenFigure{entitiesSince(sketch, mark), Snap{*center}, Snap{{center->x + radius, center->y}}, {}, 0.0, {}};
         points_.clear();
         return true;
     }
 
+    std::vector<std::string> valueFields() const override
+    {
+        return open_ ? std::vector<std::string>{"Diámetro"} : std::vector<std::string>{};
+    }
+
+    std::vector<double> currentValues() const override
+    {
+        return open_ ? std::vector<double>{2.0 * distance(open_->first.point, open_->second.point)}
+                     : std::vector<double>{};
+    }
+
+    // Círculo abierto: se rehace con el mismo centro y el diámetro escrito (ya
+    // no pasa por los tres puntos, así que se fija con una cota).
+    bool applyValues(Sketch& sketch, const std::vector<std::optional<double>>& values) override
+    {
+        amended_ = false;
+        if (!open_) {
+            return false;
+        }
+        if (values.empty() || !values[0]) {
+            open_.reset();
+            return false;
+        }
+        if (!(*values[0] / 2.0 > kMinLength)) {
+            return false;
+        }
+        const OpenFigure old = *open_;
+        if (!discardEntities(sketch, old.ids)) {
+            open_.reset();
+            return false;
+        }
+        const std::size_t mark = sketch.entities().size();
+        const double radius = *values[0] / 2.0;
+        const EntityId circle = sketch.addCircle(old.first.point, radius);
+        sketch.addConstraint(Constraint::diameter(circle, *values[0]));
+        open_ = OpenFigure{entitiesSince(sketch, mark), old.first, Snap{{old.first.point.x + radius, old.first.point.y}},
+                           {}, 0.0, {}};
+        amended_ = true;
+        return true;
+    }
+
+    bool amendedLast() const override { return amended_; }
+
     bool cancel() override
     {
+        if (open_) {
+            open_.reset();
+            return true;
+        }
         const bool active = !points_.empty();
         points_.clear();
         return active;
@@ -154,12 +246,17 @@ public:
     {
         static const char* steps[] = {"Clic para el primer punto del círculo", "Clic para el segundo punto",
                                       "Clic para el tercer punto"};
+        if (open_) {
+            return "Círculo creado: escribe el diámetro y Enter para cambiarlo · clic o Esc para terminar";
+        }
         return steps[points_.size()];
     }
 
 private:
     Snap cursor_;
     std::vector<Snap> points_;
+    std::optional<OpenFigure> open_;
+    bool amended_ = false;
 };
 
 // --- Círculo tangente a 2 o 3 curvas ---------------------------------------------------

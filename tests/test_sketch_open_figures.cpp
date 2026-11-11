@@ -150,3 +150,66 @@ TEST_CASE("Figuras abiertas: tras deshacer, la figura abierta se suelta sin romp
     REQUIRE(countOf(s, true) == 0);
     REQUIRE(tool->valueFields().empty());
 }
+
+TEST_CASE("Figuras abiertas: círculo por 2 y por 3 puntos", "[sketch][open]")
+{
+    {
+        Sketch s;
+        auto tool = makeTwoPointCircleTool();
+        clickAt(*tool, s, {0, 0});
+        clickAt(*tool, s, {10, 0});
+        REQUIRE(countOf(s, true) == 1);
+        REQUIRE_THAT(tool->currentValues().at(0), WithinAbs(10.0, 1e-9));
+        REQUIRE(tool->applyValues(s, {20.0}));
+        REQUIRE(countOf(s, true) == 1);
+        REQUIRE(tool->amendedLast());
+        REQUIRE_THAT(tool->currentValues().at(0), WithinAbs(20.0, 1e-9));
+    }
+    {
+        Sketch s;
+        auto tool = makeThreePointCircleTool();
+        clickAt(*tool, s, {10, 0});
+        clickAt(*tool, s, {0, 10});
+        clickAt(*tool, s, {-10, 0});
+        REQUIRE(countOf(s, true) == 1);
+        REQUIRE_THAT(tool->currentValues().at(0), WithinAbs(20.0, 1e-9));
+        REQUIRE(tool->applyValues(s, {30.0}));
+        REQUIRE(countOf(s, true) == 1);
+        REQUIRE(makePlaneGcsSolver()->solve(s).status == SolveStatus::Solved);
+        REQUIRE_FALSE(tool->applyValues(s, {std::nullopt}));
+        REQUIRE(tool->valueFields().empty());
+    }
+}
+
+TEST_CASE("Figuras abiertas: rectángulo por 3 puntos y ranura", "[sketch][open]")
+{
+    {
+        Sketch s;
+        auto tool = makeThreePointRectangleTool();
+        clickAt(*tool, s, {0, 0});
+        clickAt(*tool, s, {10, 0});
+        clickAt(*tool, s, {10, 4});
+        REQUIRE(countOf(s, false) == 4);
+        const auto now = tool->currentValues();
+        REQUIRE_THAT(now.at(0), WithinAbs(10.0, 1e-9));
+        REQUIRE_THAT(now.at(1), WithinAbs(4.0, 1e-9));
+        REQUIRE(tool->applyValues(s, {std::nullopt, 9.0}));
+        REQUIRE(countOf(s, false) == 4);
+        REQUIRE(tool->amendedLast());
+        REQUIRE_THAT(tool->currentValues().at(1), WithinAbs(9.0, 1e-9));
+        REQUIRE_THAT(tool->currentValues().at(0), WithinAbs(10.0, 1e-9));
+    }
+    {
+        Sketch s;
+        auto tool = makeSlotTool(SlotMode::CenterToCenter);
+        clickAt(*tool, s, {0, 0});
+        clickAt(*tool, s, {20, 0});
+        clickAt(*tool, s, {20, 3});  // ancho 6
+        REQUIRE(countOf(s, false) == 2);
+        REQUIRE_THAT(tool->currentValues().at(0), WithinAbs(6.0, 1e-9));
+        REQUIRE(tool->applyValues(s, {10.0}));
+        REQUIRE(countOf(s, false) == 2);  // los dos lados, sin duplicar
+        REQUIRE_THAT(tool->currentValues().at(0), WithinAbs(10.0, 1e-9));
+        REQUIRE_FALSE(tool->applyValues(s, {std::nullopt}));
+    }
+}

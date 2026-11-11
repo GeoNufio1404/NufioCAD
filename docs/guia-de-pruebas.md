@@ -462,7 +462,8 @@ Rama `feature/figuras-abiertas`.
 | M.5 | Con una figura abierta, haz **clic** en otro sitio | La figura se queda y empieza otra |
 | M.6 | Con una figura abierta pulsa **Esc**; luego otra vez **Esc** | El primero cierra la edición (la figura se queda); el segundo sale de la herramienta |
 | M.7 | Crea una figura, cámbiala y pulsa **Deshacer** | Vuelve al paso anterior; si sigues escribiendo no pasa nada raro |
-| M.8 | **Anota** qué te falta o molesta | Son los pendientes |
+| M.8 | **Círculo por 2 y 3 puntos**, **rectángulo por 3 puntos** y **ranura**: termina la figura y escribe un valor (diámetro, longitud/alto, ancho) | Cambia la misma figura; con Deshacer vuelve a antes de crearla (un solo paso) |
+| M.9 | **Anota** qué te falta o molesta | Son los pendientes |
 
 ---
 

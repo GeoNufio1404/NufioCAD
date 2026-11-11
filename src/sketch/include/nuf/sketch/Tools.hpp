@@ -54,6 +54,10 @@ public:
     // Indicación para la barra de estado ("Clic para el segundo extremo").
     virtual std::string hint() const = 0;
 
+    // true si el último applyValues solo cambió la figura abierta que acababa
+    // de crear la herramienta (no hace falta otro paso en Deshacer).
+    virtual bool amendedLast() const { return false; }
+
     // Valores que se pueden escribir junto al cursor en el paso actual
     // ("Longitud", "Ángulo"…; vacío si ninguno) y su valor según el cursor.
     // Los ángulos van en grados.

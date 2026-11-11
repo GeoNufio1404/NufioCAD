@@ -1140,7 +1140,11 @@ void SketchSession::applyTypedValues()
         }
     }
     if (tool_->applyValues(sketch_, typed)) {
-        remember(std::move(before));
+        // Corregir la figura que se acaba de crear no es otro paso: Deshacer
+        // vuelve a antes de crearla.
+        if (!tool_->amendedLast()) {
+            remember(std::move(before));
+        }
         solveAndShow();
     }
     valueInput_->clear();

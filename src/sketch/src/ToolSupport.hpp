@@ -26,6 +26,8 @@ struct OpenFigure {
     std::vector<EntityId> ids;
     Snap first;
     Snap second;
+    Snap third;        // tercer clic, en las figuras de tres (rectángulo por 3 puntos)
+    double value = 0.0;  // medida auxiliar (radio de la ranura)
     std::vector<std::optional<double>> typed;  // medidas ya fijadas con cotas
 };
 
