@@ -22,7 +22,8 @@ add_executable(nuf_tests
     test_sketch_tools.cpp
     test_sketch_tools_curves.cpp
     test_sketch_tools_2b.cpp
-    test_sketch_inference.cpp)
+    test_sketch_inference.cpp
+    test_annotations_overlap.cpp)
 
 nuf_set_warnings(nuf_tests)
 target_compile_definitions(nuf_tests PRIVATE NUF_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")

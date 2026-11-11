@@ -43,6 +43,20 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 - **Pruebas:** 221 unitarias y 34 pasos de la prueba de interfaz, en verde en Windows (Debug). La prueba de interfaz **aún no cuenta los píxeles naranjas** de la guía (pendiente I8).
 - **Riesgos al volver atrás:** ninguno en archivos guardados: las restricciones creadas son las horizontal/vertical de siempre.
+## Cotas que no se pisan — 11 nov. 2026
+
+- **Rama:** `feature/cotas-sin-solaparse` (sale de `develop`, independiente de las inferencias). **Sin fusionar** hasta la prueba manual (guía K.1–K.8).
+- **Qué hace:** cada cota o icono de restricción se coloca después de calcular su sitio natural y, si su texto pisaría a otro ya colocado, se prueba otra posición (hasta 8): la cota lineal se aleja un renglón de la geometría, la de radio o diámetro gira 30°, la de ángulo usa un arco mayor, el icono pasa al hueco siguiente. Se colocan antes las cotas y luego los iconos.
+
+| Parte | Dónde (para deshacerla a mano) |
+|---|---|
+| Colocación | `layoutAnnotations`, `placeAnnotation`, `Placed` y `textBox` en `src/sketch/src/Annotations.cpp` (el resultado conserva el orden de las restricciones) |
+| Grado de libertad | parámetro `level` de `dimensionAnnotation` y de `alignedDimension` en el mismo archivo (con `level = 0` queda el dibujo de antes) |
+| Pruebas | `tests/test_annotations_overlap.cpp` (5 casos, añadido a `tests/CMakeLists.txt`) |
+
+- **Pruebas:** 219 unitarias (incluidas las nuevas) y 34 pasos de la prueba de interfaz, en verde en Windows (Debug). Colocar las anotaciones de un sketch de 1960 restricciones tarda unos 44 ms (Debug), antes unos 20 ms: el coste sube un poco por la comprobación.
+- **Pendiente:** evitar también las líneas y puntos del sketch y las líneas de cota; dar prioridad a lo seleccionado o bajo el cursor; recordar la posición por cota; línea de llamada si nada queda libre.
+- **Riesgos al volver atrás:** ninguno en archivos guardados (solo cambia dónde se dibujan los textos).
 
 ---
 

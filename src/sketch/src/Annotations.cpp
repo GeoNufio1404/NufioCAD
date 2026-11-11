@@ -6,6 +6,7 @@
 #include <map>
 #include <numbers>
 #include <optional>
+#include <unordered_map>
 
 namespace nuf::sketch {
 
@@ -18,6 +19,10 @@ constexpr double kDimensionOffsetPx = 28.0;
 constexpr double kExtensionPx = 5.0;      // las líneas de referencia sobrepasan la de cota
 constexpr double kArrowPx = 9.0;
 constexpr double kTextGapPx = 11.0;
+constexpr double kRowPx = 18.0;           // salto al apartar una anotación de otra
+constexpr int kMaxLevels = 8;             // posiciones que se prueban por anotación
+constexpr double kCharWidthPx = 8.0;      // ancho aproximado de un carácter del texto
+constexpr double kTextHeightPx = 18.0;
 
 Vec2 operator+(Vec2 a, Vec2 b) { return {a.x + b.x, a.y + b.y}; }
 Vec2 operator-(Vec2 a, Vec2 b) { return {a.x - b.x, a.y - b.y}; }
@@ -62,11 +67,11 @@ void addArrow(std::vector<Geometry>& lines, Vec2 tip, Vec2 dir, double size)
     lines.push_back(Line{tip, tip + size * right});
 }
 
-// Cota alineada entre a y b, desplazada hacia «side».
-Annotation alignedDimension(Vec2 a, Vec2 b, Vec2 side, double px)
+// Cota alineada entre a y b, desplazada hacia «side» (level: renglones más lejos).
+Annotation alignedDimension(Vec2 a, Vec2 b, Vec2 side, double px, int level)
 {
     Annotation note;
-    const Vec2 offset = kDimensionOffsetPx * px * side;
+    const Vec2 offset = (kDimensionOffsetPx + level * kRowPx) * px * side;
     const Vec2 extension = kExtensionPx * px * unit(side);
     const Vec2 a2 = a + offset;
     const Vec2 b2 = b + offset;
@@ -180,7 +185,10 @@ std::vector<Ref> subjects(const Constraint& c)
     }
 }
 
-std::optional<Annotation> dimensionAnnotation(const Sketch& sketch, const Constraint& c, double px)
+// «level» aparta la cota de otras: 0 es su sitio natural; cada nivel la lleva
+// un paso más allá según su grado de libertad (lineal: más lejos de la
+// geometría; radial: otro ángulo; ángulo: arco mayor; el resto: el texto).
+std::optional<Annotation> dimensionAnnotation(const Sketch& sketch, const Constraint& c, double px, int level)
 {
     const auto lineOf = [&](Ref r) -> const Line* {
         const Entity* e = sketch.entity(r.entity);
@@ -194,7 +202,7 @@ std::optional<Annotation> dimensionAnnotation(const Sketch& sketch, const Constr
             const Line* l = lineOf(c.first);
             if (!l) return std::nullopt;
             const Vec2 n = normalOf(unit(l->end - l->start));
-            note = alignedDimension(l->start, l->end, n, px);
+            note = alignedDimension(l->start, l->end, n, px, level);
         } else if (const Line* l = (c.second.part == Part::Whole) ? lineOf(c.second) : nullptr) {
             // Distancia de un punto a una recta: perpendicular desde el punto.
             const auto p = sketch.point(c.first);
@@ -206,12 +214,12 @@ std::optional<Annotation> dimensionAnnotation(const Sketch& sketch, const Constr
             note->lines.push_back(Line{*p, foot});
             addArrow(note->lines, *p, *p - foot, kArrowPx * px);
             addArrow(note->lines, foot, foot - *p, kArrowPx * px);
-            note->anchor = midpoint(*p, foot) + kTextGapPx * px * u;
+            note->anchor = midpoint(*p, foot) + (kTextGapPx + level * kRowPx) * px * u;
         } else {
             const auto a = sketch.point(c.first);
             const auto b = sketch.point(c.second);
             if (!a || !b) return std::nullopt;
-            note = alignedDimension(*a, *b, normalOf(unit(*b - *a)), px);
+            note = alignedDimension(*a, *b, normalOf(unit(*b - *a)), px, level);
         }
         break;
     }
@@ -232,10 +240,10 @@ std::optional<Annotation> dimensionAnnotation(const Sketch& sketch, const Constr
         }
         // Se proyectan a una línea horizontal (o vertical) por encima (o a la derecha).
         const bool x = c.type == ConstraintType::DistanceX;
-        const double level = x ? std::max(a.y, b.y) : std::max(a.x, b.x);
-        const Vec2 a1 = x ? Vec2{a.x, level} : Vec2{level, a.y};
-        const Vec2 b1 = x ? Vec2{b.x, level} : Vec2{level, b.y};
-        note = alignedDimension(a1, b1, x ? Vec2{0.0, 1.0} : Vec2{1.0, 0.0}, px);
+        const double lineAt = x ? std::max(a.y, b.y) : std::max(a.x, b.x);
+        const Vec2 a1 = x ? Vec2{a.x, lineAt} : Vec2{lineAt, a.y};
+        const Vec2 b1 = x ? Vec2{b.x, lineAt} : Vec2{lineAt, b.y};
+        note = alignedDimension(a1, b1, x ? Vec2{0.0, 1.0} : Vec2{1.0, 0.0}, px, level);
         note->lines[0] = Line{a, std::get<Line>(note->lines[0]).end};
         note->lines[1] = Line{b, std::get<Line>(note->lines[1]).end};
         break;
@@ -258,7 +266,7 @@ std::optional<Annotation> dimensionAnnotation(const Sketch& sketch, const Constr
         const Vec2 vertex = l1->start + t * d1;
         const double from = std::atan2(d1.y, d1.x);
         const double sweep = std::atan2(denom, d1.x * d2.x + d1.y * d2.y);
-        const double radius = 3.0 * kDimensionOffsetPx * px;
+        const double radius = (3.0 * kDimensionOffsetPx + level * kRowPx) * px;
         const double start = sweep >= 0.0 ? from : from + sweep;
         note->lines.push_back(Arc{vertex, radius, start, start + std::abs(sweep)});
         const double mid = from + 0.5 * sweep;
@@ -281,7 +289,7 @@ std::optional<Annotation> dimensionAnnotation(const Sketch& sketch, const Constr
         note = Annotation{};
         note->lines.push_back(Line{el->center, tip});
         addArrow(note->lines, tip, u, kArrowPx * px);
-        note->anchor = tip + 2.0 * kTextGapPx * px * u;
+        note->anchor = tip + (2.0 * kTextGapPx + level * kRowPx) * px * u;
         break;
     }
     case ConstraintType::Radius:
@@ -307,6 +315,7 @@ std::optional<Annotation> dimensionAnnotation(const Sketch& sketch, const Constr
                 }
             }
             angle += double(rank) * std::numbers::pi / 6.0;
+            angle += double(level) * std::numbers::pi / 6.0;
         } else if (const auto* arc = std::get_if<Arc>(&e->geometry)) {
             center = arc->center;
             radius = arc->radius;
@@ -314,7 +323,7 @@ std::optional<Annotation> dimensionAnnotation(const Sketch& sketch, const Constr
             while (end <= arc->startAngle) {
                 end += 2.0 * std::numbers::pi;
             }
-            angle = 0.5 * (arc->startAngle + end);
+            angle = 0.5 * (arc->startAngle + end) + double(level) * std::numbers::pi / 6.0;
         } else {
             return std::nullopt;
         }
@@ -376,34 +385,165 @@ std::string formatDimension(const Constraint& c)
     return c.driving ? text : "(" + text + ")";
 }
 
+namespace {
+
+// Caja que ocupa el texto de una anotación (centrada en su ancla), en mm.
+struct Box {
+    double x0, y0, x1, y1;
+};
+
+Box textBox(const Annotation& note, double px)
+{
+    std::size_t chars = 0;
+    for (const char ch : note.text) {
+        chars += (static_cast<unsigned char>(ch) & 0xC0) != 0x80 ? 1 : 0;  // sin bytes de continuación UTF-8
+    }
+    const double halfWidth = 0.5 * (double(chars) * kCharWidthPx + 8.0) * px;
+    const double halfHeight = 0.5 * kTextHeightPx * px;
+    return {note.anchor.x - halfWidth, note.anchor.y - halfHeight, note.anchor.x + halfWidth, note.anchor.y + halfHeight};
+}
+
+// Las cajas ya colocadas, en una rejilla de celdas: comprobar una nueva solo
+// mira las celdas que toca, no todas las anteriores.
+class Placed {
+public:
+    explicit Placed(double cell)
+        : cell_(cell)
+    {}
+
+    double overlap(const Box& box) const
+    {
+        std::vector<int> seen;
+        double total = 0.0;
+        forCells(box, [&](long long key) {
+            const auto it = cells_.find(key);
+            if (it == cells_.end()) {
+                return;
+            }
+            for (const int index : it->second) {
+                if (std::ranges::find(seen, index) != seen.end()) {
+                    continue;
+                }
+                seen.push_back(index);
+                const Box& other = boxes_[std::size_t(index)];
+                const double w = std::min(box.x1, other.x1) - std::max(box.x0, other.x0);
+                const double h = std::min(box.y1, other.y1) - std::max(box.y0, other.y0);
+                if (w > 0.0 && h > 0.0) {
+                    total += w * h;
+                }
+            }
+        });
+        return total;
+    }
+
+    void add(const Box& box)
+    {
+        const int index = int(boxes_.size());
+        boxes_.push_back(box);
+        forCells(box, [&](long long key) { cells_[key].push_back(index); });
+    }
+
+private:
+    template <class F>
+    void forCells(const Box& box, F&& visit) const
+    {
+        const long long x0 = (long long)std::floor(box.x0 / cell_);
+        const long long x1 = (long long)std::floor(box.x1 / cell_);
+        const long long y0 = (long long)std::floor(box.y0 / cell_);
+        const long long y1 = (long long)std::floor(box.y1 / cell_);
+        for (long long x = x0; x <= x1; ++x) {
+            for (long long y = y0; y <= y1; ++y) {
+                visit(x * 1000003LL + y);
+            }
+        }
+    }
+
+    double cell_;
+    std::vector<Box> boxes_;
+    std::unordered_map<long long, std::vector<int>> cells_;
+};
+
+// Prueba las posiciones de una anotación (make(nivel)) hasta dar con una que no
+// pise a ninguna ya colocada; si ninguna queda libre, la menos solapada.
+template <class Make>
+std::optional<Annotation> placeAnnotation(Placed& placed, double px, Make&& make)
+{
+    std::optional<Annotation> best;
+    double bestOverlap = 0.0;
+    for (int level = 0; level < kMaxLevels; ++level) {
+        std::optional<Annotation> note = make(level);
+        if (!note) {
+            return std::nullopt;
+        }
+        const double overlap = placed.overlap(textBox(*note, px));
+        if (!best || overlap < bestOverlap) {
+            bestOverlap = overlap;
+            best = std::move(note);
+        }
+        if (bestOverlap <= 0.0) {
+            break;
+        }
+    }
+    placed.add(textBox(*best, px));
+    return best;
+}
+
+} // namespace
+
 std::vector<Annotation> layoutAnnotations(const Sketch& sketch, double pixelSize)
 {
-    std::vector<Annotation> result;
+    // El resultado sale en el orden de las restricciones, aunque se coloquen
+    // antes las cotas que los iconos.
+    std::vector<std::pair<std::size_t, Annotation>> ordered;
     // Cuántos iconos lleva ya cada punto o entidad, para apilarlos.
     std::map<std::pair<EntityId, Part>, int> stacked;
+    Placed placed(64.0 * pixelSize);
 
+    // Primero las cotas (lo que más importa leer), luego los iconos: un icono
+    // se aparta de una cota, no al revés.
+    std::size_t order = 0;
     for (const Constraint& c : sketch.constraints()) {
+        order += 8;
+        if (!isDimensional(c.type)) {
+            continue;
+        }
+        if (auto note = placeAnnotation(placed, pixelSize, [&](int level) {
+                return dimensionAnnotation(sketch, c, pixelSize, level);
+            })) {
+            ordered.emplace_back(order, std::move(*note));
+        }
+    }
+    order = 0;
+    for (const Constraint& c : sketch.constraints()) {
+        order += 8;
         if (isDimensional(c.type)) {
-            if (auto note = dimensionAnnotation(sketch, c, pixelSize)) {
-                result.push_back(std::move(*note));
-            }
             continue;
         }
         const char* text = glyph(c.type);
+        std::size_t slot = 0;
         for (const Ref& r : subjects(c)) {
             const auto subject = subjectOf(sketch, r, pixelSize);
             if (!subject || *text == '\0') {
                 continue;
             }
-            int& index = stacked[{r.entity, r.part}];
-            Annotation note;
-            note.constraint = c.id;
-            note.text = text;
-            note.anchor = subject->base + kGlyphOffsetPx * pixelSize * subject->offsetDir
-                          + (index * kGlyphSpacingPx * pixelSize) * subject->stackDir;
-            ++index;
-            result.push_back(std::move(note));
+            const int index = stacked[{r.entity, r.part}]++;
+            if (auto note = placeAnnotation(placed, pixelSize, [&](int level) -> std::optional<Annotation> {
+                    Annotation icon;
+                    icon.constraint = c.id;
+                    icon.text = text;
+                    icon.anchor = subject->base + kGlyphOffsetPx * pixelSize * subject->offsetDir
+                                  + ((index + level) * kGlyphSpacingPx * pixelSize) * subject->stackDir;
+                    return icon;
+                })) {
+                ordered.emplace_back(order + (++slot), std::move(*note));
+            }
         }
+    }
+    std::ranges::stable_sort(ordered, [](const auto& a, const auto& b) { return a.first < b.first; });
+    std::vector<Annotation> result;
+    result.reserve(ordered.size());
+    for (auto& entry : ordered) {
+        result.push_back(std::move(entry.second));
     }
     return result;
 }
