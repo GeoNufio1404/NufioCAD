@@ -294,6 +294,19 @@ std::optional<Annotation> dimensionAnnotation(const Sketch& sketch, const Constr
         if (const auto* circle = std::get_if<Circle>(&e->geometry)) {
             center = circle->center;
             radius = circle->radius;
+            // Varios círculos con el mismo centro: cada cota va a otro ángulo (30° más que la del anterior), para que
+            // los textos y las líneas de cota no se pisen.
+            int rank = 0;
+            for (const Entity& other : sketch.entities()) {
+                if (other.id == e->id) {
+                    break;
+                }
+                if (const auto* concentric = std::get_if<Circle>(&other.geometry);
+                    concentric != nullptr && std::hypot(concentric->center.x - center.x, concentric->center.y - center.y) < 1e-6) {
+                    ++rank;
+                }
+            }
+            angle += double(rank) * std::numbers::pi / 6.0;
         } else if (const auto* arc = std::get_if<Arc>(&e->geometry)) {
             center = arc->center;
             radius = arc->radius;

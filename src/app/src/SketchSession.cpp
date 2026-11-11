@@ -16,6 +16,11 @@
 #include <QGuiApplication>
 #include <QImage>
 #include <QDialog>
+#include <QEventLoop>
+#include <QFrame>
+#include <QHBoxLayout>
+#include <QKeyEvent>
+#include <QScreen>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
 #include <QFontComboBox>
@@ -32,6 +37,60 @@
 #include <numbers>
 
 namespace nuf::app {
+
+namespace {
+
+// Teclas del campo de valor sobre el lienzo: Enter acepta, Esc cancela; al cerrarse el recuadro (también al hacer
+// clic fuera de él) termina la espera.
+class InlineEditorKeys final : public QObject {
+public:
+    InlineEditorKeys(QWidget* popup, QEventLoop* loop, bool* accepted)
+        : QObject(popup)
+        , popup_(popup)
+        , loop_(loop)
+        , accepted_(accepted)
+    {
+    }
+
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        if (event->type() == QEvent::KeyPress) {
+            const int key = static_cast<QKeyEvent*>(event)->key();
+            if (key == Qt::Key_Return || key == Qt::Key_Enter) {
+                *accepted_ = true;
+                popup_->close();
+                return true;
+            }
+            if (key == Qt::Key_Escape) {
+                popup_->close();
+                return true;
+            }
+        } else if (event->type() == QEvent::Hide && watched == popup_) {
+            loop_->quit();
+        }
+        return false;
+    }
+
+private:
+    QWidget* popup_;
+    QEventLoop* loop_;
+    bool* accepted_;
+};
+
+QString dimensionCaption(sketch::ConstraintType type)
+{
+    switch (type) {
+    case sketch::ConstraintType::Diameter: return QStringLiteral("Ø");
+    case sketch::ConstraintType::Radius: return QStringLiteral("R");
+    case sketch::ConstraintType::Angle: return QStringLiteral("Ángulo");
+    case sketch::ConstraintType::MajorRadius: return QStringLiteral("Semieje mayor");
+    case sketch::ConstraintType::MinorRadius: return QStringLiteral("Semieje menor");
+    case sketch::ConstraintType::Distance: return QStringLiteral("Distancia");
+    default: return QStringLiteral("Valor");
+    }
+}
+
+} // namespace
 
 namespace {
 
@@ -151,10 +210,17 @@ void SketchSession::setTool(Tool tool)
     case Tool::Project: tool_.reset(); break;  // lo resuelve el viewport (clic en aristas)
     case Tool::Text:
     case Tool::Image: tool_.reset(); break;   // un clic y diálogos (ver clicked)
+    case Tool::Dimension:
+        tool_.reset();  // un clic en lo que se acota (ver dimensionClicked)
+        selection_.clear();
+        selectedConstraints_.clear();
+        showSketch();
+        emit selectionChanged();
+        break;
     }
     toolKind_ = tool;
     viewport_.setSketchProjectMode(tool == Tool::Project);
-    const bool clickTool = tool == Tool::Project || tool == Tool::Text || tool == Tool::Image;
+    const bool clickTool = tool == Tool::Project || tool == Tool::Text || tool == Tool::Image || tool == Tool::Dimension;
     viewport_.setSketchToolActive(tool_ != nullptr || clickTool);
     if (tool_ && cursor_) {
         tool_->move(*cursor_);
@@ -172,6 +238,9 @@ void SketchSession::setTool(Tool tool)
         emit hintChanged(QStringLiteral("Clic donde empieza el texto (su línea base)"));
     } else if (tool == Tool::Image) {
         emit hintChanged(QStringLiteral("Clic donde va la esquina inferior izquierda de la imagen"));
+    } else if (tool == Tool::Dimension) {
+        emit hintChanged(QStringLiteral("Cota: clic en un círculo, arco o línea y escribe el valor · dos clics para una distancia o un ángulo · "
+                                        "clic en una cota para editarla · Esc para terminar"));
     } else {
         emit hintChanged(tool_ ? QString::fromStdString(tool_->hint()) : QString());
     }
@@ -179,6 +248,17 @@ void SketchSession::setTool(Tool tool)
 
 bool SketchSession::cancel()
 {
+    if (toolKind_ == Tool::Dimension) {
+        if (hasSelection()) {
+            selection_.clear();
+            selectedConstraints_.clear();
+            showSketch();
+            emit selectionChanged();
+        } else {
+            setTool(Tool::None);
+        }
+        return true;
+    }
     if (toolKind_ == Tool::Project || toolKind_ == Tool::Text || toolKind_ == Tool::Image) {
         setTool(Tool::None);
         return true;
@@ -253,6 +333,10 @@ void SketchSession::clicked(double x, double y, Qt::KeyboardModifiers modifiers)
     }
     if (toolKind_ == Tool::Image) {
         placeImage({x, y});
+        return;
+    }
+    if (toolKind_ == Tool::Dimension) {
+        dimensionClicked({x, y});
         return;
     }
     if (!tool_) {
@@ -801,12 +885,17 @@ bool SketchSession::askDimensionValue(sketch::Constraint& dimension)
     const bool angle = dimension.type == sketch::ConstraintType::Angle;
     const Units& units = Units::instance();
     const double shown = angle ? std::abs(dimension.value) * 180.0 / std::numbers::pi : units.toDisplay(std::abs(dimension.value));
-    // El cuadro acepta un número o una expresión con parámetros («grosor * 2»); en las longitudes el
-    // valor del cuadro está siempre en milímetros y se muestra en la unidad elegida.
-    QDialog dialog(&viewport_);
-    dialog.setWindowTitle(QStringLiteral("Cota"));
-    auto* form = new QFormLayout(&dialog);
-    auto* box = new ExpressionSpinBox(&dialog);
+    // El campo sale sobre el lienzo, junto al cursor (que está sobre lo que se acota o sobre su cota), como en
+    // Onshape: se escribe y Enter acepta; Esc o un clic fuera lo cancelan. Acepta un número o una expresión con
+    // parámetros («grosor * 2»); en las longitudes el valor del campo está siempre en milímetros y se muestra en la
+    // unidad elegida.
+    QFrame popup(&viewport_, Qt::Popup);
+    popup.setFrameShape(QFrame::StyledPanel);
+    popup.setAutoFillBackground(true);
+    auto* row = new QHBoxLayout(&popup);
+    row->setContentsMargins(8, 4, 8, 4);
+    row->setSpacing(8);
+    auto* box = new ExpressionSpinBox(&popup);
     box->setDecimals(3);
     if (angle) {
         box->setRange(0.0, 360.0);
@@ -821,15 +910,32 @@ bool SketchSession::askDimensionValue(sketch::Constraint& dimension)
     if (!dimension.expression.empty()) {
         box->setExpression(QString::fromStdString(dimension.expression));
     }
-    box->setToolTip(box->toolTip().isEmpty() ? QStringLiteral("Un número o una expresión con parámetros (por ejemplo «grosor * 2»)")
-                                             : box->toolTip());
-    form->addRow(angle ? QStringLiteral("Ángulo:") : QStringLiteral("Valor:"), box);
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    form->addRow(buttons);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    box->setMinimumWidth(120);
+    box->setToolTip(QStringLiteral("Un número o una expresión con parámetros (por ejemplo «grosor * 2») · Enter acepta · Esc cancela"));
+    row->addWidget(new QLabel(dimensionCaption(dimension.type), &popup));
+    row->addWidget(box);
+
+    QEventLoop loop;
+    bool accepted = false;
+    auto* keys = new InlineEditorKeys(&popup, &loop, &accepted);
+    popup.installEventFilter(keys);
+    box->installEventFilter(keys);
+    if (QLineEdit* edit = box->findChild<QLineEdit*>()) {
+        edit->installEventFilter(keys);
+    }
+    popup.adjustSize();
+    QPoint at = QCursor::pos() + QPoint(16, 16);
+    if (const QScreen* screen = QGuiApplication::screenAt(QCursor::pos())) {
+        const QRect area = screen->availableGeometry();
+        at.setX(std::clamp(at.x(), area.left(), std::max(area.left(), area.right() - popup.width())));
+        at.setY(std::clamp(at.y(), area.top(), std::max(area.top(), area.bottom() - popup.height())));
+    }
+    popup.move(at);
+    popup.show();
+    box->setFocus();
     box->selectAll();
-    if (dialog.exec() != QDialog::Accepted) {
+    loop.exec();
+    if (!accepted) {
         return false;
     }
     box->interpretText();
@@ -841,16 +947,21 @@ bool SketchSession::askDimensionValue(sketch::Constraint& dimension)
     return true;
 }
 
-void SketchSession::addDimension()
+bool SketchSession::addDimension()
 {
+    if (selection_.empty() && toolKind_ != Tool::Dimension) {
+        // Sin nada elegido: se entra en el modo Cota y se hace clic en lo que se quiere acotar.
+        setTool(Tool::Dimension);
+        return false;
+    }
     std::optional<sketch::Constraint> dimension = sketch::dimensionFromSelection(sketch_, selection_);
     if (!dimension) {
         emit message(QStringLiteral("Cota: selecciona una línea, un círculo, un arco, dos puntos, "
                                     "un punto y una línea, o dos líneas"));
-        return;
+        return false;
     }
     if (!askDimensionValue(*dimension)) {
-        return;
+        return false;
     }
     sketch::Sketch before = sketch_;
     const sketch::ConstraintId id = sketch_.addConstraint(*dimension);
@@ -867,6 +978,59 @@ void SketchSession::addDimension()
     selection_.clear();
     emit selectionChanged();
     solveAndShow();
+    return true;
+}
+
+void SketchSession::dimensionClicked(sketch::Vec2 point)
+{
+    // Un clic sobre una cota existente: se edita su valor.
+    if (const sketch::ConstraintId id = annotationAt(point)) {
+        const sketch::Constraint* c = sketch_.constraint(id);
+        if (c != nullptr && sketch::isDimensional(c->type)) {
+            editDimension(id);
+        }
+        return;
+    }
+    const sketch::Ref picked = sketch::pick(sketch_, point, kSnapRadiusPx * viewport_.sketchPixelSize());
+    if (picked.empty()) {
+        // Clic en el vacío: se empieza de nuevo.
+        selection_.clear();
+        showSketch();
+        emit selectionChanged();
+        return;
+    }
+    if (std::erase_if(selection_, [&](sketch::Ref r) { return r == picked; }) == 0) {
+        selection_.push_back(picked);
+    }
+    showSketch();
+    emit selectionChanged();
+    if (selection_.empty()) {
+        return;
+    }
+    if (!sketch::dimensionFromSelection(sketch_, selection_)) {
+        if (selection_.size() == 1) {
+            emit message(QStringLiteral("Elige otro elemento para acotar la distancia o el ángulo (un punto con otro punto o con una línea; dos líneas)"));
+            return;
+        }
+        // Esos elementos no se pueden acotar juntos: se empieza de nuevo con el último.
+        selection_ = {picked};
+        showSketch();
+        emit selectionChanged();
+        if (!sketch::dimensionFromSelection(sketch_, selection_)) {
+            emit message(QStringLiteral("Esos elementos no se pueden acotar juntos"));
+            return;
+        }
+    }
+    const bool single = selection_.size() == 1;
+    const bool created = addDimension();
+    if (!created && single && selection_.size() == 1 && sketch_.entity(selection_[0].entity) != nullptr &&
+        !std::holds_alternative<sketch::Line>(sketch_.entity(selection_[0].entity)->geometry)) {
+        // Se canceló en un círculo, arco o elipse: no hay con qué emparejarlo, se empieza de nuevo. (Una línea
+        // se deja elegida: un segundo clic en otra línea da el ángulo o la distancia entre las dos.)
+        selection_.clear();
+        showSketch();
+        emit selectionChanged();
+    }
 }
 
 void SketchSession::editDimension(sketch::ConstraintId id)

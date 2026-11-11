@@ -122,6 +122,38 @@ TEST_CASE("Anotaciones: iconos apilados, cotas y selección", "[sketch][annotati
     REQUIRE(formatDimension(Constraint::diameter(1, 12.5)) == "Ø12.5");
 }
 
+TEST_CASE("Las cotas de círculos con el mismo centro van a ángulos distintos y no se pisan", "[sketch][annotations]")
+{
+    Sketch s;
+    // Radios casi iguales: con el mismo ángulo los tres textos caerían casi en el mismo punto.
+    const EntityId a = s.addCircle({0, 0}, 10.0);
+    const EntityId b = s.addCircle({0, 0}, 11.0);
+    const EntityId c = s.addCircle({0, 0}, 12.0);
+    const EntityId other = s.addCircle({100, 0}, 10.0);
+    s.addConstraint(Constraint::diameter(a, 20.0));
+    s.addConstraint(Constraint::diameter(b, 22.0));
+    s.addConstraint(Constraint::diameter(c, 24.0));
+    s.addConstraint(Constraint::diameter(other, 20.0));
+
+    const double px = 0.1;
+    const auto notes = layoutAnnotations(s, px);
+    REQUIRE(notes.size() == 4);
+    // Ángulo de cada texto visto desde el centro común.
+    const auto angleOf = [](const Annotation& n) { return std::atan2(n.anchor.y, n.anchor.x); };
+    REQUIRE(std::abs(angleOf(notes[0]) - angleOf(notes[1])) > 0.3);
+    REQUIRE(std::abs(angleOf(notes[1]) - angleOf(notes[2])) > 0.3);
+    REQUIRE(std::abs(angleOf(notes[0]) - angleOf(notes[2])) > 0.3);
+    // Los textos están separados entre sí (antes, a 45° los tres, se apilaban en la misma línea).
+    for (std::size_t i = 0; i < 3; ++i) {
+        for (std::size_t j = i + 1; j < 3; ++j) {
+            const double gap = std::hypot(notes[i].anchor.x - notes[j].anchor.x, notes[i].anchor.y - notes[j].anchor.y);
+            REQUIRE(gap > 3.0);
+        }
+    }
+    // Un círculo con otro centro conserva el ángulo de siempre (45°).
+    REQUIRE_THAT(std::atan2(notes[3].anchor.y, notes[3].anchor.x - 100.0), Catch::Matchers::WithinAbs(std::numbers::pi / 4.0, 0.2));
+}
+
 TEST_CASE("Las cotas se muestran en la unidad elegida (el sketch sigue en milímetros)", "[annotations]")
 {
     using namespace nuf::sketch;

@@ -402,6 +402,25 @@ La app ya no se cuelga mientras recalcula: lo lento (una rosca cortante, un engr
 
 ---
 
+## Cotas sobre el lienzo (estilo Onshape) — EN PRUEBA
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| C.1 | En un sketch, dibuja un **círculo con dos clics** (centro y un punto del borde), sin escribir nada | Queda dibujado sin cota |
+| C.2 | Pulsa **D** (o el botón Cota) sin nada seleccionado | La barra de estado dice «Cota: clic en un círculo, arco o línea…»; al pasar el cursor se resalta lo que se acotaría |
+| C.3 | Haz clic en el círculo | Sale un **campo pequeño junto al cursor** («Ø 20.000 mm») con el valor actual seleccionado. Escribe 30 y Enter: el diámetro pasa a 30 y se ve la cota «Ø30» |
+| C.4 | Escribe una expresión con un parámetro (por ejemplo `grosor * 2`) | Se acepta igual que antes (si el parámetro existe) |
+| C.5 | Con el modo Cota activo, haz clic en la cota «Ø30» | Se reabre el campo con su valor; cámbialo y Enter |
+| C.6 | Abre el campo y pulsa Esc, o haz clic fuera | No cambia nada (el clic fuera solo cierra el campo) |
+| C.7 | Dibuja **tres círculos con el mismo centro** y radios parecidos y acótalos con un clic cada uno | Las cotas salen en **ángulos distintos** (cada una 30° más que la anterior) y los textos no se pisan |
+| C.8 | Haz clic en una **línea**, y luego (con la primera elegida) en otra línea | La primera abre el campo de su longitud (Esc para no acotarla); con dos líneas elegidas sale el ángulo o la distancia entre ellas |
+| C.9 | Haz clic en **dos puntos** (o un punto y una línea) | Sale el campo de la distancia entre ellos |
+| C.10 | Pulsa Esc con algo elegido, y otra vez Esc | La primera quita lo elegido; la segunda sale del modo Cota |
+| C.11 | Selecciona una línea normalmente y pulsa D | Funciona como antes (acota lo seleccionado), ahora con el campo sobre el lienzo |
+| C.12 | Deshacer (Ctrl+Z) tras acotar | Quita la cota |
+
+---
+
 ## Mover y girar arrastrando (estilo Orca) — EN PRUEBA
 
 | # | Haz esto | Debe pasar |
