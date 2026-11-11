@@ -21,6 +21,7 @@
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QScreen>
+#include <QTimer>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
 #include <QFontComboBox>
@@ -99,6 +100,7 @@ constexpr double kSnapRadiusPx = 8.0;
 // A cuántos píxeles de la recta horizontal o vertical de un punto el cursor se
 // pega a ella (alineación inferida, la «línea naranja»).
 constexpr double kAlignRadiusPx = 6.0;
+constexpr int kAwakeDwellMs = 300;  // lo que hay que esperar sobre un punto para despertarlo
 constexpr double kAlignReleasePx = 10.0;  // histéresis: se suelta más lejos de lo que se pega
 
 sketch::Geometry translated(sketch::Geometry geometry, sketch::Vec2 d)
@@ -326,15 +328,26 @@ void SketchSession::cursorMoved(bool hasPoint, double x, double y)
         cursor_ = snapAt({x, y});
         if (tool_) {
             tool_->move(*cursor_);
-            // Pasar por un punto lo «despierta»: luego se puede alinear con él
-            // desde lejos. Se recuerdan los dos últimos.
-            if ((cursor_->kind == sketch::SnapKind::Point || cursor_->kind == sketch::SnapKind::Center)
-                && cursor_->ref.entity != sketch::Sketch::kOrigin
-                && std::ranges::find(awake_, cursor_->ref) == awake_.end()) {
-                awake_.push_back(cursor_->ref);
-                if (awake_.size() > 2) {
-                    awake_.erase(awake_.begin());
-                }
+            // Quedarse un momento (0,3 s) sobre un punto lo «despierta»: luego se
+            // puede alinear con él desde lejos. Se recuerdan los dos últimos, y
+            // pasar de largo no despierta nada.
+            const bool overPoint = (cursor_->kind == sketch::SnapKind::Point || cursor_->kind == sketch::SnapKind::Center)
+                                   && cursor_->ref.entity != sketch::Sketch::kOrigin
+                                   && std::ranges::find(awake_, cursor_->ref) == awake_.end();
+            if (!overPoint) {
+                dwellRef_ = {};
+            } else if (!(dwellRef_ == cursor_->ref)) {
+                dwellRef_ = cursor_->ref;
+                QTimer::singleShot(kAwakeDwellMs, this, [this, ref = cursor_->ref] {
+                    if (tool_ && cursor_ && dwellRef_ == ref && cursor_->ref == ref
+                        && std::ranges::find(awake_, ref) == awake_.end()) {
+                        awake_.push_back(ref);
+                        if (awake_.size() > 2) {
+                            awake_.erase(awake_.begin());
+                        }
+                        showPreview();
+                    }
+                });
             }
         }
     }
@@ -1221,7 +1234,16 @@ void SketchSession::showPreview()
         }
     }
     const bool square = marker && cursor_->kind == sketch::SnapKind::Midpoint;
-    viewport_.showSketchPreview(geometry, marker, guides, badge, badgeAt, square);
+    // Los puntos despiertos (referencia de las alineaciones) llevan un anillo.
+    std::vector<sketch::Vec2> awake;
+    if (tool_) {
+        for (const sketch::Ref& ref : awake_) {
+            if (const auto position = sketch_.point(ref)) {
+                awake.push_back(*position);
+            }
+        }
+    }
+    viewport_.showSketchPreview(geometry, marker, guides, badge, badgeAt, square, awake);
 }
 
 } // namespace nuf::app

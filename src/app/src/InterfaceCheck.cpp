@@ -1045,6 +1045,52 @@ int InterfaceCheck::run()
         undoAll();
     });
 
+    // Inferencias al dibujar: con la herramienta Línea, llevar el cursor a la altura del origen dibuja la guía naranja
+    // discontinua (se cuentan sus píxeles) y quita el enderezado; con Mayús suprimida no habría guía (no se prueba aquí).
+    step(QStringLiteral("Guía naranja de alineación al dibujar"), [&] {
+        blocking(QStringLiteral("abrir un sketch"), [&] {
+            window_.startSketch(sketch::Plane::xy(), QStringLiteral("prueba"), {});
+        });
+        expect(window_.sketch_ != nullptr, QStringLiteral("no se abrió el sketch"));
+        if (window_.sketch_ == nullptr) {
+            return;
+        }
+        SketchSession* session = window_.sketch_.get();
+        const auto countOrange = [&] {
+            const QImage image = window_.viewport_->grabFramebuffer();
+            long count = 0;
+            for (int py = 0; py < image.height(); ++py) {
+                for (int px = 0; px < image.width(); ++px) {
+                    const QColor c = image.pixelColor(px, py);
+                    count += (c.red() > 200 && c.green() > 120 && c.green() < 200 && c.blue() < 120) ? 1 : 0;
+                }
+            }
+            return count;
+        };
+        session->setTool(SketchSession::Tool::Line);
+        settle(300);
+        const long before = countOrange();
+        const double reach = 20.0;
+        blocking(QStringLiteral("mover el cursor a la altura del origen"), [&] {
+            emit window_.viewport_->sketchCursorMoved(true, reach, 0.02);
+        });
+        settle(300);
+        const long during = countOrange();
+        expect(during > before + 25, QStringLiteral("no se ve la guía naranja de alineación (%1 → %2 píxeles naranjas)").arg(before).arg(during));
+        if (current_ != nullptr) {
+            current_->detail += QStringLiteral(" guía: %1 → %2 px").arg(before).arg(during);
+        }
+        // Al alejar el cursor la guía desaparece.
+        blocking(QStringLiteral("alejar el cursor"), [&] { emit window_.viewport_->sketchCursorMoved(true, reach, 9.0); });
+        settle(300);
+        const long after = countOrange();
+        expect(after < during - 25, QStringLiteral("la guía no desapareció al alejar el cursor (%1 → %2)").arg(during).arg(after));
+        session->setTool(SketchSession::Tool::None);
+        blocking(QStringLiteral("terminar el sketch"), [&] { window_.finishSketch(); });
+        waitIdle();
+        undoAll();
+    });
+
     // Sección y medición con un cuerpo.
     step(QStringLiteral("Sección y medición con un cuerpo"), [&] {
         expect(openChangeAccept(window_.boxAction_, 3) == 1, QStringLiteral("no se creó la caja"));

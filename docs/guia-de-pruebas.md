@@ -449,6 +449,19 @@ Rama `feature/inferencias-sketch`. Solo la **alineación horizontal/vertical** c
 | I.15 | Empieza una línea nueva desde el **extremo de otra** línea que ya existe y haz lo de I.12 | También infiere con esa línea |
 | I.16 | Cerca de la horizontal o la vertical, o cerca de un punto existente, o con **Mayús/Ctrl** pulsada | Mandan la horizontal/vertical y los puntos antes que ⊥/∥; Mayús y Ctrl las suprimen |
 | I.11 | **Anota** qué te falta o molesta (sobre todo: si la guía aparece demasiado, si «tiembla» al pegarse y se suelta, si querías ver un anillo en el punto despierto) | Una nota por caso: son los pendientes de la entrega |
+## Pendientes del sketch — EN PRUEBA
+
+Rama `feature/pendientes-sketch`.
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| N.1 | Con una cota o un icono cuyo sitio natural cae sobre otra línea del dibujo | El texto se aparta de esa línea si hay hueco |
+| N.2 | Con **Línea**, pasa el cursor **rápido** por un punto y sigue; luego quédate **medio segundo** sobre otro | El primero no despierta; el segundo muestra un **anillo amarillo** y desde lejos se alinea con él |
+| N.3 | Aleja el cursor del todo y vuelve a la herramienta | El anillo solo se ve con una herramienta de dibujo activa |
+| N.4 | **Anota** qué te falta o molesta | Son los pendientes |
+
+---
+
 ## Figuras abiertas — EN PRUEBA
 
 Rama `feature/figuras-abiertas`.

@@ -1456,9 +1456,19 @@ public:
 
     void showSketchPreview(const std::vector<sketch::Geometry>& geometry, std::optional<sketch::Vec2> snapPoint,
                            const std::vector<std::pair<sketch::Vec2, sketch::Vec2>>& guides,
-                           const std::string& badge, sketch::Vec2 badgeAt, bool markerSquare)
+                           const std::string& badge, sketch::Vec2 badgeAt, bool markerSquare,
+                           const std::vector<sketch::Vec2>& awake)
     {
         preview->clear();
+        if (!awake.empty()) {
+            // Anillo amarillo (7 px) en cada punto despierto.
+            SketchStroke ring = freeStroke();
+            ring.color = rgb(0xFF, 0xC9, 0x40);
+            ring.width = 1.5;
+            for (const sketch::Vec2& at : awake) {
+                preview->addGeometry(sketch::Circle{at, 7.0 * pixelSize()}, ring);
+            }
+        }
         if (snapPoint && markerSquare) {
             // Cuadrado naranja discontinuo (7 px de semilado) alrededor del punto.
             const double h = 7.0 * pixelSize();

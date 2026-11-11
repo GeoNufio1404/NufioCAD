@@ -43,6 +43,24 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 - **Pruebas:** 221 unitarias y 34 pasos de la prueba de interfaz, en verde en Windows (Debug). La prueba de interfaz **aún no cuenta los píxeles naranjas** de la guía (pendiente I8).
 - **Riesgos al volver atrás:** ninguno en archivos guardados: las restricciones creadas son las horizontal/vertical de siempre.
+## Pendientes del sketch: cotas sobre el dibujo, puntos despiertos con espera y anillo, prueba de la guía — 11 nov. 2026
+
+- **Rama:** `feature/pendientes-sketch` (junta `feature/figuras-abiertas` y `feature/inferencias-sketch-2`). **Sin fusionar** hasta la prueba manual (guía N.1–N.4).
+- **Qué hace:** (1) los textos de las cotas y los iconos **se apartan de las líneas y puntos del dibujo** (pesa menos que chocar con otro texto: si no hay hueco, se queda donde menos tapa). (2) Un punto solo se **despierta** (referencia de las alineaciones) tras **0,3 s** de espera del cursor encima: pasar de largo ya no despierta nada. (3) Los puntos despiertos llevan un **anillo amarillo**. (4) La prueba de interfaz tiene un paso nuevo que **cuenta los píxeles naranjas** de la guía de alineación y comprueba que desaparece al alejar el cursor.
+
+| Parte | Dónde (para deshacerla a mano) |
+|---|---|
+| Cotas sobre el dibujo | `addGeometryBoxes`, `kGeometryWeight` y el parámetro `geometry` de `placeAnnotation` en `src/sketch/src/Annotations.cpp` |
+| Espera y anillo | `kAwakeDwellMs`, `dwellRef_` y `cursorMoved`/`showPreview` en `src/app/src/SketchSession.cpp/.hpp`; parámetro `awake` de `showSketchPreview` (`Viewport.hpp/.cpp`, `ViewportImpl.hpp`) |
+| Prueba de la guía | paso «Guía naranja de alineación al dibujar» en `src/app/src/InterfaceCheck.cpp` |
+| Pruebas | 1 caso nuevo en `tests/test_annotations_overlap.cpp` |
+
+- **Pruebas:** 244 unitarias (2068 aserciones) y 35 pasos de la prueba de interfaz, en verde en Windows (Debug). Además, el build ya fuerza los mensajes del compilador en inglés (`VSLANG=1033`) para que ninja rastree las cabeceras.
+- **Pendiente (decidido dejar):** recordar la posición de cada cota entre repintados (hace falta estado en el visor y que el picking use el mismo cálculo), prioridad a lo seleccionado o bajo el cursor, línea de llamada si nada queda libre, ⊥/∥ para rectángulo y arco, referencia «despierta» lejana para ⊥/∥, arco tangente a una línea desde la herramienta Arco, y dibujar el símbolo ⊥/∥/T como icono en vez de texto.
+- **Riesgos al volver atrás:** ninguno en archivos guardados.
+
+---
+
 ## Figuras abiertas — 11 nov. 2026
 
 - **Rama:** `feature/figuras-abiertas` (sale de `develop`). **Sin fusionar** hasta la prueba manual (guía M.1–M.9).

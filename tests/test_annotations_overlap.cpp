@@ -163,3 +163,18 @@ TEST_CASE("Cotas: el ángulo se dibuja en la esquina de los segmentos, sea cual 
     REQUIRE(other.front().anchor.x > 0.0);
     REQUIRE(other.front().anchor.y > 0.0);
 }
+
+TEST_CASE("Cotas: el texto se aparta de las líneas del dibujo", "[sketch][annotations]")
+{
+    const double px = 0.1;
+    Sketch s;
+    const EntityId line = s.addLine({0, 0}, {10, 0});
+    s.addConstraint(Constraint::length(line, 10.0));
+    const Vec2 natural = layoutAnnotations(s, px).front().anchor;
+    // Una línea larga justo donde caería el texto.
+    s.addLine({natural.x - 6.0, natural.y}, {natural.x + 6.0, natural.y});
+    const auto notes = layoutAnnotations(s, px);
+    REQUIRE(notes.size() == 1);
+    const Vec2 moved = notes.front().anchor;
+    REQUIRE(std::abs(moved.y - natural.y) > 9.0 * px * 0.99);  // ya no la tapa
+}
