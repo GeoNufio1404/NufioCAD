@@ -250,6 +250,32 @@ std::vector<Profile> findProfiles(const Sketch& sketch, double tolerance)
                     crossings.push_back(endA ? *endA : endB ? *endB : p);
                 }
             }
+            // Rectas encimadas (misma recta y tramo en común): ninguna cruza a
+            // la otra, pero cada extremo que cae dentro de la otra la parte.
+            const auto* lineA = std::get_if<Line>(&sources[i].entity->geometry);
+            const auto* lineB = std::get_if<Line>(&sources[j].entity->geometry);
+            if (lineA && lineB) {
+                const auto strictlyInside = [&](const Line& host, Vec2 p) {
+                    const Vec2 d{host.end.x - host.start.x, host.end.y - host.start.y};
+                    const double length = std::hypot(d.x, d.y);
+                    if (length <= tolerance) {
+                        return false;
+                    }
+                    const double along = ((p.x - host.start.x) * d.x + (p.y - host.start.y) * d.y) / length;
+                    const double across = ((p.x - host.start.x) * d.y - (p.y - host.start.y) * d.x) / length;
+                    return std::abs(across) <= tolerance && along > tolerance && along < length - tolerance;
+                };
+                for (Vec2 p : {lineB->start, lineB->end}) {
+                    if (strictlyInside(*lineA, p)) {
+                        crossings.push_back(p);
+                    }
+                }
+                for (Vec2 p : {lineA->start, lineA->end}) {
+                    if (strictlyInside(*lineB, p)) {
+                        crossings.push_back(p);
+                    }
+                }
+            }
             for (const Vec2& p : crossings) {
                 splits[i].emplace_back(positionOn(sources[i].points, p), p);
                 splits[j].emplace_back(positionOn(sources[j].points, p), p);
@@ -321,12 +347,29 @@ std::vector<Profile> findProfiles(const Sketch& sketch, double tolerance)
         }
     }
 
+    // Tramos de recta repetidos (dos rectas encimadas dan el mismo tramo
+    // entre los mismos vértices): se queda uno solo.
+    for (std::size_t a = 0; a < edges.size(); ++a) {
+        if (!edges[a].alive || edges[a].points.size() != 2) {
+            continue;
+        }
+        for (std::size_t b = a + 1; b < edges.size(); ++b) {
+            if (edges[b].alive && edges[b].points.size() == 2
+                && ((edges[a].from == edges[b].from && edges[a].to == edges[b].to)
+                    || (edges[a].from == edges[b].to && edges[a].to == edges[b].from))) {
+                edges[b].alive = false;
+            }
+        }
+    }
+
     // Quita las aristas sueltas (con un extremo que no se une a nada): no
     // pueden cerrar ninguna región.
     std::vector<int> degree(vertices.size(), 0);
     for (const Edge& e : edges) {
-        ++degree[e.from];
-        ++degree[e.to];
+        if (e.alive) {
+            ++degree[e.from];
+            ++degree[e.to];
+        }
     }
     for (bool changed = true; changed;) {
         changed = false;

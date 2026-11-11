@@ -177,3 +177,21 @@ TEST_CASE("Perfiles: círculo tangente a los cuatro lados de un cuadrado da 5 re
     }
     REQUIRE_THAT(total, WithinAbs(400.0, 0.5));
 }
+
+TEST_CASE("Perfiles: rectas encimadas sobre el mismo eje no repiten tramos ni dejan púas", "[sketch][profiles]")
+{
+    // Caso del archivo de prueba del usuario: una recta larga y, encima, dos
+    // más cortas que la suman; un rectángulo cuelga de la unión.
+    Sketch s;
+    s.addLine({0, 0}, {22, 0});
+    s.addLine({0, 0}, {10, 0});
+    s.addLine({10, 0}, {22, 0});
+    s.addLine({10, 0}, {10, 5});
+    s.addLine({10, 5}, {14, 5});
+    s.addLine({14, 5}, {14, 0});
+    auto profiles = findProfiles(s);
+    REQUIRE(profiles.size() == 1);
+    REQUIRE(profiles.front().outer.edges.size() == 4);
+    REQUIRE_THAT(profiles.front().area, WithinAbs(20.0, 1e-6));
+}
+

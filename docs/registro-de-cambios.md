@@ -42,6 +42,16 @@ flowchart TD
 
 ---
 
+## Arreglo: rectas encimadas en el sketch — 11 nov. 2026
+
+- **Rama:** `feature/cotas-en-el-lienzo`.
+- **Qué pasaba:** en el sketch de `Prueba.nuf` había una recta larga con otras dos encima (que sumaban lo mismo) y un rectángulo colgando de la unión. Dos rectas sobre el mismo eje no «se cruzan», así que no se partían en la unión y el buscador de perfiles dejaba tramos duplicados y púas: salían 3 perfiles raros (25, 11 y 8 aristas, con un mismo tramo recorrido de ida y vuelta) en vez de las 9 regiones reales.
+- **Qué cambió:** en `findProfiles` (`src/sketch/src/Profiles.cpp`) cada extremo de una recta que cae dentro de otra recta colineal la parte ahí, y los tramos de recta repetidos entre los mismos vértices se reducen a uno; el conteo de grados ignora los tramos descartados.
+- **Prueba:** «Perfiles: rectas encimadas sobre el mismo eje no repiten tramos ni dejan púas» (`tests/test_sketch_profiles.cpp`). 214 pruebas unitarias en verde.
+- **Volver atrás:** `git revert` del commit; no cambia el formato `.nuf`.
+
+---
+
 ## Diagramas de la documentación a Mermaid — 10 nov. 2026
 
 - **Rama:** `feature/cotas-en-el-lienzo` (solo documentación; no cambia código ni pruebas).
