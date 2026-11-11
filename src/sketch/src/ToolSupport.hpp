@@ -6,6 +6,7 @@
 #include <nuf/sketch/Snap.hpp>
 
 #include <optional>
+#include <vector>
 
 namespace nuf::sketch::detail {
 
@@ -16,6 +17,26 @@ double distance(Vec2 a, Vec2 b);
 // Une un punto recién creado con aquello a lo que se ajustó el cursor
 // (coincidente, punto medio o punto sobre curva).
 void attach(Sketch& sketch, Ref created, const Snap& snapped);
+
+// Figura «abierta»: tras el último clic la figura ya existe en el sketch pero
+// la herramienta sigue enseñando sus campos (lados, ancho, diámetro…) para
+// cambiarlos escribiendo; se cierra con un clic nuevo, Esc o Enter sin valores.
+// Guarda lo creado (para rehacerlo con otros valores) y los dos clics.
+struct OpenFigure {
+    std::vector<EntityId> ids;
+    Snap first;
+    Snap second;
+    Snap third;        // tercer clic, en las figuras de tres (rectángulo por 3 puntos)
+    double value = 0.0;  // medida auxiliar (radio de la ranura)
+    std::vector<std::optional<double>> typed;  // medidas ya fijadas con cotas
+};
+
+// Entidades añadidas al sketch desde que tenía «mark» entidades.
+std::vector<EntityId> entitiesSince(const Sketch& sketch, std::size_t mark);
+
+// Borra esas entidades (con sus restricciones). false, sin tocar nada, si
+// alguna ya no existe (por ejemplo tras deshacer).
+bool discardEntities(Sketch& sketch, const std::vector<EntityId>& ids);
 
 // Si una curva nueva pasa por un punto existente al que se ajustó el cursor
 // (no es uno de sus extremos), pone ese punto sobre la curva.

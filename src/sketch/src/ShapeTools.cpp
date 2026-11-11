@@ -56,6 +56,7 @@ public:
 
     bool click(Sketch& sketch, const Snap& cursor) override
     {
+        open_.reset();  // un clic nuevo da por buena la figura abierta
         if (!a_) {
             a_ = cursor;
             return false;
@@ -73,6 +74,9 @@ public:
 
     std::vector<std::string> valueFields() const override
     {
+        if (open_) {
+            return {"Longitud", "Alto"};
+        }
         if (!a_) {
             return {};
         }
@@ -81,6 +85,11 @@ public:
 
     std::vector<double> currentValues() const override
     {
+        if (open_) {
+            const Vec2 n = leftNormal(unit(sub(open_->second.point, open_->first.point)));
+            return {distance(open_->first.point, open_->second.point),
+                    std::abs(dot(sub(open_->third.point, open_->second.point), n))};
+        }
         if (!a_) {
             return {};
         }
@@ -94,6 +103,32 @@ public:
 
     bool applyValues(Sketch& sketch, const std::vector<std::optional<double>>& values) override
     {
+        amended_ = false;
+        if (open_) {
+            if (values.size() < 2 || (!values[0] && !values[1])) {
+                open_.reset();  // Enter sin valores: queda como está
+                return false;
+            }
+            const OpenFigure old = *open_;
+            const Vec2 u = unit(sub(old.second.point, old.first.point));
+            const Vec2 n = leftNormal(u);
+            const double signedHeight = dot(sub(old.third.point, old.second.point), n);
+            const double length = values[0].value_or(distance(old.first.point, old.second.point));
+            const double height = values[1].value_or(std::abs(signedHeight));
+            if (!(length > kMinLength && height > kMinLength)) {
+                return false;
+            }
+            if (!discardEntities(sketch, old.ids)) {
+                open_.reset();
+                return false;
+            }
+            a_ = old.first;
+            b_ = Snap{add(old.first.point, scale(length, u))};
+            length_ = values[0] ? values[0] : old.typed[0];
+            amended_ = create(sketch, Snap{add(b_->point, scale(signedHeight < 0.0 ? -height : height, n))},
+                              values[1] ? values[1] : old.typed[1]);
+            return amended_;
+        }
         if (!a_ || values.empty() || !values[0] || !(*values[0] > kMinLength)) {
             return false;
         }
@@ -113,6 +148,10 @@ public:
 
     bool cancel() override
     {
+        if (open_) {
+            open_.reset();
+            return true;
+        }
         const bool active = a_.has_value();
         a_.reset();
         b_.reset();
@@ -135,6 +174,9 @@ public:
 
     std::string hint() const override
     {
+        if (open_) {
+            return "Rectángulo creado: escribe longitud, Tab, alto y Enter para cambiarlo · clic o Esc para terminar";
+        }
         if (!a_) {
             return "Clic para la primera esquina";
         }
@@ -161,6 +203,7 @@ private:
         if (std::abs(height(third.point)) < kMinLength) {
             return false;
         }
+        const std::size_t mark = sketch.entities().size();
         const auto lines = closedPolyline(sketch, corners(third.point));
         sketch.addConstraint(Constraint::perpendicular(lines[0], lines[1]));
         sketch.addConstraint(Constraint::parallel(lines[0], lines[2]));
@@ -179,7 +222,10 @@ private:
         if (typedHeight) {
             sketch.addConstraint(Constraint::length(lines[1], *typedHeight));
         }
-        cancel();
+        open_ = OpenFigure{entitiesSince(sketch, mark), *a_, *b_, third, 0.0, {length_, typedHeight}};
+        a_.reset();
+        b_.reset();
+        length_.reset();
         return true;
     }
 
@@ -188,6 +234,11 @@ private:
     std::optional<Snap> b_;
     Straight straight_ = Straight::None;
     std::optional<double> length_;
+    std::optional<OpenFigure> open_;
+    bool amended_ = false;
+
+public:
+    bool amendedLast() const override { return amended_; }
 };
 
 // --- Rectángulo por centro -----------------------------------------------------------
@@ -198,6 +249,7 @@ public:
 
     bool click(Sketch& sketch, const Snap& cursor) override
     {
+        open_.reset();  // un clic nuevo da por buena la figura abierta
         if (!center_) {
             center_ = cursor;
             return false;
@@ -207,11 +259,15 @@ public:
 
     std::vector<std::string> valueFields() const override
     {
-        return center_ ? std::vector<std::string>{"Ancho", "Alto"} : std::vector<std::string>{};
+        return center_ || open_ ? std::vector<std::string>{"Ancho", "Alto"} : std::vector<std::string>{};
     }
 
     std::vector<double> currentValues() const override
     {
+        if (open_) {
+            return {2.0 * std::abs(open_->second.point.x - open_->first.point.x),
+                    2.0 * std::abs(open_->second.point.y - open_->first.point.y)};
+        }
         if (!center_) {
             return {};
         }
@@ -220,6 +276,30 @@ public:
 
     bool applyValues(Sketch& sketch, const std::vector<std::optional<double>>& values) override
     {
+        amended_ = false;
+        if (open_) {
+            if (values.size() < 2 || (!values[0] && !values[1])) {
+                open_.reset();  // Enter sin valores: queda como está
+                return false;
+            }
+            const OpenFigure old = *open_;
+            const Vec2 o = old.first.point;
+            const double sx = old.second.point.x >= o.x ? 1.0 : -1.0;
+            const double sy = old.second.point.y >= o.y ? 1.0 : -1.0;
+            const double width = values[0].value_or(2.0 * std::abs(old.second.point.x - o.x));
+            const double height = values[1].value_or(2.0 * std::abs(old.second.point.y - o.y));
+            if (!(width > 2.0 * kMinLength && height > 2.0 * kMinLength)) {
+                return false;
+            }
+            if (!discardEntities(sketch, old.ids)) {
+                open_.reset();
+                return false;
+            }
+            center_ = old.first;
+            amended_ = create(sketch, Snap{{o.x + sx * width / 2.0, o.y + sy * height / 2.0}},
+                              values[0] ? values[0] : old.typed[0], values[1] ? values[1] : old.typed[1]);
+            return amended_;
+        }
         if (!center_ || values.size() < 2) {
             return false;
         }
@@ -233,6 +313,10 @@ public:
 
     bool cancel() override
     {
+        if (open_) {
+            open_.reset();
+            return true;
+        }
         const bool active = center_.has_value();
         center_.reset();
         return active;
@@ -248,6 +332,9 @@ public:
 
     std::string hint() const override
     {
+        if (open_) {
+            return "Rectángulo creado: escribe ancho, Tab, alto y Enter para cambiarlo · clic o Esc para terminar";
+        }
         return center_ ? "Clic para una esquina (o escribe ancho, Tab, alto)" : "Clic para el centro del rectángulo";
     }
 
@@ -267,6 +354,7 @@ private:
         if (std::abs(corner.point.x - c.x) < kMinLength || std::abs(corner.point.y - c.y) < kMinLength) {
             return false;
         }
+        const std::size_t mark = sketch.entities().size();
         const auto pts = corners(corner.point);
         const auto lines = closedPolyline(sketch, pts);
         sketch.addConstraint(Constraint::horizontal(lines[0]));
@@ -287,12 +375,18 @@ private:
         if (height) {
             sketch.addConstraint(Constraint::length(lines[1], *height));
         }
+        open_ = OpenFigure{entitiesSince(sketch, mark), *center_, corner, {}, 0.0, {width, height}};
         center_.reset();
         return true;
     }
 
     Snap cursor_;
     std::optional<Snap> center_;
+    std::optional<OpenFigure> open_;
+    bool amended_ = false;
+
+public:
+    bool amendedLast() const override { return amended_; }
 };
 
 // --- Polígono regular ------------------------------------------------------------------
@@ -305,6 +399,7 @@ public:
 
     bool click(Sketch& sketch, const Snap& cursor) override
     {
+        open_.reset();  // un clic nuevo da por buena la figura abierta
         if (!first_) {
             first_ = cursor;
             return false;
@@ -314,7 +409,7 @@ public:
 
     std::vector<std::string> valueFields() const override
     {
-        if (!first_) {
+        if (!first_ && !open_) {
             return {"Lados"};
         }
         return {"Lados", mode_ == PolygonMode::Edge ? "Lado" : "Diámetro"};
@@ -322,6 +417,10 @@ public:
 
     std::vector<double> currentValues() const override
     {
+        if (open_) {
+            const double d = distance(open_->first.point, open_->second.point);
+            return {double(sides_), mode_ == PolygonMode::Edge ? d : 2.0 * d};
+        }
         if (!first_) {
             return {double(sides_)};
         }
@@ -331,6 +430,11 @@ public:
 
     bool applyValues(Sketch& sketch, const std::vector<std::optional<double>>& values) override
     {
+        amended_ = false;
+        if (open_) {
+            amended_ = reopen(sketch, values);
+            return amended_;
+        }
         if (!values.empty() && values[0]) {
             sides_ = std::clamp(int(std::lround(*values[0])), 3, 64);
         }
@@ -348,6 +452,10 @@ public:
 
     bool cancel() override
     {
+        if (open_) {
+            open_.reset();
+            return true;
+        }
         const bool active = first_.has_value();
         first_.reset();
         return active;
@@ -370,6 +478,9 @@ public:
     std::string hint() const override
     {
         const std::string sides = std::to_string(sides_) + " lados";
+        if (open_) {
+            return "Polígono creado (" + sides + "): escribe lados, Tab, tamaño y Enter para cambiarlos · clic o Esc para terminar";
+        }
         if (!first_) {
             return mode_ == PolygonMode::Edge ? "Polígono (" + sides + "): clic para el primer vértice · escribe el número de lados"
                                               : "Polígono (" + sides + "): clic para el centro · escribe el número de lados";
@@ -436,12 +547,42 @@ private:
         return shape;
     }
 
+    // Figura abierta: la rehace con otro número de lados o tamaño.
+    bool reopen(Sketch& sketch, const std::vector<std::optional<double>>& values)
+    {
+        if (values.empty() || (!values[0] && (values.size() < 2 || !values[1]))) {
+            open_.reset();  // Enter sin valores: queda como está
+            return false;
+        }
+        const OpenFigure old = *open_;
+        const int oldSides = sides_;
+        if (values[0]) {
+            sides_ = std::clamp(int(std::lround(*values[0])), 3, 64);
+        }
+        const bool typedSize = values.size() >= 2 && values[1].has_value();
+        const double size = typedSize ? (mode_ == PolygonMode::Edge ? *values[1] : *values[1] / 2.0)
+                                      : distance(old.first.point, old.second.point);
+        const Vec2 second = add(old.first.point, scale(size, unit(sub(old.second.point, old.first.point))));
+        first_ = old.first;
+        if (!layout(second) || !discardEntities(sketch, old.ids)) {
+            const bool gone = !layout(second) ? false : true;  // layout válido pero ya no existe: se cierra
+            sides_ = oldSides;
+            first_.reset();
+            if (gone) {
+                open_.reset();
+            }
+            return false;
+        }
+        return create(sketch, Snap{second}, typedSize ? values[1] : old.typed[0]);
+    }
+
     bool create(Sketch& sketch, const Snap& second, std::optional<double> typedSize)
     {
         const auto shape = layout(second.point);
         if (!shape) {
             return false;
         }
+        const std::size_t mark = sketch.entities().size();
         const auto lines = closedPolyline(sketch, shape->vertices);
         for (std::size_t k = 1; k < lines.size(); ++k) {
             sketch.addConstraint(Constraint::equal(lines[0], lines[k]));
@@ -477,6 +618,7 @@ private:
                 sketch.addConstraint(Constraint::diameter(circle, *typedSize));
             }
         }
+        open_ = OpenFigure{entitiesSince(sketch, mark), *first_, second, {}, 0.0, {typedSize}};
         first_.reset();
         return true;
     }
@@ -485,6 +627,11 @@ private:
     int sides_ = 6;
     Snap cursor_;
     std::optional<Snap> first_;
+    std::optional<OpenFigure> open_;
+    bool amended_ = false;
+
+public:
+    bool amendedLast() const override { return amended_; }
 };
 
 // --- Ranura ---------------------------------------------------------------------------------
@@ -497,6 +644,7 @@ public:
 
     bool click(Sketch& sketch, const Snap& cursor) override
     {
+        open_.reset();  // un clic nuevo da por buena la figura abierta
         if (!p1_) {
             p1_ = cursor;
             return false;
@@ -514,16 +662,44 @@ public:
 
     std::vector<std::string> valueFields() const override
     {
-        return p2_ ? std::vector<std::string>{"Ancho"} : std::vector<std::string>{};
+        return p2_ || open_ ? std::vector<std::string>{"Ancho"} : std::vector<std::string>{};
     }
 
     std::vector<double> currentValues() const override
     {
+        if (open_) {
+            return {2.0 * open_->value};
+        }
         return p2_ ? std::vector<double>{2.0 * radiusAt(cursor_.point)} : std::vector<double>{};
     }
 
     bool applyValues(Sketch& sketch, const std::vector<std::optional<double>>& values) override
     {
+        amended_ = false;
+        if (open_) {
+            // Ranura abierta: se rehace con el ancho escrito.
+            if (values.empty() || !values[0]) {
+                open_.reset();
+                return false;
+            }
+            const OpenFigure old = *open_;
+            if (!(*values[0] > kMinLength)) {
+                return false;
+            }
+            p1_ = old.first;
+            p2_ = old.second;
+            if (!layout(*values[0] / 2.0) || !discardEntities(sketch, old.ids)) {
+                const bool valid = layout(*values[0] / 2.0).has_value();
+                p1_.reset();
+                p2_.reset();
+                if (valid) {
+                    open_.reset();  // ya no existe (se deshizo)
+                }
+                return false;
+            }
+            amended_ = create(sketch, *values[0] / 2.0, values[0]);
+            return amended_;
+        }
         if (!p2_ || values.empty() || !values[0] || !(*values[0] > kMinLength)) {
             return false;
         }
@@ -532,6 +708,10 @@ public:
 
     bool cancel() override
     {
+        if (open_) {
+            open_.reset();
+            return true;
+        }
         const bool active = p1_.has_value();
         p1_.reset();
         p2_.reset();
@@ -557,6 +737,9 @@ public:
 
     std::string hint() const override
     {
+        if (open_) {
+            return "Ranura creada: escribe el ancho y Enter para cambiarlo · clic o Esc para terminar";
+        }
         if (!p1_) {
             switch (mode_) {
             case SlotMode::CenterToCenter: return "Clic para el centro de un extremo";
@@ -569,6 +752,8 @@ public:
         }
         return "Clic para el ancho (o escríbelo)";
     }
+
+    // (la indicación de la ranura abierta va en hint(), arriba)
 
 private:
     struct Shape {
@@ -629,6 +814,7 @@ private:
         if (!s) {
             return false;
         }
+        const std::size_t mark = sketch.entities().size();
         const EntityId top = sketch.addLine(s->top.start, s->top.end);
         const EntityId bottom = sketch.addLine(s->bottom.start, s->bottom.end);
         const EntityId endArc = sketch.addArc(s->arcAtEnd.center, r, s->arcAtEnd.startAngle, s->arcAtEnd.endAngle);
@@ -665,7 +851,9 @@ private:
         if (width) {
             sketch.addConstraint(Constraint::diameter(endArc, *width));
         }
-        cancel();
+        open_ = OpenFigure{entitiesSince(sketch, mark), *p1_, *p2_, {}, r, {width}};
+        p1_.reset();
+        p2_.reset();
         return true;
     }
 
@@ -674,6 +862,11 @@ private:
     std::optional<Snap> p1_;
     std::optional<Snap> p2_;
     Straight straight_ = Straight::None;
+    std::optional<OpenFigure> open_;
+    bool amended_ = false;
+
+public:
+    bool amendedLast() const override { return amended_; }
 };
 
 } // namespace

@@ -66,6 +66,12 @@ struct SnapOptions {
     // alignTolerance 0 no hay alineaciones.
     std::vector<AlignPoint> alignPoints;
     double alignTolerance = 0.0;
+    // Histéresis: la alineación que ya tenía el cursor (alignX/alignY de la
+    // posición anterior) se mantiene hasta alignRelease (≥ alignTolerance), para
+    // que la guía no tiemble al borde del radio de atracción.
+    Ref stickyX;
+    Ref stickyY;
+    double alignRelease = 0.0;
 };
 
 // Prioridad: puntos y centros, intersecciones, puntos medios, sobre una

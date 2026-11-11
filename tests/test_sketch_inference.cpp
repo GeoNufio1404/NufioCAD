@@ -221,3 +221,41 @@ TEST_CASE("Inferencias: sobre un eje también hay guía vertical", "[sketch][inf
     REQUIRE_THAT(snapped.point.y, WithinAbs(0.0, 1e-9));
     REQUIRE(snapped.alignX == Ref::of(p));
 }
+
+TEST_CASE("Inferencias: una línea que sale del extremo de un arco a casi su tangente queda tangente", "[sketch][inference]")
+{
+    for (const double turn : {1.5, 20.0}) {
+        Sketch s;
+        const double pi = 3.14159265358979;
+        s.addArc({0, 0}, 10.0, 0.0, pi / 4);  // termina a 45°; sigue hacia arriba a la izquierda
+        const Vec2 end{10 * std::cos(pi / 4), 10 * std::sin(pi / 4)};
+        const double heading = pi / 4 + pi / 2 + turn * pi / 180;
+        SnapOptions options;
+        options.tolerance = 0.5;
+        auto tool = makeLineTool();
+        for (const Vec2 p : {end, Vec2{end.x + 6 * std::cos(heading), end.y + 6 * std::sin(heading)}}) {
+            const Snap at = snap(s, p, options);
+            tool->move(at);
+            tool->click(s, at);
+        }
+        const auto tangents = std::ranges::count(s.constraints(), ConstraintType::Tangent, &Constraint::type);
+        REQUIRE(tangents == (turn < 3.0 ? 1 : 0));
+    }
+}
+
+TEST_CASE("Inferencias: la alineación que ya había se suelta más lejos (histéresis)", "[sketch][inference]")
+{
+    Sketch s;
+    const EntityId p = s.addPoint({0, 5});
+    SnapOptions options = alignedTo({{{0, 5}, Ref::of(p)}});
+    options.alignRelease = 1.0;
+    // A 0,8 de la recta (fuera de 0,5) no se pega por primera vez…
+    REQUIRE(snap(s, {20, 5.8}, options).guides.empty());
+    // …pero si ya estaba pegada, sigue hasta 1,0.
+    options.stickyY = Ref::of(p);
+    const Snap kept = snap(s, {20, 5.8}, options);
+    REQUIRE(kept.alignY == Ref::of(p));
+    REQUIRE_THAT(kept.point.y, WithinAbs(5.0, 1e-12));
+    // Más allá del radio de suelta, se libera.
+    REQUIRE(snap(s, {20, 6.5}, options).guides.empty());
+}

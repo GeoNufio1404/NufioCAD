@@ -1,4 +1,4 @@
-# Guía de pruebas manuales — NufioCAD
+﻿# Guía de pruebas manuales — NufioCAD
 
 Para ir probando fase por fase cuando haya tiempo. Cada prueba dice **qué hacer** y **qué debería pasar**; si algo no es así (o no te gusta cómo se siente), anótalo con la plantilla del final y mándamelo.
 
@@ -449,6 +449,57 @@ Rama `feature/inferencias-sketch`. Solo la **alineación horizontal/vertical** c
 | I.15 | Empieza una línea nueva desde el **extremo de otra** línea que ya existe y haz lo de I.12 | También infiere con esa línea |
 | I.16 | Cerca de la horizontal o la vertical, o cerca de un punto existente, o con **Mayús/Ctrl** pulsada | Mandan la horizontal/vertical y los puntos antes que ⊥/∥; Mayús y Ctrl las suprimen |
 | I.11 | **Anota** qué te falta o molesta (sobre todo: si la guía aparece demasiado, si «tiembla» al pegarse y se suelta, si querías ver un anillo en el punto despierto) | Una nota por caso: son los pendientes de la entrega |
+## Ayuda en las herramientas y banner de la barra de estado — FUSIONADO (probar)
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| O.1 | Deja el ratón sobre **cada herramienta** de la barra SKETCH (y las de los desplegables) | Aparece su nombre, su tecla y una línea que dice qué hace |
+| O.2 | Abre los **menús** (Sketch, Restricciones, Archivo, Editar) y deja el ratón sobre una entrada | También se ve la ayuda |
+| O.3 | Activa una herramienta | La **barra de abajo se vuelve azul** con la indicación en negrita; al salir de la herramienta vuelve a su aspecto normal |
+| O.4 | Mira el banner con el tema claro y el oscuro | Se lee bien en ambos |
+
+---
+
+## Pendientes del sketch — EN PRUEBA
+
+Rama `feature/pendientes-sketch`.
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| N.1 | Con una cota o un icono cuyo sitio natural cae sobre otra línea del dibujo | El texto se aparta de esa línea si hay hueco |
+| N.2 | Con **Línea**, pasa el cursor **rápido** por un punto y sigue; luego quédate **medio segundo** sobre otro | El primero no despierta; el segundo muestra un **anillo amarillo** y desde lejos se alinea con él |
+| N.3 | Aleja el cursor del todo y vuelve a la herramienta | El anillo solo se ve con una herramienta de dibujo activa |
+| N.4 | **Anota** qué te falta o molesta | Son los pendientes |
+
+---
+
+## Figuras abiertas — EN PRUEBA
+
+Rama `feature/figuras-abiertas`.
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| M.1 | **Círculo**: clic en el centro y clic en el borde | El círculo queda dibujado y el recuadro sigue enseñando **Diámetro** con su valor |
+| M.2 | Escribe otro diámetro y Enter | El mismo círculo cambia de tamaño (no aparece otro) y queda cotado |
+| M.3 | **Rectángulo** (esquinas y por centro): dos clics; escribe solo el **alto** y Enter | Cambia el alto, el ancho se conserva |
+| M.4 | **Polígono** (los tres modos): dos clics; escribe **8** en Lados y Enter; luego otro tamaño | Pasa a 8 lados y luego cambia de tamaño, sin figuras repetidas |
+| M.5 | Con una figura abierta, haz **clic** en otro sitio | La figura se queda y empieza otra |
+| M.6 | Con una figura abierta pulsa **Esc**; luego otra vez **Esc** | El primero cierra la edición (la figura se queda); el segundo sale de la herramienta |
+| M.7 | Crea una figura, cámbiala y pulsa **Deshacer** | Vuelve al paso anterior; si sigues escribiendo no pasa nada raro |
+| M.8 | **Círculo por 2 y 3 puntos**, **rectángulo por 3 puntos** y **ranura**: termina la figura y escribe un valor (diámetro, longitud/alto, ancho) | Cambia la misma figura; con Deshacer vuelve a antes de crearla (un solo paso) |
+| M.9 | **Anota** qué te falta o molesta | Son los pendientes |
+## Tangente desde un arco e histéresis — EN PRUEBA
+
+Rama `feature/inferencias-sketch-2`.
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| L.1 | Dibuja un arco; con **Línea**, empieza en uno de sus extremos y lleva el cursor casi en la dirección en que seguiría el arco (a menos de 3°) | El tramo se endereza a la tangente y sale una **T**; al clic, restricción **tangente** (icono T) |
+| L.2 | Lo mismo yendo hacia atrás (hacia el arco) o con un ángulo claro | Sin T; el tramo sigue al cursor |
+| L.3 | Lleva el cursor despacio hasta la guía naranja horizontal de un punto y sepárate poco a poco | La guía se queda pegada hasta unos 10 px y luego se suelta, sin parpadear en el borde |
+
+---
+
 ## Ajustes tras la primera prueba — EN PRUEBA
 
 Rama `feature/ajustes-sketch`.

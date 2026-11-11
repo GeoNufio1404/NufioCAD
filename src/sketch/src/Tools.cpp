@@ -34,6 +34,14 @@ public:
                     }
                 }
             }
+            // Si empieza en el extremo de un arco, un tramo casi tangente se
+            // endereza a la tangente y se crea la restricción Tangente.
+            arcExit_.reset();
+            if (cursor.kind == SnapKind::Point && (cursor.ref.part == Part::Start || cursor.ref.part == Part::End)) {
+                if (const Entity* e = sketch.entity(cursor.ref.entity); e && std::holds_alternative<Arc>(e->geometry)) {
+                    arcExit_ = exitDirection(sketch, cursor.ref);
+                }
+            }
             // Si empieza en el extremo de una curva, se puede seguir con un arco tangente.
             direction_ = cursor.kind == SnapKind::Point ? exitDirection(sketch, cursor.ref) : std::nullopt;
             return false;
@@ -41,10 +49,11 @@ public:
         Snap end = cursor;
         const Straight straight = straighten(start_->point, end);
         Relation relation = Relation::None;
-        if (straight == Straight::None && reference_) {
-            relation = relate(start_->point, reference_->line, end);
+        bool tangent = false;
+        if (straight == Straight::None) {
+            relation = relateEnd(end, tangent);
         }
-        return commit(sketch, end, straight, std::nullopt, std::nullopt, relation);
+        return commit(sketch, end, straight, std::nullopt, std::nullopt, relation, tangent);
     }
 
     // Arrastrar desde el punto actual de la cadena dibuja un arco tangente
@@ -92,8 +101,9 @@ public:
             return {};
         }
         Snap end = cursor_;
-        if (straighten(start_->point, end) == Straight::None && reference_) {
-            relate(start_->point, reference_->line, end);
+        if (straighten(start_->point, end) == Straight::None) {
+            bool tangent = false;
+            relateEnd(end, tangent);
         }
         const double dx = end.point.x - start_->point.x;
         const double dy = end.point.y - start_->point.y;
@@ -142,21 +152,47 @@ private:
         Line line;
     };
 
+    // Relación inferida del tramo con la tangente del arco del que se parte
+    // (solo hacia delante) o con la línea de referencia.
+    Relation relateEnd(Snap& end, bool& tangent) const
+    {
+        tangent = false;
+        if (arcExit_) {
+            Snap probe = end;
+            const Line along{start_->point, {start_->point.x + arcExit_->x, start_->point.y + arcExit_->y}};
+            if (relate(start_->point, along, probe) == Relation::Parallel
+                && (probe.point.x - start_->point.x) * arcExit_->x + (probe.point.y - start_->point.y) * arcExit_->y > 0.0) {
+                end = probe;
+                tangent = true;
+                return Relation::Parallel;
+            }
+        }
+        return reference_ ? relate(start_->point, reference_->line, end) : Relation::None;
+    }
+
     bool commit(Sketch& sketch, const Snap& end, Straight straight, std::optional<double> length,
-                std::optional<double> angle, Relation relation = Relation::None)
+                std::optional<double> angle, Relation relation = Relation::None, bool tangent = false)
     {
         if (distance(start_->point, end.point) < kMinLength) {
             return false;
         }
         const EntityId line = sketch.addLine(start_->point, end.point);
-        attach(sketch, Ref::start(line), *start_);
+        // La tangente ya une los dos extremos: no se añade además la coincidencia.
+        if (!tangent) {
+            attach(sketch, Ref::start(line), *start_);
+        }
         attach(sketch, Ref::end(line), end);
         if (straight == Straight::Horizontal) {
             sketch.addConstraint(Constraint::horizontal(line));
         } else if (straight == Straight::Vertical) {
             sketch.addConstraint(Constraint::vertical(line));
         }
-        if (relation != Relation::None && reference_) {
+        if (tangent) {
+            const Constraint c = Constraint::tangentAt(Ref::start(line), start_->ref);
+            if (sketch.canAdd(c)) {
+                sketch.addConstraint(c);
+            }
+        } else if (relation != Relation::None && reference_) {
             const Constraint c = relation == Relation::Parallel ? Constraint::parallel(line, reference_->id)
                                                                 : Constraint::perpendicular(line, reference_->id);
             if (sketch.canAdd(c)) {
@@ -170,6 +206,7 @@ private:
             sketch.addConstraint(Constraint::angle(Sketch::kAxisX, line, *angle));
         }
         reference_ = Reference{line, Line{start_->point, end.point}};
+        arcExit_.reset();
 
         // Cerrar en el primer punto de la cadena la termina.
         const bool closed = end.kind == SnapKind::Point && distance(end.point, first_->point) < kMinLength;
@@ -197,6 +234,7 @@ public:
         direction_.reset();
         dragArc_.reset();
         reference_.reset();
+        arcExit_.reset();
         return active;
     }
 
@@ -212,11 +250,15 @@ public:
         }
         Snap end = cursor_;
         Relation relation = Relation::None;
-        if (straighten(start_->point, end) == Straight::None && reference_) {
-            relation = relate(start_->point, reference_->line, end);
+        bool tangent = false;
+        if (straighten(start_->point, end) == Straight::None) {
+            relation = relateEnd(end, tangent);
         }
         result.geometry = {Line{start_->point, end.point}};
-        if (relation != Relation::None) {
+        if (tangent) {
+            result.badge = "T";
+            result.badgeAt = {(start_->point.x + end.point.x) / 2, (start_->point.y + end.point.y) / 2};
+        } else if (relation != Relation::None) {
             result.guides.push_back({reference_->line.start, reference_->line.end});
             result.badge = relation == Relation::Parallel ? "∥" : "⊥";
             result.badgeAt = {(start_->point.x + end.point.x) / 2, (start_->point.y + end.point.y) / 2};
@@ -236,6 +278,7 @@ private:
     std::optional<Snap> first_;
     std::optional<Vec2> direction_;  // con la que llega la cadena a start_
     std::optional<ArcFit> dragArc_;  // arco tangente mientras se arrastra
+    std::optional<Vec2> arcExit_;  // tangente del arco del que se parte
     std::optional<Reference> reference_;  // línea anterior de la cadena (o la que se continúa)
 };
 
@@ -247,6 +290,7 @@ public:
 
     bool click(Sketch& sketch, const Snap& cursor) override
     {
+        open_.reset();  // un clic nuevo da por buena la figura abierta
         if (!corner_) {
             corner_ = cursor;
             return false;
@@ -256,7 +300,7 @@ public:
 
     std::vector<std::string> valueFields() const override
     {
-        if (!corner_) {
+        if (!corner_ && !open_) {
             return {};
         }
         return {"Ancho", "Alto"};
@@ -264,6 +308,10 @@ public:
 
     std::vector<double> currentValues() const override
     {
+        if (open_) {
+            return {std::abs(open_->second.point.x - open_->first.point.x),
+                    std::abs(open_->second.point.y - open_->first.point.y)};
+        }
         if (!corner_) {
             return {};
         }
@@ -272,6 +320,11 @@ public:
 
     bool applyValues(Sketch& sketch, const std::vector<std::optional<double>>& values) override
     {
+        amended_ = false;
+        if (open_) {
+            amended_ = reopen(sketch, values);
+            return amended_;
+        }
         if (!corner_ || values.size() < 2) {
             return false;
         }
@@ -285,6 +338,31 @@ public:
     }
 
 private:
+    // Figura abierta: la rehace con el ancho o el alto escritos.
+    bool reopen(Sketch& sketch, const std::vector<std::optional<double>>& values)
+    {
+        if (values.size() < 2 || (!values[0] && !values[1])) {
+            open_.reset();  // Enter sin valores: queda como está
+            return false;
+        }
+        const OpenFigure old = *open_;
+        const Vec2 a = old.first.point;
+        const double sx = old.second.point.x >= a.x ? 1.0 : -1.0;
+        const double sy = old.second.point.y >= a.y ? 1.0 : -1.0;
+        const double width = values[0].value_or(std::abs(old.second.point.x - a.x));
+        const double height = values[1].value_or(std::abs(old.second.point.y - a.y));
+        if (!(width > kMinLength && height > kMinLength)) {
+            return false;
+        }
+        if (!discardEntities(sketch, old.ids)) {
+            open_.reset();
+            return false;
+        }
+        corner_ = old.first;
+        return create(sketch, Snap{{a.x + sx * width, a.y + sy * height}}, values[0] ? values[0] : old.typed[0],
+                      values[1] ? values[1] : old.typed[1]);
+    }
+
     bool create(Sketch& sketch, const Snap& cursor, std::optional<double> width, std::optional<double> height)
     {
         const Vec2 a = corner_->point;
@@ -292,6 +370,7 @@ private:
         if (std::abs(c.x - a.x) < kMinLength || std::abs(c.y - a.y) < kMinLength) {
             return false;
         }
+        const std::size_t mark = sketch.entities().size();
         const Vec2 b{c.x, a.y};
         const Vec2 d{a.x, c.y};
         const EntityId ab = sketch.addLine(a, b);
@@ -314,6 +393,7 @@ private:
         if (height) {
             sketch.addConstraint(Constraint::length(bc, *height));
         }
+        open_ = OpenFigure{entitiesSince(sketch, mark), *corner_, cursor, {}, 0.0, {width, height}};
         corner_.reset();
         return true;
     }
@@ -321,6 +401,10 @@ private:
 public:
     bool cancel() override
     {
+        if (open_) {
+            open_.reset();
+            return true;
+        }
         const bool active = corner_.has_value();
         corner_.reset();
         return active;
@@ -340,6 +424,9 @@ public:
 
     std::string hint() const override
     {
+        if (open_) {
+            return "Rectángulo creado: escribe ancho, Tab, alto y Enter para cambiarlo · clic o Esc para terminar";
+        }
         return corner_ ? "Clic para la esquina opuesta (o escribe ancho, Tab, alto)"
                        : "Clic para la primera esquina del rectángulo";
     }
@@ -347,6 +434,11 @@ public:
 private:
     Snap cursor_;
     std::optional<Snap> corner_;
+    std::optional<OpenFigure> open_;
+    bool amended_ = false;
+
+public:
+    bool amendedLast() const override { return amended_; }
 };
 
 // --- Círculo -----------------------------------------------------------------
@@ -357,6 +449,7 @@ public:
 
     bool click(Sketch& sketch, const Snap& cursor) override
     {
+        open_.reset();  // un clic nuevo da por buena la figura abierta
         if (!center_) {
             center_ = cursor;
             return false;
@@ -366,7 +459,7 @@ public:
 
     std::vector<std::string> valueFields() const override
     {
-        if (!center_) {
+        if (!center_ && !open_) {
             return {};
         }
         return {"Diámetro"};
@@ -374,6 +467,9 @@ public:
 
     std::vector<double> currentValues() const override
     {
+        if (open_) {
+            return {2.0 * distance(open_->first.point, open_->second.point)};
+        }
         if (!center_) {
             return {};
         }
@@ -382,6 +478,25 @@ public:
 
     bool applyValues(Sketch& sketch, const std::vector<std::optional<double>>& values) override
     {
+        amended_ = false;
+        if (open_) {
+            // Círculo abierto: se rehace con el diámetro escrito.
+            if (values.empty() || !values[0]) {
+                open_.reset();
+                return false;
+            }
+            const OpenFigure old = *open_;
+            if (!(*values[0] / 2.0 > kMinLength)) {
+                return false;
+            }
+            if (!discardEntities(sketch, old.ids)) {
+                open_.reset();
+                return false;
+            }
+            center_ = old.first;
+            amended_ = create(sketch, *values[0] / 2.0, values[0]);
+            return amended_;
+        }
         if (!center_ || values.empty()) {
             return false;
         }
@@ -395,11 +510,14 @@ private:
         if (radius < kMinLength) {
             return false;
         }
+        const std::size_t mark = sketch.entities().size();
         const EntityId circle = sketch.addCircle(center_->point, radius);
         attach(sketch, Ref::center(circle), *center_);
         if (diameter) {
             sketch.addConstraint(Constraint::diameter(circle, *diameter));
         }
+        open_ = OpenFigure{entitiesSince(sketch, mark), *center_,
+                           Snap{{center_->point.x + radius, center_->point.y}}, {}, 0.0, {diameter}};
         center_.reset();
         return true;
     }
@@ -408,6 +526,10 @@ public:
 
     bool cancel() override
     {
+        if (open_) {
+            open_.reset();
+            return true;
+        }
         const bool active = center_.has_value();
         center_.reset();
         return active;
@@ -427,12 +549,20 @@ public:
 
     std::string hint() const override
     {
+        if (open_) {
+            return "Círculo creado: escribe el diámetro y Enter para cambiarlo · clic o Esc para terminar";
+        }
         return center_ ? "Clic para fijar el tamaño (o escribe el diámetro)" : "Clic para el centro del círculo";
     }
 
 private:
     Snap cursor_;
     std::optional<Snap> center_;
+    std::optional<OpenFigure> open_;
+    bool amended_ = false;
+
+public:
+    bool amendedLast() const override { return amended_; }
 };
 
 // --- Arco por 3 puntos -------------------------------------------------------------

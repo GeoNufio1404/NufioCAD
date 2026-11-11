@@ -520,11 +520,41 @@ std::vector<Box> lineBoxes(const Annotation& note, double px)
     return boxes;
 }
 
+// Cajas pequeñas a lo largo de la geometría del sketch: los textos procuran no
+// taparla (pesa menos que chocar con otro texto).
+void addGeometryBoxes(Placed& geometry, const Sketch& sketch, double px)
+{
+    const double half = 0.5 * kLineSamplePx * px;
+    for (const Entity& e : sketch.entities()) {
+        if (e.reference) {
+            continue;  // los ejes son infinitos y ya se ven
+        }
+        const std::vector<Vec2> points = polyline(e.geometry);
+        if (points.size() == 1) {
+            geometry.add({points[0].x - half, points[0].y - half, points[0].x + half, points[0].y + half});
+            continue;
+        }
+        for (std::size_t i = 1; i < points.size(); ++i) {
+            const double len = std::hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+            const int steps = std::clamp(int(std::ceil(len / (kLineSamplePx * px))), 1, 64);
+            for (int k = 0; k <= steps; ++k) {
+                const double t = double(k) / double(steps);
+                const double x = points[i - 1].x + t * (points[i].x - points[i - 1].x);
+                const double y = points[i - 1].y + t * (points[i].y - points[i - 1].y);
+                geometry.add({x - half, y - half, x + half, y + half});
+            }
+        }
+    }
+}
+
+constexpr double kGeometryWeight = 0.25;  // un texto sobre el dibujo molesta menos que sobre otro texto
+
 // Prueba las posiciones de una anotación (make(nivel)) hasta dar con una que no
 // pise a ninguna ya colocada; si ninguna queda libre, la menos solapada.
 // «radial»: también cuentan las líneas de la cota (radio, diámetro).
 template <class Make>
-std::optional<Annotation> placeAnnotation(Placed& placed, double px, Make&& make, bool radial = false)
+std::optional<Annotation> placeAnnotation(Placed& placed, const Placed& geometry, double px, Make&& make,
+                                          bool radial = false)
 {
     std::optional<Annotation> best;
     std::vector<Box> bestLines;
@@ -535,7 +565,8 @@ std::optional<Annotation> placeAnnotation(Placed& placed, double px, Make&& make
         if (!note) {
             return std::nullopt;
         }
-        double overlap = placed.overlap(textBox(*note, px));
+        const Box text = textBox(*note, px);
+        double overlap = placed.overlap(text) + kGeometryWeight * geometry.overlap(text);
         std::vector<Box> lines;
         if (radial) {
             lines = lineBoxes(*note, px);
@@ -569,6 +600,8 @@ std::vector<Annotation> layoutAnnotations(const Sketch& sketch, double pixelSize
     // Cuántos iconos lleva ya cada punto o entidad, para apilarlos.
     std::map<std::pair<EntityId, Part>, int> stacked;
     Placed placed(64.0 * pixelSize);
+    Placed geometry(64.0 * pixelSize);
+    addGeometryBoxes(geometry, sketch, pixelSize);
 
     // Primero las cotas (lo que más importa leer), luego los iconos: un icono
     // se aparta de una cota, no al revés.
@@ -580,7 +613,7 @@ std::vector<Annotation> layoutAnnotations(const Sketch& sketch, double pixelSize
         }
         const bool radial = c.type == ConstraintType::Radius || c.type == ConstraintType::Diameter;
         if (auto note = placeAnnotation(
-                placed, pixelSize, [&](int level) { return dimensionAnnotation(sketch, c, pixelSize, level); },
+                placed, geometry, pixelSize, [&](int level) { return dimensionAnnotation(sketch, c, pixelSize, level); },
                 radial)) {
             ordered.emplace_back(order, std::move(*note));
         }
@@ -599,7 +632,7 @@ std::vector<Annotation> layoutAnnotations(const Sketch& sketch, double pixelSize
                 continue;
             }
             const int index = stacked[{r.entity, r.part}]++;
-            if (auto note = placeAnnotation(placed, pixelSize, [&](int level) -> std::optional<Annotation> {
+            if (auto note = placeAnnotation(placed, geometry, pixelSize, [&](int level) -> std::optional<Annotation> {
                     Annotation icon;
                     icon.constraint = c.id;
                     icon.text = text;

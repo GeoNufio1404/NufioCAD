@@ -78,6 +78,29 @@ Straight straighten(Vec2 start, Snap& end)
     return Straight::None;
 }
 
+std::vector<EntityId> entitiesSince(const Sketch& sketch, std::size_t mark)
+{
+    std::vector<EntityId> ids;
+    const auto& entities = sketch.entities();
+    for (std::size_t i = mark; i < entities.size(); ++i) {
+        ids.push_back(entities[i].id);
+    }
+    return ids;
+}
+
+bool discardEntities(Sketch& sketch, const std::vector<EntityId>& ids)
+{
+    for (const EntityId id : ids) {
+        if (sketch.entity(id) == nullptr) {
+            return false;
+        }
+    }
+    for (const EntityId id : ids) {
+        sketch.removeEntity(id);
+    }
+    return true;
+}
+
 Relation relate(Vec2 start, const Line& reference, Snap& end)
 {
     if (end.free || (end.kind != SnapKind::None && end.kind != SnapKind::Grid) || !end.alignX.empty()

@@ -196,15 +196,20 @@ Snap snap(const Sketch& sketch, Vec2 cursor, const SnapOptions& options)
         const AlignPoint* sameX = nullptr;
         double bestY = options.alignTolerance;
         double bestX = options.alignTolerance;
+        const double release = std::max(options.alignRelease, options.alignTolerance);
         for (const AlignPoint& ref : options.alignPoints) {
             const double dy = std::abs(cursor.y - ref.position.y);
             const double dx = std::abs(cursor.x - ref.position.x);
-            if (dy <= bestY && dx > options.alignTolerance) {
-                bestY = dy;
+            // La alineación que ya había se suelta más lejos (histéresis) y
+            // gana a cualquier otra.
+            const bool stickY = !options.stickyY.empty() && ref.ref == options.stickyY && dy <= release;
+            const bool stickX = !options.stickyX.empty() && ref.ref == options.stickyX && dx <= release;
+            if (stickY || (dy <= bestY && dx > options.alignTolerance)) {
+                bestY = stickY ? -1.0 : dy;
                 sameY = &ref;
             }
-            if (dx <= bestX && dy > options.alignTolerance) {
-                bestX = dx;
+            if (stickX || (dx <= bestX && dy > options.alignTolerance)) {
+                bestX = stickX ? -1.0 : dx;
                 sameX = &ref;
             }
         }

@@ -411,10 +411,11 @@ void Viewport::showSketch(const sketch::Sketch& sketch, const std::vector<sketch
 
 void Viewport::showSketchPreview(const std::vector<sketch::Geometry>& geometry, std::optional<sketch::Vec2> snapPoint,
                                  const std::vector<std::pair<sketch::Vec2, sketch::Vec2>>& guides,
-                                 const std::string& badge, sketch::Vec2 badgeAt, bool markerSquare)
+                                 const std::string& badge, sketch::Vec2 badgeAt, bool markerSquare,
+                                 const std::vector<sketch::Vec2>& awake)
 {
     if (isSketching()) {
-        impl_->showSketchPreview(geometry, snapPoint, guides, badge, badgeAt, markerSquare);
+        impl_->showSketchPreview(geometry, snapPoint, guides, badge, badgeAt, markerSquare, awake);
         update();
     }
 }

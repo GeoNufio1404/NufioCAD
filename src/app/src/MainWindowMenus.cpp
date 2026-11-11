@@ -58,6 +58,7 @@
 #include <QTimer>
 #include <QStatusBar>
 #include <QToolBar>
+#include <QToolButton>
 
 #include <algorithm>
 #include <filesystem>
@@ -81,6 +82,89 @@ void MainWindow::createMenus()
         decorate(action, icon);
         connect(action, &QAction::triggered, this, slot);
         return action;
+    };
+    // Ayuda breve de cada acción (se ve al dejar el ratón encima, en la barra y en los menús).
+    const auto help = [](const QString& name) -> QString {
+        static const std::vector<std::pair<QString, QString>> table = {
+            {QStringLiteral("Nuevo diseño"), QStringLiteral("Empieza un diseño vacío (pregunta si hay cambios sin guardar)")},
+            {QStringLiteral("Abrir…"), QStringLiteral("Abre un diseño guardado (.nuf)")},
+            {QStringLiteral("Recientes…"), QStringLiteral("Lista los diseños abiertos hace poco")},
+            {QStringLiteral("Guardar"), QStringLiteral("Guarda el diseño en su archivo")},
+            {QStringLiteral("Guardar como…"), QStringLiteral("Guarda el diseño con otro nombre o en otra carpeta")},
+            {QStringLiteral("Importar STEP…"), QStringLiteral("Trae un cuerpo desde un archivo STEP")},
+            {QStringLiteral("Exportar…"), QStringLiteral("Saca los cuerpos a STL, OBJ u otros formatos")},
+            {QStringLiteral("Imprimir…"), QStringLiteral("Revisa los cuerpos y los prepara para imprimir en 3D")},
+            {QStringLiteral("Deshacer"), QStringLiteral("Quita el último cambio")},
+            {QStringLiteral("Rehacer"), QStringLiteral("Vuelve a poner el cambio deshecho")},
+            {QStringLiteral("Renombrar diseño…"), QStringLiteral("Cambia el nombre del diseño")},
+            {QStringLiteral("Borrar"), QStringLiteral("Borra lo seleccionado en el sketch")},
+            {QStringLiteral("Importar DXF…"), QStringLiteral("Trae un dibujo DXF al sketch")},
+            // Herramientas de dibujo (por icono)
+            {QStringLiteral("line"), QStringLiteral("Dibuja líneas encadenadas; arrastra para continuar con un arco tangente")},
+            {QStringLiteral("rectangle"), QStringLiteral("Rectángulo con dos esquinas opuestas")},
+            {QStringLiteral("rectangle-3point"), QStringLiteral("Rectángulo girado: un lado y la altura")},
+            {QStringLiteral("rectangle-center"), QStringLiteral("Rectángulo desde su centro hasta una esquina")},
+            {QStringLiteral("circle"), QStringLiteral("Círculo con el centro y un punto del borde")},
+            {QStringLiteral("circle-2point"), QStringLiteral("Círculo con los dos extremos de un diámetro")},
+            {QStringLiteral("circle-3point"), QStringLiteral("Círculo que pasa por tres puntos")},
+            {QStringLiteral("circle-tangent2"), QStringLiteral("Círculo tangente a dos curvas")},
+            {QStringLiteral("circle-tangent3"), QStringLiteral("Círculo tangente a tres curvas")},
+            {QStringLiteral("arc"), QStringLiteral("Arco con inicio, fin y un punto por el que pasa")},
+            {QStringLiteral("arc-center"), QStringLiteral("Arco con el centro, el inicio y el fin")},
+            {QStringLiteral("arc-tangent"), QStringLiteral("Arco que continúa tangente desde el extremo de una curva")},
+            {QStringLiteral("polygon-circumscribed"), QStringLiteral("Polígono regular que rodea un círculo (centro y punto medio de un lado)")},
+            {QStringLiteral("polygon-inscribed"), QStringLiteral("Polígono regular dentro de un círculo (centro y vértice)")},
+            {QStringLiteral("polygon-edge"), QStringLiteral("Polígono regular a partir de un lado")},
+            {QStringLiteral("slot-center-to-center"), QStringLiteral("Ranura con los centros de sus extremos y el ancho")},
+            {QStringLiteral("slot-overall"), QStringLiteral("Ranura con su longitud total y el ancho")},
+            {QStringLiteral("slot-center-point"), QStringLiteral("Ranura desde su punto central y el ancho")},
+            {QStringLiteral("slot-arc"), QStringLiteral("Ranura curva sobre un arco y el ancho")},
+            {QStringLiteral("ellipse"), QStringLiteral("Elipse con centro, eje mayor y eje menor")},
+            {QStringLiteral("ellipse-arc"), QStringLiteral("Un trozo de elipse: elipse más inicio y fin")},
+            {QStringLiteral("spline-fit"), QStringLiteral("Curva suave que pasa por los puntos que marcas (Enter termina)")},
+            {QStringLiteral("spline-control"), QStringLiteral("Curva suave guiada por puntos de control (Enter termina)")},
+            {QStringLiteral("conic"), QStringLiteral("Curva cónica (elipse, parábola o hipérbola) con inicio, fin y vértice")},
+            {QStringLiteral("trim"), QStringLiteral("Recorta una curva hasta la siguiente que la cruza")},
+            {QStringLiteral("extend"), QStringLiteral("Alarga una curva hasta la siguiente")},
+            {QStringLiteral("break"), QStringLiteral("Parte una curva en el punto donde cruza otra")},
+            {QStringLiteral("fillet"), QStringLiteral("Redondea la esquina entre dos líneas con un radio")},
+            {QStringLiteral("chamfer"), QStringLiteral("Corta la esquina entre dos líneas con una distancia")},
+            {QStringLiteral("offset"), QStringLiteral("Copia una curva (y las unidas a ella) a una distancia")},
+            {QStringLiteral("mirror"), QStringLiteral("Refleja lo seleccionado respecto a una línea")},
+            {QStringLiteral("move"), QStringLiteral("Mueve lo seleccionado de un punto base a otro")},
+            {QStringLiteral("copy"), QStringLiteral("Copia lo seleccionado de un punto base a otro")},
+            {QStringLiteral("rotate"), QStringLiteral("Gira lo seleccionado alrededor de un centro")},
+            {QStringLiteral("scale"), QStringLiteral("Cambia el tamaño de lo seleccionado con un factor")},
+            {QStringLiteral("pattern-rectangular"), QStringLiteral("Repite lo seleccionado en filas y columnas")},
+            {QStringLiteral("pattern-circular"), QStringLiteral("Repite lo seleccionado alrededor de un centro")},
+            {QStringLiteral("project"), QStringLiteral("Trae al sketch las aristas de la pieza como referencia")},
+            {QStringLiteral("text"), QStringLiteral("Escribe un texto que luego se puede extruir")},
+            {QStringLiteral("image"), QStringLiteral("Pone una imagen de referencia para calcar")},
+            // Restricciones (por texto)
+            {QStringLiteral("Coincidente"), QStringLiteral("Une dos puntos, o un punto con una curva")},
+            {QStringLiteral("Horizontal"), QStringLiteral("Deja una línea (o dos puntos) a la misma altura")},
+            {QStringLiteral("Vertical"), QStringLiteral("Deja una línea (o dos puntos) alineados en vertical")},
+            {QStringLiteral("Paralela"), QStringLiteral("Hace que dos líneas tengan la misma dirección")},
+            {QStringLiteral("Perpendicular"), QStringLiteral("Hace que dos líneas formen 90°")},
+            {QStringLiteral("Tangente"), QStringLiteral("Hace que dos curvas se toquen sin cortarse")},
+            {QStringLiteral("Igual"), QStringLiteral("Iguala el largo de dos líneas o el radio de dos círculos")},
+            {QStringLiteral("Colineal"), QStringLiteral("Pone dos líneas sobre la misma recta")},
+            {QStringLiteral("Concéntrica"), QStringLiteral("Da el mismo centro a dos círculos o arcos")},
+            {QStringLiteral("Punto medio"), QStringLiteral("Deja un punto en el medio de una línea")},
+            {QStringLiteral("Simetría"), QStringLiteral("Hace simétricos dos puntos respecto a una línea")},
+            {QStringLiteral("Fijar"), QStringLiteral("Fija un punto o una curva para que no se mueva")},
+            {QStringLiteral("Curvatura (G2)"), QStringLiteral("Une dos curvas con la misma tangente y curvatura")},
+            {QStringLiteral("Cota"), QStringLiteral("Mide y fija una distancia, un radio o un ángulo")},
+            {QStringLiteral("Intersección con la pieza"), QStringLiteral("Traza la intersección de la pieza con el plano del sketch")},
+            {QStringLiteral("Alternar construcción"), QStringLiteral("Convierte la geometría en auxiliar (no forma perfiles)")},
+            {QStringLiteral("Alternar bloqueo"), QStringLiteral("Impide mover la geometría seleccionada")},
+        };
+        for (const auto& [key, text] : table) {
+            if (key == name) {
+                return text;
+            }
+        }
+        return {};
     };
     addFile(QStringLiteral("&Nuevo diseño"), QKeySequence(QKeySequence::New), QStringLiteral("file-new"),
             &MainWindow::newDocument);
@@ -362,7 +446,7 @@ void MainWindow::createMenus()
             QAction* action = menu->addAction(entry.text);
             action->setShortcut(entry.key);
             action->setCheckable(true);
-            decorate(action, entry.icon, {}, family);
+            decorate(action, entry.icon, help(entry.icon), family);
             toolGroup->addAction(action);
             connect(action, &QAction::triggered, this, [this, tool = entry.tool](bool checked) {
                 if (sketch_) {
@@ -411,7 +495,7 @@ void MainWindow::createMenus()
           std::tuple{T::Fix, QStringLiteral("Fijar"), QStringLiteral("c-fix")},
           std::tuple{T::Curvature, QStringLiteral("Curvatura (G2)"), QStringLiteral("c-curvature")}}) {
         QAction* action = constraintMenu->addAction(text, this, [this, type = type] { sketch_->applyConstraint(type); });
-        decorate(action, icon, QStringLiteral("Selecciona las entidades y aplica"));
+        decorate(action, icon, help(text) + QStringLiteral(" · selecciona las entidades y aplica"));
         constraintActions_.push_back(action);
     }
     dimensionAction_ = sketchMenu->addAction(QStringLiteral("C&ota"), QKeySequence(Qt::Key_D), this,
@@ -489,8 +573,11 @@ void MainWindow::createMenus()
         family(QString::fromUtf8(name));
     }
     ribbon_->addGroup(sketchTab_, QStringLiteral("RESTRICCIONES"));
-    ribbon_->addMenu(sketchTab_, QStringLiteral("Restricciones"), uiIcon(QStringLiteral("c-perpendicular")),
-                     constraintMenu);
+    if (QToolButton* constraints = ribbon_->addMenu(sketchTab_, QStringLiteral("Restricciones"),
+                                                    uiIcon(QStringLiteral("c-perpendicular")), constraintMenu)) {
+        constraints->setToolTip(QStringLiteral("<b>Restricciones</b><br>Relaciones entre entidades: horizontal, "
+                                               "paralela, tangente, igual…"));
+    }
     ribbon_->addGroup(sketchTab_, QStringLiteral("INSERTAR"));
     family(QStringLiteral("Texto"));
     ribbon_->addAction(sketchTab_, importDxfAction_);
@@ -627,6 +714,19 @@ void MainWindow::createMenus()
         action->setCheckable(true);
         action->setChecked(theme == currentTheme());
         themeGroup->addAction(action);
+    }
+
+    // Todas las acciones con ayuda breve en su tooltip, y los menús la enseñan
+    // también (por defecto un menú no muestra tooltips).
+    for (QAction* action : findChildren<QAction*>()) {
+        QString name = action->text();
+        name.remove(QLatin1Char('&'));
+        if (const QString text = help(name); !text.isEmpty() && !action->menu()) {
+            addHint(action, text);
+        }
+    }
+    for (QMenu* menu : findChildren<QMenu*>()) {
+        menu->setToolTipsVisible(true);
     }
 }
 
