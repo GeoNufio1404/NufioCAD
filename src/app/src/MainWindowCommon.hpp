@@ -94,6 +94,19 @@ inline void decorate(QAction* action, const QString& icon, const QString& hint =
     action->setToolTip(tip);
 }
 
+// Añade (o cambia) la línea de ayuda del tooltip de una acción que ya está decorada.
+inline void addHint(QAction* action, const QString& hint)
+{
+    QString name = action->text();
+    name.remove(QLatin1Char('&'));
+    QString tip = QStringLiteral("<b>%1</b>").arg(name.toHtmlEscaped());
+    if (!action->shortcut().isEmpty()) {
+        tip += QStringLiteral(" (%1)").arg(action->shortcut().toString(QKeySequence::NativeText));
+    }
+    tip += QStringLiteral("<br>") + hint.toHtmlEscaped();
+    action->setToolTip(tip);
+}
+
 inline QWidget* placeholder(const QString& text)
 {
     auto* label = new QLabel(text);

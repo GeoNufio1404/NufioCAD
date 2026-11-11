@@ -29,6 +29,7 @@
 #include <QMap>
 #include <QPushButton>
 #include <QKeyEvent>
+#include <QStatusBar>
 #include <QTimer>
 #include <QSettings>
 #include <QTextStream>
@@ -1089,6 +1090,28 @@ int InterfaceCheck::run()
         blocking(QStringLiteral("terminar el sketch"), [&] { window_.finishSketch(); });
         waitIdle();
         undoAll();
+    });
+
+    // Ayuda de las herramientas: todas explican qué hacen al dejar el ratón encima (tooltip con una línea de ayuda tras
+    // el nombre), y el banner de la barra de estado cambia de color solo mientras hay un mensaje.
+    step(QStringLiteral("Cada herramienta tiene su ayuda y la barra de estado destaca el mensaje"), [&] {
+        std::vector<QString> without;
+        for (const auto& [tool, action] : window_.toolActions_) {
+            Q_UNUSED(tool);
+            if (!action->toolTip().contains(QStringLiteral("<br>"))) {
+                without.push_back(action->text());
+            }
+        }
+        for (QAction* action : window_.constraintActions_) {
+            if (!action->toolTip().contains(QStringLiteral("<br>"))) {
+                without.push_back(action->text());
+            }
+        }
+        expect(without.empty(), QStringLiteral("herramientas sin ayuda: %1").arg(without.empty() ? QString() : without.front()));
+        window_.statusBar()->showMessage(QStringLiteral("Prueba"));
+        expect(window_.statusBar()->styleSheet().contains(QStringLiteral("#0B5CAD")), QStringLiteral("la barra de estado no se destaca con un mensaje"));
+        window_.statusBar()->clearMessage();
+        expect(window_.statusBar()->styleSheet().isEmpty(), QStringLiteral("la barra de estado no vuelve a su aspecto normal"));
     });
 
     // Sección y medición con un cuerpo.

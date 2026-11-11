@@ -43,6 +43,24 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 - **Pruebas:** 221 unitarias y 34 pasos de la prueba de interfaz, en verde en Windows (Debug). La prueba de interfaz **aún no cuenta los píxeles naranjas** de la guía (pendiente I8).
 - **Riesgos al volver atrás:** ninguno en archivos guardados: las restricciones creadas son las horizontal/vertical de siempre.
+## Ayuda en todas las herramientas y banner de la barra de estado — 11 nov. 2026
+
+- **Rama:** `feature/ayudas-y-barra` (sobre `feature/pendientes-sketch`). Fusionada a `develop` a petición del usuario tras sus pruebas.
+- **Qué hace:** (1) **todas** las herramientas de dibujo (líneas, rectángulos, círculos, arcos, polígonos, ranuras, elipses, splines, cónica, recortar/extender/partir, empalme/chaflán, desfase, simetría, mover/copiar/girar/escalar, patrones, proyectar, texto, imagen), las restricciones, la cota y las acciones de Archivo y Editar muestran al dejar el ratón encima el nombre, su tecla y **una línea de ayuda**; los menús también enseñan el tooltip (por defecto no lo hacen) y el botón «Restricciones» de la barra lleva el suyo. (2) La **barra de estado** pasa a un **banner azul** (#0B5CAD, texto blanco en negrita, filete claro arriba, 26 px de alto) **solo mientras hay un mensaje** (la indicación de la herramienta, avisos); sin mensaje vuelve a su aspecto neutro. El azul es el de la selección (como en Fusion 360), con contraste AA (6,6:1), y no usa rojo ni ámbar, que se reservan para errores.
+
+| Parte | Dónde (para deshacerla a mano) |
+|---|---|
+| Textos de ayuda | tabla `help` en `MainWindow::createMenus` (`src/app/src/MainWindowMenus.cpp`) y `addHint` en `MainWindowCommon.hpp` |
+| Menús con tooltip | último bucle de `createMenus` (`setToolTipsVisible`) |
+| Banner | conexión a `QStatusBar::messageChanged` en el constructor de `MainWindow` (`src/app/src/MainWindow.cpp`) |
+| Prueba | paso «Cada herramienta tiene su ayuda y la barra de estado destaca el mensaje» en `src/app/src/InterfaceCheck.cpp` |
+
+- **Pruebas:** 244 unitarias y 36 pasos de la prueba de interfaz. Con otro programa pesado abierto (un juego) el paso «Mover y girar arrastrando» y el de la cota de un clic fallan por tiempo, sin relación con estos cambios; con la máquina libre pasan.
+- **Pendiente:** las acciones de los diálogos, el árbol del modelo y las barras de vista no tienen tooltip nuevo; los avisos de error siguen con el mismo banner azul (se podría darles otro color si hace falta).
+- **Riesgos al volver atrás:** ninguno en archivos guardados.
+
+---
+
 ## Pendientes del sketch: cotas sobre el dibujo, puntos despiertos con espera y anillo, prueba de la guía — 11 nov. 2026
 
 - **Rama:** `feature/pendientes-sketch` (junta `feature/figuras-abiertas` y `feature/inferencias-sketch-2`). **Sin fusionar** hasta la prueba manual (guía N.1–N.4).

@@ -98,6 +98,19 @@ MainWindow::MainWindow(QWidget* parent)
     cursorLabel_->setMinimumWidth(190);
     statusBar()->addPermanentWidget(cursorLabel_);
     statusBar()->addPermanentWidget(versions);
+    // La indicación de lo que se está haciendo (el mensaje de la barra) va en un banner de color: es donde está
+    // lo importante y se olvida con facilidad. Sin mensaje la barra queda neutra. Contraste de texto blanco sobre
+    // #0B5CAD: 6,6:1 (AA); el acento es azul, como el de la selección, y no el rojo/ámbar de los errores.
+    statusBar()->setSizeGripEnabled(false);
+    connect(statusBar(), &QStatusBar::messageChanged, this, [this](const QString& text) {
+        statusBar()->setStyleSheet(
+            text.isEmpty()
+                ? QString()
+                : QStringLiteral("QStatusBar { background: #0B5CAD; color: white; font-weight: 600; min-height: 26px;"
+                                 " border-top: 2px solid #4C9BEA; }"
+                                 "QStatusBar::item { border: 0; }"
+                                 "QStatusBar QLabel { color: white; font-weight: 400; }"));
+    });
     connect(viewport_, &render::Viewport::selectionChanged, this,
             [this](const QString& description) { statusBar()->showMessage(description); });
     connect(viewport_, &render::Viewport::busyChanged, this, [this](bool busy) {

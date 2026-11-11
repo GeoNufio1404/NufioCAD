@@ -449,6 +449,17 @@ Rama `feature/inferencias-sketch`. Solo la **alineación horizontal/vertical** c
 | I.15 | Empieza una línea nueva desde el **extremo de otra** línea que ya existe y haz lo de I.12 | También infiere con esa línea |
 | I.16 | Cerca de la horizontal o la vertical, o cerca de un punto existente, o con **Mayús/Ctrl** pulsada | Mandan la horizontal/vertical y los puntos antes que ⊥/∥; Mayús y Ctrl las suprimen |
 | I.11 | **Anota** qué te falta o molesta (sobre todo: si la guía aparece demasiado, si «tiembla» al pegarse y se suelta, si querías ver un anillo en el punto despierto) | Una nota por caso: son los pendientes de la entrega |
+## Ayuda en las herramientas y banner de la barra de estado — FUSIONADO (probar)
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| O.1 | Deja el ratón sobre **cada herramienta** de la barra SKETCH (y las de los desplegables) | Aparece su nombre, su tecla y una línea que dice qué hace |
+| O.2 | Abre los **menús** (Sketch, Restricciones, Archivo, Editar) y deja el ratón sobre una entrada | También se ve la ayuda |
+| O.3 | Activa una herramienta | La **barra de abajo se vuelve azul** con la indicación en negrita; al salir de la herramienta vuelve a su aspecto normal |
+| O.4 | Mira el banner con el tema claro y el oscuro | Se lee bien en ambos |
+
+---
+
 ## Pendientes del sketch — EN PRUEBA
 
 Rama `feature/pendientes-sketch`.
