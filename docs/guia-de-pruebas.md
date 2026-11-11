@@ -427,6 +427,23 @@ La app ya no se cuelga mientras recalcula: lo lento (una rosca cortante, un engr
 
 ---
 
+## Cotas que no se pisan — EN PRUEBA
+
+Rama `feature/cotas-sin-solaparse`. Usa los casos que anotaste en C.16.
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| K.1 | Dibuja un **rectángulo pequeño** (unos 6 × 4 mm) y acota sus cuatro lados | Los cuatro números se leen sin taparse (los que chocarían se alejan un renglón de la geometría) |
+| K.2 | Dibuja **dos líneas paralelas a 1–2 mm** y acota cada una | Los dos números no se pisan |
+| K.3 | Una línea con restricción **horizontal** (icono H) y su cota | El icono y el número no se pisan |
+| K.4 | **Diez círculos con el mismo centro** y acótalos | Cada diámetro en un ángulo distinto, sin tapar a otro |
+| K.5 | Con cualquiera de los casos anteriores, **acerca y aleja** la vista con la rueda | Siempre se ven sin pisarse (las distancias son en píxeles); las cotas no «bailan» al mover el cursor |
+| K.6 | Acota un **ángulo** entre dos líneas cerca de otra cota | El arco del ángulo se aleja si su texto chocaría |
+| K.7 | Un sketch grande (por ejemplo 15–20 cotas) | Se sigue moviendo con fluidez |
+| K.8 | **Anota** dónde aún se pisa algo (un texto con una línea del dibujo, con un punto o con la línea de otra cota) | Una captura por caso: son los pendientes (esas colisiones aún no se evitan) |
+
+---
+
 ## Mover y girar arrastrando (estilo Orca) — EN PRUEBA
 
 | # | Haz esto | Debe pasar |
