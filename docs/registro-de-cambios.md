@@ -23,7 +23,42 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 | Cotas de círculos concéntricos | Todas a 45°: con radios parecidos los textos se apilaban | Cada círculo con el mismo centro que otro anterior pone su cota 30° más allá | Bloque `rank` en el caso `Radius`/`Diameter` de `src/sketch/src/Annotations.cpp` |
 | Pruebas | — | Prueba unitaria «Las cotas de círculos con el mismo centro van a ángulos distintos…» y paso de la prueba de interfaz «Cota de un clic con el valor escrito sobre el lienzo» | `tests/test_sketch_selection.cpp`, `src/app/src/InterfaceCheck.cpp` |
 
+**Cómo decide el modo Cota qué hacer con cada clic:**
+
+```mermaid
+flowchart TD
+    A["Clic en modo Cota"] --> B{"¿Sobre una cota?"}
+    B -- sí --> E["Reabrir el campo con su valor"]
+    B -- no --> C{"¿Sobre una figura?"}
+    C -- no --> D["Vaciar lo elegido"]
+    C -- sí --> F{"¿Se puede acotar<br/>lo elegido?"}
+    F -- "no, falta otro elemento" --> G["Esperar el siguiente clic"]
+    F -- sí --> H["Campo de valor junto al cursor"]
+    H -- Enter --> I["Crear la cota y resolver el sketch"]
+    H -- "Esc o clic fuera" --> J["Cancelar: una línea queda elegida<br/>para emparejarla con otra"]
+```
+
 **Riesgos conocidos al volver atrás:** ninguno en archivos guardados: las cotas siguen siendo las mismas restricciones de siempre (no hay campos nuevos en el `.nuf`), así que un diseño hecho con esta entrega se abre igual en la versión anterior.
+
+---
+
+## Diagramas de la documentación a Mermaid — 10 nov. 2026
+
+- **Rama:** `feature/cotas-en-el-lienzo` (solo documentación; no cambia código ni pruebas).
+- **Qué cambió:** los dibujos hechos con caracteres de texto pasaron a [Mermaid](https://mermaid.js.org), que GitHub dibuja solo en cualquier archivo `.md`, y se añadieron los que ayudan a entender el flujo.
+
+| Diagrama | Archivo | Antes | Ahora |
+|---|---|---|---|
+| Capas y dependencias de los módulos | `docs/arquitectura-cad.md` (sección 2) | Cuadro con caracteres de dibujo | `flowchart` con las capas (interfaz, núcleo, bibliotecas) y una flecha por cada dependencia de la tabla de debajo |
+| Estados de una herramienta | `docs/arquitectura-cad.md` (sección 5) | Una línea con flechas de texto | `stateDiagram-v2` con Aceptar, Cancelar y Esc |
+| Extruir un perfil | `docs/arquitectura-cad.md` (sección 8) | Solo la lista numerada | `sequenceDiagram` (usuario, herramienta, visor, comandos y documento); la lista se conserva debajo |
+| Flujo de ramas | `docs/hoja-de-ruta-cad.md` (notas de planificación) | No existía | `gitGraph` con `main`, `develop` y las `feature/…` |
+| Prioridad de las inferencias | `docs/hoja-de-ruta-cad.md` (plan I1) | No existía | `flowchart` con lo que gana cuando coinciden varias |
+| Qué hace un clic en el modo Cota | `docs/registro-de-cambios.md` | No existía | `flowchart` de decisión |
+
+- **Se dejó como está:** el árbol de carpetas del `README.md` (un árbol de archivos se lee mejor como texto que como diagrama) y los bloques de código y de comandos.
+- **Comprobación:** los 6 diagramas se validaron con el propio analizador de Mermaid (versión 11), sin errores; el validador rechaza uno roto a propósito.
+- **Volver atrás:** `git revert <commit>` de esta documentación, o `git checkout v0.1.0 -- docs/arquitectura-cad.md` para recuperar el dibujo de texto de ese archivo.
 
 ---
 

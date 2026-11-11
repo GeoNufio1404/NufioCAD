@@ -16,27 +16,43 @@
 
 Las dependencias solo apuntan hacia abajo.
 
+```mermaid
+flowchart TB
+    subgraph UI["Interfaz (con Qt)"]
+        app["app/<br/>UI Qt Widgets: ventana, navegador, timeline, panel,<br/>menú radial, herramientas interactivas"]
+        render["render/<br/>Viewport (QOpenGLWidget + V3d/AIS de OCCT):<br/>selección, resaltado, vista previa"]
+    end
+    subgraph CORE["NÚCLEO (sin Qt)"]
+        commands["commands/<br/>Command + CommandStack (deshacer/rehacer)"]
+        io["io/<br/>.nuf (SQLite), STEP, STL, OBJ"]
+        document["document/<br/>Document, Feature, Timeline, Parameters,<br/>motor de recálculo, referencias estables"]
+        sketch["sketch/<br/>geometría 2D + restricciones (ISolver)"]
+        geometry["geometry/<br/>Adaptador del kernel (OCCT): extruir, booleanas,<br/>fillet, mallado, historial topológico"]
+    end
+    subgraph LIBS["Bibliotecas externas"]
+        occt(["OpenCASCADE"])
+        sqlite(["SQLite"])
+        gcs(["PlaneGCS + Eigen"])
+        qt(["Qt"])
+    end
+    app --> render
+    app --> commands
+    app --> io
+    render --> document
+    commands --> document
+    io --> document
+    io --> geometry
+    document --> sketch
+    document --> geometry
+    sketch --> geometry
+    geometry --> occt
+    io --> sqlite
+    sketch --> gcs
+    app -.-> qt
+    render -.-> qt
 ```
-┌──────────────────────────────────────────────────────────┐
-│  app/      UI Qt Widgets: ventana, navegador, timeline,  │
-│            panel, menú radial, herramientas interactivas │
-├──────────────────────────────────────────────────────────┤
-│  render/   Viewport (QOpenGLWidget + V3d/AIS de OCCT):   │
-│            selección, resaltado, vista previa            │
-╞══════════════════════ NÚCLEO (sin Qt) ═══════════════════╡
-│  commands/ Command + CommandStack (deshacer/rehacer)     │
-├──────────────────────────────────────────────────────────┤
-│  document/ Document, Feature, Timeline, Parameters,      │
-│            motor de recálculo, referencias estables      │
-├───────────────────────────┬──────────────────────────────┤
-│  sketch/  geometría 2D +  │  io/  .nuf (SQLite), STEP,   │
-│  restricciones (ISolver)  │       STL, OBJ               │
-├───────────────────────────┴──────────────────────────────┤
-│  geometry/ Adaptador del kernel (OCCT): extruir,         │
-│            booleanas, fillet, mallado, historial topo.   │
-└──────────────────────────────────────────────────────────┘
-   OpenCASCADE · SQLite · PlaneGCS (+ Eigen) · Qt (solo arriba)
-```
+
+Las flechas siguen la tabla de dependencias de abajo (de quien depende hacia lo que usa); las discontinuas son Qt, que solo se usa en las dos capas de arriba.
 
 | Módulo | Responsabilidad | Depende de |
 |---|---|---|
@@ -129,8 +145,17 @@ Comandos iniciales: `AddFeature`, `EditFeatureParams`, `DeleteFeature`, `Suppres
 
 Cada herramienta de la UI (Extruir, Línea, Fillet…) es una pequeña **máquina de estados** en `app/`:
 
-```
-Inactiva → Seleccionando entrada → Ajustando parámetros (vista previa) → Aceptar / Cancelar
+```mermaid
+stateDiagram-v2
+    direction LR
+    state "Seleccionando entrada" as Seleccionando
+    state "Ajustando parámetros (vista previa)" as Ajustando
+    [*] --> Inactiva
+    Inactiva --> Seleccionando: se activa la herramienta
+    Seleccionando --> Ajustando: ya hay entradas
+    Ajustando --> Inactiva: Aceptar (se agrega al historial)
+    Ajustando --> Inactiva: Cancelar (sin rastro)
+    Seleccionando --> Inactiva: Esc
 ```
 
 - La **vista previa** crea una operación temporal y la calcula con `compute()` **fuera** del documento; `render/` la dibuja en naranja.
@@ -190,6 +215,31 @@ CREATE TABLE blobs      (key TEXT PRIMARY KEY, kind TEXT, data BLOB); -- importa
 ---
 
 ## 8. Flujo completo: extruir un perfil
+
+```mermaid
+sequenceDiagram
+    actor U as Usuario
+    participant App as app/ (ExtrudeTool)
+    participant R as render/
+    participant CS as CommandStack
+    participant D as Document
+    U->>App: pulsa E
+    U->>R: selecciona un perfil
+    R->>App: TopoRef (TopoResolver::describe)
+    U->>App: arrastra la flecha
+    App->>App: crea un ExtrudeFeature temporal y llama a compute()
+    App->>R: vista previa
+    U->>App: Aceptar
+    App->>CS: push(AddFeature)
+    CS->>D: AddFeature::execute, inserta tras el marcador
+    D->>D: recompute
+    D-->>R: recomputed, actualiza el viewport
+    D-->>App: recomputed, actualiza navegador y timeline
+    U->>CS: Ctrl+Z
+    CS->>D: AddFeature::undo, la quita y recalcula
+```
+
+Los mismos pasos, uno por uno:
 
 1. El usuario presiona **E** → `app/` activa `ExtrudeTool`.
 2. Selecciona un perfil → `render/` convierte el clic en un `TopoRef` vía `TopoResolver::describe`.

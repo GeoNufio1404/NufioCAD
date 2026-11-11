@@ -486,6 +486,21 @@ Fuentes: ayuda de Onshape, «Automatic Inferencing» ([en](https://cad.onshape.c
 - La línea se endereza si queda a menos de 3° de horizontal o vertical respecto a **su propio** punto inicial y recibe esa restricción (`kStraightenAngle`), pero **sin ninguna línea guía** que lo avise, y **sin** alineación con otros puntos, ni perpendicular/paralela/tangente.
 
 ### Plan de inferencias («softblocks») — entrega 2 o 3, rama `feature/inferencias-sketch`
+```mermaid
+flowchart LR
+    A["Cursor se mueve"] --> B{"¿Punto o centro<br/>existente cerca?"}
+    B -- sí --> P1["Pegar al punto"]
+    B -- no --> C{"¿Cruce de dos<br/>rectas guía?"}
+    C -- sí --> P2["Pegar al cruce"]
+    C -- no --> D{"¿Recta guía horizontal o vertical<br/>(punto inicial o punto despierto)?"}
+    D -- sí --> P3["Pegar a la recta<br/>y dibujarla naranja"]
+    D -- no --> E{"¿Perpendicular, paralela<br/>o tangente?"}
+    E -- sí --> P4["Enderezar y mostrar<br/>el icono"]
+    E -- no --> F["Rejilla / libre"]
+```
+
+Orden de prioridad de las inferencias (lo que gana cuando coinciden varias):
+
 - [ ] **I1 — Motor de inferencias en el sketch (sin Qt, con pruebas unitarias):** `sketch::snap` devuelve además una lista de `Inference` (tipo, puntos o curvas de referencia, recta guía en coordenadas del sketch). Candidatas en este orden de prioridad: punto/centro existente > intersección de dos rectas guía > alineación horizontal/vertical con el punto inicial de la herramienta > alineación con un punto «despertado» > perpendicular/paralela a la línea anterior de la cadena o a una línea despertada > tangente > rejilla.
 - [ ] **I2 — Horizontal/vertical con «softblock» y línea naranja:** si el cursor está a menos de ~6 px de la recta horizontal o vertical que pasa por el punto de referencia, se **pega** a ella y se dibuja la recta guía **discontinua naranja** desde ese punto hasta el cursor; para soltarse hay que alejarse más (~10 px), igual que el softblock de los anillos de Mover (histéresis), para que no tiemble. Al hacer clic se crea la restricción: horizontal/vertical de la línea (si es su propio punto inicial) o **horizontal/vertical entre los dos puntos** (si es otro punto; `Constraint::horizontal(punto, punto)` ya existe).
 - [ ] **I3 — Puntos «despertados»:** al pasar el cursor sobre un punto (extremo, centro, punto medio) durante ~0,3 s queda despierto (se marca con un anillo pequeño); se recuerdan los dos últimos. Así aparece la alineación con un punto lejano sin tener que dibujar desde él. Si se cruzan las guías de dos puntos (X de uno e Y del otro), el cursor se pega al **cruce**.
@@ -575,6 +590,28 @@ Resumen de todo lo pendiente que no son pruebas manuales; el detalle sigue en el
 - **Orden:** la Fase 4 va justo después del modelado básico para tener un flujo útil de punta a punta lo antes posible; cada fase siguiente agrega valor real.
 - **Esfuerzo:** las Fases 1–3 son alcanzables en semanas; las Fases 4–5 bien hechas (incluyendo robustez del historial) concentran la mayor parte del esfuerzo.
 - **Versiones y ramas (desde la v0.1.0, 9 nov. 2026):** `main` solo guarda versiones estables (la primera es la etiqueta `v0.1.0`); `develop` es la rama de integración; cada cambio o funcionalidad nueva va en `feature/<nombre>`, que sale de `develop` y vuelve a ella. `main` recibe `develop` solo al sacar una versión, con su etiqueta.
+
+```mermaid
+gitGraph
+    commit id: "v0.1.0" tag: "v0.1.0"
+    branch develop
+    checkout develop
+    commit id: "integración"
+    branch feature/cotas-en-el-lienzo
+    checkout feature/cotas-en-el-lienzo
+    commit id: "cotas"
+    commit id: "prueba manual"
+    checkout develop
+    merge feature/cotas-en-el-lienzo
+    branch feature/inferencias-sketch
+    checkout feature/inferencias-sketch
+    commit id: "inferencias"
+    checkout develop
+    merge feature/inferencias-sketch
+    checkout main
+    merge develop tag: "próxima versión"
+```
+
 - **Marcadores por sistema (desde el 9 nov. 2026):** `estable-windows` y `estable-fedora` no son copias del código: apuntan al último commit de `develop` que se probó a mano en ese sistema y no reciben commits propios. Se avanzan con `git switch estable-<sistema>` y `git merge --ff-only develop` (o `git branch -f estable-<sistema> <commit>`) tras probar. `git log estable-fedora..estable-windows` lista lo hecho en Windows que falta probar en Fedora. Lo que sea distinto entre sistemas va con `#if` o CMake en el mismo código, nunca en ramas. Un arreglo de un sistema se hace en `feature/…` desde `develop` y debe compilar en los dos (el CI de Windows y Linux lo comprueba). `main` solo recibe `develop` cuando los dos marcadores apuntan al mismo commit, con su etiqueta.
 
 ## Estado
