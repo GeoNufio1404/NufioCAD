@@ -3,12 +3,15 @@
 #include "FeatureTools.hpp"
 #include "FeatureToolsCommon.hpp"
 #include "MainWindow.hpp"
+#include "SketchSession.hpp"
 #include "Units.hpp"
 
 #include <nuf/commands/FeatureCommands.hpp>
 #include <nuf/render/Viewport.hpp>
+#include <nuf/sketch/Annotations.hpp>
 
 #include <QAction>
+#include <QApplication>
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
@@ -25,6 +28,8 @@
 #include <QListWidget>
 #include <QMap>
 #include <QPushButton>
+#include <QKeyEvent>
+#include <QTimer>
 #include <QSettings>
 #include <QTextStream>
 #include <QEvent>
@@ -908,6 +913,135 @@ int InterfaceCheck::run()
             }
             waitFor([this] { return window_.tool_ == nullptr; }, 10000);
         }
+        undoAll();
+    });
+
+    // Cota de un clic, al estilo Onshape: la figura se dibuja con clics (sin cota), la herramienta Cota la acota con un
+    // clic y el valor se escribe en un campo sobre el lienzo (no en un diálogo); un clic en la cota la reabre.
+    step(QStringLiteral("Cota de un clic con el valor escrito sobre el lienzo"), [&] {
+        blocking(QStringLiteral("abrir un sketch"), [&] {
+            window_.startSketch(sketch::Plane::xy(), QStringLiteral("prueba"), {});
+        });
+        expect(window_.sketch_ != nullptr, QStringLiteral("no se abrió el sketch"));
+        if (window_.sketch_ == nullptr) {
+            return;
+        }
+        SketchSession* session = window_.sketch_.get();
+        const auto click = [&](double x, double y) { emit window_.viewport_->sketchClicked(x, y, Qt::NoModifier); };
+        const auto circleRadius = [&](std::size_t index) {
+            std::size_t seen = 0;
+            for (const sketch::Entity& e : session->sketch().entities()) {
+                if (const auto* circle = std::get_if<sketch::Circle>(&e.geometry)) {
+                    if (seen++ == index) {
+                        return circle->radius;
+                    }
+                }
+            }
+            return -1.0;
+        };
+        const auto dimensionCount = [&] {
+            long count = 0;
+            for (const sketch::Constraint& c : session->sketch().constraints()) {
+                count += sketch::isDimensional(c.type) ? 1 : 0;
+            }
+            return count;
+        };
+        // El campo que sale sobre el lienzo (un recuadro emergente junto al cursor): se espera a que aparezca y se le
+        // escribe un valor (o se cancela con Esc), como haría el usuario.
+        bool popupSeen = false;
+        const auto answer = [&](double value, bool accept) {
+            popupSeen = false;
+            auto attempts = std::make_shared<int>(0);
+            auto poll = std::make_shared<std::function<void()>>();
+            *poll = [this, value, accept, attempts, poll, &popupSeen] {
+                QWidget* popup = QApplication::activePopupWidget();
+                if (popup == nullptr) {
+                    if (++*attempts < 40) {
+                        QTimer::singleShot(100, *poll);
+                    }
+                    return;
+                }
+                popupSeen = true;
+                popup->grab().save(QDir::temp().filePath(QStringLiteral("cota-campo.png")));  // para mirarlo
+                if (accept) {
+                    if (auto* box = popup->findChild<QDoubleSpinBox*>()) {
+                        box->setValue(value);
+                    }
+                }
+                QKeyEvent key(QEvent::KeyPress, accept ? Qt::Key_Return : Qt::Key_Escape, Qt::NoModifier);
+                QWidget* target = QApplication::focusWidget() != nullptr ? QApplication::focusWidget() : popup;
+                QCoreApplication::sendEvent(target, &key);
+            };
+            QTimer::singleShot(100, *poll);
+        };
+
+        // 1. Un círculo con dos clics: no lleva cota.
+        session->setTool(SketchSession::Tool::Circle);
+        click(0.0, 0.0);
+        click(10.0, 0.0);
+        expect(std::abs(circleRadius(0) - 10.0) < 1e-6, QStringLiteral("el círculo no se dibujó con dos clics (radio %1)").arg(circleRadius(0)));
+        expect(dimensionCount() == 0, QStringLiteral("un círculo dibujado con clics no debía llevar cota"));
+
+        // 2. Herramienta Cota: un clic en el círculo y el valor se escribe sobre el lienzo.
+        session->setTool(SketchSession::Tool::Dimension);
+        answer(30.0, true);
+        blocking(QStringLiteral("acotar con un clic"), [&] { click(10.0, 0.0); });
+        expect(popupSeen, QStringLiteral("no salió el campo de valor sobre el lienzo"));
+        expect(dimensionCount() == 1, QStringLiteral("el clic no creó la cota (%1)").arg(dimensionCount()));
+        expect(std::abs(circleRadius(0) - 15.0) < 1e-3, QStringLiteral("el diámetro escrito (30) no se aplicó (radio %1)").arg(circleRadius(0)));
+
+        // 3. Un clic sobre la cota la reabre y la cambia; Esc la deja como estaba.
+        const auto annotationOf = [&]() -> std::optional<sketch::Vec2> {
+            for (const sketch::Annotation& note : sketch::layoutAnnotations(session->sketch(), window_.viewport_->sketchPixelSize())) {
+                if (note.dimension) {
+                    return note.anchor;
+                }
+            }
+            return std::nullopt;
+        };
+        if (const auto at = annotationOf()) {
+            answer(40.0, true);
+            blocking(QStringLiteral("clic en la cota"), [&] { click(at->x, at->y); });
+            expect(popupSeen, QStringLiteral("un clic en la cota no abrió su campo"));
+            expect(std::abs(circleRadius(0) - 20.0) < 1e-3, QStringLiteral("la cota editada (40) no se aplicó (radio %1)").arg(circleRadius(0)));
+            if (const auto again = annotationOf()) {
+                answer(99.0, false);
+                blocking(QStringLiteral("cancelar con Esc"), [&] { click(again->x, again->y); });
+                expect(std::abs(circleRadius(0) - 20.0) < 1e-3, QStringLiteral("Esc debía dejar la cota como estaba (radio %1)").arg(circleRadius(0)));
+            }
+        } else {
+            expect(false, QStringLiteral("la cota no tiene anotación"));
+        }
+
+        // 4. Dos círculos más con el mismo centro: sus cotas no se pisan.
+        session->setTool(SketchSession::Tool::Circle);
+        click(0.0, 0.0);
+        click(21.0, 0.0);
+        click(0.0, 0.0);
+        click(22.0, 0.0);
+        session->setTool(SketchSession::Tool::Dimension);
+        answer(42.0, true);
+        blocking(QStringLiteral("acotar el segundo círculo"), [&] { click(0.0, 21.0); });
+        answer(44.0, true);
+        blocking(QStringLiteral("acotar el tercer círculo"), [&] { click(0.0, 22.0); });
+        std::vector<sketch::Vec2> anchors;
+        for (const sketch::Annotation& note : sketch::layoutAnnotations(session->sketch(), window_.viewport_->sketchPixelSize())) {
+            if (note.dimension) {
+                anchors.push_back(note.anchor);
+            }
+        }
+        expect(anchors.size() == 3, QStringLiteral("debía haber tres cotas (%1)").arg(anchors.size()));
+        if (anchors.size() == 3) {
+            const auto gap = [&](std::size_t i, std::size_t j) { return std::hypot(anchors[i].x - anchors[j].x, anchors[i].y - anchors[j].y); };
+            expect(gap(0, 1) > 5.0 && gap(1, 2) > 5.0 && gap(0, 2) > 5.0,
+                   QStringLiteral("las cotas de círculos concéntricos se pisan (%1, %2, %3)").arg(gap(0, 1)).arg(gap(1, 2)).arg(gap(0, 2)));
+        }
+
+        session->setTool(SketchSession::Tool::None);
+        settle(300);
+        window_.viewport_->grabFramebuffer().save(QDir::temp().filePath(QStringLiteral("cotas-concentricas.png")));  // para mirarlo
+        blocking(QStringLiteral("terminar el sketch"), [&] { window_.finishSketch(); });
+        waitIdle();
         undoAll();
     });
 

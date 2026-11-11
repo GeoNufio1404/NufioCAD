@@ -8,7 +8,9 @@ Meta de usabilidad: Fusion 360. Kernel: OpenCASCADE. Interfaz: Qt 6.
 > de los archivos de diseño (`.nuf`).
 
 Documentación de diseño en [`docs/`](docs/):
-[hoja de ruta](docs/hoja-de-ruta-cad.md) · [arquitectura](docs/arquitectura-cad.md).
+[hoja de ruta](docs/hoja-de-ruta-cad.md) · [arquitectura](docs/arquitectura-cad.md) ·
+[guía de pruebas](docs/guia-de-pruebas.md) · [registro de cambios](docs/registro-de-cambios.md).
+Los diagramas están en [Mermaid](https://mermaid.js.org): GitHub los dibuja solo.
 
 ---
 

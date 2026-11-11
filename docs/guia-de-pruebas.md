@@ -402,6 +402,31 @@ La app ya no se cuelga mientras recalcula: lo lento (una rosca cortante, un engr
 
 ---
 
+## Cotas sobre el lienzo (estilo Onshape) — EN PRUEBA
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| C.1 | En un sketch, dibuja un **círculo con dos clics** (centro y un punto del borde), sin escribir nada | Queda dibujado sin cota |
+| C.2 | Pulsa **D** (o el botón Cota) sin nada seleccionado | La barra de estado dice «Cota: clic en un círculo, arco o línea…»; al pasar el cursor se resalta lo que se acotaría |
+| C.3 | Haz clic en el círculo | Sale un **campo pequeño junto al cursor** («Ø 20.000 mm») con el valor actual seleccionado. Escribe 30 y Enter: el diámetro pasa a 30 y se ve la cota «Ø30» |
+| C.4 | Escribe una expresión con un parámetro (por ejemplo `grosor * 2`) | Se acepta igual que antes (si el parámetro existe) |
+| C.5 | Con el modo Cota activo, haz clic en la cota «Ø30» | Se reabre el campo con su valor; cámbialo y Enter |
+| C.6 | Abre el campo y pulsa Esc, o haz clic fuera | No cambia nada (el clic fuera solo cierra el campo) |
+| C.7 | Dibuja **tres círculos con el mismo centro** y radios parecidos y acótalos con un clic cada uno | Las cotas salen en **ángulos distintos** (cada una 30° más que la anterior) y los textos no se pisan |
+| C.8 | Haz clic en una **línea**, y luego (con la primera elegida) en otra línea | La primera abre el campo de su longitud (Esc para no acotarla); con dos líneas elegidas sale el ángulo o la distancia entre ellas |
+| C.9 | Haz clic en **dos puntos** (o un punto y una línea) | Sale el campo de la distancia entre ellos |
+| C.10 | Pulsa Esc con algo elegido, y otra vez Esc | La primera quita lo elegido; la segunda sale del modo Cota |
+| C.11 | Selecciona una línea normalmente y pulsa D | Funciona como antes (acota lo seleccionado), ahora con el campo sobre el lienzo |
+| C.12 | Deshacer (Ctrl+Z) tras acotar | Quita la cota |
+| C.13 | Abre el campo de una cota y, sin cerrarlo, haz zoom o gira la vista | Anota qué pasa: el campo se queda donde estaba (sabido: no sigue a la vista); que no se cierre el programa ni se pierda el valor |
+| C.14 | **Lo de antes sigue igual:** con la herramienta Círculo, marca el centro y **escribe** el diámetro antes del segundo clic (y lo mismo con Línea: longitud y ángulo) | Se crea la figura con su cota, como siempre |
+| C.15 | Guarda, cierra, abre el diseño y edita el sketch | Las cotas siguen ahí con su valor; un clic en una (modo Cota) o doble clic (sin herramienta) la reabre con el campo |
+| C.16 | **Anota dónde se pisan las cotas** (esto es para la siguiente entrega, no es un fallo de esta): un rectángulo pequeño con sus cuatro cotas, dos líneas paralelas a 1–2 mm acotadas, una cota junto a un icono de restricción (H, V…), y acercando y alejando la vista | Una captura de cada caso en que dos textos o un texto y un icono se tapen; servirán de casos de prueba para «cotas sin solaparse» |
+
+**Antes de fusionar esta rama:** pasar C.1–C.16 en Windows (y, cuando se pueda, en Fedora). Lo que falle se anota con la plantilla del final; después viene la auditoría de código del sketch (ver la hoja de ruta, «Sketch al estilo Onshape»).
+
+---
+
 ## Mover y girar arrastrando (estilo Orca) — EN PRUEBA
 
 | # | Haz esto | Debe pasar |

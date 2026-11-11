@@ -48,6 +48,8 @@ public:
         Project,
         // Extras (Fase 2d)
         Text, Image,
+        // Cota de un clic: clic en un círculo, arco o línea (o en dos elementos) y el valor se escribe sobre el lienzo.
+        Dimension,
     };
 
     // «initial»: un sketch ya hecho que se vuelve a editar.
@@ -92,7 +94,8 @@ public:
     void applyConstraint(sketch::ConstraintType type);
     // Acota la selección: pide el valor (propone el actual). Si la medida ya
     // está determinada por otras restricciones, la deja como cota de referencia.
-    void addDimension();
+    // Sin selección entra en el modo Cota (clic en lo que se quiere acotar). Devuelve true si creó una cota.
+    bool addDimension();
 
     // Deshacer/rehacer dentro del sketch.
     bool canUndo() const noexcept { return !undo_.empty(); }
@@ -136,8 +139,11 @@ private:
     void placeText(sketch::Vec2 at);
     void placeImage(sketch::Vec2 at);
     void updateValueInput();
-    // Pide un valor nuevo para la cota; false si se canceló.
+    // Pide un valor nuevo para la cota en un campo sobre el lienzo, junto al cursor; false si se canceló.
     bool askDimensionValue(sketch::Constraint& dimension);
+    // Modo Cota: un clic en una cota existente la edita; en un círculo, arco o línea, la crea; dos clics para
+    // distancias y ángulos.
+    void dimensionClicked(sketch::Vec2 point);
     void editDimension(sketch::ConstraintId id);
     sketch::ConstraintId annotationAt(sketch::Vec2 point) const;
 

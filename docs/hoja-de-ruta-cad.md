@@ -465,6 +465,64 @@ Guía paso a paso para probar cada fase y dar feedback: [`guia-de-pruebas.md`](g
 
 **Convención:** cada bloque termina con su línea «**Pendiente de …**» (lo que no se hizo, lo que no se probó a mano, límites conocidos). Todo pendiente nuevo se documenta ahí al cerrar el bloque, y al hacer la segunda auditoría de código se repasan todos.
 
+## Sketch al estilo Onshape (plan del 10 nov. 2026)
+
+Pedido del usuario tras usar Onshape: medidas escritas después del clic (no antes), «softblocks» con líneas naranjas al alinear o al formar ángulos rectos, y cotas que nunca se pisen. Se hace por entregas, cada una en su rama `feature/…` desde `develop`, con su prueba manual antes de fusionar, y al final una auditoría de código del sketch para que siga siendo eficiente.
+
+**Entrega 1 — Cotas sobre el lienzo ✅ (rama `feature/cotas-en-el-lienzo`, sin fusionar):** campo de valor junto al cursor en vez de diálogo, herramienta Cota de un clic, cotas de círculos concéntricos a ángulos distintos. Detalle en la Oleada 3 del backlog; registro de cambios para volver atrás en [`registro-de-cambios.md`](registro-de-cambios.md); prueba manual C.1–C.16 en la guía.
+
+### Qué hace Onshape (investigado el 10 nov. 2026)
+Fuentes: ayuda de Onshape, «Automatic Inferencing» ([en](https://cad.onshape.com/help/Content/Sketch/automatic_inferencing.htm), [es](https://cad.onshape.com/help/es/Content/inferencing.htm), [fr](https://cad.onshape.com/help/fr_FR/Content/Sketch/automatic_inferencing.htm)) y un [plan de clase que usa Onshape](https://mdecadp2018.github.io/site-40623206/downloads/2-1-Lesson%20Plan.pdf). Lo que dice la documentación:
+- Mientras se dibuja, Onshape **infiere** restricciones y las muestra antes del clic: **alineación horizontal y vertical** con el origen y con otras entidades, **paralela**, **punto medio** y **coincidente**.
+- **Horizontal / vertical:** una **línea discontinua naranja** (en una página en inglés se describe amarilla) desde el punto de referencia hasta el cursor; el cursor «se pega» a esa recta (lo que el usuario llama *softblock*).
+- **Puntos y puntos medios:** se resaltan en amarillo.
+- **Paralela:** la línea que se dibuja se ve discontinua, la línea de referencia se resalta en naranja y aparece el icono de paralela.
+- **«Despertar» la inferencia:** algunas solo aparecen si antes se pasa el cursor cerca de la otra entidad (por ejemplo, se pasa por un punto y luego, lejos de él, aparece la alineación con ese punto).
+- **Suprimirlas:** se mantiene pulsado **Mayús** mientras se mueve el ratón.
+- Lo que la documentación no detalla (y se toma de cómo se ve al usarlo, a confirmar por el usuario): **perpendicular** con indicador al formar 90° con la línea anterior, **tangente** al encadenar un arco, y que al hacer clic con la inferencia activa **se crea la restricción** que mostraba.
+
+### Qué tenemos hoy (punto de partida)
+- `sketch::snap` atrae el cursor a puntos, centros, puntos medios, intersecciones, sobre una curva y a la rejilla (con un marcador), y **Ctrl** dibuja libre.
+- La línea se endereza si queda a menos de 3° de horizontal o vertical respecto a **su propio** punto inicial y recibe esa restricción (`kStraightenAngle`), pero **sin ninguna línea guía** que lo avise, y **sin** alineación con otros puntos, ni perpendicular/paralela/tangente.
+
+### Plan de inferencias («softblocks») — entrega 2 o 3, rama `feature/inferencias-sketch`
+```mermaid
+flowchart LR
+    A["Cursor se mueve"] --> B{"¿Punto o centro<br/>existente cerca?"}
+    B -- sí --> P1["Pegar al punto"]
+    B -- no --> C{"¿Cruce de dos<br/>rectas guía?"}
+    C -- sí --> P2["Pegar al cruce"]
+    C -- no --> D{"¿Recta guía horizontal o vertical<br/>(punto inicial o punto despierto)?"}
+    D -- sí --> P3["Pegar a la recta<br/>y dibujarla naranja"]
+    D -- no --> E{"¿Perpendicular, paralela<br/>o tangente?"}
+    E -- sí --> P4["Enderezar y mostrar<br/>el icono"]
+    E -- no --> F["Rejilla / libre"]
+```
+
+Orden de prioridad de las inferencias (lo que gana cuando coinciden varias):
+
+- [ ] **I1 — Motor de inferencias en el sketch (sin Qt, con pruebas unitarias):** `sketch::snap` devuelve además una lista de `Inference` (tipo, puntos o curvas de referencia, recta guía en coordenadas del sketch). Candidatas en este orden de prioridad: punto/centro existente > intersección de dos rectas guía > alineación horizontal/vertical con el punto inicial de la herramienta > alineación con un punto «despertado» > perpendicular/paralela a la línea anterior de la cadena o a una línea despertada > tangente > rejilla.
+- [ ] **I2 — Horizontal/vertical con «softblock» y línea naranja:** si el cursor está a menos de ~6 px de la recta horizontal o vertical que pasa por el punto de referencia, se **pega** a ella y se dibuja la recta guía **discontinua naranja** desde ese punto hasta el cursor; para soltarse hay que alejarse más (~10 px), igual que el softblock de los anillos de Mover (histéresis), para que no tiemble. Al hacer clic se crea la restricción: horizontal/vertical de la línea (si es su propio punto inicial) o **horizontal/vertical entre los dos puntos** (si es otro punto; `Constraint::horizontal(punto, punto)` ya existe).
+- [ ] **I3 — Puntos «despertados»:** al pasar el cursor sobre un punto (extremo, centro, punto medio) durante ~0,3 s queda despierto (se marca con un anillo pequeño); se recuerdan los dos últimos. Así aparece la alineación con un punto lejano sin tener que dibujar desde él. Si se cruzan las guías de dos puntos (X de uno e Y del otro), el cursor se pega al **cruce**.
+- [ ] **I4 — Perpendicular y paralela:** al encadenar líneas, si la nueva queda a menos de 3° de 90° (o de 0°) respecto a la anterior (o a una línea despertada), se endereza y se dibuja la guía naranja y el icono ⊥ o ∥ junto a la esquina; al clic se crea la restricción Perpendicular o Paralela.
+- [ ] **I5 — Tangente:** un arco que empieza en el extremo de una línea o arco y una línea que sale de un arco: si la dirección queda a menos de 3° de la tangente, se pega y se marca; al clic, restricción Tangente.
+- [ ] **I6 — Cómo se ve:** guías en naranja (`F2A34B`, el color de las flechas de arrastre) **discontinuas** y finas, puntos de referencia y puntos medios resaltados en amarillo, icono de la restricción que se creará junto al cursor; todo en la capa de la vista previa del sketch (no toca la geometría). Hace falta que el visor sepa dibujar líneas discontinuas en la vista previa.
+- [ ] **I7 — Suprimir:** **Mayús** suprime las inferencias como en Onshape (y Ctrl sigue dibujando libre, sin snap). Ojo: hoy Mayús + clic agrega a la selección y Mayús + arrastre selecciona por rectángulo, pero eso es sin herramienta; con una herramienta de dibujo activa Mayús queda libre para esto.
+- [ ] **I8 — Pruebas:** unitarias del motor (cada inferencia, su prioridad, la histéresis y la restricción que crea) y pasos en la prueba de interfaz que mueven el cursor y hacen clic (como la de las cotas), contando los píxeles naranjas de la guía.
+- **Riesgos:** demasiadas guías a la vez confunden (se muestran como máximo dos); el coste de buscar alineaciones en sketches grandes (se limita a los puntos despiertos y al punto inicial; nada de recorrer todos los puntos en cada movimiento); que las restricciones automáticas sobrerrestrinjan el sketch (se comprueba con `canAdd` antes de añadirlas, como hoy).
+
+### Plan para que las cotas no se pisen nunca — rama `feature/cotas-sin-solaparse`
+Hoy cada cota (y cada icono de restricción) se coloca sola en `layoutAnnotations` sin mirar a las demás: dos cotas paralelas cercanas, una cota sobre un icono, o el texto de una cota sobre otra línea de cota se pisan. Solo los círculos concéntricos se reparten (entrega 1).
+- [ ] **S1 — Cajas de texto:** cada anotación lleva el rectángulo que ocupa su texto (ancho por número de caracteres y alto de la letra, en píxeles pasados a mm con `pixelSize`) y, para las cotas, su línea de cota.
+- [ ] **S2 — Paso de colocación después de `layoutAnnotations`:** se recorren las anotaciones en orden (seleccionadas y bajo el cursor primero, luego las cotas de más a menos importantes, los iconos al final) y cada una que choca con una ya colocada se **desplaza por su grado de libertad natural**: cota lineal → más lejos de la geometría, en saltos de un renglón (y si ya está lejos, su texto se corre a lo largo de la línea de cota); cota radial o de diámetro → otro ángulo (30° más); ángulo → radio del arco mayor; icono → al siguiente hueco de su fila. Se prueban hasta N posiciones (por ejemplo 8); si ninguna queda libre, se usa la menos solapada y el texto lleva una **línea de llamada** hasta su cota.
+- [ ] **S3 — Colisión rápida:** rejilla de cubos en pantalla (hash espacial) para no comparar todas con todas: lineal en el número de anotaciones aunque haya cientos.
+- [ ] **S4 — Estable:** la posición elegida se recuerda por cota mientras no cambie (para que no salten al mover el cursor o al resolver), y se recalcula al hacer zoom (las distancias son en píxeles).
+- [ ] **S5 — Textos sobre la geometría:** como mínimo, el texto lleva un fondo opaco del color del lienzo (ya lo lleva la cota resaltada) para leerse aunque cruce una línea; la colocación evita también los puntos del sketch.
+- [ ] **S6 — Pruebas:** unitarias con casos que hoy se pisan (cotas paralelas a 1 mm, una cota y un icono, diez círculos concéntricos, un rectángulo pequeño con sus cuatro cotas) que comprueban que ningún par de cajas de texto se solapa, a varios zooms; y la medición del tiempo de colocación con 500 cotas (prueba de rendimiento).
+
+### Después: auditoría del sketch
+- [ ] Tras la prueba manual de las entregas, auditoría de código del sketch (`SketchSession`, herramientas, `Annotations`, snap) para simplificar y optimizar: coste de `layoutAnnotations` y del snap por movimiento del ratón, repintados, duplicación entre herramientas; con mediciones antes y después.
+
 ## Backlog consolidado (revisión del 9 nov. 2026, versión 0.1.0)
 
 Resumen de todo lo pendiente que no son pruebas manuales; el detalle sigue en el «Pendiente de …» de cada bloque. Se trabaja por oleadas y al cerrar cada punto se tacha aquí y en su bloque. Lo ya hecho está marcado con [x]; al final hay un resumen de lo pendiente (nuevo, de lo último que se hizo) y la lista de pruebas manuales que faltan.
@@ -492,6 +550,7 @@ Resumen de todo lo pendiente que no son pruebas manuales; el detalle sigue en el
 - [x] Vista previa de generadores en azul translúcido y «⏳ Calculando…» sobre la vista: los cuerpos con clave `gen:` (la vista previa de un generador, que aún no está en el diseño) se dibujan en azul con 45 % de transparencia; el distintivo (abajo a la izquierda de la vista) sale mientras el historial se recalcula o se calcula la vista previa de una herramienta (`FeatureTool::computingChanged`, `MainWindow::updateBusyBadge`). La prueba de interfaz comprueba por píxeles que la vista previa de Lightbox es azulada y que el distintivo no queda al terminar. **Pendiente:** el azul es fijo (no sigue el tema), no hay opción para verla opaca, y el distintivo no dice cuánto falta ni deja cancelar; las vistas previas de las demás herramientas (Caja, Rosca…) siguen siendo opacas y grises; el «Preparando el dibujo de la pieza…» del visor sigue en la barra de estado.
 - [x] Errores de geometría en lenguaje claro: los fallos del kernel de OpenCASCADE («Error del kernel al extruir: …») ahora dicen qué se intentaba, qué probar y, al final y entre paréntesis, el detalle técnico (`kernelFailure` en `Modeling.cpp`: extruir, revolucionar, combinar cuerpos, reflejar, repetir, engranaje, caja, cilindro, rosca, barrer, loft, mover, colocar, agujero); la booleana que falla explica que puede ser por cuerpos que solo se tocan en una arista o por caras casi coincidentes; el «Error inesperado» del documento sugiere probar otros valores o deshacer. Los mensajes que ya eran claros (validaciones de medidas, redondeo, vaciado) no cambian. **Pendiente:** las sugerencias son fijas por operación (no distinguen la causa concreta que dio el kernel); sin traducir el detalle técnico, que sigue en inglés; las ayudas con «mm» fijo en los textos de los generadores («M3: 2,5») no siguen la unidad elegida.
 - [x] **Mover y girar con el ratón, estilo Orca Slicer** (pedido del usuario): sobre el cuerpo salen flechas X/Y/Z para mover y anillos con marcas cada 45° para girar; al arrastrar solo se mueve una **sombra azul translúcida** y el modelo se calcula al soltar; los anillos miden el ángulo absoluto desde su perilla (0°), se pegan a las marcas con **softblock** (se pegan a menos de 4° y se sueltan a más de 9°) y dibujan una **recta amarilla de alineación**; mientras se arrastra uno se quitan los otros dos; cada anillo gira sobre su eje del mundo; se pueden mover y girar **varios cuerpos a la vez** como un bloque (Shift + clic, o casillas; un llavero son placa y texto). Falta probarlo a mano (guía O.1–O.18). Detalle y pendientes en la Fase 8.
+- [x] **Cotas sobre el lienzo, al estilo Onshape (primera entrega; rama `feature/cotas-en-el-lienzo`, sin fusionar hasta que el usuario la pruebe):** (1) el valor de una cota ya no se pide en un diálogo: sale un **campo pequeño sobre el lienzo, junto al cursor** («Ø 44.000 mm»; acepta números y expresiones con parámetros), Enter acepta y Esc o un clic fuera lo cancelan; (2) nueva herramienta **Cota de un clic** (tecla D sin nada elegido, o el botón Cota): un clic en un círculo, arco, elipse o línea crea su cota y abre el campo; dos clics para una distancia (punto con punto o con línea) o un ángulo (dos líneas); un clic en una cota existente la reabre; Esc quita lo elegido y, sin nada, sale del modo; con algo ya seleccionado, D funciona como antes; (3) las cotas de **círculos con el mismo centro** van a ángulos distintos (30° más cada una) y no se pisan. La prueba de interfaz abre un sketch, dibuja un círculo con clics, lo acota con un clic escribiendo un valor en el campo, lo reabre, cancela con Esc y comprueba tres círculos concéntricos; y una prueba unitaria comprueba la colocación de las cotas. **Pendiente:** el campo sale junto al cursor, no sobre el texto de la cota, y no sigue el zoom si se mueve la vista con él abierto; con una línea, el primer clic abre ya el campo de su longitud (para acotar un ángulo o una distancia hay que cancelar con Esc y hacer clic en la otra línea: la primera queda elegida); si se hace clic fuera mientras el campo está abierto, ese clic solo lo cierra; las cotas de arcos concéntricos y los textos que se tapan por otras causas no se reparten; no hay cota «de referencia» a partir de un clic. **Siguiente entrega (`feature/figuras-abiertas`):** que el polígono (y luego el círculo y el rectángulo) quede abierto tras el último clic, con su campo de lados y de tamaño para ajustarlos después.
 - [ ] Selector de unidad en la barra de estado; atajos para Caja, Cilindro y generadores.
 - [ ] Ocultar la pestaña HERRAMIENTAS dentro de un sketch; aviso de recuperación menos molesto.
 - [ ] Unidades restantes: Medir, avisos de impresión, lista de parámetros, área/volumen, por documento.
@@ -531,6 +590,28 @@ Resumen de todo lo pendiente que no son pruebas manuales; el detalle sigue en el
 - **Orden:** la Fase 4 va justo después del modelado básico para tener un flujo útil de punta a punta lo antes posible; cada fase siguiente agrega valor real.
 - **Esfuerzo:** las Fases 1–3 son alcanzables en semanas; las Fases 4–5 bien hechas (incluyendo robustez del historial) concentran la mayor parte del esfuerzo.
 - **Versiones y ramas (desde la v0.1.0, 9 nov. 2026):** `main` solo guarda versiones estables (la primera es la etiqueta `v0.1.0`); `develop` es la rama de integración; cada cambio o funcionalidad nueva va en `feature/<nombre>`, que sale de `develop` y vuelve a ella. `main` recibe `develop` solo al sacar una versión, con su etiqueta.
+
+```mermaid
+gitGraph
+    commit id: "v0.1.0" tag: "v0.1.0"
+    branch develop
+    checkout develop
+    commit id: "integración"
+    branch feature/cotas-en-el-lienzo
+    checkout feature/cotas-en-el-lienzo
+    commit id: "cotas"
+    commit id: "prueba manual"
+    checkout develop
+    merge feature/cotas-en-el-lienzo
+    branch feature/inferencias-sketch
+    checkout feature/inferencias-sketch
+    commit id: "inferencias"
+    checkout develop
+    merge feature/inferencias-sketch
+    checkout main
+    merge develop tag: "próxima versión"
+```
+
 - **Marcadores por sistema (desde el 9 nov. 2026):** `estable-windows` y `estable-fedora` no son copias del código: apuntan al último commit de `develop` que se probó a mano en ese sistema y no reciben commits propios. Se avanzan con `git switch estable-<sistema>` y `git merge --ff-only develop` (o `git branch -f estable-<sistema> <commit>`) tras probar. `git log estable-fedora..estable-windows` lista lo hecho en Windows que falta probar en Fedora. Lo que sea distinto entre sistemas va con `#if` o CMake en el mismo código, nunca en ramas. Un arreglo de un sistema se hace en `feature/…` desde `develop` y debe compilar en los dos (el CI de Windows y Linux lo comprueba). `main` solo recibe `develop` cuando los dos marcadores apuntan al mismo commit, con su etiqueta.
 
 ## Estado
