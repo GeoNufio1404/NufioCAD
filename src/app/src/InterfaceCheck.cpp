@@ -993,7 +993,7 @@ int InterfaceCheck::run()
 
         // 3. Un clic sobre la cota la reabre y la cambia; Esc la deja como estaba.
         const auto annotationOf = [&]() -> std::optional<sketch::Vec2> {
-            for (const sketch::Annotation& note : sketch::layoutAnnotations(session->sketch(), window_.viewport_->sketchPixelSize())) {
+            for (const sketch::Annotation& note : window_.viewport_->sketchAnnotations(session->sketch())) {
                 if (note.dimension) {
                     return note.anchor;
                 }
@@ -1026,7 +1026,7 @@ int InterfaceCheck::run()
         answer(44.0, true);
         blocking(QStringLiteral("acotar el tercer círculo"), [&] { click(0.0, 22.0); });
         std::vector<sketch::Vec2> anchors;
-        for (const sketch::Annotation& note : sketch::layoutAnnotations(session->sketch(), window_.viewport_->sketchPixelSize())) {
+        for (const sketch::Annotation& note : window_.viewport_->sketchAnnotations(session->sketch())) {
             if (note.dimension) {
                 anchors.push_back(note.anchor);
             }

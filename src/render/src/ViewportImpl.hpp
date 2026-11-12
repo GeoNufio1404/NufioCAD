@@ -1420,7 +1420,10 @@ public:
         const auto touchesFocus = [&](const sketch::Constraint& c) {
             return focus.contains(c.first.entity) || focus.contains(c.second.entity) || focus.contains(c.third.entity);
         };
-        for (const sketch::Annotation& note : sketch::layoutAnnotations(sketch, annotationScale)) {
+        // Las cotas seleccionadas se colocan primero y ganan los huecos.
+        layoutMemory.priority.clear();
+        layoutMemory.priority.insert(highlight.selectedConstraints.begin(), highlight.selectedConstraints.end());
+        for (const sketch::Annotation& note : sketch::layoutAnnotations(sketch, annotationScale, &layoutMemory)) {
             const bool picked =
                 std::ranges::find(highlight.selectedConstraints, note.constraint) != highlight.selectedConstraints.end();
             const bool hovered = note.constraint == highlight.hoveredConstraint;
@@ -1696,6 +1699,7 @@ public:
     std::vector<sketch::EntityId> shownUnderconstrained;
     SketchHighlight shownHighlight;
     double annotationScale = 0.0;
+    sketch::LayoutMemory layoutMemory;  // nivel elegido por cota entre repintados
     bool measuresVisible = true;
     bool measuresAll = false;      // todas las medidas, no solo las de lo que se mira
     bool constraintsAll = false;   // todas las restricciones, no solo las de lo que se mira

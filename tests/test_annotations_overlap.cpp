@@ -178,3 +178,43 @@ TEST_CASE("Cotas: el texto se aparta de las líneas del dibujo", "[sketch][annot
     const Vec2 moved = notes.front().anchor;
     REQUIRE(std::abs(moved.y - natural.y) > 9.0 * px * 0.99);  // ya no la tapa
 }
+
+TEST_CASE("Cotas: la posición elegida se recuerda y la seleccionada gana el hueco", "[sketch][annotations]")
+{
+    Sketch s;
+    const EntityId a = s.addLine({0, 0}, {40, 0});
+    const EntityId b = s.addLine({0, 1}, {40, 1});
+    const ConstraintId ca = s.addConstraint(Constraint::length(a, 40.0));
+    const ConstraintId cb = s.addConstraint(Constraint::length(b, 40.0));
+    const double px = 0.1;
+    const auto anchorOf = [](const std::vector<Annotation>& notes, ConstraintId id) {
+        for (const Annotation& n : notes) {
+            if (n.constraint == id) {
+                return n.anchor;
+            }
+        }
+        return Vec2{1e9, 1e9};
+    };
+
+    // Sin prioridad la primera cota ocupa su sitio natural y la segunda se aparta.
+    LayoutMemory memory;
+    const auto first = layoutAnnotations(s, px, &memory);
+    const Vec2 naturalA = anchorOf(first, ca);
+    const Vec2 movedB = anchorOf(first, cb);
+    REQUIRE(memory.levels[ca] == 0);
+    REQUIRE(memory.levels[cb] > 0);
+
+    // Repintar igual no mueve nada.
+    const auto again = layoutAnnotations(s, px, &memory);
+    REQUIRE(anchorOf(again, ca).x == naturalA.x);
+    REQUIRE(anchorOf(again, ca).y == naturalA.y);
+    REQUIRE(anchorOf(again, cb).x == movedB.x);
+    REQUIRE(anchorOf(again, cb).y == movedB.y);
+
+    // Seleccionando la segunda, esta pasa a su sitio y la primera cede.
+    memory.priority = {cb};
+    const auto picked = layoutAnnotations(s, px, &memory);
+    REQUIRE(memory.levels[cb] == 0);
+    REQUIRE(memory.levels[ca] > 0);
+    REQUIRE(overlappingPairs(picked, px) == 0);
+}

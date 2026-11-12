@@ -59,11 +59,23 @@ public:
         open_.reset();  // un clic nuevo da por buena la figura abierta
         if (!a_) {
             a_ = cursor;
+            // Si parte del extremo de una línea, el primer lado puede quedar
+            // paralelo o perpendicular a ella.
+            reference_.reset();
+            relation_ = Relation::None;
+            if (cursor.kind == SnapKind::Point && (cursor.ref.part == Part::Start || cursor.ref.part == Part::End)) {
+                if (const Entity* e = sketch.entity(cursor.ref.entity)) {
+                    if (const auto* line = std::get_if<Line>(&e->geometry)) {
+                        reference_ = {e->id, *line};
+                    }
+                }
+            }
             return false;
         }
         if (!b_) {
             Snap b = cursor;
             straight_ = straighten(a_->point, b);
+            relation_ = straight_ == Straight::None ? relateFirst(b) : Relation::None;
             if (distance(a_->point, b.point) >= kMinLength) {
                 b_ = b;
             }
@@ -95,7 +107,9 @@ public:
         }
         if (!b_) {
             Snap b = cursor_;
-            straighten(a_->point, b);
+            if (straighten(a_->point, b) == Straight::None) {
+                relateFirst(b);
+            }
             return {distance(a_->point, b.point)};
         }
         return {std::abs(height(cursor_.point))};
@@ -136,6 +150,7 @@ public:
             // Lado con la longitud escrita, en la dirección del cursor.
             Snap b = cursor_;
             straight_ = straighten(a_->point, b);
+            relation_ = straight_ == Straight::None ? relateFirst(b) : Relation::None;
             const Vec2 u = unit(sub(b.point, a_->point));
             b_ = Snap{add(a_->point, scale(*values[0], u))};
             length_ = *values[0];
@@ -166,10 +181,19 @@ public:
         }
         if (!b_) {
             Snap b = cursor_;
-            straighten(a_->point, b);
-            return {{Line{a_->point, b.point}}};
+            Preview result;
+            const Relation relation = straighten(a_->point, b) == Straight::None ? relateFirst(b) : Relation::None;
+            result.geometry = {Line{a_->point, b.point}};
+            if (relation != Relation::None) {
+                result.guides.push_back({reference_->second.start, reference_->second.end});
+                result.badge = relation == Relation::Parallel ? "∥" : "⊥";
+                result.badgeAt = {(a_->point.x + b.point.x) / 2, (a_->point.y + b.point.y) / 2};
+            }
+            return result;
         }
-        return {polylinePreview(corners(cursor_.point))};
+        Preview result;
+        result.geometry = polylinePreview(corners(cursor_.point));
+        return result;
     }
 
     std::string hint() const override
@@ -184,6 +208,11 @@ public:
     }
 
 private:
+    Relation relateFirst(Snap& b) const
+    {
+        return reference_ ? relate(a_->point, reference_->second, b) : Relation::None;
+    }
+
     // Altura con signo de p respecto al primer lado (positiva a su izquierda).
     double height(Vec2 p) const
     {
@@ -212,6 +241,12 @@ private:
             sketch.addConstraint(Constraint::horizontal(lines[0]));
         } else if (straight_ == Straight::Vertical) {
             sketch.addConstraint(Constraint::vertical(lines[0]));
+        } else if (relation_ != Relation::None && reference_) {
+            const Constraint c = relation_ == Relation::Parallel ? Constraint::parallel(lines[0], reference_->first)
+                                                                 : Constraint::perpendicular(lines[0], reference_->first);
+            if (sketch.canAdd(c)) {
+                sketch.addConstraint(c);
+            }
         }
         attach(sketch, Ref::start(lines[0]), *a_);
         attach(sketch, Ref::end(lines[0]), *b_);
@@ -233,6 +268,8 @@ private:
     std::optional<Snap> a_;
     std::optional<Snap> b_;
     Straight straight_ = Straight::None;
+    Relation relation_ = Relation::None;
+    std::optional<std::pair<EntityId, Line>> reference_;  // línea de la que parte el primer lado
     std::optional<double> length_;
     std::optional<OpenFigure> open_;
     bool amended_ = false;

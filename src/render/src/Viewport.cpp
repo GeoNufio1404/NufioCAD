@@ -466,6 +466,11 @@ void Viewport::grabSketchDrag()
 
 double Viewport::sketchPixelSize() const { return impl_->pixelSize(); }
 
+std::vector<sketch::Annotation> Viewport::sketchAnnotations(const sketch::Sketch& sketch)
+{
+    return sketch::layoutAnnotations(sketch, impl_->pixelSize(), &impl_->layoutMemory);
+}
+
 double Viewport::sketchGridStep() const { return impl_->gridStep(); }
 
 Qt::MouseButtons Viewport::navigationButtons(Qt::MouseButtons buttons) const

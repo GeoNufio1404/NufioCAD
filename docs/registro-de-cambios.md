@@ -43,6 +43,20 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 - **Pruebas:** 221 unitarias y 34 pasos de la prueba de interfaz, en verde en Windows (Debug). La prueba de interfaz **aún no cuenta los píxeles naranjas** de la guía (pendiente I8).
 - **Riesgos al volver atrás:** ninguno en archivos guardados: las restricciones creadas son las horizontal/vertical de siempre.
+## Cotas que no saltan y la seleccionada gana el hueco — 11 nov. 2026
+
+- **Rama:** `feature/cotas-e-inferencias` (sale de `develop`). Sin fusionar hasta la prueba manual (guía Q).
+- **Qué hace:** (1) cada cota **recuerda su posición** (el nivel que la apartó de otras) entre repintados y al resolver el sketch: ya no salta al mover un punto; se olvida al hacer zoom. (2) La cota **seleccionada** se coloca primero y toma su sitio natural; las demás ceden. Lo que se dibuja y lo que se pica comparten la misma memoria (`Viewport::sketchAnnotations`).
+- **Dónde:** `LayoutMemory` y `layoutAnnotations(…, memory)` en `src/sketch/{include/nuf/sketch,src}/Annotations.*`; la memoria vive en `ViewportImpl::layoutMemory`.
+- **Pruebas:** 245 unitarias (nueva: repintar no mueve nada y la prioridad cambia el reparto) y 36 pasos de interfaz.
+- **Rectángulo de 3 puntos con ⊥/∥:** si el primer lado parte del extremo de una línea y queda a ≤3° de su paralela o perpendicular, se endereza, se resalta la línea y sale «∥»/«⊥»; al clic se crea la restricción (si cabe). Dónde: `ThreePointRectangleTool` en `src/sketch/src/ShapeTools.cpp`. Prueba nueva en `tests/test_sketch_inference.cpp` (246 unitarias).
+- **Arco de 3 puntos tangente:** si empieza en el extremo de una línea o un arco y el arco por los tres puntos sale a ≤3° de la tangente (hacia delante), se sustituye por el arco exactamente tangente, sale «T» y al clic se crea Tangente (si no cabe, coincidencia). Dónde: `ArcTool::inferTangent` en `src/sketch/src/Tools.cpp`. Prueba nueva (247 unitarias).
+- **Prueba de interfaz:** 35 de 36 pasos con el juego Warframe abierto (falla por tiempo «Mover y girar arrastrando», que no usa el sketch); sin juego pasaba 36/36.
+- **Pendiente:** línea de llamada cuando no queda sitio, referencia «despierta» lejana, arco tangente a una línea, y símbolos como iconos dibujados.
+- **Riesgos al volver atrás:** ninguno en archivos guardados.
+
+---
+
 ## Auditoría del sketch: eficiencia con sketches grandes — 11 nov. 2026
 
 - **Rama:** `feature/auditoria-sketch` (sale de `develop`). **Sin fusionar**: los cambios son internos (mismos resultados, los 244 casos unitarios y los 36 pasos de interfaz siguen en verde), pero se prueban a mano con un sketch grande (guía P.1–P.3).

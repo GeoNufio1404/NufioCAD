@@ -449,6 +449,17 @@ Rama `feature/inferencias-sketch`. Solo la **alineación horizontal/vertical** c
 | I.15 | Empieza una línea nueva desde el **extremo de otra** línea que ya existe y haz lo de I.12 | También infiere con esa línea |
 | I.16 | Cerca de la horizontal o la vertical, o cerca de un punto existente, o con **Mayús/Ctrl** pulsada | Mandan la horizontal/vertical y los puntos antes que ⊥/∥; Mayús y Ctrl las suprimen |
 | I.11 | **Anota** qué te falta o molesta (sobre todo: si la guía aparece demasiado, si «tiembla» al pegarse y se suelta, si querías ver un anillo en el punto despierto) | Una nota por caso: son los pendientes de la entrega |
+## Cotas estables y cota seleccionada — EN PRUEBA
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| Q.1 | Dibuja dos líneas paralelas muy juntas y acótalas; arrastra un extremo | Las cotas no saltan de sitio mientras arrastras |
+| Q.2 | Selecciona la cota que quedó apartada | Pasa a su sitio natural y la otra se aparta; ninguna se pisa |
+| Q.4 | Dibuja una línea; con «Arco» empieza en su extremo, marca el final y pasa el tercer punto cerca de la curva que seguiría la línea | La curva se endereza, sale «T» y el arco queda tangente a la línea (sin conflicto al arrastrar) |
+| Q.3 | Dibuja una línea inclinada. Con «Rectángulo 3 puntos» empieza en su extremo y lleva el primer lado casi perpendicular (o paralelo) | Se endereza, la línea se resalta en naranja y sale ⊥ (∥); termina el rectángulo y el sketch queda sin conflictos |
+
+---
+
 ## Auditoría del sketch (rendimiento) — EN PRUEBA
 
 Rama `feature/auditoria-sketch`. Hace falta un sketch grande: dibuja una **rejilla de unas 20 × 20 casillas** (por ejemplo, un rectángulo con patrón rectangular, o importa un DXF grande).
