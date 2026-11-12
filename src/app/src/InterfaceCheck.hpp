@@ -33,6 +33,8 @@ public:
     ~InterfaceCheck();
 
     int run();
+    // --captura-temas: guarda capturas de la ventana y de los menús con el tema claro y el oscuro, para mirarlas.
+    int captureThemes(const QString& folder);
 
 private:
     struct Result {

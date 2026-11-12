@@ -65,12 +65,16 @@ int main(int argc, char* argv[])
     // --prueba-interfaz [--informe archivo] [--umbral-ms N]: abre las herramientas con la ventana real y comprueba
     // que no hay fallos ni paradas largas. Usa carpetas y ajustes propios: no toca los del usuario.
     bool interfaceCheck = false;
+    QString captureFolder;  // --captura-temas carpeta: capturas del tema claro y oscuro
     QString reportPath;
     int thresholdMs = 20000;  // en Debug, OpenCASCADE es lento: sirve para detectar paradas de decenas de segundos
     for (int i = 1; i < argc; ++i) {
         const std::string_view argument(argv[i]);
         if (argument == "--prueba-interfaz") {
             interfaceCheck = true;
+        } else if (argument == "--captura-temas" && i + 1 < argc) {
+            interfaceCheck = true;
+            captureFolder = QString::fromLocal8Bit(argv[i + 1]);
         } else if (argument == "--informe" && i + 1 < argc) {
             reportPath = QString::fromLocal8Bit(argv[i + 1]);
         } else if (argument == "--umbral-ms" && i + 1 < argc) {
@@ -108,8 +112,9 @@ int main(int argc, char* argv[])
     nuf::app::MainWindow window;
     window.show();
     if (interfaceCheck) {
-        QTimer::singleShot(800, &window, [&window, reportPath, thresholdMs] {
-            const int code = nuf::app::InterfaceCheck(window, reportPath, thresholdMs).run();
+        QTimer::singleShot(800, &window, [&window, reportPath, thresholdMs, captureFolder] {
+            nuf::app::InterfaceCheck check(window, reportPath, thresholdMs);
+            const int code = captureFolder.isEmpty() ? check.run() : check.captureThemes(captureFolder);
             window.close();
             QApplication::exit(code);
         });
