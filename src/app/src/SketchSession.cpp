@@ -727,6 +727,7 @@ void SketchSession::pruneSelection()
     if (std::erase_if(selection_, gone) + std::erase_if(selectedConstraints_, goneConstraint) > 0) {
         emit selectionChanged();
     }
+    std::erase_if(pinnedConstraints_, goneConstraint);
     if (goneConstraint(hoveredConstraint_)) {
         hoveredConstraint_ = 0;
     }
@@ -918,6 +919,7 @@ void SketchSession::applyConstraint(sketch::ConstraintType type)
         return;
     }
     remember(std::move(before));
+    pinnedConstraints_.insert(pinnedConstraints_.end(), added.begin(), added.end());
     selection_.clear();
     emit selectionChanged();
     solveAndShow();
@@ -1101,7 +1103,7 @@ void SketchSession::editDimension(sketch::ConstraintId id)
 
 void SketchSession::showSketch()
 {
-    viewport_.showSketch(sketch_, underconstrained_, {selection_, hovered_, selectedConstraints_, hoveredConstraint_});
+    viewport_.showSketch(sketch_, underconstrained_, {selection_, hovered_, selectedConstraints_, hoveredConstraint_, pinnedConstraints_});
 }
 
 void SketchSession::solveAndShow()

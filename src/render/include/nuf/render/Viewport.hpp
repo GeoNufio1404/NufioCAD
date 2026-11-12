@@ -21,6 +21,9 @@ struct SketchHighlight {
     sketch::Ref hovered;
     std::vector<sketch::ConstraintId> selectedConstraints;
     sketch::ConstraintId hoveredConstraint = 0;
+    // Restricciones que el usuario aplicó en esta sesión: su icono se queda a
+    // la vista aunque no se mire su geometría, para saber cuáles ya puso.
+    std::vector<sketch::ConstraintId> pinnedConstraints;
 };
 
 // Lo seleccionado en el modelo (fuera del sketch), con referencias estables.

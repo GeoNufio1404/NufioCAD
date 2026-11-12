@@ -1427,7 +1427,8 @@ public:
             const bool picked =
                 std::ranges::find(highlight.selectedConstraints, note.constraint) != highlight.selectedConstraints.end();
             const bool hovered = note.constraint == highlight.hoveredConstraint;
-            bool relevant = note.dimension || constraintsAll || picked || hovered;
+            const bool pinned = std::ranges::find(highlight.pinnedConstraints, note.constraint) != highlight.pinnedConstraints.end();
+            bool relevant = note.dimension || constraintsAll || picked || hovered || pinned;
             if (!relevant) {
                 for (const sketch::Constraint& c : sketch.constraints()) {
                     if (c.id == note.constraint) {
