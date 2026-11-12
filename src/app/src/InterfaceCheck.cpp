@@ -946,19 +946,19 @@ int InterfaceCheck::run()
         undoAll();
     });
 
-    // Un llavero son dos cuerpos (placa y texto): mover con los dos marcados los lleva juntos.
-    step(QStringLiteral("Mover los dos cuerpos de un letrero a la vez"), [&] {
+    // Un lightbox son dos cuerpos (caja y tapa): mover con los dos marcados los lleva juntos.
+    step(QStringLiteral("Mover los dos cuerpos de un lightbox a la vez"), [&] {
         QAction* sign = nullptr;
         for (QAction* action : generators) {
-            if (action->text().contains(QStringLiteral("Letrero"))) {
+            if (action->text().contains(QStringLiteral("Lightbox"))) {
                 sign = action;
             }
         }
-        expect(sign != nullptr, QStringLiteral("no hay generador Letrero"));
+        expect(sign != nullptr, QStringLiteral("no hay generador Lightbox"));
         if (sign == nullptr) {
             return;
         }
-        expect(openChangeAccept(sign, 0) >= 1, QStringLiteral("no se creó el letrero"));
+        expect(openChangeAccept(sign, 0) >= 1, QStringLiteral("no se creó el lightbox"));
         const auto centers = [&] {
             std::vector<double> xs;
             for (const document::Body& body : window_.document_.result().bodies) {
@@ -968,7 +968,7 @@ int InterfaceCheck::run()
             return xs;
         };
         const std::vector<double> before = centers();
-        expect(before.size() >= 2, QStringLiteral("el letrero debía tener al menos dos cuerpos (%1)").arg(before.size()));
+        expect(before.size() >= 2, QStringLiteral("el lightbox debía tener al menos dos cuerpos (%1)").arg(before.size()));
         blocking(QStringLiteral("abrir Mover"), [&] { window_.moveAction_->trigger(); });
         waitIdle();
         auto* list = window_.propertiesDock_->widget() != nullptr ? window_.propertiesDock_->widget()->findChild<QListWidget*>() : nullptr;

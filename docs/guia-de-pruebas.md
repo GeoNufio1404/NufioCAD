@@ -653,17 +653,20 @@ Código: **LIG**.
 
 | ID | Haz esto | Debe pasar |
 |---|---|---|
-| LIG.1 | Pestaña HERRAMIENTAS (o menú Herramientas) › **Lightbox** | Se abre el formulario a la derecha y se ve una caja abierta por delante con su tapa (marco, labio y cara central) al lado |
+| LIG.1 | Pestaña HERRAMIENTAS (o menú Herramientas) › **Lightbox** | Se abre el formulario a la derecha y se ve una caja abierta por delante con su tapa (placa y labio, un solo sólido) al lado |
 | LIG.2 | Cambia Ancho, Alto, Pared… | La vista previa se actualiza (con «Calculando…» un momento) |
 | LIG.3 | Cambia «Forma» a Redonda | Desaparecen Ancho y Alto, aparece Diámetro, y la caja es redonda |
 | LIG.4 | Pon Ancho 20 y Pared 20 (un hueco imposible) | Avisa en rojo de la operación que falla y no deja aceptar, sin cerrar la herramienta |
-| LIG.5 | Aceptar | Navegador: componente «Lightbox» con «Caja», «Marco», «Labio» y «Cara»; el historial muestra las 8 operaciones «Lightbox: …» |
+| LIG.5 | Aceptar | Navegador: componente «Lightbox» con solo dos cuerpos, «Caja» y «Tapa»; el historial muestra las 6 operaciones «Lightbox: …» |
 | LIG.6 | Sólido › Parámetros | Aparecen ancho, alto, profundidad, pared, frente, tapa, labio, holgura y cable; al cambiar uno, todo se recalcula |
 | LIG.7 | Ctrl+Z | Desaparece todo de una vez (operaciones, parámetros y componente) |
 | LIG.8 | Genera un segundo Lightbox | Sus parámetros salen como ancho_2, alto_2… y no pisan los del primero |
-| LIG.9 | Exporta o imprime los cuatro cuerpos | La revisión no avisa de paredes finas con los valores por defecto; marco, labio y cara no se solapan |
+| LIG.9 | Exporta o imprime los dos cuerpos | La revisión no avisa de paredes finas con los valores por defecto |
 | LIG.10 | Sólido › Caja / Cilindro | Primitivas con posición, centradas o no, con alto ± y operación; doble clic en una operación «Lightbox: …» del historial abre su panel |
 | LIG.11 | Compara con tus lightboxes de referencia (Illescas, Aguilar) | Las medidas son las de `docs/generadores.md`: 175 × 131 × 37 con pared 2; para igualar la de Illescas pon ancho 174,664, alto 132,036, profundidad 37 y holgura 0 |
+| LIG.12 | Aceptar y selecciona la tapa en el Navegador o con un clic en ella | Se marca **toda** la tapa (placa y labio) como un solo cuerpo; no hay marco, labio ni cara sueltos |
+| LIG.13 | Forma «Redonda», Aceptar | También salen solo «Caja» y «Tapa»; Ctrl+Z lo deshace todo de una vez |
+| LIG.14 | Cambia «Frente», «Alto del labio» y «Grosor del labio» con el formulario abierto | La flecha turquesa mide la placa de la tapa, el labio desde su borde de arriba y el grosor de su pared |
 
 ### 4.2 Caja con tapa
 
@@ -676,6 +679,7 @@ Código: **CAJ**.
 | CAJ.3 | Aceptar y abrir Sólido › Parámetros | Ancho, fondo, alto, pared… como parámetros; al cambiar «alto» la caja y los postes crecen |
 | CAJ.4 | Imprime la tapa con labio sobre la caja | Entra a presión sin forzar con holgura 0,2 (subir a 0,3 si queda dura) |
 | CAJ.5 | Prueba un tornillo M3 en un poste y en la tapa | Se enrosca en el poste (Ø2,5) y pasa libre por la tapa (Ø3,4) |
+| CAJ.6 | Aceptar con cada cierre y mira el Navegador | Solo hay dos cuerpos, «Caja» y «Tapa»; la tapa (placa, labio y agujeros) es uno solo. No cambia nada respecto a antes (la Caja con tapa ya era así) |
 
 ### 4.3 Letrero o llavero
 
@@ -689,7 +693,10 @@ Código: **LET**.
 | LET.4 | Cambia «Texto» a Grabado | Las letras quedan hundidas en la placa (un solo cuerpo) |
 | LET.5 | Prueba letras con hueco (O, A, B, 8) | El hueco queda libre, no se rellena |
 | LET.6 | Aceptar | Navegador: «Placa» y «Texto» en el componente; el historial tiene el sketch «…: letras» y sus operaciones |
-| LET.7 | Imprime con relieve en otro color | El cuerpo «Texto» se asigna a otro filamento sin tocar la placa |
+| LET.7 | Cambia «Texto» a «En relieve (otro cuerpo)», acepta e imprime con el texto en otro color | El cuerpo «Texto» se asigna a otro filamento sin tocar la placa |
+| LET.8 | Por defecto («En relieve (un solo cuerpo)») acepta | Navegador: un solo cuerpo «Placa» en el componente; el texto está unido a la placa, sin juntas visibles |
+| LET.9 | Igual con «Tipo» Llavero | Placa, texto y anilla (con su agujero) son un solo cuerpo; mover o girar lo lleva todo junto |
+| LET.10 | Reabre el letrero (doble clic en una operación) y cambia el grosor, el relieve o el modo | Se rehace en su sitio; Ctrl+Z lo deshace de una vez; un diseño guardado antes sigue abriendo con su modo |
 
 ### 4.4 Par de engranajes
 
