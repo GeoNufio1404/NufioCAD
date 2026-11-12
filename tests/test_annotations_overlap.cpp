@@ -244,3 +244,27 @@ TEST_CASE("Iconos de restricciones: se dibujan con líneas dentro de su caja y l
     REQUIRE(notes.size() == 1);
     REQUIRE(!notes[0].icon.empty());
 }
+
+TEST_CASE("Cotas: sin hueco libre el texto sale de su línea con una línea de llamada", "[sketch][annotations]")
+{
+    Sketch s;
+    // Veinte paralelas a 0,3 mm: no caben todas las cotas en sus ocho renglones.
+    for (int i = 0; i < 20; ++i) {
+        const EntityId line = s.addLine({0, 0.3 * i}, {40, 0.3 * i});
+        s.addConstraint(Constraint::length(line, 40.0));
+    }
+    const double px = 0.1;
+    const auto notes = layoutAnnotations(s, px);
+    REQUIRE(notes.size() == 20);
+    int callouts = 0;
+    for (const Annotation& n : notes) {
+        // Una cota alineada lleva tres líneas y dos flechas de dos trazos cada una; la llamada es una más.
+        if (n.lines.size() == 8) {
+            ++callouts;
+            const auto* leader = std::get_if<Line>(&n.lines.back());
+            REQUIRE(leader != nullptr);
+            REQUIRE(std::hypot(leader->end.x - leader->start.x, leader->end.y - leader->start.y) > 0.0);
+        }
+    }
+    REQUIRE(callouts >= 1);
+}

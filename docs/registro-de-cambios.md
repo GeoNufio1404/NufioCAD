@@ -43,6 +43,20 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 - **Pruebas:** 221 unitarias y 34 pasos de la prueba de interfaz, en verde en Windows (Debug). La prueba de interfaz **aún no cuenta los píxeles naranjas** de la guía (pendiente I8).
 - **Riesgos al volver atrás:** ninguno en archivos guardados: las restricciones creadas son las horizontal/vertical de siempre.
+## Pulido final: diálogos, sketch claro, avisos, referencia despierta y llamada de cotas — 12 nov. 2026
+
+- **Rama:** `feature/pulido-final` (sale de `develop`). Sin fusionar hasta la prueba manual (guía TEM.7–TEM.9, SKI y SKC nuevas).
+- **Colores de aviso por tema:** `toneColor(Tone::Error/Warning/Success/Muted)` y `isDarkTheme()` (`Theme.cpp`). Los rojos, ámbares y verdes fijos no llegaban a 4,5:1 sobre el gris claro (el ámbar, 1,8:1); ahora el claro usa `#B42318`, `#8A5300`, `#1E7B34` y `#55606C`, y el oscuro sus colores de siempre (algo aclarado el rojo: `#F2777A`). Cambiados en el diálogo de Exportar (revisión de impresión), los paneles de herramientas y generadores («Calculando…», errores y avisos), el diálogo de Parámetros, el navegador (sketches con aviso) y el texto de ayuda de los cuerpos. Los textos ya puestos conservan el color hasta que se refrescan; los diálogos se crean cada vez.
+- **Sketch en tema claro:** (1) las medidas automáticas y los iconos usan un gris más oscuro (`#3E4854`, 7:1; en el oscuro `#B0B8C2`); (2) **corregido un fallo real:** al cambiar de tema con un sketch abierto, el dibujo (trazos, medidas, iconos) se quedaba con los colores del tema anterior; `applyTheme` ahora rehace el sketch mostrado.
+- **Diálogos:** revisados con capturas en ambos temas (Exportar, Parámetros, Configuración, Cuerpos): coherentes con el tema; sin más cambios que los colores de aviso. Visto: los tres cuadros de la «Cama X × Y × Z» del diálogo de Exportar quedan estrechos y cortan el número («6.00mm»), pendiente.
+- **Referencia «despierta» lejana:** quedarse 0,3 s sobre una **línea** (con una herramienta de dibujo) la deja como referencia (se recuerdan las dos últimas; anillo amarillo en su punto medio). Con **Línea** y **Rectángulo de 3 puntos**, si el tramo nuevo queda a ≤3° de su paralela o perpendicular se endereza, se resalta esa línea y sale ⊥/∥, y al clic se crea la restricción con ella (la línea de la que se parte o el tramo anterior mandan sobre la despierta). Dónde: `SketchTool::setAwakeLines` y `AwakeLine` (`Tools.hpp`), `LineTool::relateEnd` (`Tools.cpp`), `ThreePointRectangleTool::relateFirst` (`ShapeTools.cpp`), y la espera en `SketchSession::cursorMoved`. Los ejes no cuentan.
+- **Línea de llamada de las cotas:** si ningún renglón queda libre, el texto de una cota alineada sale de su línea a un hueco libre (a uno u otro lado, algo desplazado) y una línea de llamada lo une con la cota (`placeAnnotation`, `Annotations.cpp`). Las radiales siguen girando.
+- **Pruebas:** 250 unitarias (nuevas: referencia despierta para ⊥ y ∥, y llamada con veinte paralelas a 0,3 mm) y 36/36 de interfaz. `--captura-temas` ahora también guarda los diálogos y un sketch en ambos temas.
+- **Pendiente:** cuadros estrechos de la cama en Exportar; ⊥/∥ para el arco y la referencia lejana con el Arco (la tangente lejana); prioridad de lo que está bajo el cursor al colocar cotas (descartado a propósito: haría saltar las cotas al pasar el ratón); fondo del icono sobre líneas.
+- **Riesgos al volver atrás:** ninguno en archivos guardados.
+
+---
+
 ## Temas claro y oscuro: más capas y más contraste — 12 nov. 2026
 
 - **Rama:** `feature/temas-interfaz` (sale de `develop`). Sin fusionar hasta la prueba manual (guía TEM).

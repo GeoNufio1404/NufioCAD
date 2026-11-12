@@ -157,6 +157,7 @@ private:
     Relation relateEnd(Snap& end, bool& tangent) const
     {
         tangent = false;
+        matched_.reset();
         if (arcExit_) {
             Snap probe = end;
             const Line along{start_->point, {start_->point.x + arcExit_->x, start_->point.y + arcExit_->y}};
@@ -167,7 +168,25 @@ private:
                 return Relation::Parallel;
             }
         }
-        return reference_ ? relate(start_->point, reference_->line, end) : Relation::None;
+        // La línea de la que se parte (o el tramo anterior) manda; si no, una línea despierta lejana.
+        if (reference_) {
+            const Relation relation = relate(start_->point, reference_->line, end);
+            if (relation != Relation::None) {
+                matched_ = reference_;
+                return relation;
+            }
+        }
+        for (const AwakeLine& awake : awakeLines_) {
+            if (reference_ && awake.id == reference_->id) {
+                continue;
+            }
+            const Relation relation = relate(start_->point, awake.line, end);
+            if (relation != Relation::None) {
+                matched_ = Reference{awake.id, awake.line};
+                return relation;
+            }
+        }
+        return Relation::None;
     }
 
     bool commit(Sketch& sketch, const Snap& end, Straight straight, std::optional<double> length,
@@ -192,9 +211,9 @@ private:
             if (sketch.canAdd(c)) {
                 sketch.addConstraint(c);
             }
-        } else if (relation != Relation::None && reference_) {
-            const Constraint c = relation == Relation::Parallel ? Constraint::parallel(line, reference_->id)
-                                                                : Constraint::perpendicular(line, reference_->id);
+        } else if (relation != Relation::None && matched_) {
+            const Constraint c = relation == Relation::Parallel ? Constraint::parallel(line, matched_->id)
+                                                                : Constraint::perpendicular(line, matched_->id);
             if (sketch.canAdd(c)) {
                 sketch.addConstraint(c);
             }
@@ -259,7 +278,7 @@ public:
             result.badge = "T";
             result.badgeAt = {(start_->point.x + end.point.x) / 2, (start_->point.y + end.point.y) / 2};
         } else if (relation != Relation::None) {
-            result.guides.push_back({reference_->line.start, reference_->line.end});
+            result.guides.push_back({matched_->line.start, matched_->line.end});
             result.badge = relation == Relation::Parallel ? "∥" : "⊥";
             result.badgeAt = {(start_->point.x + end.point.x) / 2, (start_->point.y + end.point.y) / 2};
         }
@@ -280,6 +299,11 @@ private:
     std::optional<ArcFit> dragArc_;  // arco tangente mientras se arrastra
     std::optional<Vec2> arcExit_;  // tangente del arco del que se parte
     std::optional<Reference> reference_;  // línea anterior de la cadena (o la que se continúa)
+    std::vector<AwakeLine> awakeLines_;   // líneas despiertas (referencias lejanas)
+    mutable std::optional<Reference> matched_;  // la referencia con la que se infirió la última relación
+
+public:
+    void setAwakeLines(std::vector<AwakeLine> lines) override { awakeLines_ = std::move(lines); }
 };
 
 // --- Rectángulo ----------------------------------------------------------------

@@ -169,6 +169,8 @@ private:
     // Los dos últimos puntos sobre los que pasó el cursor con una herramienta
     // de dibujo: «despiertos», sirven de referencia para las alineaciones.
     std::vector<sketch::Ref> awake_;
+    std::vector<sketch::EntityId> awakeLines_;  // líneas sobre las que el cursor se detuvo (referencias lejanas)
+    sketch::EntityId dwellLine_ = 0;
     sketch::Ref dwellRef_;  // punto sobre el que espera el cursor para despertarlo
     std::vector<sketch::EntityId> underconstrained_;
     std::vector<sketch::Ref> selection_;

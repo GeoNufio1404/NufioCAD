@@ -26,6 +26,13 @@ struct Preview {
     Vec2 badgeAt{};
 };
 
+// Una línea «despierta» (el cursor se detuvo sobre ella): las herramientas de línea la usan como referencia
+// lejana para inferir perpendicular o paralela, aunque el nuevo tramo no salga de ella.
+struct AwakeLine {
+    EntityId id = 0;
+    Line line;
+};
+
 class SketchTool {
 public:
     virtual ~SketchTool() = default;
@@ -57,6 +64,9 @@ public:
     // true si el último applyValues solo cambió la figura abierta que acababa
     // de crear la herramienta (no hace falta otro paso en Deshacer).
     virtual bool amendedLast() const { return false; }
+
+    // Las líneas despiertas actuales (con su geometría de ahora). Por defecto se ignoran.
+    virtual void setAwakeLines(std::vector<AwakeLine> /*lines*/) {}
 
     // Valores que se pueden escribir junto al cursor en el paso actual
     // ("Longitud", "Ángulo"…; vacío si ninguno) y su valor según el cursor.

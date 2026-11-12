@@ -185,7 +185,7 @@ public:
             const Relation relation = straighten(a_->point, b) == Straight::None ? relateFirst(b) : Relation::None;
             result.geometry = {Line{a_->point, b.point}};
             if (relation != Relation::None) {
-                result.guides.push_back({reference_->second.start, reference_->second.end});
+                result.guides.push_back({matched_->second.start, matched_->second.end});
                 result.badge = relation == Relation::Parallel ? "∥" : "⊥";
                 result.badgeAt = {(a_->point.x + b.point.x) / 2, (a_->point.y + b.point.y) / 2};
             }
@@ -208,9 +208,28 @@ public:
     }
 
 private:
+    // La línea de la que parte el lado manda; si no, una línea despierta lejana.
     Relation relateFirst(Snap& b) const
     {
-        return reference_ ? relate(a_->point, reference_->second, b) : Relation::None;
+        matched_.reset();
+        if (reference_) {
+            const Relation relation = relate(a_->point, reference_->second, b);
+            if (relation != Relation::None) {
+                matched_ = reference_;
+                return relation;
+            }
+        }
+        for (const AwakeLine& awake : awakeLines_) {
+            if (reference_ && awake.id == reference_->first) {
+                continue;
+            }
+            const Relation relation = relate(a_->point, awake.line, b);
+            if (relation != Relation::None) {
+                matched_ = std::make_pair(awake.id, awake.line);
+                return relation;
+            }
+        }
+        return Relation::None;
     }
 
     // Altura con signo de p respecto al primer lado (positiva a su izquierda).
@@ -241,9 +260,9 @@ private:
             sketch.addConstraint(Constraint::horizontal(lines[0]));
         } else if (straight_ == Straight::Vertical) {
             sketch.addConstraint(Constraint::vertical(lines[0]));
-        } else if (relation_ != Relation::None && reference_) {
-            const Constraint c = relation_ == Relation::Parallel ? Constraint::parallel(lines[0], reference_->first)
-                                                                 : Constraint::perpendicular(lines[0], reference_->first);
+        } else if (relation_ != Relation::None && matched_) {
+            const Constraint c = relation_ == Relation::Parallel ? Constraint::parallel(lines[0], matched_->first)
+                                                                 : Constraint::perpendicular(lines[0], matched_->first);
             if (sketch.canAdd(c)) {
                 sketch.addConstraint(c);
             }
@@ -270,12 +289,15 @@ private:
     Straight straight_ = Straight::None;
     Relation relation_ = Relation::None;
     std::optional<std::pair<EntityId, Line>> reference_;  // línea de la que parte el primer lado
+    std::vector<AwakeLine> awakeLines_;                   // líneas despiertas (referencias lejanas)
+    mutable std::optional<std::pair<EntityId, Line>> matched_;  // con la que se infirió la relación
     std::optional<double> length_;
     std::optional<OpenFigure> open_;
     bool amended_ = false;
 
 public:
     bool amendedLast() const override { return amended_; }
+    void setAwakeLines(std::vector<AwakeLine> lines) override { awakeLines_ = std::move(lines); }
 };
 
 // --- Rectángulo por centro -----------------------------------------------------------

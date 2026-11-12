@@ -170,6 +170,8 @@ void SketchSession::setTool(Tool tool)
                                 || tool == Tool::Rotate || tool == Tool::Scale || tool == Tool::PatternRectangular
                                 || tool == Tool::PatternCircular;
     awake_.clear();
+    awakeLines_.clear();
+    dwellLine_ = 0;
     const std::vector<sketch::EntityId> selected = selectedEntities();
     if (needsSelection && selected.empty()) {
         emit message(QStringLiteral("Selecciona primero lo que quieras transformar"));
@@ -327,7 +329,41 @@ void SketchSession::cursorMoved(bool hasPoint, double x, double y)
     } else {
         cursor_ = snapAt({x, y});
         if (tool_) {
+            // Las líneas despiertas, con su geometría de ahora (el solver pudo moverlas).
+            std::vector<sketch::AwakeLine> lines;
+            for (const sketch::EntityId id : awakeLines_) {
+                if (const sketch::Entity* e = sketch_.entity(id)) {
+                    if (const auto* line = std::get_if<sketch::Line>(&e->geometry)) {
+                        lines.push_back({id, *line});
+                    }
+                }
+            }
+            tool_->setAwakeLines(std::move(lines));
             tool_->move(*cursor_);
+            // Lo mismo con una línea: quedarse 0,3 s sobre ella la deja como referencia para inferir
+            // perpendicular o paralela aunque el tramo nuevo salga de otro sitio. Se recuerdan las dos últimas.
+            sketch::EntityId overLine = 0;
+            if ((cursor_->kind == sketch::SnapKind::OnCurve || cursor_->kind == sketch::SnapKind::Midpoint)
+                && cursor_->ref.entity != sketch::Sketch::kAxisX && cursor_->ref.entity != sketch::Sketch::kAxisY) {
+                if (const sketch::Entity* e = sketch_.entity(cursor_->ref.entity); e && std::holds_alternative<sketch::Line>(e->geometry)
+                    && std::ranges::find(awakeLines_, e->id) == awakeLines_.end()) {
+                    overLine = e->id;
+                }
+            }
+            if (overLine == 0) {
+                dwellLine_ = 0;
+            } else if (dwellLine_ != overLine) {
+                dwellLine_ = overLine;
+                QTimer::singleShot(kAwakeDwellMs, this, [this, overLine] {
+                    if (tool_ && cursor_ && dwellLine_ == overLine && std::ranges::find(awakeLines_, overLine) == awakeLines_.end()) {
+                        awakeLines_.push_back(overLine);
+                        if (awakeLines_.size() > 2) {
+                            awakeLines_.erase(awakeLines_.begin());
+                        }
+                        showPreview();
+                    }
+                });
+            }
             // Quedarse un momento (0,3 s) sobre un punto lo «despierta»: luego se
             // puede alinear con él desde lejos. Se recuerdan los dos últimos, y
             // pasar de largo no despierta nada.
@@ -1241,6 +1277,16 @@ void SketchSession::showPreview()
         for (const sketch::Ref& ref : awake_) {
             if (const auto position = sketch_.point(ref)) {
                 awake.push_back(*position);
+            }
+        }
+    }
+    // Las líneas despiertas llevan el mismo anillo en su punto medio.
+    if (tool_) {
+        for (const sketch::EntityId id : awakeLines_) {
+            if (const sketch::Entity* e = sketch_.entity(id)) {
+                if (const auto* line = std::get_if<sketch::Line>(&e->geometry)) {
+                    awake.push_back({(line->start.x + line->end.x) / 2, (line->start.y + line->end.y) / 2});
+                }
             }
         }
     }

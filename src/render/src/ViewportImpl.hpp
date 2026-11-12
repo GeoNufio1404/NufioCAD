@@ -97,6 +97,11 @@ public:
         viewCube->SetTextColor(dark ? rgb(0xE6, 0xE9, 0xED) : rgb(0x1F, 0x23, 0x29));
         viewCube->SetBoxColor(dark ? rgb(0x4A, 0x50, 0x59) : rgb(0xE6, 0xE9, 0xED));
         context->Redisplay(viewCube, false);
+        // El sketch que se está mostrando lleva los colores del tema baked en su dibujo (trazos, medidas, iconos):
+        // hay que rehacerlo, o se quedan los del tema anterior hasta el siguiente cambio.
+        if (mode == Mode::Sketch && shownSketch) {
+            rebuildSketch();
+        }
         view->Invalidate();
     }
 
@@ -1403,7 +1408,8 @@ public:
         // Restricciones y cotas.
         annotationScale = pixelSize();
         const Quantity_Color text = darkTheme ? rgb(0xE6, 0xE9, 0xED) : rgb(0x1F, 0x23, 0x29);
-        const Quantity_Color dimmed = darkTheme ? rgb(0x9A, 0xA3, 0xAE) : rgb(0x6B, 0x74, 0x80);
+        // Texto tenue (medidas automáticas, iconos): 7:1 sobre el fondo claro y 6:1 sobre el oscuro del lienzo.
+        const Quantity_Color dimmed = darkTheme ? rgb(0xB0, 0xB8, 0xC2) : rgb(0x3E, 0x48, 0x54);
         const Quantity_Color box = darkTheme ? rgb(0x2B, 0x30, 0x37) : rgb(0xF4, 0xF5, 0xF7);
         // Tres niveles: las cotas que puso el usuario (azul, con sus líneas), las
         // restricciones (iconos pequeños y apagados, solo donde se mira) y las

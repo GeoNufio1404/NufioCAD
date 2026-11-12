@@ -1,4 +1,5 @@
 #include "ExportDialog.hpp"
+#include "Theme.hpp"
 #include "ExpressionSpinBox.hpp"
 
 #include <QApplication>
@@ -243,19 +244,20 @@ void ExportDialog::runReview()
     const std::vector<geometry::PrintIssue> issues = geometry::checkPrintable(chosen, printSettings());
     QApplication::restoreOverrideCursor();
     if (issues.empty()) {
-        review_->setText(QStringLiteral("<span style='color:#3FB950'>✓ Todo en orden para imprimir con tu impresora.</span>"));
+        review_->setText(QStringLiteral("<span style='color:%1'>✓ Todo en orden para imprimir con tu impresora.</span>")
+                             .arg(toneColor(Tone::Success)));
         return;
     }
     QStringList lines;
     for (const geometry::PrintIssue& issue : issues) {
-        const char* color = issue.level == geometry::PrintIssue::Level::Error ? "#E5484D"
-                            : issue.level == geometry::PrintIssue::Level::Warning ? "#F2A34B"
-                                                                                   : "#8B949E";
+        const QString color = toneColor(issue.level == geometry::PrintIssue::Level::Error     ? Tone::Error
+                                        : issue.level == geometry::PrintIssue::Level::Warning ? Tone::Warning
+                                                                                               : Tone::Muted);
         const QString icon = issue.level == geometry::PrintIssue::Level::Error ? QStringLiteral("⛔")
                              : issue.level == geometry::PrintIssue::Level::Warning ? QStringLiteral("⚠")
                                                                                    : QStringLiteral("ℹ");
         lines << QStringLiteral("<span style='color:%1'>%2 %3</span>")
-                     .arg(QLatin1String(color), icon, QString::fromStdString(issue.text).toHtmlEscaped());
+                     .arg(color, icon, QString::fromStdString(issue.text).toHtmlEscaped());
     }
     review_->setText(lines.join(QStringLiteral("<br>")));
 }

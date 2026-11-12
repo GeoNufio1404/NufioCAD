@@ -600,6 +600,42 @@ std::optional<Annotation> placeAnnotation(Placed& placed, const Placed& geometry
             break;
         }
     }
+    // Si ningún renglón quedó libre, el texto sale de su línea de cota a un hueco libre (a uno u otro lado, y
+    // algo desplazado a lo largo) y una línea de llamada lo une con ella: así se sigue sabiendo de qué cota es.
+    if (!radial && bestOverlap > 0.0 && best->lines.size() >= 3) {
+        if (const auto* base = std::get_if<Line>(&best->lines[2])) {
+            const Vec2 mid = midpoint(base->start, base->end);
+            const Vec2 along = unit(base->end - base->start);
+            const Vec2 across{-along.y, along.x};
+            const double width = textBox(*best, px).x1 - textBox(*best, px).x0;
+            std::optional<Vec2> found;
+            for (int row = 1; row <= 4 && !found; ++row) {
+                for (const double sign : {1.0, -1.0}) {
+                    for (const double shift : {0.0, 1.0, -1.0}) {
+                        Annotation probe = *best;
+                        probe.anchor = mid + (sign * (kTextGapPx + row * kRowPx) * px) * across + (shift * 0.75 * width) * along;
+                        const Box box = textBox(probe, px);
+                        if (placed.overlap(box) + kGeometryWeight * geometry.overlap(box) <= 0.0) {
+                            found = probe.anchor;
+                            break;
+                        }
+                    }
+                    if (found) {
+                        break;
+                    }
+                }
+            }
+            if (found) {
+                best->anchor = *found;
+                const Vec2 toText = *found - mid;
+                const double distance = std::hypot(toText.x, toText.y);
+                const double stop = 0.5 * kTextHeightPx * px;  // la llamada llega hasta el borde del texto
+                if (distance > stop) {
+                    best->lines.push_back(Line{mid, mid + ((distance - stop) / distance) * toText});
+                }
+            }
+        }
+    }
     if (chosen) {
         *chosen = bestLevel;
     }

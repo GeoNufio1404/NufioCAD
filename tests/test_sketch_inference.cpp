@@ -315,3 +315,51 @@ TEST_CASE("Inferencias: un arco que sale del extremo de una línea y pasa casi p
         REQUIRE(solver->solve(s).status == SolveStatus::Solved);
     }
 }
+
+TEST_CASE("Inferencias: una línea despierta lejana sirve de referencia para ⊥ y ∥ aunque el tramo salga de otro sitio", "[sketch][inference]")
+{
+    for (const bool perpendicular : {true, false}) {
+        Sketch s;
+        // La línea despierta está lejos, a 30°; el tramo nuevo sale del origen, sin tocarla.
+        const Vec2 far0{100, 100};
+        const Vec2 far1{100 + 20 * 0.8660254, 100 + 20 * 0.5};
+        const EntityId awake = s.addLine(far0, far1);
+        SnapOptions options;
+        options.tolerance = 0.5;
+        auto tool = makeLineTool();
+        tool->setAwakeLines({AwakeLine{awake, Line{far0, far1}}});
+        const Snap a = snap(s, {0, 20}, options);
+        tool->move(a);
+        tool->click(s, a);
+        const double degrees = perpendicular ? 30.0 + 89.0 : 31.0;
+        const double angle = degrees * 3.14159265358979 / 180.0;
+        const Snap b = snap(s, {10 * std::cos(angle), 20 + 10 * std::sin(angle)}, options);
+        tool->move(b);
+        const Preview preview = tool->preview();
+        REQUIRE(preview.badge == (perpendicular ? "⊥" : "∥"));
+        REQUIRE(preview.guides.size() == 1);
+        REQUIRE(tool->click(s, b));
+        const ConstraintType wanted = perpendicular ? ConstraintType::Perpendicular : ConstraintType::Parallel;
+        int onAwake = 0;
+        for (const Constraint& k : s.constraints()) {
+            if (k.type == wanted && (k.first.entity == awake || k.second.entity == awake)) {
+                ++onAwake;
+            }
+        }
+        REQUIRE(onAwake == 1);
+        auto solver = makePlaneGcsSolver();
+        REQUIRE(solver->solve(s).status == SolveStatus::Solved);
+    }
+    // Sin línea despierta, no hay inferencia.
+    Sketch s;
+    s.addLine({100, 100}, {117, 110});
+    SnapOptions options;
+    options.tolerance = 0.5;
+    auto tool = makeLineTool();
+    const Snap a = snap(s, {0, 20}, options);
+    tool->move(a);
+    tool->click(s, a);
+    const Snap b = snap(s, {-5, 28}, options);
+    tool->move(b);
+    REQUIRE(tool->preview().badge.empty());
+}
