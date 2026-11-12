@@ -290,3 +290,28 @@ TEST_CASE("Inferencias: el primer lado de un rectángulo de 3 puntos que sale de
     auto solver = makePlaneGcsSolver();
     REQUIRE(solver->solve(s).status == SolveStatus::Solved);
 }
+
+TEST_CASE("Inferencias: un arco que sale del extremo de una línea y pasa casi por la tangente queda tangente", "[sketch][inference]")
+{
+    for (const bool near : {true, false}) {
+        Sketch s;
+        s.addLine({0, 0}, {20, 0});
+        SnapOptions options;
+        options.tolerance = 0.5;
+        // Arco tangente a la línea: centro (20, 10), de (20, 0) a (30, 10); su punto medio es (27.07, 2.93).
+        const Vec2 through = near ? Vec2{27.1, 3.0} : Vec2{25.0, 7.0};
+        auto tool = makeArcTool();
+        for (const Vec2 p : {Vec2{20, 0}, Vec2{30, 10}}) {
+            const Snap at = snap(s, p, options);
+            tool->move(at);
+            tool->click(s, at);
+        }
+        const Snap mid = snap(s, through, options);
+        tool->move(mid);
+        REQUIRE((tool->preview().badge == "T") == near);
+        REQUIRE(tool->click(s, mid));
+        REQUIRE(std::ranges::count(s.constraints(), ConstraintType::Tangent, &Constraint::type) == (near ? 1 : 0));
+        auto solver = makePlaneGcsSolver();
+        REQUIRE(solver->solve(s).status == SolveStatus::Solved);
+    }
+}

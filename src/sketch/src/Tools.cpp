@@ -576,6 +576,9 @@ public:
     {
         if (!start_) {
             start_ = cursor;
+            // Si parte del extremo de una línea o un arco, un arco casi
+            // tangente a ella se endereza a la tangente.
+            direction_ = cursor.kind == SnapKind::Point ? exitDirection(sketch, cursor.ref) : std::nullopt;
             return false;
         }
         if (!end_) {
@@ -584,17 +587,35 @@ public:
             }
             return false;
         }
-        const auto fit = fitArc(start_->point, end_->point, cursor.point);
+        auto fit = fitArc(start_->point, end_->point, cursor.point);
         if (!fit) {
             return false;
+        }
+        bool tangent = false;
+        if (const auto t = inferTangent(*fit, cursor.point)) {
+            fit = t;
+            tangent = true;
         }
         const Arc& a = fit->arc;
         const EntityId arc = sketch.addArc(a.center, a.radius, a.startAngle, a.endAngle);
         // Si el arco quedó invertido, su inicio es el segundo punto marcado.
-        attach(sketch, Ref::start(arc), fit->swapped ? *end_ : *start_);
-        attach(sketch, Ref::end(arc), fit->swapped ? *start_ : *end_);
+        const Ref atStart = fit->swapped ? Ref::end(arc) : Ref::start(arc);
+        const Ref atEnd = fit->swapped ? Ref::start(arc) : Ref::end(arc);
+        if (tangent) {
+            // La tangente ya une el extremo: no se añade además la coincidencia.
+            const Constraint c = Constraint::tangentAt(atStart, start_->ref);
+            if (sketch.canAdd(c)) {
+                sketch.addConstraint(c);
+            } else {
+                attach(sketch, atStart, *start_);
+            }
+        } else {
+            attach(sketch, atStart, *start_);
+        }
+        attach(sketch, atEnd, *end_);
         start_.reset();
         end_.reset();
+        direction_.reset();
         return true;
     }
 
@@ -603,6 +624,7 @@ public:
         const bool active = start_.has_value();
         start_.reset();
         end_.reset();
+        direction_.reset();
         return active;
     }
 
@@ -614,8 +636,15 @@ public:
         if (!end_) {
             return {{Line{start_->point, cursor_.point}}};
         }
-        if (const auto fit = fitArc(start_->point, end_->point, cursor_.point)) {
-            return {{fit->arc}};
+        if (auto fit = fitArc(start_->point, end_->point, cursor_.point)) {
+            Preview result;
+            if (const auto t = inferTangent(*fit, cursor_.point)) {
+                fit = t;
+                result.badge = "T";
+                result.badgeAt = {(start_->point.x + end_->point.x) / 2, (start_->point.y + end_->point.y) / 2};
+            }
+            result.geometry = {fit->arc};
+            return result;
         }
         return {{Line{start_->point, end_->point}}};
     }
@@ -625,13 +654,39 @@ public:
         if (!start_) {
             return "Clic para el inicio del arco";
         }
-        return end_ ? "Clic para un punto por el que pasa el arco" : "Clic para el final del arco";
+        return end_ ? "Clic para un punto por el que pasa el arco (cerca de la tangente se endereza)" : "Clic para el final del arco";
     }
 
 private:
+    // Si el arco por los tres puntos sale del inicio a menos de
+    // kStraightenAngle de la tangente de la curva de la que parte (hacia
+    // delante), devuelve el arco exactamente tangente con ese inicio y final.
+    std::optional<ArcFit> inferTangent(const ArcFit& fit, Vec2 through) const
+    {
+        if (!direction_ || start_->kind != SnapKind::Point) {
+            return std::nullopt;
+        }
+        const Vec2 radial{start_->point.x - fit.arc.center.x, start_->point.y - fit.arc.center.y};
+        // Sentido en que se recorre el arco: inicio → por el punto → final.
+        const double cross = (through.x - start_->point.x) * (end_->point.y - start_->point.y)
+                             - (through.y - start_->point.y) * (end_->point.x - start_->point.x);
+        const double sign = cross > 0.0 ? 1.0 : -1.0;
+        const Vec2 along{-sign * radial.y, sign * radial.x};
+        const double length = std::hypot(along.x, along.y);
+        if (length < kMinLength) {
+            return std::nullopt;
+        }
+        const double cosine = (along.x * direction_->x + along.y * direction_->y) / length;
+        if (cosine < std::cos(kStraightenAngle)) {
+            return std::nullopt;
+        }
+        return tangentArc(start_->point, *direction_, end_->point);
+    }
+
     Snap cursor_;
     std::optional<Snap> start_;
     std::optional<Snap> end_;
+    std::optional<Vec2> direction_;
 };
 
 } // namespace
