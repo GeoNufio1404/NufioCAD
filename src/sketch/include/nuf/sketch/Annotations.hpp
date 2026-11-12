@@ -6,6 +6,8 @@
 
 #include <nuf/sketch/Sketch.hpp>
 
+#include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -20,9 +22,21 @@ struct Annotation {
     bool reference = false;       // cota de referencia (se muestra entre paréntesis)
 };
 
+// Lo que el que pinta recuerda entre un repintado y el siguiente para que las
+// cotas no salten: el «nivel» (renglón o ángulo extra) que se eligió para cada
+// una. Se olvida al cambiar el zoom, porque las distancias son en píxeles.
+// «priority»: cotas que se colocan primero y ganan los huecos (las seleccionadas).
+struct LayoutMemory {
+    double pixelSize = 0.0;
+    std::map<ConstraintId, int> levels;
+    std::set<ConstraintId> priority;
+};
+
 // Una anotación por cota y una por cada entidad afectada por una restricción
 // geométrica (las coincidentes no se muestran: se ven como puntos unidos).
-std::vector<Annotation> layoutAnnotations(const Sketch& sketch, double pixelSize);
+// Con «memory», cada cota prueba primero el nivel que ya tenía y solo se mueve
+// si ahora pisa a otra; el nivel elegido se guarda de vuelta en «memory».
+std::vector<Annotation> layoutAnnotations(const Sketch& sketch, double pixelSize, LayoutMemory* memory = nullptr);
 
 // Restricción cuya anotación está bajo el cursor (0 si ninguna).
 ConstraintId pickAnnotation(const std::vector<Annotation>& annotations, Vec2 cursor, double pixelSize);

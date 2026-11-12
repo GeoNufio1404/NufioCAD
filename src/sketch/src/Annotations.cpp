@@ -561,14 +561,22 @@ constexpr double kGeometryWeight = 0.25;  // un texto sobre el dibujo molesta me
 // pise a ninguna ya colocada; si ninguna queda libre, la menos solapada.
 // «radial»: también cuentan las líneas de la cota (radio, diámetro).
 template <class Make>
+// «preferred»: nivel que tenía en el repintado anterior; se prueba primero y,
+// si no pisa a nadie, se conserva (la cota no salta). «chosen» recibe el nivel.
 std::optional<Annotation> placeAnnotation(Placed& placed, const Placed& geometry, double px, Make&& make,
-                                          bool radial = false)
+                                          bool radial = false, int preferred = -1, int* chosen = nullptr)
 {
     std::optional<Annotation> best;
     std::vector<Box> bestLines;
     double bestOverlap = 0.0;
+    int bestLevel = 0;
     const int levels = radial ? kMaxRadialLevels : kMaxLevels;
-    for (int level = 0; level < levels; ++level) {
+    // Orden de prueba: primero el recordado (si cabe en el rango), luego 0, 1, 2…
+    for (int step = 0; step <= levels; ++step) {
+        const int level = step == 0 ? preferred : step - 1;
+        if (level < 0 || level >= levels || (step > 0 && level == preferred)) {
+            continue;
+        }
         std::optional<Annotation> note = make(level);
         if (!note) {
             return std::nullopt;
@@ -586,10 +594,14 @@ std::optional<Annotation> placeAnnotation(Placed& placed, const Placed& geometry
             bestOverlap = overlap;
             best = std::move(note);
             bestLines = std::move(lines);
+            bestLevel = level;
         }
         if (bestOverlap <= 0.0) {
             break;
         }
+    }
+    if (chosen) {
+        *chosen = bestLevel;
     }
     placed.add(textBox(*best, px));
     for (const Box& box : bestLines) {
@@ -600,8 +612,12 @@ std::optional<Annotation> placeAnnotation(Placed& placed, const Placed& geometry
 
 } // namespace
 
-std::vector<Annotation> layoutAnnotations(const Sketch& sketch, double pixelSize)
+std::vector<Annotation> layoutAnnotations(const Sketch& sketch, double pixelSize, LayoutMemory* memory)
 {
+    if (memory && std::abs(memory->pixelSize - pixelSize) > 0.01 * pixelSize) {
+        memory->levels.clear();  // otro zoom: las distancias en píxeles piden otro reparto
+        memory->pixelSize = pixelSize;
+    }
     // El resultado sale en el orden de las restricciones, aunque se coloquen
     // antes las cotas que los iconos.
     std::vector<std::pair<std::size_t, Annotation>> ordered;
@@ -613,17 +629,32 @@ std::vector<Annotation> layoutAnnotations(const Sketch& sketch, double pixelSize
 
     // Primero las cotas (lo que más importa leer), luego los iconos: un icono
     // se aparta de una cota, no al revés.
+    std::vector<std::pair<std::size_t, const Constraint*>> dimensions;  // (posición, cota)
     std::size_t order = 0;
     for (const Constraint& c : sketch.constraints()) {
         order += 8;
-        if (!isDimensional(c.type)) {
-            continue;
+        if (isDimensional(c.type)) {
+            dimensions.emplace_back(order, &c);
         }
+    }
+    if (memory && !memory->priority.empty()) {
+        std::ranges::stable_partition(dimensions, [&](const auto& d) { return memory->priority.contains(d.second->id); });
+    }
+    for (const auto& [position, constraint] : dimensions) {
+        const Constraint& c = *constraint;
         const bool radial = c.type == ConstraintType::Radius || c.type == ConstraintType::Diameter;
+        int chosen = 0;
+        const auto remembered = memory ? memory->levels.find(c.id) : std::map<ConstraintId, int>::iterator{};
+        // Las prioritarias no tienen en cuenta su recuerdo: toman su sitio natural si está libre.
+        const bool remember = memory && !memory->priority.contains(c.id) && remembered != memory->levels.end();
+        const int preferred = remember ? remembered->second : -1;
         if (auto note = placeAnnotation(
                 placed, geometry, pixelSize, [&](int level) { return dimensionAnnotation(sketch, c, pixelSize, level); },
-                radial)) {
-            ordered.emplace_back(order, std::move(*note));
+                radial, preferred, &chosen)) {
+            ordered.emplace_back(position, std::move(*note));
+            if (memory) {
+                memory->levels[c.id] = chosen;
+            }
         }
     }
     order = 0;

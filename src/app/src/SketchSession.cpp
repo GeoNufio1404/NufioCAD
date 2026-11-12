@@ -863,8 +863,7 @@ void SketchSession::dragFinished()
 
 sketch::ConstraintId SketchSession::annotationAt(sketch::Vec2 point) const
 {
-    const double px = viewport_.sketchPixelSize();
-    return sketch::pickAnnotation(sketch::layoutAnnotations(sketch_, px), point, px);
+    return sketch::pickAnnotation(viewport_.sketchAnnotations(sketch_), point, viewport_.sketchPixelSize());
 }
 
 namespace {

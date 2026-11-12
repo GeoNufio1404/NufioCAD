@@ -43,6 +43,17 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 - **Pruebas:** 221 unitarias y 34 pasos de la prueba de interfaz, en verde en Windows (Debug). La prueba de interfaz **aún no cuenta los píxeles naranjas** de la guía (pendiente I8).
 - **Riesgos al volver atrás:** ninguno en archivos guardados: las restricciones creadas son las horizontal/vertical de siempre.
+## Cotas que no saltan y la seleccionada gana el hueco — 11 nov. 2026
+
+- **Rama:** `feature/cotas-e-inferencias` (sale de `develop`). Sin fusionar hasta la prueba manual (guía Q).
+- **Qué hace:** (1) cada cota **recuerda su posición** (el nivel que la apartó de otras) entre repintados y al resolver el sketch: ya no salta al mover un punto; se olvida al hacer zoom. (2) La cota **seleccionada** se coloca primero y toma su sitio natural; las demás ceden. Lo que se dibuja y lo que se pica comparten la misma memoria (`Viewport::sketchAnnotations`).
+- **Dónde:** `LayoutMemory` y `layoutAnnotations(…, memory)` en `src/sketch/{include/nuf/sketch,src}/Annotations.*`; la memoria vive en `ViewportImpl::layoutMemory`.
+- **Pruebas:** 245 unitarias (nueva: repintar no mueve nada y la prioridad cambia el reparto) y 36 pasos de interfaz.
+- **Pendiente:** línea de llamada cuando no queda sitio, ⊥/∥ para rectángulo y arco, referencia «despierta» lejana, arco tangente a una línea, y símbolos como iconos dibujados.
+- **Riesgos al volver atrás:** ninguno en archivos guardados.
+
+---
+
 ## Auditoría del sketch: eficiencia con sketches grandes — 11 nov. 2026
 
 - **Rama:** `feature/auditoria-sketch` (sale de `develop`). **Sin fusionar**: los cambios son internos (mismos resultados, los 244 casos unitarios y los 36 pasos de interfaz siguen en verde), pero se prueban a mano con un sketch grande (guía P.1–P.3).

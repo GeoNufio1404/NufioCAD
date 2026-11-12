@@ -1,6 +1,7 @@
 #pragma once
 
 #include <nuf/document/Features.hpp>
+#include <nuf/sketch/Annotations.hpp>
 #include <nuf/sketch/Plane.hpp>
 
 #include <QOpenGLWidget>
@@ -224,6 +225,9 @@ public:
     void grabSketchDrag();
     // Tamaño de un píxel en el plano del sketch (mm) y paso de la rejilla.
     double sketchPixelSize() const;
+    // Las anotaciones (cotas e iconos) tal como se dibujan: con la memoria del
+    // visor, para que lo que se pinta y lo que se pica coincidan y no salten.
+    std::vector<sketch::Annotation> sketchAnnotations(const sketch::Sketch& sketch);
     double sketchGridStep() const;
 
 signals:
