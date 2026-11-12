@@ -291,15 +291,16 @@ Sketch Sketch::restore(std::vector<Entity> entities, std::vector<Constraint> con
     result.nextEntityId_ = nextEntityId;
     result.nextConstraintId_ = nextConstraintId;
 
+    // Las entidades se guardan ordenadas por id (como las crea addEntity): así
+    // entity(id) busca por bisección en vez de recorrerlas todas.
+    std::ranges::stable_sort(result.entities_, {}, &Entity::id);
     for (std::size_t i = 0; i < result.entities_.size(); ++i) {
         const EntityId id = result.entities_[i].id;
         if (id == 0 || id >= nextEntityId) {
             invalid("Entidad con id fuera de rango");
         }
-        for (std::size_t j = 0; j < i; ++j) {
-            if (result.entities_[j].id == id) {
-                invalid("Entidad con id repetido");
-            }
+        if (i > 0 && result.entities_[i - 1].id == id) {
+            invalid("Entidad con id repetido");
         }
     }
     // El origen y los ejes siempre están.
@@ -446,8 +447,9 @@ void Sketch::removeConstraint(ConstraintId id)
 
 const Entity* Sketch::entity(EntityId id) const
 {
-    auto it = std::ranges::find(entities_, id, &Entity::id);
-    return it == entities_.end() ? nullptr : &*it;
+    // Ordenadas por id (ver restore y addEntity): bisección.
+    auto it = std::ranges::lower_bound(entities_, id, {}, &Entity::id);
+    return it != entities_.end() && it->id == id ? &*it : nullptr;
 }
 
 Entity* Sketch::entity(EntityId id)
