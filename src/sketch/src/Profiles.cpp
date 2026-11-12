@@ -10,6 +10,7 @@
 #include <map>
 #include <numbers>
 #include <optional>
+#include <unordered_map>
 
 namespace nuf::sketch {
 
@@ -181,13 +182,30 @@ std::vector<Profile> findProfiles(const Sketch& sketch, double tolerance)
 {
     // --- Vértices y aristas -------------------------------------------------
     std::vector<Vec2> vertices;
+    // Rejilla de celdas del doble de la tolerancia: un vértice cercano solo
+    // puede estar en la celda de p o en las ocho vecinas (antes se recorrían
+    // todos los vértices, y con miles de líneas era cuadrático).
+    const double cell = std::max(tolerance, 1e-12) * 2.0;
+    std::unordered_map<long long, std::vector<int>> vertexCells;
+    const auto cellKey = [&](long long cx, long long cy) { return cx * 1000003LL + cy; };
     const auto vertexAt = [&](Vec2 p) {
-        for (std::size_t i = 0; i < vertices.size(); ++i) {
-            if (distance(vertices[i], p) <= tolerance) {
-                return int(i);
+        const long long cx = (long long)std::floor(p.x / cell);
+        const long long cy = (long long)std::floor(p.y / cell);
+        for (long long dx = -1; dx <= 1; ++dx) {
+            for (long long dy = -1; dy <= 1; ++dy) {
+                const auto it = vertexCells.find(cellKey(cx + dx, cy + dy));
+                if (it == vertexCells.end()) {
+                    continue;
+                }
+                for (const int i : it->second) {
+                    if (distance(vertices[std::size_t(i)], p) <= tolerance) {
+                        return i;
+                    }
+                }
             }
         }
         vertices.push_back(p);
+        vertexCells[cellKey(cx, cy)].push_back(int(vertices.size() - 1));
         return int(vertices.size() - 1);
     };
 
@@ -231,8 +249,31 @@ std::vector<Profile> findProfiles(const Sketch& sketch, double tolerance)
     // Cruces entre curvas: exactos entre rectas y circunferencias; con la
     // polilínea en el resto. Cada cruce parte las dos curvas en el mismo punto.
     std::vector<std::vector<std::pair<double, Vec2>>> splits(sources.size());
+    // Caja de cada curva (algo holgada: la polilínea de un círculo queda por
+    // dentro de la curva): dos curvas con las cajas separadas no se cruzan, y
+    // no hace falta calcular su intersección.
+    struct Box {
+        double x0, y0, x1, y1;
+    };
+    std::vector<Box> boxes;
+    boxes.reserve(sources.size());
+    for (const Source& src : sources) {
+        Box box{1e300, 1e300, -1e300, -1e300};
+        for (const Vec2& p : src.points) {
+            box.x0 = std::min(box.x0, p.x);
+            box.y0 = std::min(box.y0, p.y);
+            box.x1 = std::max(box.x1, p.x);
+            box.y1 = std::max(box.y1, p.y);
+        }
+        const double margin = 0.05 * std::max(box.x1 - box.x0, box.y1 - box.y0) + 2.0 * tolerance + 1e-9;
+        boxes.push_back({box.x0 - margin, box.y0 - margin, box.x1 + margin, box.y1 + margin});
+    }
     for (std::size_t i = 0; i < sources.size(); ++i) {
         for (std::size_t j = i + 1; j < sources.size(); ++j) {
+            if (boxes[i].x1 < boxes[j].x0 || boxes[j].x1 < boxes[i].x0 || boxes[i].y1 < boxes[j].y0
+                || boxes[j].y1 < boxes[i].y0) {
+                continue;
+            }
             std::vector<Vec2> crossings;
             if (detail::isSimpleCurve(*sources[i].entity) && detail::isSimpleCurve(*sources[j].entity)) {
                 crossings = detail::intersections(detail::curveOf(*sources[i].entity),
@@ -349,15 +390,15 @@ std::vector<Profile> findProfiles(const Sketch& sketch, double tolerance)
 
     // Tramos de recta repetidos (dos rectas encimadas dan el mismo tramo
     // entre los mismos vértices): se queda uno solo.
-    for (std::size_t a = 0; a < edges.size(); ++a) {
-        if (!edges[a].alive || edges[a].points.size() != 2) {
-            continue;
-        }
-        for (std::size_t b = a + 1; b < edges.size(); ++b) {
-            if (edges[b].alive && edges[b].points.size() == 2
-                && ((edges[a].from == edges[b].from && edges[a].to == edges[b].to)
-                    || (edges[a].from == edges[b].to && edges[a].to == edges[b].from))) {
-                edges[b].alive = false;
+    {
+        std::map<std::pair<int, int>, bool> seen;  // pareja de vértices (ordenada) ya vista
+        for (Edge& e : edges) {
+            if (!e.alive || e.points.size() != 2) {
+                continue;
+            }
+            const std::pair<int, int> key{std::min(e.from, e.to), std::max(e.from, e.to)};
+            if (!seen.emplace(key, true).second) {
+                e.alive = false;
             }
         }
     }

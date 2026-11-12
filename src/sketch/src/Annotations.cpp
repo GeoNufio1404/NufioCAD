@@ -446,7 +446,13 @@ public:
 
     double overlap(const Box& box) const
     {
-        std::vector<int> seen;
+        // Una caja que ocupa varias celdas solo se cuenta una vez: se marca con
+        // el número de consulta (antes, una lista con búsqueda lineal, que con
+        // muchas cajas por celda era cuadrática).
+        if (stamp_.size() < boxes_.size()) {
+            stamp_.resize(boxes_.size(), 0);
+        }
+        const unsigned query = ++query_;
         double total = 0.0;
         forCells(box, [&](long long key) {
             const auto it = cells_.find(key);
@@ -454,10 +460,10 @@ public:
                 return;
             }
             for (const int index : it->second) {
-                if (std::ranges::find(seen, index) != seen.end()) {
+                if (stamp_[std::size_t(index)] == query) {
                     continue;
                 }
-                seen.push_back(index);
+                stamp_[std::size_t(index)] = query;
                 const Box& other = boxes_[std::size_t(index)];
                 const double w = std::min(box.x1, other.x1) - std::max(box.x0, other.x0);
                 const double h = std::min(box.y1, other.y1) - std::max(box.y0, other.y0);
@@ -492,6 +498,8 @@ private:
     }
 
     double cell_;
+    mutable std::vector<unsigned> stamp_;
+    mutable unsigned query_ = 0;
     std::vector<Box> boxes_;
     std::unordered_map<long long, std::vector<int>> cells_;
 };

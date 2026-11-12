@@ -43,6 +43,29 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 - **Pruebas:** 221 unitarias y 34 pasos de la prueba de interfaz, en verde en Windows (Debug). La prueba de interfaz **aún no cuenta los píxeles naranjas** de la guía (pendiente I8).
 - **Riesgos al volver atrás:** ninguno en archivos guardados: las restricciones creadas son las horizontal/vertical de siempre.
+## Auditoría del sketch: eficiencia con sketches grandes — 11 nov. 2026
+
+- **Rama:** `feature/auditoria-sketch` (sale de `develop`). **Sin fusionar**: los cambios son internos (mismos resultados, los 244 casos unitarios y los 36 pasos de interfaz siguen en verde), pero se prueban a mano con un sketch grande (guía P.1–P.3).
+- **Cómo se midió:** banco `tests/bench_sketch.cpp` (oculto; se ejecuta con `nuf_tests "[.bench]"`) con una rejilla de 30 × 30 casillas (1 863 entidades), otra de 20 × 20 con 421 cotas y cadenas de líneas con restricciones. **Solo en Debug**: no hay compilación Release en esta máquina (pide recompilar todo vcpkg), así que las cifras absolutas son pesimistas; lo que vale es la comparación.
+- **Qué se arregló:**
+  1. `Sketch::entity(id)` buscaba recorriendo todas las entidades (y lo llaman `point`, `pick`, el snap y el solver por cada referencia): ahora las entidades se guardan **ordenadas por id** y se busca por **bisección** (`restore` las ordena y comprueba duplicados sin doble bucle).
+  2. `findProfiles`: los vértices se buscaban uno a uno (**rejilla de celdas**), cada curva se comparaba con todas las demás (**se descartan por la caja**) y los tramos repetidos se comparaban de dos en dos (**mapa** por pareja de vértices).
+  3. Colocación de cotas: la consulta de solapes llevaba la lista de cajas ya vistas con búsqueda lineal; ahora se marcan con el número de consulta.
+
+| Operación (1 863 entidades, Debug) | Antes | Después |
+|---|---|---|
+| `pick` (resaltar al pasar el cursor sin herramienta) | 30,8 ms | 4,1 ms |
+| Perfiles (`findProfiles`) | 4 598 ms | 120 ms |
+| Colocar 421 cotas, zoom 0,05 | 52 ms | 31 ms |
+| Colocar 421 cotas, zoom muy alejado (1) | 688 ms | 94 ms |
+| `snap` por movimiento | 0,61 ms | 0,62 ms |
+| Copiar el sketch (un paso de Deshacer) | 0,47 ms | 0,28 ms |
+
+- **Pendiente (medido, sin arreglar):** el **solver** (PlaneGCS) crece casi con el cubo del tamaño de cada grupo conectado: 25 líneas encadenadas 30 ms, 50 → 154 ms, 100 → 1 166 ms, 150 → 3 529 ms (Debug). Los grupos independientes ya se resuelven por separado; una cadena larga con coincidencias es un solo grupo. Falta medirlo en Release y, si sigue siendo caro, ver si PlaneGCS admite reducir el sistema. `pick` aún recorre cuatro partes por entidad (4 ms en Debug).
+- **Riesgos al volver atrás:** ninguno en archivos guardados; las entidades siempre salen del archivo ordenadas por id.
+
+---
+
 ## Ayuda en todas las herramientas y banner de la barra de estado — 11 nov. 2026
 
 - **Rama:** `feature/ayudas-y-barra` (sobre `feature/pendientes-sketch`). Fusionada a `develop` a petición del usuario tras sus pruebas.

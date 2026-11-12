@@ -449,6 +449,18 @@ Rama `feature/inferencias-sketch`. Solo la **alineación horizontal/vertical** c
 | I.15 | Empieza una línea nueva desde el **extremo de otra** línea que ya existe y haz lo de I.12 | También infiere con esa línea |
 | I.16 | Cerca de la horizontal o la vertical, o cerca de un punto existente, o con **Mayús/Ctrl** pulsada | Mandan la horizontal/vertical y los puntos antes que ⊥/∥; Mayús y Ctrl las suprimen |
 | I.11 | **Anota** qué te falta o molesta (sobre todo: si la guía aparece demasiado, si «tiembla» al pegarse y se suelta, si querías ver un anillo en el punto despierto) | Una nota por caso: son los pendientes de la entrega |
+## Auditoría del sketch (rendimiento) — EN PRUEBA
+
+Rama `feature/auditoria-sketch`. Hace falta un sketch grande: dibuja una **rejilla de unas 20 × 20 casillas** (por ejemplo, un rectángulo con patrón rectangular, o importa un DXF grande).
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| P.1 | Con el sketch grande y **sin herramienta**, pasa el cursor por encima | El resaltado sigue al cursor sin tirones |
+| P.2 | Termina el sketch y extruye el perfil | Los perfiles salen sin esperas largas |
+| P.3 | Acerca y aleja la vista con muchas cotas en pantalla | Las cotas se recolocan con fluidez |
+
+---
+
 ## Ayuda en las herramientas y banner de la barra de estado — FUSIONADO (probar)
 
 | # | Haz esto | Debe pasar |
