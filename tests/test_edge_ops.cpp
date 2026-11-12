@@ -2194,7 +2194,7 @@ TEST_CASE("Una caja y un cilindro se colocan, se cortan y se ligan a parámetros
     REQUIRE_THAT(reopened.result().bodies.front().shape.bounds().max.x, Catch::Matchers::WithinAbs(20.0, 1e-6));
 }
 
-TEST_CASE("El generador de lightbox hace caja y tapa de cuatro cuerpos ligados a parámetros", "[generator]")
+TEST_CASE("El generador de lightbox hace una caja y una tapa de un solo cuerpo ligados a parámetros", "[generator]")
 {
     const document::Generator* lightbox = document::findGenerator("lightbox");
     REQUIRE(lightbox != nullptr);
@@ -2204,13 +2204,13 @@ TEST_CASE("El generador de lightbox hace caja y tapa de cuatro cuerpos ligados a
     Document doc;
     commands::AddRecipe command(lightbox->make(values, ""), "Lightbox");
     command.execute(doc);
-    REQUIRE(doc.result().bodies.size() == 4);
+    REQUIRE(doc.result().bodies.size() == 2);  // la caja y la tapa (marco, labio y cara unidos)
     for (std::size_t i = 0; i < doc.featureCount(); ++i) {
         INFO(doc.feature(i).name());
         REQUIRE(doc.status(doc.feature(i).id()).health != Health::Error);
     }
-    const char* names[] = {"Caja", "Marco", "Labio", "Cara"};
-    for (std::size_t i = 0; i < 4; ++i) {
+    const char* names[] = {"Caja", "Tapa"};
+    for (std::size_t i = 0; i < 2; ++i) {
         REQUIRE(doc.bodyInfo().at(doc.result().bodies[i].key).name == names[i]);
         REQUIRE(doc.bodyInfo().at(doc.result().bodies[i].key).component == "Lightbox");
     }
@@ -2224,15 +2224,13 @@ TEST_CASE("El generador de lightbox hace caja y tapa de cuatro cuerpos ligados a
     REQUIRE_THAT(volume(0), Catch::Matchers::WithinAbs(box, 3.0));
     REQUIRE(doc.result().bodies[0].shape.bounds().min.z == Catch::Approx(0.0).margin(1e-6));  // el fondo, en la cama
     REQUIRE(doc.result().bodies[0].shape.bounds().max.z == Catch::Approx(37.0).margin(1e-6));
-    // El marco (el anillo de 2 mm, de 0,8), el labio (1 mm de grueso y 5 de alto, 0,1 de holgura) y la cara central.
-    REQUIRE_THAT(volume(1), Catch::Matchers::WithinAbs((outer - 171.0 * 127.0) * 0.8, 3.0));
-    REQUIRE_THAT(volume(2), Catch::Matchers::WithinAbs((170.8 * 126.8 - 168.8 * 124.8) * 5.0, 3.0));
-    REQUIRE_THAT(volume(3), Catch::Matchers::WithinAbs(171.0 * 127.0 * 0.8, 3.0));
-    // La tapa va al lado y apoyada en la cama; el labio, sobre el marco.
+    // La tapa, un solo cuerpo: la placa del tamaño de la caja (marco y cara central, 0,8 mm) más el labio (1 mm de
+    // grueso y 5 de alto, 0,1 de holgura).
+    REQUIRE_THAT(volume(1), Catch::Matchers::WithinAbs(outer * 0.8 + (170.8 * 126.8 - 168.8 * 124.8) * 5.0, 4.0));
+    // La tapa va al lado y apoyada en la cama; el labio sobresale 5 mm del frente.
     REQUIRE(doc.result().bodies[1].shape.bounds().min.x > 80.0);
     REQUIRE(doc.result().bodies[1].shape.bounds().min.z == Catch::Approx(0.0).margin(1e-6));
-    REQUIRE(doc.result().bodies[2].shape.bounds().min.z == Catch::Approx(0.8).margin(1e-6));
-    REQUIRE(doc.result().bodies[2].shape.bounds().max.z == Catch::Approx(5.8).margin(1e-6));
+    REQUIRE(doc.result().bodies[1].shape.bounds().max.z == Catch::Approx(5.8).margin(1e-6));
 
     // Los parámetros mandan: con más pared, menos hueco.
     auto params = doc.parameters();
@@ -2250,7 +2248,7 @@ TEST_CASE("El generador de lightbox hace caja y tapa de cuatro cuerpos ligados a
     REQUIRE(doc.parameters().empty());
     REQUIRE(doc.bodyInfo().empty());
     command.execute(doc);
-    REQUIRE(doc.result().bodies.size() == 4);
+    REQUIRE(doc.result().bodies.size() == 2);
 
     // Una segunda vez usa otros nombres de parámetros.
     REQUIRE(document::freeSuffix(doc, *lightbox, values) == "_2");
@@ -2264,7 +2262,7 @@ TEST_CASE("El lightbox redondo", "[generator]")
     values["pared_cable"] = 1.0;  // por la pared de abajo
     Document doc;
     document::applyRecipe(doc, lightbox->make(values, ""));
-    REQUIRE(doc.result().bodies.size() == 4);
+    REQUIRE(doc.result().bodies.size() == 2);
     const double pi = std::numbers::pi;
     const double hollow = pi * 75.0 * 75.0 * 37.0 - pi * 73.0 * 73.0 * 35.0;
     // El agujero del cable (Ø6 por una pared de 2) le quita algo de material a la caja.
@@ -2272,7 +2270,9 @@ TEST_CASE("El lightbox redondo", "[generator]")
     REQUIRE(volume < hollow - 20.0);
     REQUIRE(volume > hollow - 200.0);
     REQUIRE(doc.result().bodies[0].shape.bounds().max.z == Catch::Approx(37.0).margin(1e-6));
-    REQUIRE_THAT(doc.result().bodies[3].shape.volume(), Catch::Matchers::WithinAbs(pi * 73.0 * 73.0 * 0.8, 2.0));
+    // La tapa redonda: placa de Ø150 × 0,8 más el labio (Ø148,8 por fuera, 1 mm de grueso, 5 de alto).
+    REQUIRE_THAT(doc.result().bodies[1].shape.volume(),
+                 Catch::Matchers::WithinAbs(pi * 75.0 * 75.0 * 0.8 + pi * (72.9 * 72.9 - 71.9 * 71.9) * 5.0, 4.0));
 }
 
 TEST_CASE("El agujero del cable del lightbox sale por la pared elegida", "[generator]")
@@ -2284,7 +2284,7 @@ TEST_CASE("El agujero del cable del lightbox sale por la pared elegida", "[gener
         values["cable"] = cable;
         Document doc;
         document::applyRecipe(doc, lightbox->make(values, ""));
-        REQUIRE(doc.result().bodies.size() == 4);
+        REQUIRE(doc.result().bodies.size() == 2);
         for (std::size_t i = 0; i < doc.featureCount(); ++i) {
             REQUIRE(doc.status(doc.feature(i).id()).health != Health::Error);
         }
@@ -2299,7 +2299,7 @@ TEST_CASE("El agujero del cable del lightbox sale por la pared elegida", "[gener
         INFO(wall);
         const std::vector<double> with = volumes(wall, 6.0);
         REQUIRE(with[0] < solid[0] - 30.0);
-        for (std::size_t i = 1; i < 4; ++i) {
+        for (std::size_t i = 1; i < 2; ++i) {
             REQUIRE_THAT(with[i], Catch::Matchers::WithinAbs(solid[i], 1e-3));
         }
     }
@@ -2417,6 +2417,21 @@ TEST_CASE("El generador de letreros pone las letras en relieve, grabadas o suelt
     // El texto mide 22 × 14; con 5 mm de margen la placa es de 32 × 24 × 3 y esquinas de radio 3.
     const double plateArea = 32.0 * 24.0 - (4.0 - pi) * 9.0;
     const double letterArea = 2.0 * (10.0 * 14.0 - 4.0 * 8.0);
+
+    // Por defecto, el texto en relieve va unido a la placa: un solo cuerpo.
+    REQUIRE(generator->defaults().at("modo") == 3.0);
+    Document single;
+    make(0.0, 3.0, single);
+    REQUIRE(single.result().bodies.size() == 1);
+    REQUIRE_THAT(single.result().bodies[0].shape.volume(), Catch::Matchers::WithinAbs(plateArea * 3.0 + letterArea * 1.2, 1e-2));
+    REQUIRE(single.result().bodies[0].shape.bounds().max.z == Catch::Approx(4.2).margin(1e-6));
+    REQUIRE(single.bodyInfo().at(single.result().bodies[0].key).name == "Placa");
+    REQUIRE(single.bodyInfo().at(single.result().bodies[0].key).component == "Letrero");
+    Document singleKey;
+    make(1.0, 3.0, singleKey);  // el llavero con anilla y agujero, también en un cuerpo
+    REQUIRE(singleKey.result().bodies.size() == 1);
+    REQUIRE(singleKey.result().bodies[0].shape.volume() > plateArea * 3.0 + letterArea * 1.2 + 100.0);
+    REQUIRE(singleKey.result().bodies[0].shape.bounds().min.x < -16.0 - 9.0);
 
     Document relief;
     make(0.0, 0.0, relief);
@@ -2598,7 +2613,7 @@ TEST_CASE("Reabrir un generador cambia sus operaciones en su sitio y se puede de
         REQUIRE(doc.feature(i).id() == ids[i]);
         REQUIRE(doc.status(ids[i]).health != Health::Error);
     }
-    REQUIRE(doc.result().bodies.size() == 4);
+    REQUIRE(doc.result().bodies.size() == 2);
     REQUIRE(doc.result().bodies[0].shape.volume() != Catch::Approx(oldVolume));
     REQUIRE(doc.bodyInfo().at(doc.result().bodies[0].key).name == "Caja");
     REQUIRE(document::decodeValues(doc.feature(0).origin.values).at("pared") == 4.0);
@@ -2621,7 +2636,7 @@ TEST_CASE("Reabrir un generador cambia sus operaciones en su sitio y se puede de
     REQUIRE(doc.featureCount() > count);
     const FeatureId newLead = doc.feature(0).origin.lead;
     REQUIRE(document::generatedGroup(doc, newLead).size() == doc.featureCount());
-    REQUIRE(doc.result().bodies.size() == 4);
+    REQUIRE(doc.result().bodies.size() == 2);
     for (std::size_t i = 0; i < doc.featureCount(); ++i) {
         INFO(doc.feature(i).name());
         REQUIRE(doc.status(doc.feature(i).id()).health != Health::Error);
@@ -2649,7 +2664,7 @@ TEST_CASE("Reabrir un generador cambia sus operaciones en su sitio y se puede de
     }
     rebuild.undo(doc);
     REQUIRE(doc.featureCount() == count);
-    REQUIRE(doc.result().bodies.size() == 4);
+    REQUIRE(doc.result().bodies.size() == 2);
     for (std::size_t i = 0; i < count; ++i) {
         REQUIRE(doc.feature(i).id() == ids[i]);
     }

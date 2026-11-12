@@ -26,6 +26,7 @@
 #include <QRegularExpression>
 #include <QColor>
 #include <optional>
+#include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QImage>
 #include <QElapsedTimer>
@@ -278,7 +279,7 @@ QPushButton* InterfaceCheck::button(const QString& text) const
     return nullptr;
 }
 
-int InterfaceCheck::openChangeAccept(QAction* action, int spinIndex)
+int InterfaceCheck::openChangeAccept(QAction* action, int spinIndex, const QString& choice)
 {
     const std::size_t before = window_.document_.featureCount();
     expect(action != nullptr && action->isEnabled(), QStringLiteral("el comando no está disponible"));
@@ -291,6 +292,15 @@ int InterfaceCheck::openChangeAccept(QAction* action, int spinIndex)
         return 0;
     }
     waitIdle();
+    if (!choice.isEmpty() && window_.propertiesDock_->widget() != nullptr) {
+        for (QComboBox* combo : window_.propertiesDock_->widget()->findChildren<QComboBox*>()) {
+            if (const int at = combo->findText(choice); at >= 0) {
+                blocking(QStringLiteral("elegir una opción"), [&] { combo->setCurrentIndex(at); });
+                waitIdle();
+                break;
+            }
+        }
+    }
     if (QDoubleSpinBox* box = spin(spinIndex)) {
         blocking(QStringLiteral("cambiar un valor"), [&] { box->setValue(std::min(box->maximum(), box->value() * 1.1 + 0.05)); });
         waitIdle();
@@ -622,7 +632,7 @@ int InterfaceCheck::run()
                 lightbox = action;
             }
         }
-        expect(lightbox != nullptr && lightbox->isEnabled(), QStringLiteral("no hay generador Lightbox"));
+        expect(lightbox != nullptr && lightbox->isEnabled(), QStringLiteral("no hay generador Letrero"));
         if (lightbox == nullptr) {
             return;
         }
@@ -946,7 +956,7 @@ int InterfaceCheck::run()
         undoAll();
     });
 
-    // Un llavero son dos cuerpos (placa y texto): mover con los dos marcados los lleva juntos.
+    // Un letrero con el texto «en otro cuerpo» son dos cuerpos (placa y texto): mover con los dos marcados los lleva juntos.
     step(QStringLiteral("Mover los dos cuerpos de un letrero a la vez"), [&] {
         QAction* sign = nullptr;
         for (QAction* action : generators) {
@@ -954,11 +964,13 @@ int InterfaceCheck::run()
                 sign = action;
             }
         }
-        expect(sign != nullptr, QStringLiteral("no hay generador Letrero"));
+        expect(sign != nullptr, QStringLiteral("no hay generador Lightbox"));
         if (sign == nullptr) {
             return;
         }
-        expect(openChangeAccept(sign, 0) >= 1, QStringLiteral("no se creó el letrero"));
+        // Por defecto el texto va unido a la placa (un cuerpo): aquí se elige «en otro cuerpo». Se usa el letrero (pieza
+        // pequeña) y no un lightbox para que la vista no quede lejos y el resto de la prueba parta de la de siempre.
+        expect(openChangeAccept(sign, 0, QStringLiteral("En relieve (otro cuerpo)")) >= 1, QStringLiteral("no se creó el letrero"));
         const auto centers = [&] {
             std::vector<double> xs;
             for (const document::Body& body : window_.document_.result().bodies) {

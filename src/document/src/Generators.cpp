@@ -30,8 +30,8 @@ std::string number(double value)
 
 // --- Lightbox ------------------------------------------------------------------------------
 // Como la «Light Box» de MakerLab: una caja abierta por delante (fondo cerrado y paredes), y una tapa delantera
-// hecha de un marco, un labio que entra en la caja y la cara central (donde va la imagen). Todo son cuerpos
-// aparte para poder darle a cada uno su filamento sin pintar caras.
+// hecha de un marco, un labio que entra en la caja y la cara central (donde va la imagen). La caja y la tapa son
+// dos cuerpos; la tapa es un solo cuerpo (placa más labio), sin piezas sueltas que manejar.
 
 class Lightbox final : public Generator {
 public:
@@ -39,8 +39,8 @@ public:
     std::string title() const override { return "Lightbox"; }
     std::string description() const override
     {
-        return "Caja de luz para imprimir, como la de MakerLab: caja abierta por delante y tapa delantera con marco, "
-               "labio y una cara central aparte (para la imagen).";
+        return "Caja de luz para imprimir, como la de MakerLab: caja abierta por delante y tapa delantera de un solo "
+               "cuerpo, con su labio que entra en la caja.";
     }
 
     std::vector<GeneratorField> fields() const override
@@ -92,9 +92,15 @@ public:
         const auto topCorner = [](const GeneratorValues& v) { return std::array<double, 3>{0.0, 0.0, v.at("profundidad")}; };
         ArrowSpec corner{0, 'x', false};
         corner.at = topCorner;  // el radio de la esquina, a lo largo del borde de arriba que sale de ella
+        // La tapa es el cuerpo 1: el frente va de su cara de abajo (Z = 0), el labio se mide desde su borde de arriba
+        // y el grosor del labio empieza en su pared exterior (a pared + holgura del borde de la tapa).
+        ArrowSpec lipWall{1, 'x', false};
+        lipWall.at = [](const GeneratorValues& v) {
+            return std::array<double, 3>{v.at("pared") + v.at("holgura"), kCenter, v.at("frente") + v.at("labio") / 2.0};
+        };
         return {{"ancho", {0, 'x', false}}, {"diametro", {0, 'x', false}}, {"alto", {0, 'y', false}},
                 {"profundidad", {0, 'z', false}}, {"pared", {0, 'x', true}}, {"fondo", {0, 'z', false}},
-                {"frente", {3, 'z', false}}, {"labio", {2, 'z', false}}, {"labio_pared", {2, 'x', false}},
+                {"frente", {1, 'z', false}}, {"labio", {1, 'z', true}}, {"labio_pared", lipWall},
                 {"esquina", corner}};
     }
 
@@ -110,7 +116,7 @@ public:
 
         Recipe recipe;
         recipe.component = "Lightbox";
-        recipe.bodyNames = {"Caja", "Marco", "Labio", "Cara"};
+        recipe.bodyNames = {"Caja", "Tapa"};
         const auto param = [&](const std::string& name, double value) {
             recipe.parameters.push_back({name, number(value)});
         };
@@ -206,16 +212,14 @@ public:
             }
             recipe.features.push_back(std::move(f));
         }
-        // 4. El marco de la tapa: una placa del tamaño de la caja con el centro hueco (el anillo de la pared).
-        recipe.features.push_back(shapeAt("Lightbox: marco", Operation::NewBody, W, H, "0", frente, beside, esquina));
+        // 4. La tapa, un solo cuerpo: la placa del tamaño de la caja (marco y cara central juntos)...
+        recipe.features.push_back(shapeAt("Lightbox: tapa", Operation::NewBody, W, H, "0", frente, beside, esquina));
+        // 5. ...y el labio: un anillo que sale hacia atrás desde la cara interior de la tapa y entra en la caja. Se
+        // une a la placa (empieza 0,01 mm dentro de ella para que la unión sea firme).
         recipe.features.push_back(
-            shapeAt("Lightbox: hueco del marco", Operation::Cut, inW, inH, "-1", frente + " + 2", beside, ""));
-        // 5. El labio: un anillo que sale hacia atrás desde la cara interior de la tapa y entra en la caja.
-        recipe.features.push_back(shapeAt("Lightbox: labio", Operation::NewBody, lipW, lipH, frente, labio, beside, ""));
+            shapeAt("Lightbox: labio", Operation::Join, lipW, lipH, frente + " - 0.01", labio + " + 0.01", beside, ""));
         recipe.features.push_back(
             shapeAt("Lightbox: hueco del labio", Operation::Cut, lipInW, lipInH, frente, labio + " + 1", beside, ""));
-        // 6. La cara central, donde va la imagen: rellena el hueco del marco (un cuerpo aparte).
-        recipe.features.push_back(shapeAt("Lightbox: cara central", Operation::NewBody, inW, inH, "0", frente, beside, ""));
         return recipe;
     }
 };
@@ -452,11 +456,17 @@ public:
         font.key = "fuente";
         font.label = "Fuente";
         font.kind = K::Font;
+        // El orden de las opciones no cambia (los diseños guardados guardan el índice): la nueva va al final y es la
+        // que sale por defecto.
+        GeneratorField mode = choice("modo", "Texto", {"En relieve (otro cuerpo)", "Grabado (hundido)", "Solo letras",
+                                                       "En relieve (un solo cuerpo)"});
+        mode.value = 3.0;
+        mode.hint = "«Otro cuerpo» deja el texto aparte para imprimirlo en otro color";
         return {choice("tipo", "Tipo", {"Letrero", "Llavero"}),
                 text,
                 font,
                 length("altura_texto", "Tamaño del texto", 20.0, 3.0, 300.0, "Tamaño de la fuente; las letras mayúsculas miden ~70 %"),
-                choice("modo", "Texto", {"En relieve (otro cuerpo)", "Grabado (hundido)", "Solo letras"}),
+                mode,
                 length("margen", "Margen de la placa", 5.0, 1.0, 100.0, "Entre el texto y el borde"),
                 length("grosor", "Grosor de la placa", 3.0, 0.8, 50.0),
                 length("relieve", "Relieve o profundidad", 1.2, 0.2, 50.0, "Cuánto sobresale (o se hunde) el texto"),
@@ -545,7 +555,9 @@ public:
 
         Recipe recipe;
         recipe.component = keychain ? "Llavero" : "Letrero";
-        recipe.bodyNames = mode == 2 ? std::vector<std::string>{"Texto"} : std::vector<std::string>{"Placa", "Texto"};
+        recipe.bodyNames = mode == 2   ? std::vector<std::string>{"Texto"}
+                           : mode == 3 ? std::vector<std::string>{"Placa"}
+                                       : std::vector<std::string>{"Placa", "Texto"};
         const auto param = [&](const std::string& name, double value) {
             recipe.parameters.push_back({name, number(value)});
         };
@@ -597,7 +609,13 @@ public:
         for (const sketch::Profile& profile : profiles) {
             letters->profiles.push_back(profileRef(kRecipeSketch, profile));
         }
-        if (mode == 0) {
+        if (mode == 3) {
+            // Un solo cuerpo: el texto se une a la placa (empieza 0,01 mm dentro de ella para que la unión sea firme).
+            letters->operation = Operation::Join;
+            letters->spec.startOffset = v("grosor") - 0.01;
+            letters->spec.side1.distance = v("relieve") + 0.01;
+            letters->expressions = {{"startOffset", thick + " - 0.01"}, {"distance", relief + " + 0.01"}};
+        } else if (mode == 0) {
             letters->operation = Operation::NewBody;
             letters->spec.startOffset = v("grosor");
             letters->spec.side1.distance = v("relieve");

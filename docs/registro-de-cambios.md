@@ -10,6 +10,25 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Tapa en un solo cuerpo (Lightbox y Letrero) — 12 nov. 2026
+
+- **Rama:** `feature/tapa-un-solo-cuerpo` (desde `develop`). **Sin fusionar** hasta la prueba manual (guía LIG.12–14, CAJ.6, LET.7–10).
+- **Qué hace:** la tapa del **Lightbox** pasa de tres cuerpos sueltos (Marco, Labio, Cara) a uno, **Tapa** (placa más labio unido): los cuerpos son ahora **Caja** y **Tapa**. En el **Letrero/Llavero**, el texto en relieve se une a la placa (y a la anilla) en un solo cuerpo; para no perder el texto en otro color (LET.7) hay una opción nueva en «Texto»: **En relieve (un solo cuerpo)**, que es la de fábrica, junto a «En relieve (otro cuerpo)» de siempre. La **Caja con tapa** ya tenía la tapa en un solo cuerpo (solo se añadió una comprobación en la guía).
+- **Dónde:**
+
+| Parte | Dónde (para deshacerla a mano) |
+|---|---|
+| Lightbox | `Lightbox::make` y `arrows` en `src/document/src/Generators.cpp`: el marco, su hueco y la cara central se sustituyen por «Lightbox: tapa»; el labio pasa de Cuerpo nuevo a Unir (empieza 0,01 mm dentro de la placa); las flechas de frente, labio y grosor del labio miran al cuerpo 1 |
+| Letrero | `Sign::fields/make` en el mismo archivo: opción 3 «En relieve (un solo cuerpo)» (por defecto), extrusión «Unir» desde `grosor − 0,01` |
+| Pruebas | `tests/test_edge_ops.cpp` (lightbox, lightbox redondo, cable, reabrir generador, letreros); `InterfaceCheck.cpp/.hpp`: el paso «Mover los dos cuerpos» elige «En relieve (otro cuerpo)» en el letrero |
+| Docs | `generadores.md`, `guia-de-pruebas.md`, `hoja-de-ruta-cad.md` |
+
+- **Pruebas:** 250 unitarias y 36/36 pasos de la prueba de interfaz en verde (Windows, Debug). Al principio fallaba «Cota de un clic»: el paso «Mover los dos cuerpos» usaba un Lightbox y dejaba la vista muy alejada, y el sketch siguiente (con las tolerancias de captura en unidades de pantalla) no creaba los círculos. Se arregló volviendo a usar el letrero, eligiendo «En relieve (otro cuerpo)» (`openChangeAccept` gana un parámetro `choice`).
+- **Riesgos:** los diseños de Lightbox guardados antes conservan sus cuatro cuerpos hasta que se reabra el generador (al reabrir se rehacen con la tapa unida); el Lightbox ya no permite otro filamento solo para la cara central.
+- **Volver atrás:** no fusionar la rama o `git revert` de la fusión; ningún cambio de formato de archivo.
+
+---
+
 ## Perpendicular y paralela al dibujar líneas (entrega 2, segunda parte) — 11 nov. 2026
 
 - **Rama:** `feature/inferencias-sketch` (sobre la parte anterior). **Sin fusionar** hasta la prueba manual (guía I.12–I.16).

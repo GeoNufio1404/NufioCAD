@@ -59,7 +59,7 @@ private:
     QDoubleSpinBox* spin(int index) const;
     QPushButton* button(const QString& text) const;
     // Abre un comando, mueve un valor y lo acepta; devuelve cuántas operaciones añadió.
-    int openChangeAccept(QAction* action, int spinIndex);
+    int openChangeAccept(QAction* action, int spinIndex, const QString& choice = {});
     void undoAll();
 
     MainWindow& window_;

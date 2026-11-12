@@ -30,15 +30,14 @@ y Sólido › Parámetros cambia las medidas de todo el diseño. El formulario d
 | Ancho y alto | a lo largo de X y de Y |
 | Profundidad | a lo largo de Z: el **fondo** de la caja está en Z = 0 (apoyado en la cama) y la caja se abre por **delante** (+Z) |
 | Tapa | sale **al lado** de la caja, en +X a `ancho + 10` mm del centro, con la cara de la imagen apoyada en Z = 0 (cara abajo, como se imprime) |
-| Cuerpos | «Caja», «Marco», «Labio» y «Cara», en el componente «Lightbox» |
+| Cuerpos | «Caja» y «Tapa» (un solo cuerpo), en el componente «Lightbox» |
 
 ## Lightbox (rectangular y redonda)
 
 Hecha a imagen de la «Light Box» de MakerLab (ver la referencia al final de esta sección): una **caja** abierta
-por delante (fondo cerrado y paredes) y una **tapa delantera** que entra en la caja y se compone de tres cuerpos
-aparte: el **marco** (el anillo de la pared), el **labio** (un anillo que entra en la caja) y la **cara central**
-(la zona de la imagen). Al ser cuerpos distintos, cada uno puede llevar su filamento sin pintar caras: por ejemplo,
-marco y labio negros y la cara central blanca (o la que lleve tu imagen).
+por delante (fondo cerrado y paredes) y una **tapa delantera** que entra en la caja. La tapa es **un solo cuerpo**: la placa (el marco y la cara central
+—la zona de la imagen—, sin juntas) con el **labio** (un anillo que entra en la caja) unido a ella. Así hay solo dos
+cuerpos que manejar. Ya no se puede dar un filamento distinto a la cara central.
 
 ### Preguntas y medidas
 
@@ -81,9 +80,8 @@ la misma pared curva (abajo, arriba, izquierda y derecha son direcciones del cí
 |---|---|
 | Caja, exterior | 175 × 131 × 37 mm, esquinas de radio 2 |
 | Hueco | 171 × 127 mm (ancho − 2·pared, alto − 2·pared) y 35 mm de profundidad, esquinas interiores vivas |
-| Marco | Anillo de 175 × 131 exterior y 171 × 127 interior, 0,8 mm de alto |
-| Labio | Anillo de 170,8 × 126,8 exterior (hueco − 2·holgura) y 168,8 × 124,8 interior, 5 mm de alto, sobre el marco (Z de 0,8 a 5,8) |
-| Cara central | 171 × 127 × 0,8 mm: rellena el hueco del marco |
+| Placa de la tapa | 175 × 131 × 0,8 mm (marco y cara central, un solo sólido) |
+| Labio | Anillo de 170,8 × 126,8 exterior (hueco − 2·holgura) y 168,8 × 124,8 interior, 5 mm de alto, unido a la placa (Z de 0,8 a 5,8) |
 | Volumen de la caja sin agujero | ≈ 88 000 mm³ |
 
 La versión redonda usa las mismas fórmulas con círculos (diámetro exterior, hueco de diámetro − 2·pared, labio de
@@ -96,20 +94,18 @@ diámetro − 2·pared − 2·holgura).
 | 1 | Lightbox: caja | Caja centrada, radio `esquina` | ancho × alto × profundidad, desde Z = 0 | Cuerpo nuevo |
 | 2 | Lightbox: hueco | Caja centrada, desplazada `fondo` en Z | (ancho − 2·pared) × (alto − 2·pared) × profundidad | Cortar |
 | 3 | Lightbox: agujero del cable | Cilindro Ø `cable` por el fondo o por la pared elegida | por el fondo: desde Z = −1, longitud `fondo + 2`; por una pared: `pared + 2`, repartida a los dos lados | Cortar |
-| 4 | Lightbox: marco | Caja centrada en X = ancho + 10, radio `esquina` | ancho × alto × frente | Cuerpo nuevo |
-| 5 | Lightbox: hueco del marco | Caja en el mismo sitio | (ancho − 2·pared) × (alto − 2·pared), atravesando el marco | Cortar |
-| 6 | Lightbox: labio | Caja en el mismo sitio, desde Z = frente | (hueco − 2·holgura) × alto del labio | Cuerpo nuevo |
-| 7 | Lightbox: hueco del labio | Caja en el mismo sitio, desde Z = frente | (hueco − 2·holgura − 2·grosor del labio), más alta que el labio | Cortar |
-| 8 | Lightbox: cara central | Caja en el mismo sitio, desde Z = 0 | (ancho − 2·pared) × (alto − 2·pared) × frente | Cuerpo nuevo |
+| 4 | Lightbox: tapa | Caja centrada en X = ancho + 10, radio `esquina` | ancho × alto × frente | Cuerpo nuevo |
+| 5 | Lightbox: labio | Caja en el mismo sitio, desde Z = frente − 0,01 | (hueco − 2·holgura) × (alto del labio + 0,01) | Unir (a la tapa) |
+| 6 | Lightbox: hueco del labio | Caja en el mismo sitio, desde Z = frente | (hueco − 2·holgura − 2·grosor del labio), más alta que el labio | Cortar |
 
 En la redonda, las cajas son cilindros (el diámetro hace de ancho y de alto) y no hay radio de esquinas.
 
 ### Nombres
 
-- Cuerpos: **Caja**, **Marco**, **Labio** y **Cara**; componente **Lightbox**.
+- Cuerpos: **Caja** y **Tapa**; componente **Lightbox**.
 - Operaciones: las de la tabla («Lightbox: …»).
 - Caras: cada caja y cada cilindro nombra sus caras por su orientación (ver más abajo; las esquinas redondeadas se
-  llaman `esquina+x+y`, etc.), así que se puede dibujar un sketch en la **cara central** (para cortar o dar relieve a tu
+  llaman `esquina+x+y`, etc.), así que se puede dibujar un sketch en la **cara de la tapa** (para cortar o dar relieve a tu
   imagen) y la operación sigue su cara si cambias una medida.
 
 ### Referencia: la «Light Box» de MakerLab
@@ -178,7 +174,7 @@ parámetros (`ancho`, `alto`…), así que se pueden cambiar después en Sólido
 
 ## Letrero o llavero (con texto)
 
-Una placa con tu texto, que puede ir **en relieve** (en un cuerpo aparte, para imprimirlo en otro color), **grabado** en la
+Una placa con tu texto, que puede ir **en relieve** (unido a la placa en **un solo cuerpo**, o en otro cuerpo aparte para imprimirlo en otro color), **grabado** en la
 placa o como **letras sueltas**, y con una **anilla** opcional para convertirlo en llavero. Las letras salen del contorno
 de la fuente elegida (las del sistema) y quedan en un sketch editable dentro del historial.
 
@@ -190,7 +186,7 @@ de la fuente elegida (las del sistema) y quedan en un sketch editable dentro del
 | Texto | — | Nufio | cualquier texto | Lo que se escribe |
 | Fuente | — | la de la interfaz | las fuentes escalables del sistema | La forma de las letras |
 | Tamaño del texto | — | 20 mm | 3 – 300 | Tamaño de la fuente (las mayúsculas miden ~70 %); no es un parámetro: cambia el sketch |
-| Texto | — | En relieve (otro cuerpo) | En relieve / Grabado (hundido) / Solo letras | Cómo va el texto |
+| Texto | — | En relieve (un solo cuerpo) | En relieve (otro cuerpo) / Grabado (hundido) / Solo letras / En relieve (un solo cuerpo) | Cómo va el texto. El orden de las opciones se mantiene (los diseños guardados guardan el índice): la nueva es la última y la de fábrica |
 | Margen de la placa | — | 5 mm | 1 – 100 | Entre el texto y el borde; solo sirve para calcular el tamaño de la placa |
 | Grosor de la placa | `grosor` | 3 mm | 0,8 – 50 | Grosor de la placa |
 | Relieve o profundidad | `relieve` | 1,2 mm | 0,2 – 50 | Cuánto sobresale (o se hunde) el texto; con «Solo letras», su altura |
@@ -209,9 +205,9 @@ parámetros (si cambias el texto después hay que editar el sketch y esas dos me
 | 2 | «…: placa» | Caja centrada, radio `esquina` | `placa_ancho` × `placa_alto` × `grosor` | Cuerpo nuevo |
 | 3 | «Llavero: anilla» | Cilindro Ø `anilla`, a la izquierda de la placa (2 mm metidos en ella) | grosor de la placa | Unir |
 | 4 | «Llavero: agujero» | Cilindro Ø `agujero` en el centro de la anilla | atraviesa la anilla | Cortar |
-| 5 | «…: texto» | Extrusión de las letras | En relieve: de `grosor` a `grosor + relieve`, cuerpo nuevo. Grabado: de `grosor − relieve` hacia arriba, cortando la placa. Solo letras: desde Z = 0, `relieve` de alto | Cuerpo nuevo / Cortar |
+| 5 | «…: texto» | Extrusión de las letras | En relieve (otro cuerpo): de `grosor` a `grosor + relieve`, cuerpo nuevo. En relieve (un solo cuerpo): de `grosor − 0,01` a `grosor + relieve`, unido a la placa. Grabado: de `grosor − relieve` hacia arriba, cortando la placa. Solo letras: desde Z = 0, `relieve` de alto | Cuerpo nuevo / Unir / Cortar |
 
-Cuerpos: **Placa** y **Texto** (en relieve), solo **Placa** (grabado) o solo **Texto** (letras sueltas). Componente:
+Cuerpos: **Placa** (relieve en un solo cuerpo, grabado; con la anilla en el llavero), **Placa** y **Texto** (relieve en otro cuerpo) o solo **Texto** (letras sueltas). Componente:
 «Letrero» o «Llavero». Las regiones que rellenan el hueco de una letra (el interior de una «O», una «A»…) no se
 extruyen.
 
