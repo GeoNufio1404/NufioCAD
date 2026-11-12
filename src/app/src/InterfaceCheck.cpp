@@ -26,6 +26,7 @@
 #include <QRegularExpression>
 #include <QColor>
 #include <optional>
+#include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QImage>
 #include <QElapsedTimer>
@@ -278,7 +279,7 @@ QPushButton* InterfaceCheck::button(const QString& text) const
     return nullptr;
 }
 
-int InterfaceCheck::openChangeAccept(QAction* action, int spinIndex)
+int InterfaceCheck::openChangeAccept(QAction* action, int spinIndex, const QString& choice)
 {
     const std::size_t before = window_.document_.featureCount();
     expect(action != nullptr && action->isEnabled(), QStringLiteral("el comando no está disponible"));
@@ -291,6 +292,15 @@ int InterfaceCheck::openChangeAccept(QAction* action, int spinIndex)
         return 0;
     }
     waitIdle();
+    if (!choice.isEmpty() && window_.propertiesDock_->widget() != nullptr) {
+        for (QComboBox* combo : window_.propertiesDock_->widget()->findChildren<QComboBox*>()) {
+            if (const int at = combo->findText(choice); at >= 0) {
+                blocking(QStringLiteral("elegir una opción"), [&] { combo->setCurrentIndex(at); });
+                waitIdle();
+                break;
+            }
+        }
+    }
     if (QDoubleSpinBox* box = spin(spinIndex)) {
         blocking(QStringLiteral("cambiar un valor"), [&] { box->setValue(std::min(box->maximum(), box->value() * 1.1 + 0.05)); });
         waitIdle();
@@ -622,7 +632,7 @@ int InterfaceCheck::run()
                 lightbox = action;
             }
         }
-        expect(lightbox != nullptr && lightbox->isEnabled(), QStringLiteral("no hay generador Lightbox"));
+        expect(lightbox != nullptr && lightbox->isEnabled(), QStringLiteral("no hay generador Letrero"));
         if (lightbox == nullptr) {
             return;
         }
@@ -946,11 +956,11 @@ int InterfaceCheck::run()
         undoAll();
     });
 
-    // Un lightbox son dos cuerpos (caja y tapa): mover con los dos marcados los lleva juntos.
-    step(QStringLiteral("Mover los dos cuerpos de un lightbox a la vez"), [&] {
+    // Un letrero con el texto «en otro cuerpo» son dos cuerpos (placa y texto): mover con los dos marcados los lleva juntos.
+    step(QStringLiteral("Mover los dos cuerpos de un letrero a la vez"), [&] {
         QAction* sign = nullptr;
         for (QAction* action : generators) {
-            if (action->text().contains(QStringLiteral("Lightbox"))) {
+            if (action->text().contains(QStringLiteral("Letrero"))) {
                 sign = action;
             }
         }
@@ -958,7 +968,9 @@ int InterfaceCheck::run()
         if (sign == nullptr) {
             return;
         }
-        expect(openChangeAccept(sign, 0) >= 1, QStringLiteral("no se creó el lightbox"));
+        // Por defecto el texto va unido a la placa (un cuerpo): aquí se elige «en otro cuerpo». Se usa el letrero (pieza
+        // pequeña) y no un lightbox para que la vista no quede lejos y el resto de la prueba parta de la de siempre.
+        expect(openChangeAccept(sign, 0, QStringLiteral("En relieve (otro cuerpo)")) >= 1, QStringLiteral("no se creó el letrero"));
         const auto centers = [&] {
             std::vector<double> xs;
             for (const document::Body& body : window_.document_.result().bodies) {
@@ -968,7 +980,7 @@ int InterfaceCheck::run()
             return xs;
         };
         const std::vector<double> before = centers();
-        expect(before.size() >= 2, QStringLiteral("el lightbox debía tener al menos dos cuerpos (%1)").arg(before.size()));
+        expect(before.size() >= 2, QStringLiteral("el letrero debía tener al menos dos cuerpos (%1)").arg(before.size()));
         blocking(QStringLiteral("abrir Mover"), [&] { window_.moveAction_->trigger(); });
         waitIdle();
         auto* list = window_.propertiesDock_->widget() != nullptr ? window_.propertiesDock_->widget()->findChild<QListWidget*>() : nullptr;
