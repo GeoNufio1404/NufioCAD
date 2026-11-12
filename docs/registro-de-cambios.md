@@ -61,7 +61,7 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 | `snap` por movimiento | 0,61 ms | 0,62 ms |
 | Copiar el sketch (un paso de Deshacer) | 0,47 ms | 0,28 ms |
 
-- **Pendiente (medido, sin arreglar):** el **solver** (PlaneGCS) crece casi con el cubo del tamaño de cada grupo conectado: 25 líneas encadenadas 30 ms, 50 → 154 ms, 100 → 1 166 ms, 150 → 3 529 ms (Debug). Los grupos independientes ya se resuelven por separado; una cadena larga con coincidencias es un solo grupo. Falta medirlo en Release y, si sigue siendo caro, ver si PlaneGCS admite reducir el sistema. `pick` aún recorre cuatro partes por entidad (4 ms en Debug).
+- **Solver medido en Release (11 nov. 2026):** compilando el sketch y PlaneGCS aparte con `/O2` (cadena de líneas unidas con coincidencias y longitud, un solo grupo): 25 líneas 1,6 ms, 50 → 6,2 ms, 100 → 31 ms, 150 → 107 ms, 300 → 1,67 s; un caso pequeño tarda 0,1 ms. Release es unas 30 veces más rápido que Debug; `pick` baja a 0,4 ms, perfiles de 1 863 entidades a 17 ms y colocar 421 cotas a 6 ms. **Conclusión:** el crecimiento sigue siendo cúbico, pero un grupo conectado de hasta ~100 entidades se resuelve en menos de un cuadro (≈30 ms); solo un grupo de 150 o más entidades notaría tirones al arrastrar. No se cambia el solver; se retoma si aparecen sketches reales con grupos así de grandes.
 - **Riesgos al volver atrás:** ninguno en archivos guardados; las entidades siempre salen del archivo ordenadas por id.
 
 ---
