@@ -259,3 +259,34 @@ TEST_CASE("Inferencias: la alineación que ya había se suelta más lejos (hist�
     // Más allá del radio de suelta, se libera.
     REQUIRE(snap(s, {20, 6.5}, options).guides.empty());
 }
+
+TEST_CASE("Inferencias: el primer lado de un rectángulo de 3 puntos que sale de una línea a casi 90° queda perpendicular a ella", "[sketch][inference]")
+{
+    Sketch s;
+    const Vec2 end{20 * 0.8660254, 20 * 0.5};
+    const EntityId base = s.addLine({0, 0}, end);
+    SnapOptions options;
+    options.tolerance = 0.5;
+    auto tool = makeThreePointRectangleTool();
+    const Snap a = snap(s, end, options);
+    tool->move(a);
+    tool->click(s, a);
+    const double angle = (30.0 + 89.0) * 3.14159265358979 / 180.0;
+    const Snap b = snap(s, {end.x + 10 * std::cos(angle), end.y + 10 * std::sin(angle)}, options);
+    tool->move(b);
+    REQUIRE(tool->preview().badge == "⊥");
+    REQUIRE(tool->preview().guides.size() == 1);
+    tool->click(s, b);
+    const Snap c = snap(s, {end.x - 8, end.y + 9}, options);
+    tool->move(c);
+    REQUIRE(tool->click(s, c));
+    int onBase = 0;
+    for (const Constraint& k : s.constraints()) {
+        if (k.type == ConstraintType::Perpendicular && (k.first.entity == base || k.second.entity == base)) {
+            ++onBase;
+        }
+    }
+    REQUIRE(onBase == 1);
+    auto solver = makePlaneGcsSolver();
+    REQUIRE(solver->solve(s).status == SolveStatus::Solved);
+}

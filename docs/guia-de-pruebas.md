@@ -455,6 +455,7 @@ Rama `feature/inferencias-sketch`. Solo la **alineación horizontal/vertical** c
 |---|---|---|
 | Q.1 | Dibuja dos líneas paralelas muy juntas y acótalas; arrastra un extremo | Las cotas no saltan de sitio mientras arrastras |
 | Q.2 | Selecciona la cota que quedó apartada | Pasa a su sitio natural y la otra se aparta; ninguna se pisa |
+| Q.3 | Dibuja una línea inclinada. Con «Rectángulo 3 puntos» empieza en su extremo y lleva el primer lado casi perpendicular (o paralelo) | Se endereza, la línea se resalta en naranja y sale ⊥ (∥); termina el rectángulo y el sketch queda sin conflictos |
 
 ---
 

@@ -49,7 +49,9 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 - **Qué hace:** (1) cada cota **recuerda su posición** (el nivel que la apartó de otras) entre repintados y al resolver el sketch: ya no salta al mover un punto; se olvida al hacer zoom. (2) La cota **seleccionada** se coloca primero y toma su sitio natural; las demás ceden. Lo que se dibuja y lo que se pica comparten la misma memoria (`Viewport::sketchAnnotations`).
 - **Dónde:** `LayoutMemory` y `layoutAnnotations(…, memory)` en `src/sketch/{include/nuf/sketch,src}/Annotations.*`; la memoria vive en `ViewportImpl::layoutMemory`.
 - **Pruebas:** 245 unitarias (nueva: repintar no mueve nada y la prioridad cambia el reparto) y 36 pasos de interfaz.
-- **Pendiente:** línea de llamada cuando no queda sitio, ⊥/∥ para rectángulo y arco, referencia «despierta» lejana, arco tangente a una línea, y símbolos como iconos dibujados.
+- **Rectángulo de 3 puntos con ⊥/∥:** si el primer lado parte del extremo de una línea y queda a ≤3° de su paralela o perpendicular, se endereza, se resalta la línea y sale «∥»/«⊥»; al clic se crea la restricción (si cabe). Dónde: `ThreePointRectangleTool` en `src/sketch/src/ShapeTools.cpp`. Prueba nueva en `tests/test_sketch_inference.cpp` (246 unitarias).
+- **Prueba de interfaz:** 35 de 36 pasos con el juego Warframe abierto (falla por tiempo «Mover y girar arrastrando», que no usa el sketch); sin juego pasaba 36/36.
+- **Pendiente:** línea de llamada cuando no queda sitio, ⊥/∥ para el arco, referencia «despierta» lejana, arco tangente a una línea, y símbolos como iconos dibujados.
 - **Riesgos al volver atrás:** ninguno en archivos guardados.
 
 ---
