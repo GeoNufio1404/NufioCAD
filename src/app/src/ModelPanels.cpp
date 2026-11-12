@@ -1,4 +1,5 @@
 #include "ModelPanels.hpp"
+#include "Theme.hpp"
 
 #include <QContextMenuEvent>
 #include <QHeaderView>
@@ -469,7 +470,7 @@ void NavigatorWidget::refresh(const document::Document& document, const document
         const document::FeatureStatus& status = document.status(f.id());
         if (status.health == document::Health::Warning || status.health == document::Health::Error) {
             item->setToolTip(0, QString::fromStdString(status.message));
-            item->setForeground(0, QColor(0xF2, 0xA3, 0x4B));
+            item->setForeground(0, QColor(toneColor(Tone::Warning)));
         }
     }
     expandAll();

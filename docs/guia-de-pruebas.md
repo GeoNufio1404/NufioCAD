@@ -105,6 +105,9 @@ Código: **TEM**. Estado: en prueba. Cambia el tema en Ver › Tema.
 | TEM.4 | Cambia entre claro, oscuro y sistema varias veces | Cambia al instante, sin parpadeos raros ni textos ilegibles, y se recuerda al reabrir |
 | TEM.5 | En ambos temas, abre un menú (Sólido) y un cuadro de diálogo (Exportar) | Los menús y los diálogos se ven coherentes con el tema |
 | TEM.6 | Con el tema claro y el oscuro, mueve y gira la vista con una pieza grande | Sigue igual de fluido que antes (los cambios son de color, no afectan al rendimiento) |
+| TEM.7 | Tema claro: abre Exportar con una pieza que dé avisos (por ejemplo una pared de 0,3 mm) y Parámetros con una expresión errónea (`ancho +`) | El verde de «todo en orden», el ámbar de los avisos y el rojo de los errores se leen bien sobre el fondo gris, sin esfuerzo |
+| TEM.8 | Tema claro: entra a un sketch con varias figuras y restricciones y activa «Mostrar todas» | Las medidas, iconos y trazos se leen bien (nada de gris muy claro sobre claro) |
+| TEM.9 | Con un sketch abierto, cambia de tema (Ver › Tema) | El dibujo cambia de colores al instante (trazos, medidas e iconos), sin tener que salir y volver a entrar |
 
 ### 1.3 Unidades
 
@@ -302,6 +305,8 @@ Código: **SKI**. Estado: en prueba. Aquí están las guías naranjas, los punto
 | SKI.25 | Dibuja un arco; con **Línea**, empieza en uno de sus extremos y lleva el cursor casi en la dirección en que seguiría el arco (a menos de 3°) | El tramo se endereza a la tangente y sale una **T**; al clic, restricción **tangente** (icono T) |
 | SKI.26 | Lo mismo yendo hacia atrás (hacia el arco) o con un ángulo claro | Sin T; el tramo sigue al cursor |
 | SKI.27 | Dibuja una línea; con «Arco» empieza en su extremo, marca el final y pasa el tercer punto cerca de la curva que seguiría la línea | La curva se endereza, sale «T» y el arco queda tangente a la línea (sin conflicto al arrastrar) |
+| SKI.28 | Con **Línea**, deja el cursor medio segundo sobre una línea inclinada que esté lejos (sale un anillo amarillo en su punto medio); luego dibuja un tramo nuevo desde otro sitio, casi paralelo o perpendicular a ella (a menos de 3°) | El tramo se endereza, la línea lejana se resalta en naranja y sale ∥ o ⊥; al clic, la restricción queda con esa línea (sin conflictos al arrastrar) |
+| SKI.29 | Lo mismo con **Rectángulo de 3 puntos** (su primer lado) y sin haber dejado el cursor sobre ninguna línea | Con la línea despierta se endereza; sin ella no hay inferencia |
 
 ### 2.4 Cotas
 
@@ -347,6 +352,8 @@ Usa los casos que anotaste en **SKC.16**.
 | SKC.25 | Acota **5–6 círculos** juntos (distintos centros y concéntricos) | Los textos y las líneas de cota no se pisan entre sí |
 | SKC.26 | Acota ángulos de 90° y otros (dibujando las líneas en ambos sentidos: llegando al vértice y saliendo de él) | El arco y el número están en la **esquina** de las dos líneas, dentro del ángulo que se mide |
 | SKC.27 | Con una cota o un icono cuyo sitio natural cae sobre otra línea del dibujo | El texto se aparta de esa línea si hay hueco |
+
+| SKC.30 | Dibuja muchas líneas paralelas y muy juntas (unas 20 a 0,3 mm) y acótalas todas | Las cotas que no caben en ningún renglón sacan su texto a un hueco libre con una **línea de llamada** hasta su cota; ningún número queda encima de otro |
 
 #### 2.4.3 Cotas estables y cota seleccionada
 

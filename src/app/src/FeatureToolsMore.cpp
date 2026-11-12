@@ -1,4 +1,5 @@
 #include "FeatureTools.hpp"
+#include "Theme.hpp"
 
 #include "ExpressionSpinBox.hpp"
 #include "Units.hpp"
@@ -304,7 +305,7 @@ void MoveTool::createFields(QFormLayout* form)
     {
         // Sin hoja de estilos (cada una obliga a Qt a calcular el estilo de todo el panel en cada repintado).
         QPalette palette = hint->palette();
-        palette.setColor(QPalette::WindowText, QColor(0x8B, 0x93, 0xA0));
+        palette.setColor(QPalette::WindowText, QColor(toneColor(Tone::Muted)));
         hint->setPalette(palette);
     }
     form->addRow(QStringLiteral("Cuerpos"), bodyList_);

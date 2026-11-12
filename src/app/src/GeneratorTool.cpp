@@ -1,4 +1,5 @@
 #include "GeneratorTool.hpp"
+#include "Theme.hpp"
 
 #include "ExpressionSpinBox.hpp"
 
@@ -263,7 +264,7 @@ void GeneratorTool::updatePreview()
                 updatePreview();
             });
         }
-        statusLabel_->setText(QStringLiteral("<span style='color:#8B93A0'>Calculando…</span>"));
+        statusLabel_->setText(QStringLiteral("<span style='color:%1'>Calculando…</span>").arg(toneColor(Tone::Muted)));
         timer_->start(previewDelayMs());
         return;
     }
@@ -300,7 +301,7 @@ void GeneratorTool::updatePreview()
     okButton_->setEnabled(false);
     QTimer::singleShot(300, this, [this] {
         if (previewRun_.running() && statusLabel_ != nullptr) {
-            statusLabel_->setText(QStringLiteral("<span style='color:#8B93A0'>Calculando…</span>"));
+            statusLabel_->setText(QStringLiteral("<span style='color:%1'>Calculando…</span>").arg(toneColor(Tone::Muted)));
         }
     });
     emit computingChanged(true);
@@ -363,8 +364,7 @@ void GeneratorTool::showResult(const Calculation& calculation, bool first)
         statusLabel_->clear();
         okButton_->setEnabled(true);
     } else {
-        statusLabel_->setText(QStringLiteral("<span style='color:#E5484D'>%1</span>")
-                                  .arg(QString::fromStdString(problem).toHtmlEscaped()));
+        statusLabel_->setText(QStringLiteral("<span style='color:%1'>%2</span>").arg(toneColor(Tone::Error), QString::fromStdString(problem).toHtmlEscaped()));
         okButton_->setEnabled(false);
     }
 }

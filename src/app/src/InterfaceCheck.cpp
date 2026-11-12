@@ -1,7 +1,11 @@
 #include "InterfaceCheck.hpp"
 #include "Theme.hpp"
 
+#include "BodiesDialog.hpp"
+#include "ExportDialog.hpp"
 #include "FeatureTools.hpp"
+#include "ParametersDialog.hpp"
+#include "SettingsDialog.hpp"
 #include "FeatureToolsCommon.hpp"
 #include "MainWindow.hpp"
 #include "SketchSession.hpp"
@@ -360,6 +364,58 @@ int InterfaceCheck::captureThemes(const QString& folder)
             menu->grab().save(QDir(folder).filePath(QStringLiteral("tema-%1-menu%2.png").arg(name).arg(index++)));
             menu->close();
         }
+    }
+    // Los cuadros de diálogo, uno a uno (sin exec: se muestran, se capturan y se cierran).
+    const auto shot = [&](QDialog& dialog, const QString& name) {
+        dialog.show();
+        settle(300);
+        dialog.grab().save(QDir(folder).filePath(name));
+        dialog.close();
+    };
+    for (const auto& [name, theme] : themes) {
+        setTheme(theme);
+        settle(400);
+        std::vector<std::string> keys;
+        for (const document::Body& body : window_.document_.result().bodies) {
+            keys.push_back(body.key);
+        }
+        ExportDialog exportDialog(window_.document_.result().bodies, keys, &window_);
+        shot(exportDialog, QStringLiteral("tema-%1-dialogo-exportar.png").arg(name));
+        ParametersDialog parameters({{"alto", "12"}, {"ancho", "alto * 2"}, {"mal", "ancho +"}}, &window_);
+        shot(parameters, QStringLiteral("tema-%1-dialogo-parametros.png").arg(name));
+        SettingsDialog settings(&window_);
+        shot(settings, QStringLiteral("tema-%1-dialogo-configuracion.png").arg(name));
+        BodiesDialog bodies(window_.document_, &window_);
+        shot(bodies, QStringLiteral("tema-%1-dialogo-cuerpos.png").arg(name));
+    }
+
+    // El sketch con restricciones y cotas, en cada tema.
+    if (window_.tool_ != nullptr) {
+        window_.finishTool(false);
+    }
+    blocking(QStringLiteral("abrir un sketch"), [&] { window_.startSketch(sketch::Plane::xy(), QStringLiteral("captura"), {}); });
+    if (window_.sketch_ != nullptr) {
+        SketchSession* session = window_.sketch_.get();
+        const auto click = [&](double x, double y) { emit window_.viewport_->sketchClicked(x, y, Qt::NoModifier); };
+        session->setTool(SketchSession::Tool::Rectangle);
+        click(-30.0, -15.0);
+        click(10.0, 12.0);
+        session->setTool(SketchSession::Tool::Circle);
+        click(30.0, 0.0);
+        click(38.0, 0.0);
+        session->setTool(SketchSession::Tool::Line);
+        click(-30.0, -25.0);
+        click(25.0, -25.0);
+        session->setTool(SketchSession::Tool::None);
+        window_.viewport_->setSketchShowAll(true, true);
+        for (const auto& [name, theme] : themes) {
+            setTheme(theme);
+            settle(500);
+            window_.viewport_->grabFramebuffer().save(QDir(folder).filePath(QStringLiteral("tema-%1-sketch.png").arg(name)));
+            window_.grab().save(QDir(folder).filePath(QStringLiteral("tema-%1-sketch-ventana.png").arg(name)));
+        }
+        window_.finishSketch();
+        waitIdle();
     }
     // Sin cambios pendientes, para que cerrar la ventana no pregunte si guardar.
     undoAll();

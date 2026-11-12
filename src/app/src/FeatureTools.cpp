@@ -1,4 +1,5 @@
 #include "FeatureTools.hpp"
+#include "Theme.hpp"
 
 #include "ExpressionSpinBox.hpp"
 #include "Units.hpp"
@@ -336,7 +337,7 @@ void FeatureTool::updatePreview()
                 previewDue_ = false;
             });
         }
-        statusLabel_->setText(QStringLiteral("<span style='color:#8B93A0'>Calculando…</span>"));
+        statusLabel_->setText(QStringLiteral("<span style='color:%1'>Calculando…</span>").arg(toneColor(Tone::Muted)));
         previewTimer_->start(delay);
         return;
     }
@@ -370,7 +371,7 @@ void FeatureTool::updatePreview()
     okButton_->setEnabled(false);  // hasta saber si lo que se pide sale bien
     QTimer::singleShot(300, this, [this] {
         if (previewRun_.running() && statusLabel_ != nullptr) {
-            statusLabel_->setText(QStringLiteral("<span style='color:#8B93A0'>Calculando…</span>"));
+            statusLabel_->setText(QStringLiteral("<span style='color:%1'>Calculando…</span>").arg(toneColor(Tone::Muted)));
         }
     });
     emit computingChanged(true);
@@ -412,11 +413,11 @@ void FeatureTool::showPreview(const document::Feature& feature, const document::
     const QString text = QString::fromStdString(result.status.message);
     switch (result.status.health) {
     case document::Health::Error:
-        statusLabel_->setText(QStringLiteral("<span style='color:#E5484D'>%1</span>").arg(text.toHtmlEscaped()));
+        statusLabel_->setText(QStringLiteral("<span style='color:%1'>%2</span>").arg(toneColor(Tone::Error), text.toHtmlEscaped()));
         okButton_->setEnabled(false);
         break;
     case document::Health::Warning:
-        statusLabel_->setText(QStringLiteral("<span style='color:#F2A34B'>%1</span>").arg(text.toHtmlEscaped()));
+        statusLabel_->setText(QStringLiteral("<span style='color:%1'>%2</span>").arg(toneColor(Tone::Warning), text.toHtmlEscaped()));
         okButton_->setEnabled(true);
         break;
     default:

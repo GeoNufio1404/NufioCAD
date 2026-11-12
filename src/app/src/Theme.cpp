@@ -166,9 +166,31 @@ bool systemPrefersDark()
 #endif
 }
 
+}  // namespace
+
+bool isDarkTheme()
+{
+    return g_theme == Theme::Dark || (g_theme == Theme::System && systemPrefersDark());
+}
+
+QString toneColor(Tone tone)
+{
+    // Sobre el marco claro (#E4E8EE) y sobre el blanco: 4,7:1 o más; sobre el oscuro (#1E2126): 4,5:1 o más.
+    const bool dark = isDarkTheme();
+    switch (tone) {
+    case Tone::Error: return dark ? QStringLiteral("#F2777A") : QStringLiteral("#B42318");
+    case Tone::Warning: return dark ? QStringLiteral("#F2A34B") : QStringLiteral("#8A5300");
+    case Tone::Success: return dark ? QStringLiteral("#3FB950") : QStringLiteral("#1E7B34");
+    case Tone::Muted: break;
+    }
+    return dark ? QStringLiteral("#9AA3AE") : QStringLiteral("#55606C");
+}
+
+namespace {
+
 void apply()
 {
-    const bool dark = g_theme == Theme::Dark || (g_theme == Theme::System && systemPrefersDark());
+    const bool dark = isDarkTheme();
     QApplication::setPalette(dark ? darkPalette() : lightPalette());
     // Los paneles (Navegador, Propiedades, Timeline) llevan una barra de título propia, un poco más elevada que
     // el marco y en negrita, para saber de un vistazo qué panel es cuál. Solo afecta a esa barra.

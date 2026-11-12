@@ -1,4 +1,5 @@
 #include "ParametersDialog.hpp"
+#include "Theme.hpp"
 
 #include <nuf/document/Expression.hpp>
 
@@ -202,7 +203,7 @@ void ParametersDialog::refresh()
             problem = error;
         }
     }
-    problem_->setText(problem.isEmpty() ? QString() : QStringLiteral("<span style='color:#E5484D'>%1</span>").arg(problem.toHtmlEscaped()));
+    problem_->setText(problem.isEmpty() ? QString() : QStringLiteral("<span style='color:%1'>%2</span>").arg(toneColor(Tone::Error), problem.toHtmlEscaped()));
     ok_->setEnabled(problem.isEmpty());
     refreshing_ = false;
 }
