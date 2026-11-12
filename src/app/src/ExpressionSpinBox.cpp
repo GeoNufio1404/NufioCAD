@@ -36,7 +36,9 @@ public:
         setObjectName(QStringLiteral("nufUnitLabel"));
         label_ = new QLabel(unit, box);
         label_->setAttribute(Qt::WA_TransparentForMouseEvents);
-        label_->setStyleSheet(QStringLiteral("QLabel { background: transparent; color: palette(placeholder-text); }"));
+        // Con el rol de la paleta (no con una hoja de estilo) para que siga al tema; el texto tenue es el mismo
+        // que el de los rótulos de la cinta.
+        label_->setForegroundRole(QPalette::PlaceholderText);
         box->installEventFilter(this);
         if (QLineEdit* edit = editOf(box)) {
             edit->installEventFilter(this);

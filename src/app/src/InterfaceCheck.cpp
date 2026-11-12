@@ -1,4 +1,5 @@
 #include "InterfaceCheck.hpp"
+#include "Theme.hpp"
 
 #include "FeatureTools.hpp"
 #include "FeatureToolsCommon.hpp"
@@ -24,6 +25,8 @@
 #include <QDoubleSpinBox>
 #include <QImage>
 #include <QElapsedTimer>
+#include <QMenu>
+#include <QMenuBar>
 #include <QFile>
 #include <QListWidget>
 #include <QMap>
@@ -330,6 +333,37 @@ void InterfaceCheck::step(const QString& name, const std::function<void()>& body
     }
     current_ = nullptr;
     currentStep_ = -1;
+}
+
+int InterfaceCheck::captureThemes(const QString& folder)
+{
+    QDir().mkpath(folder);
+    settle(300);
+    openChangeAccept(window_.boxAction_, 2);
+    waitIdle();
+    blocking(QStringLiteral("abrir Caja"), [&] { window_.boxAction_->trigger(); });
+    waitIdle();
+    const std::vector<std::pair<QString, Theme>> themes = {{QStringLiteral("claro"), Theme::Light},
+                                                           {QStringLiteral("oscuro"), Theme::Dark}};
+    for (const auto& [name, theme] : themes) {
+        setTheme(theme);
+        settle(700);
+        window_.grab().save(QDir(folder).filePath(QStringLiteral("tema-%1-ventana.png").arg(name)));
+        int index = 0;
+        for (QAction* action : window_.menuBar()->actions()) {
+            QMenu* menu = action->menu();
+            if (menu == nullptr) {
+                continue;
+            }
+            menu->popup(window_.mapToGlobal(QPoint(40, 40)));
+            settle(150);
+            menu->grab().save(QDir(folder).filePath(QStringLiteral("tema-%1-menu%2.png").arg(name).arg(index++)));
+            menu->close();
+        }
+    }
+    // Sin cambios pendientes, para que cerrar la ventana no pregunte si guardar.
+    undoAll();
+    return 0;
 }
 
 int InterfaceCheck::run()

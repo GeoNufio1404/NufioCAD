@@ -43,6 +43,17 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 - **Pruebas:** 221 unitarias y 34 pasos de la prueba de interfaz, en verde en Windows (Debug). La prueba de interfaz **aún no cuenta los píxeles naranjas** de la guía (pendiente I8).
 - **Riesgos al volver atrás:** ninguno en archivos guardados: las restricciones creadas son las horizontal/vertical de siempre.
+## Temas claro y oscuro: más capas y más contraste — 12 nov. 2026
+
+- **Rama:** `feature/temas-interfaz` (sale de `develop`). Sin fusionar hasta la prueba manual (guía TEM).
+- **Qué cambia (solo color y dibujo de unos controles; sin coste de rendimiento):** (1) **Claro:** antes casi todo era blanco. Ahora hay capas: marco de la ventana `#E4E8EE` (gris azulado), cinta y botones `#F6F7F9`, contenido y campos blancos, bordes `#B6BEC9` y bordes de control `#8A94A1` (3:1 sobre blanco, WCAG para componentes), texto `#1B2027`, texto apagado `#555F6B` (≥4,5:1 sobre el marco). (2) **Oscuro:** bordes algo más claros (`#434952`) y borde de control `#6E7782`. (3) **Casillas y botones de opción** con estilo propio (`NufioStyle`, un `QProxyStyle` de Fusion): Fusion los dibujaba con un borde casi negro sobre casi negro en el oscuro y desaparecían; ahora llevan borde visible y, marcados, relleno azul con marca blanca (también estado intermedio y desactivado). (4) **Barras de título de los paneles** (Navegador, Propiedades, Timeline) en negrita, sobre un tono elevado y con filete inferior. (5) El rótulo de unidad («mm») de los cuadros numéricos seguía el color del texto apagado mediante una hoja de estilo que en el claro salía casi invisible; ahora usa el rol de la paleta y sigue al tema.
+- **Descartado por rendimiento o riesgo:** sombras y degradados en los paneles y transparencias en el marco (repintan más); una hoja de estilo global para todos los controles (re-pulir cada widget). Solo se usa una regla para la barra de título de los paneles.
+- **Herramienta nueva:** `NufioCAD --captura-temas <carpeta>` guarda capturas de la ventana y de los menús con ambos temas (`src/app/src/InterfaceCheck.cpp`), para revisar los cambios de color sin abrir la app a mano.
+- **Pendiente:** ver a ojo los cuadros de diálogo (Exportar, Parámetros, Configuración), el sketch con restricciones y la vista previa translúcida en el tema claro; los colores de avisos (rojo, ámbar, verde) de los paneles son fijos y se leen bien sobre ambos fondos pero no se han ajustado por tema; el fondo de la vista 3D del tema claro es un degradado gris casi igual que el marco.
+- **Riesgos al volver atrás:** ninguno en archivos guardados (el tema es un ajuste del usuario).
+
+---
+
 ## Banner de la barra de estado siempre presente — 12 nov. 2026
 
 - **Rama:** `feature/iconos-restricciones`. Pedido tras probar: el banner azul ya no se quita y se pone según haya mensaje; **está siempre** (con la barra vacía solo sin texto) y, al **cambiar el mensaje, parpadea** (se aclara a #4C9BEA, vuelve a #0B5CAD, se aclara y vuelve; 0,9 s) para llamar la atención sin saltos. Un mensaje repetido igual no parpadea. Dónde: conexión a `QStatusBar::messageChanged` en `MainWindow.cpp`. Paso de la prueba de interfaz actualizado (banner presente sin mensaje, vuelve al azul base). Prueba manual AYU.3.

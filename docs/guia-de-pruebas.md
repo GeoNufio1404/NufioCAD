@@ -22,6 +22,7 @@ Va en el mismo orden que el programa: **1. General**, **2. Sketch**, **3. Sólid
 | 1.1 Visor y navegación | `NAV` |
 | 1.2 Interfaz general | `UI` |
 | 1.2.1 Ayudas (tooltips) y barra de estado | `AYU` |
+| 1.2.2 Temas claro y oscuro | `TEM` |
 | 1.3 Unidades | `UNI` |
 | 1.4 Cálculo en segundo plano | `CAL` |
 | 1.5 Vista previa translúcida y «Calculando…» | `VPR` |
@@ -91,6 +92,19 @@ Código: **AYU**. Estado: fusionado, falta probar a mano.
 | AYU.2 | Abre los **menús** (Sketch, Restricciones, Archivo, Editar) y deja el ratón sobre una entrada | También se ve la ayuda |
 | AYU.3 | Activa una herramienta y cámbiala por otra | La **barra de abajo es siempre un banner azul** (no aparece ni desaparece, ni sin mensaje); al cambiar el mensaje **parpadea** un momento (se aclara y vuelve al azul) y la indicación sale en negrita |
 | AYU.4 | Mira el banner con el tema claro y el oscuro | Se lee bien en ambos |
+
+#### 1.2.2 Temas claro y oscuro
+
+Código: **TEM**. Estado: en prueba. Cambia el tema en Ver › Tema.
+
+| ID | Haz esto | Debe pasar |
+|---|---|---|
+| TEM.1 | Tema **claro**: mira la ventana con una pieza y un panel abierto (por ejemplo Caja) | Cada zona se distingue por su tono: el marco de la ventana (gris azulado), la cinta (casi blanca, elevada), el navegador y los campos (blancos), y los paneles tienen su barra de título en negrita |
+| TEM.2 | Tema claro: lee el «mm» de los cuadros numéricos, los rótulos de la cinta y los textos apagados | Se leen sin esfuerzo (contraste suficiente) |
+| TEM.3 | Tema **oscuro**: mira las casillas de verificación (Navegador y paneles) marcadas y sin marcar | Se ve su borde aunque no estén marcadas; marcadas salen en azul con la marca blanca |
+| TEM.4 | Cambia entre claro, oscuro y sistema varias veces | Cambia al instante, sin parpadeos raros ni textos ilegibles, y se recuerda al reabrir |
+| TEM.5 | En ambos temas, abre un menú (Sólido) y un cuadro de diálogo (Exportar) | Los menús y los diálogos se ven coherentes con el tema |
+| TEM.6 | Con el tema claro y el oscuro, mueve y gira la vista con una pieza grande | Sigue igual de fluido que antes (los cambios son de color, no afectan al rendimiento) |
 
 ### 1.3 Unidades
 
