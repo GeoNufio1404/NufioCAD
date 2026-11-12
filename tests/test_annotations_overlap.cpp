@@ -218,3 +218,29 @@ TEST_CASE("Cotas: la posición elegida se recuerda y la seleccionada gana el hue
     REQUIRE(memory.levels[ca] > 0);
     REQUIRE(overlappingPairs(picked, px) == 0);
 }
+
+TEST_CASE("Iconos de restricciones: se dibujan con líneas dentro de su caja y la curvatura usa texto", "[sketch][annotations]")
+{
+    const double px = 0.1;
+    for (const ConstraintType type :
+         {ConstraintType::Horizontal, ConstraintType::Vertical, ConstraintType::Parallel, ConstraintType::Perpendicular,
+          ConstraintType::Tangent, ConstraintType::Equal, ConstraintType::Collinear, ConstraintType::Concentric,
+          ConstraintType::Midpoint, ConstraintType::Symmetric, ConstraintType::Fix, ConstraintType::PointOnObject}) {
+        const auto icon = glyphGeometry(type, {5.0, 5.0}, px);
+        REQUIRE(!icon.empty());
+        for (const Geometry& g : icon) {
+            for (const Vec2& p : polyline(g)) {
+                REQUIRE(std::abs(p.x - 5.0) <= 8.0 * px + 1e-9);
+                REQUIRE(std::abs(p.y - 5.0) <= 8.0 * px + 1e-9);
+            }
+        }
+    }
+    REQUIRE(glyphGeometry(ConstraintType::Curvature, {0, 0}, px).empty());
+
+    Sketch s;
+    const EntityId a = s.addLine({0, 0}, {10, 0});
+    s.addConstraint(Constraint::horizontal(a));
+    const auto notes = layoutAnnotations(s, px);
+    REQUIRE(notes.size() == 1);
+    REQUIRE(!notes[0].icon.empty());
+}

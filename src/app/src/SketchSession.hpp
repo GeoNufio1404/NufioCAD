@@ -174,6 +174,7 @@ private:
     std::vector<sketch::Ref> selection_;
     sketch::Ref hovered_;
     std::vector<sketch::ConstraintId> selectedConstraints_;
+    std::vector<sketch::ConstraintId> pinnedConstraints_;  // aplicadas por el usuario: su icono se queda visible
     sketch::ConstraintId hoveredConstraint_ = 0;
     std::vector<sketch::Sketch> undo_;
     std::vector<sketch::Sketch> redo_;

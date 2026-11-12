@@ -18,6 +18,9 @@ struct Annotation {
     Vec2 anchor;                  // centro del texto
     std::string text;             // UTF-8: "H", "//", "40", "R5", "30°"…
     std::vector<Geometry> lines;  // líneas de cota, de referencia y flechas
+    // Icono dibujado con líneas (restricciones geométricas); vacío si no hay
+    // dibujo propio y se usa «text». No depende de ninguna fuente.
+    std::vector<Geometry> icon;
     bool dimension = false;
     bool reference = false;       // cota de referencia (se muestra entre paréntesis)
 };
@@ -40,6 +43,10 @@ std::vector<Annotation> layoutAnnotations(const Sketch& sketch, double pixelSize
 
 // Restricción cuya anotación está bajo el cursor (0 si ninguna).
 ConstraintId pickAnnotation(const std::vector<Annotation>& annotations, Vec2 cursor, double pixelSize);
+
+// Dibujo del icono de una restricción centrado en «at» (unos 14 px de lado, en
+// mm con «pixelSize»). Vacío si esa restricción no tiene icono dibujado.
+std::vector<Geometry> glyphGeometry(ConstraintType type, Vec2 at, double pixelSize);
 
 // Texto de una cota: "40", "12.5", "30°", "R5", "Ø10"; entre paréntesis si es
 // de referencia.

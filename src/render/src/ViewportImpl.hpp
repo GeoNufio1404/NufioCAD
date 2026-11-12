@@ -1427,7 +1427,8 @@ public:
             const bool picked =
                 std::ranges::find(highlight.selectedConstraints, note.constraint) != highlight.selectedConstraints.end();
             const bool hovered = note.constraint == highlight.hoveredConstraint;
-            bool relevant = note.dimension || constraintsAll || picked || hovered;
+            const bool pinned = std::ranges::find(highlight.pinnedConstraints, note.constraint) != highlight.pinnedConstraints.end();
+            bool relevant = note.dimension || constraintsAll || picked || hovered || pinned;
             if (!relevant) {
                 for (const sketch::Constraint& c : sketch.constraints()) {
                     if (c.id == note.constraint) {
@@ -1449,7 +1450,13 @@ public:
                 drawing->addGeometry(line, {color, 1.0});
             }
             // Las cotas, con su recuadro y tamaño normal; las restricciones, más pequeñas.
-            drawing->addText(note.anchor, note.text, color, box, note.dimension ? 13.0 : 11.0);
+            if (!note.icon.empty()) {
+                for (const sketch::Geometry& part : note.icon) {
+                    drawing->addGeometry(part, {color, 1.6});
+                }
+            } else {
+                drawing->addText(note.anchor, note.text, color, box, note.dimension ? 13.0 : 11.0);
+            }
         }
         if (measuresVisible) {
             addMeasures(sketch, focus, dimmed, text);
@@ -1482,7 +1489,25 @@ public:
             }
         }
         if (!badge.empty()) {
-            preview->addText(badgeAt, badge, rgb(0xF2, 0xA3, 0x4B), rgb(0x1F, 0x23, 0x29), 16.0);
+            // Los símbolos conocidos se dibujan con líneas (sin depender de la fuente), algo más grandes.
+            std::vector<sketch::Geometry> drawn;
+            if (badge == "∥") {
+                drawn = sketch::glyphGeometry(sketch::ConstraintType::Parallel, badgeAt, 1.4 * pixelSize());
+            } else if (badge == "⊥") {
+                drawn = sketch::glyphGeometry(sketch::ConstraintType::Perpendicular, badgeAt, 1.4 * pixelSize());
+            } else if (badge == "T") {
+                drawn = sketch::glyphGeometry(sketch::ConstraintType::Tangent, badgeAt, 1.4 * pixelSize());
+            }
+            if (drawn.empty()) {
+                preview->addText(badgeAt, badge, rgb(0xF2, 0xA3, 0x4B), rgb(0x1F, 0x23, 0x29), 16.0);
+            } else {
+                SketchStroke orange = freeStroke();
+                orange.color = rgb(0xF2, 0xA3, 0x4B);
+                orange.width = 2.0;
+                for (const sketch::Geometry& part : drawn) {
+                    preview->addGeometry(part, orange);
+                }
+            }
         }
         for (const auto& [from, to] : guides) {
             preview->addGeometry(sketch::Line{from, to}, constructionStroke());
