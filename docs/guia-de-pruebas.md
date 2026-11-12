@@ -89,7 +89,7 @@ Código: **AYU**. Estado: fusionado, falta probar a mano.
 |---|---|---|
 | AYU.1 | Deja el ratón sobre **cada herramienta** de la barra SKETCH (y las de los desplegables) | Aparece su nombre, su tecla y una línea que dice qué hace |
 | AYU.2 | Abre los **menús** (Sketch, Restricciones, Archivo, Editar) y deja el ratón sobre una entrada | También se ve la ayuda |
-| AYU.3 | Activa una herramienta | La **barra de abajo se vuelve azul** con la indicación en negrita; al salir de la herramienta vuelve a su aspecto normal |
+| AYU.3 | Activa una herramienta y cámbiala por otra | La **barra de abajo es siempre un banner azul** (no aparece ni desaparece, ni sin mensaje); al cambiar el mensaje **parpadea** un momento (se aclara y vuelve al azul) y la indicación sale en negrita |
 | AYU.4 | Mira el banner con el tema claro y el oscuro | Se lee bien en ambos |
 
 ### 1.3 Unidades

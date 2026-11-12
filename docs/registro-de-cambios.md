@@ -43,6 +43,12 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 - **Pruebas:** 221 unitarias y 34 pasos de la prueba de interfaz, en verde en Windows (Debug). La prueba de interfaz **aún no cuenta los píxeles naranjas** de la guía (pendiente I8).
 - **Riesgos al volver atrás:** ninguno en archivos guardados: las restricciones creadas son las horizontal/vertical de siempre.
+## Banner de la barra de estado siempre presente — 12 nov. 2026
+
+- **Rama:** `feature/iconos-restricciones`. Pedido tras probar: el banner azul ya no se quita y se pone según haya mensaje; **está siempre** (con la barra vacía solo sin texto) y, al **cambiar el mensaje, parpadea** (se aclara a #4C9BEA, vuelve a #0B5CAD, se aclara y vuelve; 0,9 s) para llamar la atención sin saltos. Un mensaje repetido igual no parpadea. Dónde: conexión a `QStatusBar::messageChanged` en `MainWindow.cpp`. Paso de la prueba de interfaz actualizado (banner presente sin mensaje, vuelve al azul base). Prueba manual AYU.3.
+
+---
+
 ## Iconos de restricciones dibujados con líneas — 11 nov. 2026
 
 - **Rama:** `feature/iconos-restricciones` (sale de `develop`, ya con `feature/cotas-e-inferencias` fusionada). Sin fusionar hasta la prueba manual (guía R).

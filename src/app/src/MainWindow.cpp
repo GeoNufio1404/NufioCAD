@@ -58,6 +58,7 @@
 #include <QSettings>
 #include <QTimer>
 #include <QStatusBar>
+#include <QVariantAnimation>
 #include <QToolBar>
 
 #include <algorithm>
@@ -99,17 +100,37 @@ MainWindow::MainWindow(QWidget* parent)
     statusBar()->addPermanentWidget(cursorLabel_);
     statusBar()->addPermanentWidget(versions);
     // La indicación de lo que se está haciendo (el mensaje de la barra) va en un banner de color: es donde está
-    // lo importante y se olvida con facilidad. Sin mensaje la barra queda neutra. Contraste de texto blanco sobre
-    // #0B5CAD: 6,6:1 (AA); el acento es azul, como el de la selección, y no el rojo/ámbar de los errores.
+    // lo importante y se olvida con facilidad. El banner está **siempre** (no aparece ni desaparece: con la barra
+    // vacía sigue ahí, solo sin texto) y, cuando el mensaje cambia, parpadea una vez (se aclara y vuelve al azul
+    // base) para llamar la atención sin saltos. Contraste de texto blanco sobre #0B5CAD: 6,6:1 (AA); el acento es
+    // azul, como el de la selección, y no el rojo/ámbar de los errores.
     statusBar()->setSizeGripEnabled(false);
-    connect(statusBar(), &QStatusBar::messageChanged, this, [this](const QString& text) {
+    const auto paintBanner = [this](const QColor& background) {
         statusBar()->setStyleSheet(
-            text.isEmpty()
-                ? QString()
-                : QStringLiteral("QStatusBar { background: #0B5CAD; color: white; font-weight: 600; min-height: 26px;"
-                                 " border-top: 2px solid #4C9BEA; }"
-                                 "QStatusBar::item { border: 0; }"
-                                 "QStatusBar QLabel { color: white; font-weight: 400; }"));
+            QStringLiteral("QStatusBar { background: %1; color: white; font-weight: 600; min-height: 26px;"
+                           " border-top: 2px solid #4C9BEA; }"
+                           "QStatusBar::item { border: 0; }"
+                           "QStatusBar QLabel { color: white; font-weight: 400; }")
+                .arg(background.name()));
+    };
+    const QColor bannerBase(0x0B, 0x5C, 0xAD);
+    const QColor bannerFlash(0x4C, 0x9B, 0xEA);
+    paintBanner(bannerBase);
+    auto* blink = new QVariantAnimation(this);
+    blink->setDuration(900);
+    blink->setKeyValueAt(0.0, bannerFlash);
+    blink->setKeyValueAt(0.25, bannerBase);
+    blink->setKeyValueAt(0.4, bannerFlash);
+    blink->setKeyValueAt(1.0, bannerBase);
+    connect(blink, &QVariantAnimation::valueChanged, this,
+            [paintBanner](const QVariant& value) { paintBanner(value.value<QColor>()); });
+    auto lastMessage = std::make_shared<QString>();
+    connect(statusBar(), &QStatusBar::messageChanged, this, [blink, lastMessage](const QString& text) {
+        if (!text.isEmpty() && text != *lastMessage) {
+            blink->stop();
+            blink->start();
+        }
+        *lastMessage = text;
     });
     connect(viewport_, &render::Viewport::selectionChanged, this,
             [this](const QString& description) { statusBar()->showMessage(description); });

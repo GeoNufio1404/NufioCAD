@@ -1093,7 +1093,7 @@ int InterfaceCheck::run()
     });
 
     // Ayuda de las herramientas: todas explican qué hacen al dejar el ratón encima (tooltip con una línea de ayuda tras
-    // el nombre), y el banner de la barra de estado cambia de color solo mientras hay un mensaje.
+    // el nombre), y el banner de la barra de estado está siempre y parpadea al cambiar el mensaje.
     step(QStringLiteral("Cada herramienta tiene su ayuda y la barra de estado destaca el mensaje"), [&] {
         std::vector<QString> without;
         for (const auto& [tool, action] : window_.toolActions_) {
@@ -1108,10 +1108,19 @@ int InterfaceCheck::run()
             }
         }
         expect(without.empty(), QStringLiteral("herramientas sin ayuda: %1").arg(without.empty() ? QString() : without.front()));
+        // El banner está siempre (también sin mensaje) y, al cambiar el mensaje, parpadea y vuelve al azul base.
+        const auto banner = [&] { return window_.statusBar()->styleSheet(); };
+        expect(banner().contains(QStringLiteral("min-height: 26px")), QStringLiteral("la barra de estado no tiene banner sin mensaje"));
         window_.statusBar()->showMessage(QStringLiteral("Prueba"));
-        expect(window_.statusBar()->styleSheet().contains(QStringLiteral("#0B5CAD")), QStringLiteral("la barra de estado no se destaca con un mensaje"));
+        expect(banner().contains(QStringLiteral("min-height: 26px")), QStringLiteral("la barra de estado pierde el banner con un mensaje"));
+        QElapsedTimer settle;
+        settle.start();
+        while (settle.elapsed() < 1300) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        }
+        expect(banner().contains(QStringLiteral("background: #0b5cad")), QStringLiteral("el banner no vuelve al azul base tras parpadear"));
         window_.statusBar()->clearMessage();
-        expect(window_.statusBar()->styleSheet().isEmpty(), QStringLiteral("la barra de estado no vuelve a su aspecto normal"));
+        expect(banner().contains(QStringLiteral("min-height: 26px")), QStringLiteral("el banner desaparece al borrar el mensaje"));
     });
 
     // Sección y medición con un cuerpo.
