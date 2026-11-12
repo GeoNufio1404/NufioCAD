@@ -612,6 +612,84 @@ std::optional<Annotation> placeAnnotation(Placed& placed, const Placed& geometry
 
 } // namespace
 
+std::vector<Geometry> glyphGeometry(ConstraintType type, Vec2 at, double pixelSize)
+{
+    std::vector<Geometry> out;
+    // Coordenadas en píxeles respecto al centro (x a la derecha, y arriba).
+    const auto line = [&](double x0, double y0, double x1, double y1) {
+        out.push_back(Line{{at.x + x0 * pixelSize, at.y + y0 * pixelSize}, {at.x + x1 * pixelSize, at.y + y1 * pixelSize}});
+    };
+    const auto circle = [&](double x, double y, double r) {
+        out.push_back(Circle{{at.x + x * pixelSize, at.y + y * pixelSize}, r * pixelSize});
+    };
+    switch (type) {
+    case ConstraintType::Horizontal:
+        line(-6, 0, 6, 0);
+        break;
+    case ConstraintType::Vertical:
+        line(0, -6, 0, 6);
+        break;
+    case ConstraintType::Parallel:
+        line(-5, -6, -1, 6);
+        line(1, -6, 5, 6);
+        break;
+    case ConstraintType::Perpendicular:
+        line(-6, -5, 6, -5);
+        line(0, -5, 0, 6);
+        break;
+    case ConstraintType::Tangent:
+        circle(0, 2.5, 4);
+        line(-6, -1.5, 6, -1.5);
+        break;
+    case ConstraintType::Equal:
+        line(-5, 2, 5, 2);
+        line(-5, -2, 5, -2);
+        break;
+    case ConstraintType::Collinear:
+        line(-7, 0, -1.5, 0);
+        line(1.5, 0, 7, 0);
+        line(-7, -3, -7, 3);
+        line(7, -3, 7, 3);
+        break;
+    case ConstraintType::Concentric:
+        circle(0, 0, 2.5);
+        circle(0, 0, 6);
+        break;
+    case ConstraintType::Midpoint:
+        line(-6, -3, 6, -3);
+        line(0, -3, 0, 5);
+        line(-3, 1, 0, 5);
+        line(3, 1, 0, 5);
+        break;
+    case ConstraintType::Symmetric:
+        line(0, -6, 0, 6);
+        line(-6, 0, -2, 0);
+        line(-4, 2, -2, 0);
+        line(-4, -2, -2, 0);
+        line(6, 0, 2, 0);
+        line(4, 2, 2, 0);
+        line(4, -2, 2, 0);
+        break;
+    case ConstraintType::Fix:
+        line(-4, -5, 4, -5);
+        line(4, -5, 4, 1);
+        line(4, 1, -4, 1);
+        line(-4, 1, -4, -5);
+        line(-2.5, 1, -2.5, 4);
+        line(-2.5, 4, 0, 6);
+        line(0, 6, 2.5, 4);
+        line(2.5, 4, 2.5, 1);
+        break;
+    case ConstraintType::PointOnObject:
+        circle(0, 2.5, 1.5);
+        line(-6, -3, 6, -3);
+        break;
+    default:
+        break;
+    }
+    return out;
+}
+
 std::vector<Annotation> layoutAnnotations(const Sketch& sketch, double pixelSize, LayoutMemory* memory)
 {
     if (memory && std::abs(memory->pixelSize - pixelSize) > 0.01 * pixelSize) {
@@ -679,6 +757,7 @@ std::vector<Annotation> layoutAnnotations(const Sketch& sketch, double pixelSize
                                   + ((index + level) * kGlyphSpacingPx * pixelSize) * subject->stackDir;
                     return icon;
                 })) {
+                note->icon = glyphGeometry(c.type, note->anchor, pixelSize);
                 ordered.emplace_back(order + (++slot), std::move(*note));
             }
         }

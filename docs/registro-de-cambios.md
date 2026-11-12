@@ -43,6 +43,17 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 - **Pruebas:** 221 unitarias y 34 pasos de la prueba de interfaz, en verde en Windows (Debug). La prueba de interfaz **aún no cuenta los píxeles naranjas** de la guía (pendiente I8).
 - **Riesgos al volver atrás:** ninguno en archivos guardados: las restricciones creadas son las horizontal/vertical de siempre.
+## Iconos de restricciones dibujados con líneas — 11 nov. 2026
+
+- **Rama:** `feature/iconos-restricciones` (sale de `develop`, ya con `feature/cotas-e-inferencias` fusionada). Sin fusionar hasta la prueba manual (guía R).
+- **Qué hace:** las restricciones geométricas dejan de mostrarse como letras («H», «//», «L», «T»…) y se dibujan como **iconos de líneas**: horizontal (barra), vertical, paralelas, perpendicular (⊥), tangente (círculo sobre una recta), igual (=), colineal, concéntricos, punto medio, simetría, fija (candado) y punto sobre objeto. También la insignia ∥ ⊥ T junto al cursor al dibujar, en naranja y algo más grande. Así no dependen de la fuente (OCCT no busca en otras fuentes). La curvatura (G2) sigue con texto. El tamaño de la caja de colocación y el clic para seleccionar no cambian.
+- **Dónde:** `glyphGeometry` y `Annotation::icon` en `src/sketch/{include/nuf/sketch,src}/Annotations.*`; el dibujo en `ViewportImpl.hpp` (bucle de anotaciones y `showSketchPreview`).
+- **Pruebas:** 248 unitarias (nueva: cada icono cabe en su caja y la curvatura usa texto) y 36/36 pasos de interfaz. No se revisó a ojo cómo se ven.
+- **Pendiente:** fondo del icono para leerse sobre líneas; ver los iconos a ojo y retocar tamaños.
+- **Riesgos al volver atrás:** ninguno en archivos guardados.
+
+---
+
 ## Cotas que no saltan y la seleccionada gana el hueco — 11 nov. 2026
 
 - **Rama:** `feature/cotas-e-inferencias` (sale de `develop`). Sin fusionar hasta la prueba manual (guía Q).

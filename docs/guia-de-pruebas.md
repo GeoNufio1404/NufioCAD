@@ -449,6 +449,17 @@ Rama `feature/inferencias-sketch`. Solo la **alineación horizontal/vertical** c
 | I.15 | Empieza una línea nueva desde el **extremo de otra** línea que ya existe y haz lo de I.12 | También infiere con esa línea |
 | I.16 | Cerca de la horizontal o la vertical, o cerca de un punto existente, o con **Mayús/Ctrl** pulsada | Mandan la horizontal/vertical y los puntos antes que ⊥/∥; Mayús y Ctrl las suprimen |
 | I.11 | **Anota** qué te falta o molesta (sobre todo: si la guía aparece demasiado, si «tiembla» al pegarse y se suelta, si querías ver un anillo en el punto despierto) | Una nota por caso: son los pendientes de la entrega |
+## Iconos de restricciones dibujados — EN PRUEBA
+
+| # | Haz esto | Debe pasar |
+|---|---|---|
+| R.1 | Pon restricciones horizontal, vertical, paralela, perpendicular, tangente, igual, concéntrica, punto medio, simetría y fija; muestra las restricciones | Cada una lleva su icono dibujado (no letras) y se distingue a simple vista |
+| R.2 | Pasa el cursor y selecciona un icono | Cambia de color y se puede seleccionar con clic como antes |
+| R.3 | Dibuja una línea casi perpendicular/paralela a otra, y un arco casi tangente | La insignia ⊥ / ∥ / T naranja se ve nítida junto al cursor |
+| R.4 | Acerca y aleja la vista | Los iconos mantienen su tamaño en pantalla |
+
+---
+
 ## Cotas estables y cota seleccionada — EN PRUEBA
 
 | # | Haz esto | Debe pasar |
