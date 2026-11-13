@@ -253,6 +253,63 @@ rueda 2 de 7,5°. La rueda 1 queda en el origen y la 2 en X = distancia entre ej
 Cuerpos **Rueda 1** y **Rueda 2** en el componente «Par de engranajes». Todo está ligado a parámetros: al cambiar los
 dientes o el módulo en Sólido › Parámetros, la distancia y el giro se recalculan solos.
 
+## Engranaje interno
+
+Una **corona** con los dientes hacia dentro y un **piñón** que engrana en su interior, ya colocados. Es el mismo
+engranaje de involuta de siempre con **Tipo = Interno (corona)**: lo que se dibuja es el hueco (con forma de rueda de
+dientes) dentro de un aro. El primer hueco de la corona y el primer diente del piñón apuntan los dos por +X, así que
+encajan sin girar nada.
+
+| Qué | Fórmula |
+|---|---|
+| Diámetro primitivo | `módulo × dientes` (corona y piñón) |
+| Relación | `dientes piñón : dientes corona`; el piñón gira en el **mismo sentido** que la corona |
+| Distancia entre ejes | `módulo × (dientes corona − dientes piñón) / 2 − juego` (en un engranaje interno acercar los ejes separa los flancos) |
+| Dientes de la corona | cabeza (punta) a `rp − módulo`, raíz (fondo del hueco) a `rp + 1,25·módulo` |
+| Aro | disco exterior de radio `rp + 1,25·módulo + aro` |
+
+| Pregunta | Parámetro | Por defecto | Mín. – máx. |
+|---|---|---|---|
+| Módulo | `modulo` | 2 mm | 0,3 – 20 |
+| Dientes de la corona / del piñón | `dientes_corona`, `dientes_pinon` | 36 / 12 | 20 – 300 / 6 – 300 |
+| Ángulo de presión | `presion` | 20° | 5 – 35 |
+| Ancho | `ancho_rueda` | 8 mm | 1 – 200 |
+| Grosor del aro de la corona | `aro` | 6 mm | 1 – 100 |
+| Agujero del piñón | `agujero_pinon` | 5 mm | 0 – 100 |
+| Juego entre dientes | `juego` | 0,15 mm | 0 – 2 |
+
+Operaciones: «Engranaje: corona» (tipo Interno, en el origen) y «Engranaje: piñón» (en X = distancia entre ejes), cuerpos
+**Corona** y **Piñón** en el componente «Engranaje interno». Solo dientes rectos (con hélice avisa). El formulario avisa
+si la corona tiene menos de 8 dientes más que el piñón (los dientes se estorban; es el límite habitual de interferencia).
+
+## Cremallera
+
+Una **barra dentada** y la **rueda** que engrana con ella. La cremallera es una rueda de radio infinito: flancos rectos
+con el ángulo de presión, diente de `2,25·módulo` de alto (cabeza `+1·m` y raíz `−1,25·m` sobre la línea primitiva).
+Es el mismo engranaje con **Tipo = Cremallera** (los «Dientes» son los de la barra y «Aro o base» es el grosor bajo la raíz).
+
+| Qué | Fórmula |
+|---|---|
+| Paso | `π × módulo` (largo de la barra = `dientes × π × módulo`) |
+| Avance por vuelta de la rueda | `π × módulo × dientes de la rueda` |
+| Posición de la barra | línea primitiva a `Y = −(módulo × dientes rueda / 2) − juego` (tangente a la rueda, alejada el juego) |
+| Giro de la rueda | `270°` reducido a un paso (`giro_rueda`, calculado): un diente de la rueda apunta hacia abajo, justo sobre un hueco de la barra |
+| Posición X de la barra | `−floor(dientes barra / 2) × π × módulo`: deja un hueco de la barra bajo la rueda |
+
+| Pregunta | Parámetro | Por defecto | Mín. – máx. |
+|---|---|---|---|
+| Módulo | `modulo` | 2 mm | 0,3 – 20 |
+| Dientes de la rueda / de la cremallera | `dientes_rueda`, `dientes_cremallera` | 20 / 10 | 6 – 300 / 2 – 300 |
+| Ángulo de presión | `presion` | 20° | 5 – 30 (la barra no admite más: el diente se solaparía en la raíz) |
+| Ancho | `ancho_rueda` | 8 mm | 1 – 200 |
+| Grosor de la base de la barra | `base` | 5 mm | 1 – 100 |
+| Agujero de la rueda | `agujero_rueda` | 5 mm | 0 – 100 |
+| Juego entre dientes | `juego` | 0,15 mm | 0 – 2 |
+
+Operaciones: «Engranaje: rueda» y «Engranaje: cremallera» (tipo Cremallera); cuerpos **Rueda** y **Cremallera** en el
+componente «Cremallera». Caras de la barra: `lado:d<i>:flanco_d|flanco_i|cabeza|raiz_d`, `lado:raiz_i`, `lado:base`,
+`lado:extremo_i|extremo_d`.
+
 ## Primitivas: Caja y Cilindro
 
 Son las piezas con las que se construyen los generadores; también se pueden usar solas (Sólido › Caja / Cilindro).

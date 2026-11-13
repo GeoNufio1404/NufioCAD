@@ -710,6 +710,17 @@ Código: **PAR**.
 | PAR.4 | Aceptar y abrir Sólido › Parámetros | `modulo`, `dientes_1`, `dientes_2`… y `giro_rueda_2` (calculado); al cambiar un parámetro, todo se recalcula |
 | PAR.5 | Imprime las dos ruedas con sus ejes | Giran juntas sin atascarse con el juego de 0,15 mm (subirlo a 0,25 si rozan) |
 | PAR.6 | Haz doble clic en «Engranaje: rueda 2» del historial | Se abre su panel con Posición X, Giro inicial y los demás campos ligados |
+| PAR.7 | Herramientas › **Engranaje interno** | Se ve una corona (aro con los dientes hacia dentro, 36 dientes) y un piñón de 12 dientes dentro, tocando por el lado derecho, con los dientes encajados y sin solaparse; el panel dice 12:36 y distancia 23,85 mm |
+| PAR.8 | Pon 30 dientes al piñón | El panel avisa «con menos de 8 dientes de diferencia los dientes se estorban» |
+| PAR.9 | Con el piñón de 12: corta una sección (Inspeccionar) o mira de cerca el engrane | Los dientes del piñón entran en los huecos de la corona sin atravesarla |
+| PAR.10 | Aceptar, abrir Sólido › Parámetros y cambiar `dientes_corona` a 48 | La corona crece y el piñón se recoloca a la nueva distancia; Ctrl+Z deshace todo de una vez |
+| PAR.11 | Doble clic en «Engranaje: corona» del historial | Se abre el panel del Engranaje con Tipo «Interno (corona)» y el campo «Aro»; al cambiar el aro, el grosor exterior cambia |
+| PAR.12 | Imprime la corona y el piñón | El piñón gira dentro de la corona sin atascarse con el juego de 0,15 mm (0,25 si roza) |
+| PAR.13 | Herramientas › **Cremallera** | Se ve una barra dentada (10 dientes) debajo de una rueda de 20 dientes; un diente de la rueda cae en un hueco de la barra, sin tocarse; el panel dice cuánto avanza la barra por vuelta (125,66 mm) |
+| PAR.14 | Cambia los dientes de la rueda a 21 y el módulo a 3 | La barra se recoloca y sigue engranando (un diente de la rueda sobre un hueco de la barra) |
+| PAR.15 | Pon el ángulo de presión en 30° y luego intenta 35° | Con 30° sale la barra con dientes finos; el campo no pasa de 30° |
+| PAR.16 | Aceptar, guardar y reabrir el archivo | La cremallera y la rueda vuelven igual; doble clic en «Engranaje: cremallera» muestra Tipo «Cremallera» y el grosor de la base |
+| PAR.17 | Abre un diseño guardado antes de este cambio (con un par de engranajes) | Las ruedas siguen siendo exteriores y se ven igual |
 
 ### 4.5 Todos los generadores: reabrir, recordar y restablecer
 
@@ -970,6 +981,7 @@ Los IDs antiguos se repetían entre secciones (por ejemplo había tres `R.1`); l
 | `E.4` | Par de engranajes | `PAR.4` |
 | `E.5` | Par de engranajes | `PAR.5` |
 | `E.6` | Par de engranajes | `PAR.6` |
+| `E.7` | Engranaje interno y cremallera | `PAR.7` a `PAR.17` |
 | `B.1` | Cálculo en segundo plano | `CAL.1` |
 | `B.2` | Cálculo en segundo plano | `CAL.2` |
 | `B.3` | Cálculo en segundo plano | `CAL.3` |

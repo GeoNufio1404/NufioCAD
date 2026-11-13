@@ -752,6 +752,223 @@ public:
     }
 };
 
+// --- Engranaje interno (corona + piñón) ---------------------------------------------------------
+// Una corona con los dientes hacia dentro y un piñón que engrana por dentro: mismo módulo y ángulo de presión, a la
+// distancia entre ejes módulo·(z corona − z piñón)/2 (menos el juego: en un engranaje interno acercar los ejes
+// separa los flancos). El primer hueco de la corona y el primer diente del piñón apuntan los dos por +X, así que
+// encajan sin girar nada.
+
+GeneratorField gearField(GeneratorField::Kind kind, std::string key, std::string label, double value, double min,
+                         double max, std::string hint = {})
+{
+    GeneratorField f;
+    f.kind = kind;
+    f.key = std::move(key);
+    f.label = std::move(label);
+    f.value = value;
+    f.min = min;
+    f.max = max;
+    f.hint = std::move(hint);
+    return f;
+}
+
+// Una flecha de diámetro centrada en el cuerpo «body» (los dientes son simétricos: el centro de la caja es el eje).
+Generator::ArrowSpec centeredArrow(int body, std::function<double(const GeneratorValues&)> length = {})
+{
+    Generator::ArrowSpec spec{body, 'x', false, true};
+    spec.at = [](const GeneratorValues&) {
+        return std::array<double, 3>{Generator::kCenter, Generator::kCenter, Generator::kCenter};
+    };
+    spec.length = std::move(length);
+    return spec;
+}
+
+class InternalGear final : public Generator {
+public:
+    std::string id() const override { return "engranaje-interno"; }
+    std::string title() const override { return "Engranaje interno"; }
+    std::string icon() const override { return "gear-solid"; }
+    std::string description() const override
+    {
+        return "Una corona con los dientes hacia dentro y un piñón que engrana en su interior, a la distancia entre "
+               "ejes correcta y con el mismo módulo y ángulo de presión.";
+    }
+
+    std::vector<GeneratorField> fields() const override
+    {
+        using K = GeneratorField::Kind;
+        return {gearField(K::Length, "modulo", "Módulo", 2.0, 0.3, 20.0, "El tamaño del diente: igual en la corona y el piñón"),
+                gearField(K::Count, "dientes_corona", "Dientes de la corona", 36.0, 20.0, 300.0,
+                          "Mejor al menos 8 más que el piñón (si no, los dientes se estorban)"),
+                gearField(K::Count, "dientes_pinon", "Dientes del piñón", 12.0, 6.0, 300.0),
+                gearField(K::Angle, "presion", "Ángulo de presión", 20.0, 5.0, 35.0, "Igual en los dos (20° es lo normal)"),
+                gearField(K::Length, "ancho_rueda", "Ancho", 8.0, 1.0, 200.0, "A lo largo del eje"),
+                gearField(K::Length, "aro", "Grosor del aro de la corona", 6.0, 1.0, 100.0,
+                          "Material por fuera de los huecos de los dientes"),
+                gearField(K::Length, "agujero_pinon", "Agujero del piñón", 5.0, 0.0, 100.0, "0 = macizo"),
+                gearField(K::Length, "juego", "Juego entre dientes", 0.15, 0.0, 2.0,
+                          "Aire para que giren sin atascarse al imprimir (acerca los ejes)")};
+    }
+
+    std::string summary(const GeneratorValues& values) const override
+    {
+        const double m = values.at("modulo"), zc = values.at("dientes_corona"), zp = values.at("dientes_pinon");
+        char text[320];
+        std::snprintf(text, sizeof text,
+                      "Relación %g:%g (el piñón da %.3f vueltas por una de la corona, en el mismo sentido) · distancia "
+                      "entre ejes %.2f mm · Ø primitivos %.2f y %.2f mm%s",
+                      zp, zc, zc / zp, m * (zc - zp) / 2.0 - values.at("juego"), m * zc, m * zp,
+                      zc - zp < 8.0 ? " · AVISO: con menos de 8 dientes de diferencia los dientes se estorban" : "");
+        return text;
+    }
+
+    std::map<std::string, ArrowSpec> arrows() const override
+    {
+        const auto pitch = [](const char* teeth) {
+            return [teeth](const GeneratorValues& v) { return v.at("modulo") * v.at(teeth); };
+        };
+        return {{"ancho_rueda", {0, 'z', false}}, {"agujero_pinon", centeredArrow(1)},
+                {"modulo", centeredArrow(0, pitch("dientes_corona"))},
+                {"dientes_corona", centeredArrow(0, pitch("dientes_corona"))},
+                {"dientes_pinon", centeredArrow(1, pitch("dientes_pinon"))}};
+    }
+
+    Recipe make(const GeneratorValues& values, const std::string& suffix) const override
+    {
+        const auto p = [&](const char* name) { return std::string(name) + suffix; };
+        const std::string modulo = p("modulo"), zc = p("dientes_corona"), zp = p("dientes_pinon"), presion = p("presion"),
+                          ancho = p("ancho_rueda"), aro = p("aro"), bore = p("agujero_pinon"), juego = p("juego");
+
+        Recipe recipe;
+        recipe.component = "Engranaje interno";
+        recipe.bodyNames = {"Corona", "Piñón"};
+        const auto param = [&](const std::string& name, const char* key) {
+            recipe.parameters.push_back({name, number(values.at(key))});
+        };
+        param(modulo, "modulo");
+        param(zc, "dientes_corona");
+        param(zp, "dientes_pinon");
+        param(presion, "presion");
+        param(ancho, "ancho_rueda");
+        param(aro, "aro");
+        param(bore, "agujero_pinon");
+        param(juego, "juego");
+
+        auto ring = std::make_unique<GearFeature>();
+        ring->setName("Engranaje: corona");
+        ring->base.origin = OriginPlane::XY;
+        ring->spec.type = geometry::GearType::Internal;
+        ring->expressions = {{"module", modulo}, {"teeth", zc}, {"pressureAngle", presion}, {"thickness", ancho},
+                             {"rim", aro}};
+        recipe.features.push_back(std::move(ring));
+
+        auto pinion = std::make_unique<GearFeature>();
+        pinion->setName("Engranaje: piñón");
+        pinion->base.origin = OriginPlane::XY;
+        pinion->expressions = {{"module", modulo}, {"teeth", zp}, {"pressureAngle", presion}, {"thickness", ancho},
+                               {"bore", bore},
+                               {"x", modulo + "*(" + zc + " - " + zp + ")/2 - " + juego}};
+        recipe.features.push_back(std::move(pinion));
+        return recipe;
+    }
+};
+
+// --- Cremallera con rueda ----------------------------------------------------------------------
+// Una barra dentada (dientes trapezoidales: la involuta de radio infinito) y la rueda que engrana con ella. La
+// rueda está en el origen y la cremallera debajo, con la línea primitiva tangente a la circunferencia primitiva
+// (más el juego); la rueda lleva un diente apuntando hacia la cremallera, justo sobre un hueco de ésta.
+
+class RackAndPinion final : public Generator {
+public:
+    std::string id() const override { return "cremallera"; }
+    std::string title() const override { return "Cremallera"; }
+    std::string icon() const override { return "gear-solid"; }
+    std::string description() const override
+    {
+        return "Una barra dentada (cremallera) y la rueda que engrana con ella: mismo módulo y ángulo de presión, a la "
+               "distancia correcta y con un diente de la rueda sobre un hueco de la barra.";
+    }
+
+    std::vector<GeneratorField> fields() const override
+    {
+        using K = GeneratorField::Kind;
+        return {gearField(K::Length, "modulo", "Módulo", 2.0, 0.3, 20.0, "El tamaño del diente: igual en la rueda y la barra"),
+                gearField(K::Count, "dientes_rueda", "Dientes de la rueda", 20.0, 6.0, 300.0),
+                gearField(K::Count, "dientes_cremallera", "Dientes de la cremallera", 10.0, 2.0, 300.0,
+                          "Largo de la barra = dientes · π · módulo"),
+                gearField(K::Angle, "presion", "Ángulo de presión", 20.0, 5.0, 30.0, "Igual en los dos (20° es lo normal)"),
+                gearField(K::Length, "ancho_rueda", "Ancho", 8.0, 1.0, 200.0, "A lo largo del eje"),
+                gearField(K::Length, "base", "Grosor de la base de la barra", 5.0, 1.0, 100.0, "Bajo la raíz de los dientes"),
+                gearField(K::Length, "agujero_rueda", "Agujero de la rueda", 5.0, 0.0, 100.0, "0 = macizo"),
+                gearField(K::Length, "juego", "Juego entre dientes", 0.15, 0.0, 2.0,
+                          "Aire para que engranen sin atascarse al imprimir (aleja la barra de la rueda)")};
+    }
+
+    std::string summary(const GeneratorValues& values) const override
+    {
+        const double m = values.at("modulo"), z = values.at("dientes_rueda"), n = values.at("dientes_cremallera");
+        constexpr double kPi = 3.14159265358979323846;
+        char text[256];
+        std::snprintf(text, sizeof text,
+                      "La barra avanza %.2f mm por vuelta de la rueda · largo de la barra %.1f mm (%.2f vueltas de la "
+                      "rueda) · Ø primitivo de la rueda %.2f mm",
+                      kPi * m * z, n * kPi * m, n / z, m * z);
+        return text;
+    }
+
+    std::map<std::string, ArrowSpec> arrows() const override
+    {
+        const auto pitch = [](const GeneratorValues& v) { return v.at("modulo") * v.at("dientes_rueda"); };
+        return {{"ancho_rueda", {0, 'z', false}}, {"agujero_rueda", centeredArrow(0)},
+                {"modulo", centeredArrow(0, pitch)}, {"dientes_rueda", centeredArrow(0, pitch)}};
+    }
+
+    Recipe make(const GeneratorValues& values, const std::string& suffix) const override
+    {
+        const auto p = [&](const char* name) { return std::string(name) + suffix; };
+        const std::string modulo = p("modulo"), z = p("dientes_rueda"), n = p("dientes_cremallera"), presion = p("presion"),
+                          ancho = p("ancho_rueda"), base = p("base"), bore = p("agujero_rueda"), juego = p("juego"),
+                          giro = p("giro_rueda");
+
+        Recipe recipe;
+        recipe.component = "Cremallera";
+        recipe.bodyNames = {"Rueda", "Cremallera"};
+        const auto param = [&](const std::string& name, const std::string& expression) {
+            recipe.parameters.push_back({name, expression});
+        };
+        param(modulo, number(values.at("modulo")));
+        param(z, number(values.at("dientes_rueda")));
+        param(n, number(values.at("dientes_cremallera")));
+        param(presion, number(values.at("presion")));
+        param(ancho, number(values.at("ancho_rueda")));
+        param(base, number(values.at("base")));
+        param(bore, number(values.at("agujero_rueda")));
+        param(juego, number(values.at("juego")));
+        // Un diente de la rueda apunta hacia abajo (270°): el giro inicial se reduce a un paso angular (360°/dientes).
+        const std::string step = "360/" + z;
+        param(giro, "270 - floor(270/(" + step + "))*(" + step + ")");
+
+        auto wheel = std::make_unique<GearFeature>();
+        wheel->setName("Engranaje: rueda");
+        wheel->base.origin = OriginPlane::XY;
+        wheel->expressions = {{"module", modulo}, {"teeth", z}, {"pressureAngle", presion}, {"thickness", ancho},
+                              {"bore", bore}, {"rotation", giro}};
+        recipe.features.push_back(std::move(wheel));
+
+        auto rack = std::make_unique<GearFeature>();
+        rack->setName("Engranaje: cremallera");
+        rack->base.origin = OriginPlane::XY;
+        rack->spec.type = geometry::GearType::Rack;
+        // El origen de la barra es un hueco; se corre un número entero de pasos para que quede uno bajo la rueda.
+        rack->expressions = {{"module", modulo}, {"teeth", n}, {"pressureAngle", presion}, {"thickness", ancho},
+                             {"rim", base},
+                             {"x", "-floor(" + n + "/2)*" + modulo + "*pi"},
+                             {"y", "-(" + modulo + "*" + z + "/2) - " + juego}};
+        recipe.features.push_back(std::move(rack));
+        return recipe;
+    }
+};
+
 } // namespace
 
 GeneratorValues Generator::defaults() const
@@ -800,7 +1017,10 @@ const std::vector<const Generator*>& generators()
     static const BoxWithLid boxWithLid;
     static const Sign sign;
     static const GearPair gearPair;
-    static const std::vector<const Generator*> all = {&lightbox, &boxWithLid, &sign, &gearPair};
+    static const InternalGear internalGear;
+    static const RackAndPinion rackAndPinion;
+    static const std::vector<const Generator*> all = {&lightbox, &boxWithLid, &sign, &gearPair, &internalGear,
+                                                      &rackAndPinion};
     return all;
 }
 

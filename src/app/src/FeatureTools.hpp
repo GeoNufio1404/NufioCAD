@@ -454,6 +454,8 @@ private:
     QDoubleSpinBox* thickness_ = nullptr;
     QDoubleSpinBox* bore_ = nullptr;
     QDoubleSpinBox* helix_ = nullptr;
+    QDoubleSpinBox* rim_ = nullptr;
+    QComboBox* type_ = nullptr;
     QComboBox* operation_ = nullptr;
 };
 

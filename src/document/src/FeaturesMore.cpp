@@ -192,6 +192,7 @@ std::vector<Feature::NumericField> GearFeature::numericFields()
             field("rotation", "Giro inicial", rotation, kRadiansPerDegree), field("module", "Módulo", spec.module),
             field("thickness", "Ancho", spec.thickness),
             field("bore", "Agujero central", spec.bore),
+            field("rim", "Aro o base", spec.rim),
             field("pressureAngle", "Ángulo de presión", spec.pressureAngle, kRadiansPerDegree),
             field("helixAngle", "Ángulo de hélice", spec.helixAngle, kRadiansPerDegree),
             {"teeth", "Dientes", 1.0, [this] { return double(spec.teeth); },

@@ -10,6 +10,24 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Engranaje interno y cremallera — 12 nov. 2026
+
+- **Rama:** `feature/engranajes-interno-cremallera` (desde `develop`). **Sin fusionar** hasta la prueba manual (guía PAR.7–PAR.17).
+- **Qué hace:** el Engranaje gana un **Tipo**: Exterior (como siempre), **Interno (corona)** (aro con los dientes hacia dentro) y **Cremallera** (barra dentada de flancos rectos). Dos generadores nuevos: **Engranaje interno** (corona + piñón) y **Cremallera** (barra + rueda), con parámetros con nombre, cuerpos con nombre (Corona/Piñón, Rueda/Cremallera), componente, reapertura del formulario y deshacer de una vez, como el Par de engranajes. Los archivos anteriores abren igual (tipo exterior, aro 5).
+- **Dónde:**
+
+| Parte | Dónde (para deshacerla a mano) |
+|---|---|
+| Geometría | `GearType` y `GearSpec::type/rim` en `src/geometry/include/nuf/geometry/Modeling.hpp`; `rackGear` y los cambios de `gear` (cabeza/raíz del hueco, aro exterior) en `src/geometry/src/Modeling.cpp` |
+| Operación | `GearFeature::numericFields` (campo `rim`) en `src/document/src/FeaturesMore.cpp` |
+| Archivo | `gearType` y `rim` en la fila `gear` de `src/io/src/DocumentFile.cpp` (opcionales al leer) |
+| Interfaz | `GearTool` (combo «Tipo» y campo «Aro o base») en `src/app/src/FeatureToolsConstruct.cpp` y `FeatureTools.hpp`; los generadores salen solos en Herramientas |
+| Generadores | `InternalGear` y `RackAndPinion` en `src/document/src/Generators.cpp` |
+| Pruebas | `tests/test_edge_ops.cpp` (5 casos: corona, piñón engranado, cremallera, rueda con cremallera, guardado); la prueba de interfaz suma un paso por generador nuevo (38 en vez de 36) |
+| Docs | `generadores.md`, `guia-de-pruebas.md`, `hoja-de-ruta-cad.md` |
+
+---
+
 ## Tapa en un solo cuerpo (Lightbox y Letrero) — 12 nov. 2026
 
 - **Rama:** `feature/tapa-un-solo-cuerpo` (desde `develop`). **Sin fusionar** hasta la prueba manual (guía LIG.12–14, CAJ.6, LET.7–10).

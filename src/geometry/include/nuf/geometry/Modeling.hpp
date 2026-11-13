@@ -116,7 +116,13 @@ struct PatternSpec {
 // total va del original a la última copia.
 std::vector<Shape> pattern(std::string_view tag, const Shape& body, const PatternSpec& spec);
 
+// Tipo de dentado: rueda exterior, corona con los dientes hacia dentro (engranaje interno) o cremallera
+// (barra dentada: es una rueda de radio infinito).
+enum class GearType { External, Internal, Rack };
+
 struct GearSpec {
+    GearType type = GearType::External;
+    double rim = 5.0;                    // mm: grosor del aro por fuera de los huecos (interno) o de la base bajo la raíz (cremallera)
     double module = 2.0;                 // mm
     int teeth = 20;
     double pressureAngle = 0.3490658503988659;  // rad (20°)
@@ -125,6 +131,12 @@ struct GearSpec {
     double helixAngle = 0.0;             // rad; 0 = recto, el signo es el sentido de la hélice
 };
 
+// Interno: «teeth» dientes de la corona, cuyo hueco con forma de diente de rueda lleva cabeza −1 módulo y raíz
+// +1,25 módulo (el piñón engrana por dentro, a la distancia (z corona − z piñón)·módulo/2); un aro de grosor «rim»
+// lo rodea y el primer hueco apunta por el eje X del plano. Solo dientes rectos (sin hélice ni agujero).
+// Cremallera: «teeth» dientes en una barra recta de largo teeth·π·módulo, con la línea primitiva sobre el eje X
+// del plano desde X = 0 hasta el largo, un hueco centrado en X = 0 y en X = π·módulo·k, los dientes hacia +Y y una
+// base de grosor «rim» bajo la raíz; caras «tag:lado:d<i>:flanco_d|flanco_i|cabeza|raiz», «…:base», «…:extremo_i|d».
 // Engranaje cilíndrico de involuta centrado en el origen del plano (con su
 // eje a lo largo de la normal). Diámetro primitivo = módulo × dientes, cabeza
 // +1 módulo, raíz −1,25 módulo. Las caras se llaman

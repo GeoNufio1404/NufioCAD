@@ -574,7 +574,8 @@ Resumen de todo lo pendiente que no son pruebas manuales; el detalle sigue en el
 **Oleada 5 — Generadores y salida**
 - [ ] SVG como sketch (letrero y lightbox); 3MF multicuerpo con filamentos.
 - [ ] Lightbox: canal para tira LED. Caja con tapa: redonda, bisagra, ventilación, patas, divisiones, catálogo de tornillos M2–M6.
-- [ ] Letrero: varias líneas, alineación y cambio de texto sin rehacer. Engranajes: internos, cremallera, pocos dientes, aviso de compatibilidad.
+- [ ] Letrero: varias líneas, alineación y cambio de texto sin rehacer. Engranajes: pocos dientes, aviso de compatibilidad.
+- [x] **Engranaje interno y cremallera ✅ (pedido del usuario):** `GearSpec::type` (Exterior, Interno, Cremallera) y `GearSpec::rim` (aro de la corona o base de la barra); generadores «Engranaje interno» (corona + piñón a `m·(z corona − z piñón)/2 − juego`, aviso con menos de 8 dientes de diferencia) y «Cremallera» (barra + rueda con un diente sobre un hueco). Ver [`generadores.md`](generadores.md). **Pendiente:** corona y cremallera helicoidales (ahora avisan y no se hacen); cremallera inclinada o con chaflán de punta; corona con aro no circular (brida, orejas); rueda y cremallera con corrección de dentado; el aviso de interferencia del engranaje interno es solo en el formulario del generador (la herramienta suelta del Engranaje no avisa); pruebas de engrane solo con la booleana en el punto de contacto inicial (no se simuló el giro completo); con muchos dientes en la corona (> 100) la vista previa en Debug no se midió; el campo «Aro o base» del panel del Engranaje se muestra siempre (solo cuenta en Interno y Cremallera).
 - [ ] Tarjeta «Herramientas» sobre el lienzo vacío; control de calidad de malla al exportar.
 
 **Resumen de lo pendiente de lo último que se hizo (9 nov. 2026)**

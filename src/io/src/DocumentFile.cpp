@@ -583,7 +583,11 @@ FeatureRow rowOf(const Feature& f)
         params = {{"base", toJson(g.base)}, {"x", g.x}, {"y", g.y}, {"rotation", g.rotation}, {"module", g.spec.module},
                   {"teeth", g.spec.teeth},
                   {"pressureAngle", g.spec.pressureAngle}, {"thickness", g.spec.thickness}, {"bore", g.spec.bore},
-                  {"helixAngle", g.spec.helixAngle}, {"operation", nameOf(kOperations, g.operation)}};
+                  {"helixAngle", g.spec.helixAngle}, {"operation", nameOf(kOperations, g.operation)},
+                  {"gearType", g.spec.type == geometry::GearType::Internal ? "internal"
+                               : g.spec.type == geometry::GearType::Rack   ? "rack"
+                                                                           : "external"},
+                  {"rim", g.spec.rim}};
         break;
     }
     case FeatureKind::ConstructionAxis: {
@@ -790,6 +794,14 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         g->spec.thickness = number(p, "thickness");
         g->spec.bore = number(p, "bore");
         g->spec.helixAngle = number(p, "helixAngle");
+        {
+            // Los archivos anteriores no traen tipo ni aro: rueda exterior.
+            const std::string type = p.value("gearType", std::string("external"));
+            g->spec.type = type == "internal" ? geometry::GearType::Internal
+                           : type == "rack"   ? geometry::GearType::Rack
+                                              : geometry::GearType::External;
+            g->spec.rim = p.value("rim", 5.0);
+        }
         g->operation = parseEnum(kOperations, text(p, "operation"), "operación");
         feature = std::move(g);
     } else if (row.type == "axis") {

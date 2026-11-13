@@ -423,8 +423,15 @@ void GearTool::createFields(QFormLayout* form)
     field("bore", bore_);
     helix_ = angleBox(0.0, 45.0);
     field("helixAngle", helix_);
+    rim_ = lengthBox(5.0);
+    field("rim", rim_);
+    type_ = combo({QStringLiteral("Exterior"), QStringLiteral("Interno (corona)"), QStringLiteral("Cremallera")});
     operation_ = combo({QStringLiteral("Cuerpo nuevo"), QStringLiteral("Unir"), QStringLiteral("Cortar")});
     if (original != nullptr) {
+        type_->setCurrentIndex(original->spec.type == geometry::GearType::Internal ? 1
+                               : original->spec.type == geometry::GearType::Rack   ? 2
+                                                                                   : 0);
+        rim_->setValue(original->spec.rim);
         module_->setValue(original->spec.module);
         teeth_->setValue(original->spec.teeth);
         pressure_->setValue(original->spec.pressureAngle / kDegree);
@@ -435,6 +442,7 @@ void GearTool::createFields(QFormLayout* form)
                                     : original->operation == document::Operation::Cut ? 2
                                                                                       : 0);
     }
+    form->addRow(QStringLiteral("Tipo"), type_);
     form->addRow(QStringLiteral("Módulo"), module_);
     form->addRow(QStringLiteral("Dientes"), teeth_);
     form->addRow(QStringLiteral("Giro inicial"), rotation_);
@@ -442,12 +450,14 @@ void GearTool::createFields(QFormLayout* form)
     form->addRow(QStringLiteral("Ancho (±)"), thickness_);
     form->addRow(QStringLiteral("Agujero central"), bore_);
     form->addRow(QStringLiteral("Ángulo de hélice"), helix_);
+    form->addRow(QStringLiteral("Aro (interno) o base (cremallera)"), rim_);
     form->addRow(QStringLiteral("Operación"), operation_);
     connect(operation_, &QComboBox::currentIndexChanged, this, [this] {
         adjustDirection();
         updatePreview();
     });
-    for (QDoubleSpinBox* box : {teeth_, rotation_, module_, pressure_, thickness_, bore_, helix_}) {
+    connect(type_, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
+    for (QDoubleSpinBox* box : {teeth_, rotation_, module_, pressure_, thickness_, bore_, helix_, rim_}) {
         connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
     }
 }
@@ -486,6 +496,10 @@ std::unique_ptr<document::Feature> GearTool::build() const
     f->spec.thickness = thickness_->value();
     f->spec.bore = bore_->value();
     f->spec.helixAngle = helix_->value() * kDegree;
+    f->spec.rim = rim_->value();
+    f->spec.type = type_->currentIndex() == 1   ? geometry::GearType::Internal
+                   : type_->currentIndex() == 2 ? geometry::GearType::Rack
+                                                : geometry::GearType::External;
     const int op = operation_->currentIndex();
     f->operation = op == 1 ? document::Operation::Join : op == 2 ? document::Operation::Cut : document::Operation::NewBody;
     return f;
