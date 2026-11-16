@@ -1,12 +1,23 @@
 ﻿# Registro de cambios — NufioCAD
 
-Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo sale mal. Las entregas nuevas van arriba. Para el detalle de lo pendiente, ver la [hoja de ruta](hoja-de-ruta-cad.md); para probarlas, la [guía de pruebas](guia-de-pruebas.md).
+Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo sale mal. Las entregas nuevas van arriba. Para el detalle de lo pendiente, ver la [hoja de ruta](hoja-de-ruta.md); para probarlas, la [guía de pruebas](guia-de-pruebas.md).
 
 **Cómo se vuelve atrás, en general**
 - **Si la rama aún no está fusionada** en `develop`: no se fusiona y listo (se puede borrar con `git branch -D feature/<nombre>`; `develop` no se entera).
 - **Si ya está fusionada:** `git revert -m 1 <commit de la fusión>` en `develop` crea un commit que deshace toda la entrega sin reescribir la historia (y se puede volver a aplicar después con otro `revert` de ese revert).
 - **Si solo hay que quitar una parte:** cada entrada dice qué funciones o bloques cambió cada parte, para deshacerla a mano en una rama `feature/` nueva.
 - **Versiones publicadas:** la etiqueta `v0.1.0` (rama `main`) es la primera versión estable; `git switch --detach v0.1.0` la deja a mano para comparar.
+
+---
+
+## Documentación reorganizada — 16 nov. 2026
+
+- **Rama:** `feature/engranajes-interno-cremallera` (solo documentación; no cambia código).
+- **Qué cambia:** índice nuevo [`README.md`](README.md) en `docs/`; [`arquitectura.md`](arquitectura.md) reescrita según el código actual (9 diagramas Mermaid: contexto, módulos y dependencias, modelo del documento, generadores, estados de una herramienta, flujo de extruir, nombrado topológico, hilos y esquema del `.nuf`); nuevos [`decisiones.md`](decisiones.md) (qué se usó, por qué y qué se descartó) y [`desarrollo.md`](desarrollo.md) (compilar, pruebas, opciones de línea de comandos, variables `NUF_*`, ramas). README raíz al día. Tercera auditoría (fluidez) y Oleada 6 en la hoja de ruta.
+- **Archivos movidos:** `arquitectura-cad.md` → `arquitectura.md`, `hoja-de-ruta-cad.md` → `hoja-de-ruta.md`, `mediciones-rendimiento.md` → `rendimiento/mediciones.md`, `auditoria-2.md` → `auditorias/auditoria-2.md`. Las entradas antiguas de este registro que citan los nombres viejos se dejan como estaban.
+- **Borrado:** `aqtinstall.log` (registro de instalación de Qt), capturas temporales de `build/capturas` y la entrada `graphify-out/` de `.gitignore`.
+- **Corregido:** la arquitectura antigua decía que `sketch` dependía de `geometry` (es al revés) y que el recálculo en segundo plano estaba por decidir. Una entrada anterior decía que el build ya fuerza `VSLANG=1033`; no está en los presets: se documenta como paso manual en `desarrollo.md`.
+- **Riesgos al volver atrás:** ninguno (solo documentación).
 
 ---
 
@@ -24,7 +35,7 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 | Interfaz | `GearTool` (combo «Tipo» y campo «Aro o base») en `src/app/src/FeatureToolsConstruct.cpp` y `FeatureTools.hpp`; los generadores salen solos en Herramientas |
 | Generadores | `InternalGear` y `RackAndPinion` en `src/document/src/Generators.cpp` |
 | Pruebas | `tests/test_edge_ops.cpp` (5 casos: corona, piñón engranado, cremallera, rueda con cremallera, guardado); la prueba de interfaz suma un paso por generador nuevo (38 en vez de 36) |
-| Docs | `generadores.md`, `guia-de-pruebas.md`, `hoja-de-ruta-cad.md` |
+| Docs | `generadores.md`, `guia-de-pruebas.md`, `hoja-de-ruta.md` |
 
 ---
 
@@ -39,7 +50,7 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 | Lightbox | `Lightbox::make` y `arrows` en `src/document/src/Generators.cpp`: el marco, su hueco y la cara central se sustituyen por «Lightbox: tapa»; el labio pasa de Cuerpo nuevo a Unir (empieza 0,01 mm dentro de la placa); las flechas de frente, labio y grosor del labio miran al cuerpo 1 |
 | Letrero | `Sign::fields/make` en el mismo archivo: opción 3 «En relieve (un solo cuerpo)» (por defecto), extrusión «Unir» desde `grosor − 0,01` |
 | Pruebas | `tests/test_edge_ops.cpp` (lightbox, lightbox redondo, cable, reabrir generador, letreros); `InterfaceCheck.cpp/.hpp`: el paso «Mover los dos cuerpos» elige «En relieve (otro cuerpo)» en el letrero |
-| Docs | `generadores.md`, `guia-de-pruebas.md`, `hoja-de-ruta-cad.md` |
+| Docs | `generadores.md`, `guia-de-pruebas.md`, `hoja-de-ruta.md` |
 
 - **Pruebas:** 250 unitarias y 36/36 pasos de la prueba de interfaz en verde (Windows, Debug). Al principio fallaba «Cota de un clic»: el paso «Mover los dos cuerpos» usaba un Lightbox y dejaba la vista muy alejada, y el sketch siguiente (con las tolerancias de captura en unidades de pantalla) no creaba los círculos. Se arregló volviendo a usar el letrero, eligiendo «En relieve (otro cuerpo)» (`openChangeAccept` gana un parámetro `choice`).
 - **Riesgos:** los diseños de Lightbox guardados antes conservan sus cuatro cuerpos hasta que se reabra el generador (al reabrir se rehacen con la tapa unida); el Lightbox ya no permite otro filamento solo para la cara central.
@@ -345,5 +356,5 @@ flowchart TD
 | `896c86b` | Fusión de la extrusión hasta una cara curva (cilindro, esfera y toro) |
 | `272404b` | Icono de la aplicación en el lanzador de Linux y en el `.exe` de Windows |
 | `66ccf04`, `9d5f009`, `4dbe602` | Compatibilidad con Fedora y Ubuntu (OCCT 7.6 a 7.9, GCC) y el CI en `main`, `develop`, `feature/*` y pull requests |
-| `b72757a` | Mediciones de rendimiento en Fedora ([`mediciones-rendimiento.md`](mediciones-rendimiento.md)) |
+| `b72757a` | Mediciones de rendimiento en Fedora ([`rendimiento/mediciones.md`](rendimiento/mediciones.md)) |
 | `ab1fae7` | Marcadores `estable-windows` y `estable-fedora` en la hoja de ruta |

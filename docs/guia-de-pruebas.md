@@ -2,7 +2,7 @@
 
 Para ir probando sección por sección cuando haya tiempo. Cada prueba dice **qué hacer** y **qué debería pasar**; si algo no es así (o no te gusta cómo se siente), anótalo con la plantilla del final y mándamelo.
 
-> Las pruebas automáticas (172 casos) ya cubren la geometría, el archivo y el historial. Lo que esta guía busca es lo que no pueden ver: **si la interfaz es clara, si se siente fluida y si los resultados se ven bien**.
+> Las pruebas automáticas (unos 250 casos del núcleo y ~36 pasos de la prueba de interfaz) ya cubren la geometría, el archivo y el historial. Lo que esta guía busca es lo que no pueden ver: **si la interfaz es clara, si se siente fluida y si los resultados se ven bien**.
 
 ## Antes de empezar
 
@@ -221,7 +221,7 @@ Código: **ARC**. Las pruebas **31–38** están en la hoja de ruta («Pruebas m
 
 Código: **SKD**.
 
-Las pruebas **1–19** ya están escritas con detalle en `docs/hoja-de-ruta-cad.md` (secciones «Pruebas manuales pendientes (2a y 2b)» y «(2c y 2d)»). Resumen de lo que cubren:
+Las pruebas **1–19** ya están escritas con detalle en `docs/hoja-de-ruta.md` (secciones «Pruebas manuales pendientes (2a y 2b)» y «(2c y 2d)»). Resumen de lo que cubren:
 
 - Dibujo: línea, rectángulo, círculo, arco, polígono (con el cuadro de lados), elipse, ranura, spline, cónica, texto, imagen de referencia, importar DXF.
 - Edición: recortar, extender, partir, empalme, chaflán, desfase, simetría, mover/copiar/girar/escalar, patrones.

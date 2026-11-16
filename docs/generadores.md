@@ -2,7 +2,7 @@
 
 Qué produce cada generador (pestaña **HERRAMIENTAS** o menú **Herramientas**), con todas sus medidas, los nombres que
 le pone a las cosas y cómo se relaciona cada parámetro con la geometría. El estado de cada generador y lo que falta
-está en [`hoja-de-ruta-cad.md`](hoja-de-ruta-cad.md) (Fase 10) y cómo probarlos, en
+está en [`hoja-de-ruta.md`](hoja-de-ruta.md) (Fase 10) y cómo probarlos, en
 [`guia-de-pruebas.md`](guia-de-pruebas.md).
 
 ## Cómo funciona un generador
