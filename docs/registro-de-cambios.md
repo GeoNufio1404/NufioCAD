@@ -18,7 +18,7 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 | Parte | Dónde (para deshacerla a mano) |
 |---|---|
-| Banner y spinner | `BusySpinner.cpp/.hpp` (nuevo); `MainWindow::anythingBusy`, `paintBanner`, `setBannerBusy`, `updateBusyBadge` (`MainWindow.cpp`); `viewBusy_`, `statusSpinner_`, `badgeSpinner_`, `bannerBlink_` en `MainWindow.hpp`; llamadas en `updateMeasure` (`MainWindowView.cpp`) |
+| Banner y spinner | `BusySpinner.cpp/.hpp` y `StatusBanner.cpp/.hpp` (nuevos: la barra de estado propia dibuja el mensaje a mano para dejar el spinner **lo más a la izquierda posible**, con el texto a su derecha; QStatusBar no permite correr el mensaje); `MainWindow::anythingBusy`, `paintBanner`, `setBannerBusy`, `updateBusyBadge` (`MainWindow.cpp`); `viewBusy_`, `statusSpinner_`, `badgeSpinner_`, `bannerBlink_` en `MainWindow.hpp`; llamadas en `updateMeasure` (`MainWindowView.cpp`) |
 | Cancelación en el kernel | `ProgressCanceller`, `throwIfCancelled`, `buildCancellable` en `Modeling.cpp` (antes `BooleanCanceller`) y sus llamadas en `fuseAll`, `unify`, `edgeOperation`, el engranaje helicoidal, la rosca, el barrido, el loft y el vaciado |
 | Grupo de hilos | `geometry/TaskPool.hpp` y `src/TaskPool.cpp` (nuevos); `currentCancelFlag()` en `Cancel.hpp`; `BackgroundRun.cpp` reescrito; `Document::Job` y `stopBackground`/`reapRetired`/`finishBackground` (`Document.cpp`); `MeshTask` y `cancelMeshTasks` (`ViewportImpl.hpp`) |
 | Cierre | `MainWindow::closeEvent`: `hide()` antes de salir |

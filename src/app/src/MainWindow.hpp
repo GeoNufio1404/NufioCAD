@@ -51,6 +51,7 @@ namespace nuf::app {
 
 class BusySpinner;
 class FeatureTool;
+class StatusBanner;
 class InterfaceCheck;
 class Recovery;
 class Ribbon;
@@ -207,7 +208,8 @@ private:
     QCheckBox* sectionFlip_ = nullptr;
     QLabel* busyBadge_ = nullptr;     // «Calculando…», sobre la vista
     BusySpinner* badgeSpinner_ = nullptr;   // el spinner del distintivo
-    BusySpinner* statusSpinner_ = nullptr;  // el de la barra de estado
+    StatusBanner* statusBanner_ = nullptr;  // la barra de estado, con el spinner a la izquierda
+    BusySpinner* statusSpinner_ = nullptr;  // el de la barra de estado (lo tiene el banner)
     QVariantAnimation* bannerBlink_ = nullptr;  // el parpadeo del banner al cambiar el mensaje
     bool bannerBusy_ = false;         // el banner está en ámbar (hay algo cargando)
     bool viewBusy_ = false;           // el visor prepara la malla de algún cuerpo

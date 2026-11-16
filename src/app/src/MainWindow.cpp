@@ -3,6 +3,7 @@
 #include "ExportDialog.hpp"
 #include "BodiesDialog.hpp"
 #include "BusySpinner.hpp"
+#include "StatusBanner.hpp"
 #include "ExpressionSpinBox.hpp"
 #include "GeneratorTool.hpp"
 #include "SettingsDialog.hpp"
@@ -75,6 +76,10 @@ namespace nuf::app {
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
 {
+    // La barra de estado propia (con el spinner de carga a la izquierda del mensaje) se pone antes de que nadie pida la normal.
+    statusBanner_ = new StatusBanner(this);
+    setStatusBar(statusBanner_);
+    statusSpinner_ = statusBanner_->spinner();
     viewport_ = new render::Viewport(this);
     setCentralWidget(viewport_);
     // «Calculando…» sobre la vista, abajo a la izquierda (se recoloca al cambiar el tamaño de la vista).
@@ -95,12 +100,6 @@ MainWindow::MainWindow(QWidget* parent)
                                     .arg(QString::fromStdString(geometry::kernelVersion()),
                                          QString::fromStdString(io::NufFile::sqliteVersion()),
                                          QString::fromLatin1(qVersion())));
-    // El spinner de la barra de estado: aparece mientras algo carga (los mensajes ocultan los widgets normales de la
-    // barra, por eso es permanente).
-    statusSpinner_ = new BusySpinner(this, 16);
-    statusSpinner_->setColor(Qt::white);
-    statusSpinner_->hide();
-    statusBar()->addPermanentWidget(statusSpinner_);
     sketchStatusLabel_ = new QLabel(this);
     statusBar()->addPermanentWidget(sketchStatusLabel_);
     modelStatusLabel_ = new QLabel(this);
@@ -321,8 +320,8 @@ void MainWindow::setBannerBusy(bool busy)
     bannerBlink_->setKeyValueAt(0.4, flash);
     bannerBlink_->setKeyValueAt(1.0, base);
     paintBanner(base);
-    if (statusSpinner_ != nullptr) {
-        statusSpinner_->setVisible(busy);
+    if (statusBanner_ != nullptr) {
+        statusBanner_->setBusy(busy);
     }
 }
 
