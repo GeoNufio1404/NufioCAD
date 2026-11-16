@@ -111,6 +111,19 @@ cambio nuevo cancela el anterior. Lo que falta está en [`auditorias/auditoria-3
 - **Smart App Control (Windows):** bloquea las DLL sin firmar de OCCT en Release; por eso casi todas las medidas de
   Windows son de Debug ([`rendimiento/mediciones.md`](rendimiento/mediciones.md)).
 
+## Distribución y firma de código (Windows)
+
+Decidido el 16 nov. 2026; sin hacer todavía (ver la Oleada 7 de la [hoja de ruta](hoja-de-ruta.md)).
+
+- **No hay una auditoría obligatoria de Microsoft** para un programa de escritorio. Lo que decide si Windows lo trata como amenaza son tres mecanismos automáticos:
+  **SmartScreen** (reputación del archivo y del firmante; avisa pero deja seguir), **Defender** (firmas, heurísticas y aprendizaje automático en la nube; da falsos positivos, sobre todo con código que se genera en ejecución) y **Smart App Control** (Windows 11: solo ejecuta binarios firmados por una entidad de confianza o con buena reputación, sin opción de ejecutar de todas formas).
+- **Firmar con Authenticode** es lo que lo resuelve: el `.exe`, **todas las DLL** y el instalador, con marca de tiempo. La reputación pertenece al certificado, así que sobrevive de una versión a otra. Un certificado autofirmado no sirve para Smart App Control. Desde 2023 la clave privada debe estar en un token o en un servicio en la nube.
+- **Opciones de firmante** (precios y disponibilidad por país cambian; verificar al contratar): firma en la nube de Azure (unos 10 USD al mes), certificado OV (cientos de dólares al año; el EV ya no da reputación inmediata en SmartScreen) y SignPath Foundation (gratis para proyectos abiertos).
+- **La firma va en el CI**, con secretos del repositorio, para que la clave no esté en ningún PC.
+- **Falsos positivos:** se envían a Microsoft con el portal de muestras de Defender (revisión gratuita). Se evita lo que los dispara: empaquetadores, ofuscadores y binarios que no se puedan reproducir desde el código público.
+- **Con revisión real** solo hay dos vías: Microsoft Store (certificación y firma de Microsoft) y winget (se revisa el manifiesto y se escanea el instalador).
+- **Para probar en esta PC** (Smart App Control bloquea las DLL sin firmar de OpenCASCADE en Release): probar en otra máquina o en una máquina virtual; apagarlo es irreversible en esa instalación de Windows.
+
 ## Referencias
 
 - SQLite como formato de archivo de aplicación: <https://sqlite.org/appfileformat.html>
