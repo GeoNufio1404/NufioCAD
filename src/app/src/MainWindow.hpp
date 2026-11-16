@@ -29,6 +29,8 @@ class QDragEnterEvent;
 class QDropEvent;
 class QEvent;
 class QActionGroup;
+class QColor;
+class QVariantAnimation;
 class QDockWidget;
 class QCheckBox;
 class QComboBox;
@@ -47,6 +49,7 @@ class Generator;
 
 namespace nuf::app {
 
+class BusySpinner;
 class FeatureTool;
 class InterfaceCheck;
 class Recovery;
@@ -138,8 +141,14 @@ private:
     void startTool(std::unique_ptr<FeatureTool> tool);
     // El modelo se recalcula en segundo plano: lo que necesita el resultado nuevo espera (avisa y devuelve true).
     bool modelBusy();
-    // «Calculando…» sobre la vista mientras el modelo o la vista previa de una herramienta se calculan.
+    // ¿Hay algo cargando? El modelo, la vista previa de una herramienta, una exportación, una importación, una
+    // medición o la malla que prepara el visor.
+    bool anythingBusy() const;
+    // «Calculando…» con su spinner sobre la vista y la barra de estado en ámbar con otro spinner, mientras haya algo
+    // cargando: así se ve a la vista que el programa sigue trabajando aunque no cambie nada en pantalla.
     void updateBusyBadge();
+    void paintBanner(const QColor& background);
+    void setBannerBusy(bool busy);
     // Ejecuta «what» ya, o en cuanto termine el cálculo en segundo plano.
     void whenComputed(std::function<void()> what);
     void finishTool(bool accepted);
@@ -197,6 +206,11 @@ private:
     QDoubleSpinBox* sectionOffset_ = nullptr;
     QCheckBox* sectionFlip_ = nullptr;
     QLabel* busyBadge_ = nullptr;     // «Calculando…», sobre la vista
+    BusySpinner* badgeSpinner_ = nullptr;   // el spinner del distintivo
+    BusySpinner* statusSpinner_ = nullptr;  // el de la barra de estado
+    QVariantAnimation* bannerBlink_ = nullptr;  // el parpadeo del banner al cambiar el mensaje
+    bool bannerBusy_ = false;         // el banner está en ámbar (hay algo cargando)
+    bool viewBusy_ = false;           // el visor prepara la malla de algún cuerpo
     bool toolComputing_ = false;      // la vista previa de la herramienta abierta se está calculando
     QLabel* measurePanel_ = nullptr;  // resultado de la medición, sobre la vista
     QAction* exportAction_ = nullptr;

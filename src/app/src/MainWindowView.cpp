@@ -301,6 +301,7 @@ void MainWindow::updateMeasure()
     };
     if (elements.empty()) {
         measureRun_.cancel();
+        updateBusyBadge();
         place(QStringLiteral("<b>Medir</b><br>Elige una cara o una arista.<br>Con otra más, mide la distancia y el ángulo."));
         return;
     }
@@ -323,7 +324,8 @@ void MainWindow::updateMeasure()
                 outcome->error = QStringLiteral("error desconocido");
             }
         },
-        [outcome, moreThanTwo, place] {
+        [this, outcome, moreThanTwo, place] {
+            updateBusyBadge();
             if (!outcome->error.isEmpty()) {
                 place(QStringLiteral("<b>Medir</b> — no se pudo medir: ") + outcome->error.toHtmlEscaped());
                 return;
@@ -337,6 +339,7 @@ void MainWindow::updateMeasure()
             }
             place(html);
         });
+    updateBusyBadge();
 }
 
 // Imprimir: revisa la pieza, la exporta a STL en una carpeta temporal y abre el slicer con ella.

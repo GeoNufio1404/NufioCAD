@@ -2,6 +2,7 @@
 
 #include "ExportDialog.hpp"
 #include "BodiesDialog.hpp"
+#include "BusySpinner.hpp"
 #include "ExpressionSpinBox.hpp"
 #include "GeneratorTool.hpp"
 #include "SettingsDialog.hpp"
@@ -77,11 +78,14 @@ MainWindow::MainWindow(QWidget* parent)
     viewport_ = new render::Viewport(this);
     setCentralWidget(viewport_);
     // «Calculando…» sobre la vista, abajo a la izquierda (se recoloca al cambiar el tamaño de la vista).
-    busyBadge_ = new QLabel(QStringLiteral("⏳ Calculando…"), viewport_);
+    busyBadge_ = new QLabel(QStringLiteral("Calculando…"), viewport_);
     busyBadge_->setStyleSheet(QStringLiteral(
         "QLabel { background: rgba(20, 24, 31, 215); color: #E6EAF0; border: 1px solid #3A4250; border-radius: 12px;"
-        " padding: 5px 14px; }"));
+        " padding: 5px 14px 5px 36px; }"));  // el hueco de la izquierda es del spinner
     busyBadge_->adjustSize();
+    badgeSpinner_ = new BusySpinner(busyBadge_, 16);
+    badgeSpinner_->setColor(QColor(0xE6, 0xEA, 0xF0));
+    badgeSpinner_->move(12, (busyBadge_->height() - badgeSpinner_->height()) / 2);
     busyBadge_->hide();
     viewport_->installEventFilter(this);
     createDocks();
@@ -91,6 +95,12 @@ MainWindow::MainWindow(QWidget* parent)
                                     .arg(QString::fromStdString(geometry::kernelVersion()),
                                          QString::fromStdString(io::NufFile::sqliteVersion()),
                                          QString::fromLatin1(qVersion())));
+    // El spinner de la barra de estado: aparece mientras algo carga (los mensajes ocultan los widgets normales de la
+    // barra, por eso es permanente).
+    statusSpinner_ = new BusySpinner(this, 16);
+    statusSpinner_->setColor(Qt::white);
+    statusSpinner_->hide();
+    statusBar()->addPermanentWidget(statusSpinner_);
     sketchStatusLabel_ = new QLabel(this);
     statusBar()->addPermanentWidget(sketchStatusLabel_);
     modelStatusLabel_ = new QLabel(this);
@@ -105,36 +115,25 @@ MainWindow::MainWindow(QWidget* parent)
     // base) para llamar la atención sin saltos. Contraste de texto blanco sobre #0B5CAD: 6,6:1 (AA); el acento es
     // azul, como el de la selección, y no el rojo/ámbar de los errores.
     statusBar()->setSizeGripEnabled(false);
-    const auto paintBanner = [this](const QColor& background) {
-        statusBar()->setStyleSheet(
-            QStringLiteral("QStatusBar { background: %1; color: white; font-weight: 600; min-height: 26px;"
-                           " border-top: 2px solid #4C9BEA; }"
-                           "QStatusBar::item { border: 0; }"
-                           "QStatusBar QLabel { color: white; font-weight: 400; }")
-                .arg(background.name()));
-    };
-    const QColor bannerBase(0x0B, 0x5C, 0xAD);
-    const QColor bannerFlash(0x4C, 0x9B, 0xEA);
-    paintBanner(bannerBase);
-    auto* blink = new QVariantAnimation(this);
-    blink->setDuration(900);
-    blink->setKeyValueAt(0.0, bannerFlash);
-    blink->setKeyValueAt(0.25, bannerBase);
-    blink->setKeyValueAt(0.4, bannerFlash);
-    blink->setKeyValueAt(1.0, bannerBase);
-    connect(blink, &QVariantAnimation::valueChanged, this,
-            [paintBanner](const QVariant& value) { paintBanner(value.value<QColor>()); });
+    paintBanner(QColor(0x0B, 0x5C, 0xAD));
+    bannerBlink_ = new QVariantAnimation(this);
+    bannerBlink_->setDuration(900);
+    connect(bannerBlink_, &QVariantAnimation::valueChanged, this,
+            [this](const QVariant& value) { paintBanner(value.value<QColor>()); });
+    setBannerBusy(false);  // fija los colores del parpadeo
     auto lastMessage = std::make_shared<QString>();
-    connect(statusBar(), &QStatusBar::messageChanged, this, [blink, lastMessage](const QString& text) {
+    connect(statusBar(), &QStatusBar::messageChanged, this, [this, lastMessage](const QString& text) {
         if (!text.isEmpty() && text != *lastMessage) {
-            blink->stop();
-            blink->start();
+            bannerBlink_->stop();
+            bannerBlink_->start();
         }
         *lastMessage = text;
     });
     connect(viewport_, &render::Viewport::selectionChanged, this,
             [this](const QString& description) { statusBar()->showMessage(description); });
     connect(viewport_, &render::Viewport::busyChanged, this, [this](bool busy) {
+        viewBusy_ = busy;
+        updateBusyBadge();
         if (busy) {
             statusBar()->showMessage(QStringLiteral("Preparando el dibujo de la pieza…"));
         } else {
@@ -294,9 +293,45 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
     return QMainWindow::eventFilter(watched, event);
 }
 
+bool MainWindow::anythingBusy() const
+{
+    return toolComputing_ || document_.computing() || exportRun_.running() || importRun_.running() || measureRun_.running() ||
+           viewBusy_;
+}
+
+// Colores del banner de la barra de estado: azul en reposo y ámbar mientras algo carga (blanco sobre #A85A00: 5,1:1).
+void MainWindow::paintBanner(const QColor& background)
+{
+    statusBar()->setStyleSheet(
+        QStringLiteral("QStatusBar { background: %1; color: white; font-weight: 600; min-height: 26px;"
+                       " border-top: 2px solid %2; }"
+                       "QStatusBar::item { border: 0; }"
+                       "QStatusBar QLabel { color: white; font-weight: 400; }")
+            .arg(background.name(), bannerBusy_ ? QStringLiteral("#F0B25A") : QStringLiteral("#4C9BEA")));
+}
+
+void MainWindow::setBannerBusy(bool busy)
+{
+    const QColor base = busy ? QColor(0xA8, 0x5A, 0x00) : QColor(0x0B, 0x5C, 0xAD);
+    const QColor flash = busy ? QColor(0xD9, 0x83, 0x24) : QColor(0x4C, 0x9B, 0xEA);
+    bannerBusy_ = busy;
+    bannerBlink_->stop();
+    bannerBlink_->setKeyValueAt(0.0, flash);
+    bannerBlink_->setKeyValueAt(0.25, base);
+    bannerBlink_->setKeyValueAt(0.4, flash);
+    bannerBlink_->setKeyValueAt(1.0, base);
+    paintBanner(base);
+    if (statusSpinner_ != nullptr) {
+        statusSpinner_->setVisible(busy);
+    }
+}
+
 void MainWindow::updateBusyBadge()
 {
-    const bool busy = toolComputing_ || document_.computing() || exportRun_.running() || importRun_.running();
+    const bool busy = anythingBusy();
+    if (busy != bannerBusy_ && bannerBlink_ != nullptr) {
+        setBannerBusy(busy);
+    }
     if (busyBadge_ == nullptr || busyBadge_->isVisible() == busy) {
         return;
     }

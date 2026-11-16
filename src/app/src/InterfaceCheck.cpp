@@ -3,6 +3,7 @@
 #include "Theme.hpp"
 
 #include "BodiesDialog.hpp"
+#include "BusySpinner.hpp"
 #include "ExportDialog.hpp"
 #include "FeatureTools.hpp"
 #include "ParametersDialog.hpp"
@@ -1213,10 +1214,25 @@ int InterfaceCheck::run()
                      [&] { window_.commands_.push(std::make_unique<commands::EditFeature>(cylinderId, std::move(edited))); });
             expect(timer.elapsed() < 1000, QStringLiteral("cambiar el diámetro tardó %1 ms: debía volver al instante").arg(timer.elapsed()));
             expect(window_.document_.computing(), QStringLiteral("el recálculo no quedó en segundo plano"));
+            // Mientras algo carga, la barra de estado se pone ámbar y gira un spinner (en la barra y sobre la vista).
+            expect(window_.statusBar()->styleSheet().contains(QStringLiteral("background: #a85a00")),
+                   QStringLiteral("el banner no se puso ámbar mientras calcula"));
+            expect(window_.statusSpinner_ != nullptr && window_.statusSpinner_->isVisible(),
+                   QStringLiteral("no se ve el spinner de la barra de estado mientras calcula"));
+            expect(window_.badgeSpinner_ != nullptr && window_.badgeSpinner_->isVisible(),
+                   QStringLiteral("no se ve el spinner sobre la vista mientras calcula"));
+            if (const QString folder = qEnvironmentVariable("NUF_PRUEBA_CAPTURAS"); !folder.isEmpty()) {
+                settle(300);  // que el spinner haya girado y el banner no esté a medio parpadeo
+                window_.grab().save(QDir(folder).filePath(QStringLiteral("cargando.png")));
+            }
             settle(100);  // la interfaz sigue atendiendo eventos mientras se calcula
         }
         waitIdle();
         expect(window_.document_.status(threadId).health != document::Health::Error, QStringLiteral("la rosca falló al final"));
+        expect(window_.statusBar()->styleSheet().contains(QStringLiteral("background: #0b5cad")),
+               QStringLiteral("el banner no vuelve al azul al terminar de calcular"));
+        expect(window_.statusSpinner_ != nullptr && !window_.statusSpinner_->isVisible(),
+               QStringLiteral("el spinner de la barra de estado sigue girando al terminar"));
         undoAll();
     });
 

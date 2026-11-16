@@ -50,6 +50,8 @@ add_executable(nuf_app
     src/NavBar.hpp
     src/Recovery.cpp
     src/Recovery.hpp
+    src/BusySpinner.cpp
+    src/BusySpinner.hpp
     src/StallWatch.cpp
     src/StallWatch.hpp
     src/CrashHandler.cpp
