@@ -50,6 +50,7 @@ Va en el mismo orden que el programa: **1. General**, **2. Sketch**, **3. Sólid
 | 5.4 Vigilante de paradas (`NUF_VIGILANTE`) | `VIG` |
 | 5.5 Llamadas en segundo plano (exportar, importar, medir, recuperar) | `FLU` |
 | 5.6 Dibujo en segundo plano (mallas, vista previa, generadores) | `FLU` |
+| 5.7 Indicador de carga y cierre con trabajo en marcha | `FLU` |
 
 ---
 
@@ -808,6 +809,21 @@ Oleada 6, F3. Los cuerpos nuevos ya no se dibujan hasta tener su malla (se prepa
 | FLU.17 | Con piezas ya hechas, compara el aspecto con la versión anterior (`git stash` o la rama `develop`) | Mismo sombreado, mismas líneas de borde y misma suavidad de curvas; las roscas igual de lisas |
 
 Si la vista previa de una herramienta tarda más de 150 ms en dibujarse, en la barra de estado debe aparecer «Preparando el dibujo de la pieza…» y desaparecer al terminar; con piezas sencillas no debe parpadear.
+
+### 5.7 Indicador de carga y cierre con trabajo en marcha (`FLU`, continuación)
+
+Oleada 6, F4. Mientras algo carga, la barra de estado se pone **ámbar** y gira un **spinner**; al terminar, vuelve al azul.
+
+| ID | Qué hacer | Qué debería pasar |
+|---|---|---|
+| FLU.18 | Crea un cilindro y una rosca cortante encima; cambia el diámetro del cilindro | La barra de abajo se pone **ámbar** con un spinner girando en su parte derecha, y sobre la vista sale «Calculando…» con otro spinner. Al terminar todo vuelve al **azul** y los spinners desaparecen |
+| FLU.19 | Exporta una pieza con rosca (Archivo › Exportar) | Mientras escribe, banner ámbar y spinner; al terminar, azul y el mensaje «Exportado a …» |
+| FLU.20 | Importa un STEP grande | Lo mismo mientras importa |
+| FLU.21 | Con un patrón de 50 copias recién agregado (tarda), cambia algo antes de que termine | El cálculo anterior se abandona; el banner sigue ámbar hasta que termina el último; nunca queda ámbar con todo parado |
+| FLU.22 | Con una rosca larga calculándose (cilindro y rosca de largo 80), cierra la ventana | La ventana **desaparece al instante**; el proceso se va en un par de segundos como mucho (antes esperaba a que terminara la rosca) |
+| FLU.23 | Edita varias veces seguidas el diámetro de un cilindro con una rosca encima | Solo vale el último; nunca se ve un resultado viejo después de uno nuevo |
+
+Los colores: azul `#0B5CAD` en reposo y ámbar `#A85A00` mientras carga; el parpadeo al cambiar el mensaje se aclara con el color de cada estado. Si el spinner te molesta, es un indicador pequeño (16 px) y solo gira mientras se ve.
 
 ### 5.2 Letrero con fuentes decorativas
 

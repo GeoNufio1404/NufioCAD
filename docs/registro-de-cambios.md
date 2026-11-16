@@ -10,6 +10,25 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Oleada 6, F4: banner ámbar con spinner, cancelación en el kernel y un solo grupo de hilos — 16 nov. 2026
+
+- **Rama:** `feature/fluidez-hilos` (sale de `feature/fluidez-dibujo`). Sin fusionar hasta la prueba manual (guía FLU.18–FLU.23).
+- **Qué hace:** (1) **a petición del usuario**, mientras algo carga la barra de estado se pone ámbar y gira un spinner (también dentro del distintivo «Calculando…»); no mide porcentaje; (2) el kernel abandona a media operación el loft, el redondeo, el chaflán, el vaciado, el barrido, la unión de partes, el engranaje helicoidal y la rosca cuando se pide cancelar, y al cerrar la ventana se oculta antes de esperar a los hilos; (3) un solo `geometry::TaskPool` sustituye a los tres mecanismos de hilos que había.
+- **Resultado:** las pruebas unitarias en verde (nuevas: 6 del grupo de hilos y la de cancelación de construcciones largas; 263 casos con los ocultos de medida) y la prueba de interfaz completa (44 pasos, 0 fallidos, parada máxima 955 ms: las mismas cifras que tras F3); la de la rosca comprueba ahora que el banner se pone ámbar con spinner y vuelve a azul.
+
+| Parte | Dónde (para deshacerla a mano) |
+|---|---|
+| Banner y spinner | `BusySpinner.cpp/.hpp` (nuevo); `MainWindow::anythingBusy`, `paintBanner`, `setBannerBusy`, `updateBusyBadge` (`MainWindow.cpp`); `viewBusy_`, `statusSpinner_`, `badgeSpinner_`, `bannerBlink_` en `MainWindow.hpp`; llamadas en `updateMeasure` (`MainWindowView.cpp`) |
+| Cancelación en el kernel | `ProgressCanceller`, `throwIfCancelled`, `buildCancellable` en `Modeling.cpp` (antes `BooleanCanceller`) y sus llamadas en `fuseAll`, `unify`, `edgeOperation`, el engranaje helicoidal, la rosca, el barrido, el loft y el vaciado |
+| Grupo de hilos | `geometry/TaskPool.hpp` y `src/TaskPool.cpp` (nuevos); `currentCancelFlag()` en `Cancel.hpp`; `BackgroundRun.cpp` reescrito; `Document::Job` y `stopBackground`/`reapRetired`/`finishBackground` (`Document.cpp`); `MeshTask` y `cancelMeshTasks` (`ViewportImpl.hpp`) |
+| Cierre | `MainWindow::closeEvent`: `hide()` antes de salir |
+| Pruebas | `tests/test_task_pool.cpp` (nuevo), caso nuevo en `tests/test_edge_ops.cpp`, pasos de la rosca en `InterfaceCheck.cpp` |
+
+- **Pendiente:** sin barra de progreso ni botón «Cancelar»; `UnifySameDomain`, el cosido y el ajuste de curvas no admiten progreso (solo se interrumpen entre pasos); el grupo no crece si todos sus hilos están ocupados por tareas canceladas que aún no notan la bandera; OCCT 7.6 (CI de Ubuntu) sin probar; solo Debug en Windows.
+- **Riesgos al volver atrás:** ninguno en archivos guardados.
+
+---
+
 ## Oleada 6, F3: dibujar sin parar la ventana (mallas, vista previa y generadores) — 16 nov. 2026
 
 - **Rama:** `feature/fluidez-dibujo` (sale de `feature/fluidez-llamadas`). Sin fusionar hasta la prueba manual (guía FLU.12–FLU.17).

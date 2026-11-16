@@ -175,10 +175,8 @@ public:
     struct MeshTask {
         std::uint64_t id = 0;
         geometry::Shape shape;
-        std::atomic<bool> cancel{false};
-        std::atomic<bool> finished{false};
         geometry::PreparedMesh mesh;
-        std::thread thread;
+        geometry::TaskPool::TaskPtr task;  // en el grupo de hilos de trabajo
     };
     std::vector<std::unique_ptr<MeshTask>> meshTasks;
     std::vector<std::unique_ptr<MeshTask>> cancelledTasks;  // canceladas que aún no han terminado
@@ -252,9 +250,11 @@ public:
         const std::uint64_t id = task->id;
         Impl* self = this;
         const BodyMeshing meshing = meshingFor(shape);  // en el hilo de la interfaz: mira el tamaño de la pieza
-        task->thread = std::thread([raw, self, id, meshing] {
-            raw->mesh = geometry::prepareMesh(raw->shape, meshing.deviation, meshing.angle, raw->cancel);
-            raw->finished = true;
+        task->task = geometry::TaskPool::instance().submit([raw, self, id, meshing] {
+            raw->mesh = geometry::prepareMesh(raw->shape, meshing.deviation, meshing.angle, geometry::currentCancelFlag());
+            if (geometry::cancelRequested()) {
+                return;
+            }
             QMetaObject::invokeMethod(&self->widget_, [self, id] { self->meshTaskFinished(id); }, Qt::QueuedConnection);
         });
         meshTasks.push_back(std::move(task));
@@ -267,8 +267,8 @@ public:
         if (it == meshTasks.end()) {
             return;  // cancelada y retirada
         }
-        (*it)->thread.join();
-        if (!(*it)->cancel.load()) {
+        (*it)->task->wait();  // ya terminó (avisó al acabar)
+        if (!(*it)->task->cancelled()) {
             if ((*it)->mesh.valid()) {
                 geometry::applyMesh((*it)->shape, (*it)->mesh);
             } else {
@@ -292,29 +292,19 @@ public:
 
     void reapCancelled()
     {
-        std::erase_if(cancelledTasks, [](const std::unique_ptr<MeshTask>& t) {
-            if (!t->finished.load()) {
-                return false;
-            }
-            if (t->thread.joinable()) {
-                t->thread.join();
-            }
-            return true;
-        });
+        std::erase_if(cancelledTasks, [](const std::unique_ptr<MeshTask>& t) { return t->task->finished(); });
     }
 
     void cancelMeshTasks()
     {
         for (auto* list : {&meshTasks, &cancelledTasks}) {
             for (auto& t : *list) {
-                t->cancel = true;
+                t->task->cancel();
             }
         }
         for (auto* list : {&meshTasks, &cancelledTasks}) {
             for (auto& t : *list) {
-                if (t->thread.joinable()) {
-                    t->thread.join();
-                }
+                t->task->wait();
             }
             list->clear();
         }
@@ -343,7 +333,7 @@ public:
                 return body.shape.impl() == (*it)->shape.impl();
             }) || (!pendingTool.isNull() && pendingTool.impl() == (*it)->shape.impl());
             if (!wanted) {
-                (*it)->cancel = true;
+                (*it)->task->cancel();
                 cancelledTasks.push_back(std::move(*it));
                 it = meshTasks.erase(it);
             } else {

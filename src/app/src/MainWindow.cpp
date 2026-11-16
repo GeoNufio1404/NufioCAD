@@ -370,6 +370,8 @@ void MainWindow::closeEvent(QCloseEvent* event)
     QSettings settings;
     settings.setValue(QStringLiteral("ui/geometry"), saveGeometry());
     settings.setValue(QStringLiteral("ui/layout"), saveState(kLayoutVersion));
+    // La ventana desaparece ya: lo que quede calculando se cancela y se espera después, sin que parezca colgada.
+    hide();
     QMainWindow::closeEvent(event);
 }
 

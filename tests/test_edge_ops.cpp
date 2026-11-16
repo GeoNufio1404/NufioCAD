@@ -15,6 +15,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <chrono>
 #include <cmath>
@@ -2047,6 +2048,45 @@ TEST_CASE("Una booleana se interrumpe cuando el hilo de trabajo pide cancelar", 
     REQUIRE_FALSE(geometry::cancelRequested());
     // Sin petición de cancelar, la misma booleana sale bien.
     REQUIRE_FALSE(geometry::boolean(geometry::BooleanOp::Cut, block, rod).isNull());
+}
+
+// Oleada 6, F4: cerrar la ventana o cambiar algo no debe esperar a que termine una rosca, un engranaje helicoidal, un
+// redondeo, un vaciado ni una unión de partes: todas las construcciones largas miran la petición de cancelar.
+TEST_CASE("Las construcciones largas se interrumpen cuando el hilo de trabajo pide cancelar", "[background][thread]")
+{
+    const auto plane = sketch::Plane::fromPointAndNormal({0, 0, 0}, {0, 0, 1});
+    const geometry::Shape block = geometry::box("b", plane, 20.0, 10.0, 5.0, false);
+    const geometry::Shape other = geometry::box("c", plane, 10.0, 10.0, 8.0, false);
+    geometry::ThreadSpec threadSpec;
+    threadSpec.length = 40.0;
+    geometry::GearSpec helical;
+    helical.teeth = 20;
+    helical.helixAngle = 0.4;
+    helical.thickness = 10.0;
+    geometry::GearSpec plain;
+    plain.teeth = 20;
+    plain.thickness = 10.0;
+
+    std::atomic<bool> stop{true};
+    {
+        geometry::CancelScope scope(stop);
+        const auto cancelled = [](const std::function<void()>& call) {
+            REQUIRE_THROWS_WITH(call(), Catch::Matchers::ContainsSubstring("cancelado"));
+        };
+        cancelled([&] { geometry::thread("t", plane, threadSpec); });
+        cancelled([&] { geometry::gear("g", plane, helical); });
+        cancelled([&] { geometry::fillet("f", block, {0, 1}, 0.5); });
+        cancelled([&] { geometry::chamfer("c", block, {0, 1}, 0.5); });
+        cancelled([&] { geometry::shell("s", block, {0}, 1.0, false); });
+        cancelled([&] { geometry::boolean(geometry::BooleanOp::Fuse, block, other); });
+    }
+    REQUIRE_FALSE(geometry::cancelRequested());
+    // Sin petición de cancelar, las mismas operaciones salen bien.
+    REQUIRE_FALSE(geometry::thread("t", plane, threadSpec).isNull());
+    REQUIRE_FALSE(geometry::gear("g", plane, plain).isNull());
+    REQUIRE_FALSE(geometry::fillet("f", block, {0, 1}, 0.5).isNull());
+    REQUIRE_FALSE(geometry::chamfer("c", block, {0, 1}, 0.5).isNull());
+    REQUIRE_FALSE(geometry::shell("s", block, {0}, 1.0, false).isNull());
 }
 
 TEST_CASE("Una rosca y un engranaje se colocan en una posición X/Y del plano", "[thread][gear]")

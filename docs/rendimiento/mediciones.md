@@ -137,3 +137,14 @@ dentro de `RtlEnterCriticalSection` llamado desde `recalloc_dbg` o `free_dbg`: e
 solo candado para todo el proceso, y mientras los hilos de trabajo mallan en paralelo y reservan millones de bloques, la
 interfaz espera para hacer cualquier reserva. No es trabajo de geometría en el hilo de la interfaz. En Release esa
 contención no existe; se confirmará con la columna «Windows Release» (Oleada 7, D2).
+
+### Después de F4: un solo grupo de hilos y cancelación en el kernel (rama `feature/fluidez-hilos`, mismo equipo, Debug)
+
+F4 no mueve las cifras de las paradas de F3 (el trabajo ya estaba fuera del hilo de la interfaz): cambia **cuánto se
+tarda en soltar el trabajo cancelado**. Lo que se comprueba es, sobre todo, estructural:
+
+| Qué | Cómo se comprueba |
+|---|---|
+| Seis construcciones largas (rosca, engranaje helicoidal, redondeo, chaflán, vaciado, unión) abortan si ya se pidió cancelar | Prueba unitaria «Las construcciones largas se interrumpen…» |
+| Cancelar una tarea en cola no la ejecuta; el grupo crea hilos solo si hacen falta y no pasa del máximo; destruirlo cancela y recoge todo | 6 pruebas unitarias del grupo (`[taskpool]`) |
+| Prueba de interfaz completa | 44 pasos, 0 fallidos; parada máxima 955 ms (patrón de 50), generadores de engranajes 508–614 ms, igual que tras F3; el paso de la rosca con el banner ámbar y los spinners: 66 ms |

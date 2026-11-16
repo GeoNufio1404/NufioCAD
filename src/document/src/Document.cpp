@@ -1,6 +1,7 @@
 #include <nuf/document/Document.hpp>
 
 #include <nuf/geometry/Cancel.hpp>
+#include <nuf/geometry/TaskPool.hpp>
 #include <nuf/geometry/Shape.hpp>
 
 #include <algorithm>
@@ -173,11 +174,9 @@ std::vector<FeatureId> featuresIn(const geometry::ElementRef& ref)
 struct Document::Job {
     std::uint64_t generation = 0;
     std::size_t from = 0;  // la primera operación que recalcula
-    std::atomic<bool> cancel{false};
-    std::atomic<bool> finished{false};
+    geometry::TaskPool::TaskPtr task;  // la tarea en el grupo de hilos (se cancela y se espera a través de ella)
     std::vector<ModelState> states;
     std::vector<FeatureStatus> statuses;
-    std::thread thread;
 };
 
 Document::Document() = default;
@@ -189,19 +188,19 @@ Document::~Document()
 
 void Document::stopBackground()
 {
-    // Los hilos trabajan sobre copias, pero no se pueden dejar sueltos: se les pide parar y se espera.
+    // Las tareas trabajan sobre copias, pero no se pueden dejar sueltas (avisan a este documento): se les pide parar,
+    // las que aún esperaban en la cola se descartan y se espera a las que corrían (las construcciones largas se
+    // interrumpen a media operación, así que cerrar no espera a que termine una rosca).
     post_ = nullptr;
     for (auto& job : retired_) {
-        job->cancel = true;
+        job->task->cancel();
     }
     if (job_) {
-        job_->cancel = true;
+        job_->task->cancel();
         retired_.push_back(std::move(job_));
     }
     for (auto& job : retired_) {
-        if (job->thread.joinable()) {
-            job->thread.join();
-        }
+        job->task->wait();
     }
     retired_.clear();
 }
@@ -655,22 +654,14 @@ void Document::waitForCompute()
 
 void Document::reapRetired()
 {
-    std::erase_if(retired_, [](const std::shared_ptr<Job>& job) {
-        if (!job->finished.load()) {
-            return false;
-        }
-        if (job->thread.joinable()) {
-            job->thread.join();
-        }
-        return true;
-    });
+    std::erase_if(retired_, [](const std::shared_ptr<Job>& job) { return job->task->finished(); });
 }
 
 // El cálculo en curso ya no vale: se le pide parar (el hilo se recoge cuando termine).
 void Document::retireJob()
 {
     if (job_) {
-        job_->cancel = true;
+        job_->task->cancel();
         retired_.push_back(std::move(job_));
     }
     reapRetired();
@@ -704,16 +695,19 @@ void Document::startBackground(std::size_t index)
     ModelState before = from == 0 ? empty_ : states_[from - 1];
     const std::size_t marker = marker_;
     const std::uint64_t generation = job->generation;
-    Job* raw = job.get();
     Document* self = this;
     const Poster post = post_;
     const std::weak_ptr<bool> alive = alive_;
     job_ = job;
-    raw->thread = std::thread([raw, self, post, alive, generation, from, marker, lookup = snapshotLookup(),
-                               features = std::move(features), before = std::move(before)]() mutable {
-        geometry::CancelScope scope(raw->cancel);
+    Job* raw = job.get();
+    job->task = geometry::TaskPool::instance().submit(
+        // std::function exige un objeto copiable: las operaciones (únicas) viajan en un shared_ptr.
+        [raw, self, post, alive, generation, from, marker, lookup = snapshotLookup(),
+         owned = std::make_shared<std::vector<std::unique_ptr<Feature>>>(std::move(features)),
+         before = std::move(before)]() mutable {
+        const std::vector<std::unique_ptr<Feature>>& features = *owned;
         try {
-            for (std::size_t k = 0; k < features.size() && !raw->cancel.load(); ++k) {
+            for (std::size_t k = 0; k < features.size() && !geometry::cancelRequested(); ++k) {
                 const Feature& feature = *features[k];
                 if (from + k >= marker) {
                     raw->states.push_back(before);
@@ -731,8 +725,7 @@ void Document::startBackground(std::size_t index)
         } catch (...) {
             // Lo que salga mal aquí deja el cálculo incompleto: no se instala (ver finishBackground).
         }
-        raw->finished = true;
-        if (!raw->cancel.load()) {
+        if (!geometry::cancelRequested()) {
             post([self, alive, generation] {
                 if (alive.lock()) {
                     self->finishBackground(generation);
@@ -756,9 +749,7 @@ void Document::finishBackground(std::uint64_t generation)
         return;  // lo cancelaron o lo reemplazó otro más nuevo
     }
     const std::shared_ptr<Job> job = std::move(job_);
-    if (job->thread.joinable()) {
-        job->thread.join();
-    }
+    job->task->wait();  // ya terminó (avisó al acabar): solo falta que suelte lo suyo
     reapRetired();
     if (job->from + job->states.size() == features_.size()) {
         for (std::size_t k = 0; k < job->states.size(); ++k) {

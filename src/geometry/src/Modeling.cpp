@@ -99,11 +99,38 @@ GeometryError kernelFailure(const std::string& action, const std::string& hint, 
     return GeometryError("No se pudo " + action + ": " + hint + (detail.empty() ? std::string() : " (detalle técnico: " + detail + ")"));
 }
 
+// Deja que el kernel se detenga a media operación cuando el hilo de trabajo pide cancelar (cerrar la ventana, un
+// cambio nuevo en el historial). Lo usan las booleanas y todas las construcciones que tardan: loft, redondeo, chaflán,
+// vaciado, barrido y la unión de partes. Las que no admiten progreso (UnifySameDomain) se comprueban antes y después.
+class ProgressCanceller final : public Message_ProgressIndicator {
+protected:
+    bool UserBreak() override { return cancelRequested(); }
+    void Show(const Message_ProgressScope&, const bool) override {}
+};
+
+void throwIfCancelled()
+{
+    if (cancelRequested()) {
+        throw GeometryError("Cálculo cancelado");
+    }
+}
+
+// «builder.Build()» interrumpible: si se pidió cancelar, lanza «Cálculo cancelado».
+template <typename Builder>
+void buildCancellable(Builder& builder)
+{
+    occ::handle<ProgressCanceller> canceller = new ProgressCanceller();
+    builder.Build(canceller->Start());
+    throwIfCancelled();
+}
+
 // Une las caras coplanares (y aristas colineales) que dejan las booleanas.
 Shape unify(const Shape& input, const std::string& tag)
 {
+    throwIfCancelled();
     ShapeUpgrade_UnifySameDomain unifier(occtShape(input), true, true, false);
     unifier.Build();
+    throwIfCancelled();
     Namer namer(unifier.Shape());
     namer.inherit(input, *unifier.History());
     return namer.finish(tag);
@@ -124,7 +151,8 @@ Shape fuseAll(const std::vector<Shape>& parts, const std::string& tag)
     BRepAlgoAPI_Fuse fuse;
     fuse.SetArguments(arguments);
     fuse.SetTools(tools);
-    fuse.Build();
+    fuse.SetRunParallel(true);
+    buildCancellable(fuse);
     if (!fuse.IsDone() || fuse.HasErrors()) {
         throw GeometryError("No se pudieron unir las partes");
     }
@@ -635,17 +663,6 @@ Shape revolve(std::string_view tagView, const SketchRegion& region, const Axis& 
     }
 }
 
-namespace {
-
-// Deja que el kernel se detenga a media booleana cuando el hilo de trabajo pide cancelar.
-class BooleanCanceller final : public Message_ProgressIndicator {
-protected:
-    bool UserBreak() override { return cancelRequested(); }
-    void Show(const Message_ProgressScope&, const bool) override {}
-};
-
-} // namespace
-
 Shape boolean(BooleanOp op, const Shape& target, const Shape& tool)
 {
     try {
@@ -671,11 +688,7 @@ Shape boolean(BooleanOp op, const Shape& target, const Shape& tool)
         algo->SetArguments(objects);
         algo->SetTools(tools);
         algo->SetRunParallel(true);
-        occ::handle<BooleanCanceller> canceller = new BooleanCanceller();
-        algo->Build(canceller->Start());
-        if (cancelRequested()) {
-            throw GeometryError("Cálculo cancelado");
-        }
+        buildCancellable(*algo);
         if (!algo->IsDone() || algo->HasErrors()) {
             throw GeometryError("No se pudo combinar los cuerpos: puede que solo se toquen en una arista o un punto, o que tengan caras casi coincidentes; prueba a moverlos una décima de milímetro");
         }
@@ -757,7 +770,7 @@ Shape edgeOperation(std::string_view tag, const std::string& label, const Shape&
         for (int edge : edges) {
             maker.Add(size, edgeAt(body, edge));
         }
-        maker.Build();
+        buildCancellable(maker);
         if (!maker.IsDone() || maker.Shape().IsNull()) {
             throw GeometryError(failure);
         }
@@ -1185,6 +1198,7 @@ Shape gear(std::string_view tagView, const sketch::Plane& plane, const GearSpec&
         BRepOffsetAPI_ThruSections loft(false, false, 1e-6);
         TopoDS_Wire lastWire = outline.Wire();
         for (int k = 0; k <= sections; ++k) {
+            throwIfCancelled();
             const double t = double(k) / sections;
             if (k == 0) {
                 loft.AddWire(outline.Wire());
@@ -1198,7 +1212,7 @@ Shape gear(std::string_view tagView, const sketch::Plane& plane, const GearSpec&
             lastWire = TopoDS::Wire(moved.Shape());
             loft.AddWire(lastWire);
         }
-        loft.Build();
+        buildCancellable(loft);
         if (!loft.IsDone()) {
             throw GeometryError("No se pudo generar el engranaje helicoidal");
         }
@@ -1507,6 +1521,7 @@ Shape thread(std::string_view tagView, const sketch::Plane& plane, const ThreadS
         const int chunks = std::max(1, int(std::ceil(turns / 1.5)));
         std::vector<TopoDS_Face> sides;
         for (int c = 0; c < chunks; ++c) {
+            throwIfCancelled();
             const int k0 = int(std::lround(double(c) * sections / chunks));
             const int k1 = int(std::lround(double(c + 1) * sections / chunks));
             const int count = k1 - k0;
@@ -1516,6 +1531,7 @@ Shape thread(std::string_view tagView, const sketch::Plane& plane, const ThreadS
             }
             std::vector<occ::handle<Geom_BSplineCurve>> helices;
             for (int j = 1; j <= nPoles; ++j) {
+                throwIfCancelled();
                 occ::handle<HPntArray> path = new HPntArray(1, count + 1);
                 for (int k = 0; k <= count; ++k) {
                     path->SetValue(k + 1, curve->Pole(j).Transformed(moves[std::size_t(k0 + k)]));
@@ -1657,7 +1673,7 @@ Shape sweep(std::string_view tagView, const SketchRegion& profile, const sketch:
                     pipe.SetMode(gp_Ax2(toPnt(profile.plane.origin), toDir(profile.plane.normal)));
                 }
                 pipe.Add(wire, false, false);
-                pipe.Build();
+                buildCancellable(pipe);
                 if (!pipe.IsDone() || !pipe.MakeSolid()) {
                     throw GeometryError("No se pudo barrer el perfil (¿está en el inicio de la trayectoria y de frente a ella?)");
                 }
@@ -1724,7 +1740,7 @@ Shape loft(std::string_view tagView, const std::vector<SketchRegion>& sections, 
                 firstEdges = faces.front().sources;
             }
         }
-        maker.Build();
+        buildCancellable(maker);
         if (!maker.IsDone()) {
             throw GeometryError("No se pudo hacer el loft (¿los perfiles tienen una forma muy distinta?)");
         }
@@ -1909,8 +1925,10 @@ Shape shell(std::string_view tag, const Shape& body, const std::vector<int>& rem
             removed.Append(faceAt(body, index));
         }
         BRepOffsetAPI_MakeThickSolid maker;
+        occ::handle<ProgressCanceller> canceller = new ProgressCanceller();
         maker.MakeThickSolidByJoin(occtShape(body), removed, outward ? thickness : -thickness, 1e-4, BRepOffset_Skin,
-                                   false, false, GeomAbs_Intersection);
+                                   false, false, GeomAbs_Intersection, false, canceller->Start());
+        throwIfCancelled();
         if (!maker.IsDone() || maker.Shape().IsNull()) {
             throw GeometryError(failure);
         }

@@ -90,7 +90,7 @@ flowchart TB
 | Módulo | Qué hace | Archivos principales |
 |---|---|---|
 | `sketch` | Modelo del sketch (entidades, restricciones, cotas), solver detrás de `ISolver`, perfiles cerrados, ajuste (*snap*) e inferencias, herramientas de dibujo y edición como máquinas de estados, colocación de cotas, DXF | `Sketch.hpp`, `Solver.hpp` + `PlaneGcsSolver.cpp`, `Profiles.hpp`, `Snap.hpp`, `Tools.hpp` (+ `ShapeTools`, `CircleTools`, `CurveTools`, `EditTools`), `Annotations.hpp`, `Dxf.hpp` |
-| `geometry` | Único traductor a OCCT para el núcleo: `Shape` (forma + nombres de caras y aristas), extruir, revolución, booleanas, redondeo, vaciado, patrón, espejo, engranaje, rosca, barrido, loft; medir; revisión para imprimir; mallas para la vista; STL/OBJ/STEP; cancelación | `Shape.hpp`, `Modeling.hpp` (`Modeling.cpp`), `Naming.hpp`, `SketchFaces.cpp`, `Exchange.hpp`, `Measure.hpp`, `Printability.hpp`, `DisplayMesh.hpp`, `Cancel.hpp` |
+| `geometry` | Único traductor a OCCT para el núcleo: `Shape` (forma + nombres de caras y aristas), extruir, revolución, booleanas, redondeo, vaciado, patrón, espejo, engranaje, rosca, barrido, loft; medir; revisión para imprimir; mallas para la vista; STL/OBJ/STEP; cancelación y el grupo de hilos de trabajo (`TaskPool`) | `Shape.hpp`, `Modeling.hpp` (`Modeling.cpp`), `Naming.hpp`, `SketchFaces.cpp`, `Exchange.hpp`, `Measure.hpp`, `Printability.hpp`, `DisplayMesh.hpp`, `Cancel.hpp` |
 | `document` | `Document` (historial, marcador, parámetros, estados calculados, cálculo en segundo plano), las 21 operaciones (`Feature`), expresiones, generadores (recetas), `Signal<>` propio | `Document.hpp`, `Feature.hpp`, `Features.hpp` (`Features.cpp`, `FeaturesMore.cpp`), `Expression.hpp`, `Generators.hpp`, `Signal.hpp` |
 | `commands` | Cambios reversibles: agregar, editar, borrar, suprimir, mover, marcador, parámetros, nombres de cuerpos, recetas de generadores | `Command.hpp`, `CommandStack.hpp`, `FeatureCommands.hpp`, `AddRecipe.hpp`, `ReplaceRecipe.hpp`, `SetParameters.hpp` |
 | `io` | El `.nuf`: esquema SQLite, serialización JSON de cada operación, guardado atómico, miniatura, `--dump` | `NufFile.hpp`, `DocumentFile.hpp` |
@@ -303,35 +303,44 @@ flowchart LR
 
 Todo lo de Qt y de la vista 3D ocurre en el **hilo de la interfaz**. Los cálculos pesados se hacen en **hilos de
 trabajo sobre copias** (las formas son inmutables, así que copiarlas es copiar un puntero) y el resultado vuelve al
-hilo de la interfaz con una llamada en cola (`QMetaObject::invokeMethod`). Un cambio nuevo **cancela** el cálculo en
-curso: las booleanas y el mallado se interrumpen a medias gracias a `geometry::CancelScope`.
+hilo de la interfaz con una llamada en cola (`QMetaObject::invokeMethod`). Los hilos de trabajo viven en **un solo
+grupo** (`geometry::TaskPool`, sin Qt): se crean cuando hacen falta, se reutilizan y se recogen al cerrar. Un cambio
+nuevo **cancela** el cálculo en curso: una tarea que aún esperaba en la cola se descarta sin ejecutarse, y una que ya
+corre ve la petición con `geometry::cancelRequested()`, que miran las booleanas, el mallado y las construcciones largas
+(loft, redondeo, vaciado, barrido, rosca y engranaje helicoidal).
 
 ```mermaid
 flowchart LR
     subgraph UI["Hilo de la interfaz (Qt)"]
         ev["Ratón, teclado,<br/>pintar la vista"]
         inst["Instalar el resultado<br/>y refrescar"]
+        spin["Banner ámbar y spinner<br/>mientras haya trabajo"]
     end
-    subgraph W["Hilos de trabajo"]
-        job["Document::Job<br/>recálculo del historial"]
-        prev["BackgroundRun<br/>vistas previas y generadores"]
-        mesh["MeshTask del visor<br/>malla de cuerpos pesados"]
+    subgraph POOL["geometry::TaskPool (hilos de trabajo)"]
+        q["Cola de tareas<br/>(cancelar = descartar)"]
+        w["Hilos: se crean al hacer falta,<br/>hasta los núcleos del equipo"]
+        q --> w
     end
-    ev -- "copia de las operaciones<br/>y del estado anterior" --> job
-    ev -- "copia de la operación" --> prev
-    ev -- "copia de la forma" --> mesh
-    job & prev & mesh -- "aviso en cola<br/>(si no se canceló)" --> inst
+    ev -- "recálculo del historial<br/>(Document::Job)" --> q
+    ev -- "vistas previas, exportar, importar,<br/>medir (BackgroundRun)" --> q
+    ev -- "mallas de los cuerpos<br/>(MeshTask del visor)" --> q
+    w -- "aviso en cola<br/>(si no se canceló)" --> inst
+    inst --> spin
 ```
 
-| Dónde | Qué calcula aparte |
+| Quién encarga | Qué se calcula aparte |
 |---|---|
 | `Document::startBackground` (`document/src/Document.cpp`) | El historial desde la primera operación que cambió |
-| `BackgroundRun` (`app/src/BackgroundRun.cpp`) | Vista previa de cada herramienta y generador |
-| `ViewportImpl::startMeshTask` (`render/src/ViewportImpl.hpp`) | La malla de los cuerpos «pesados» (roscas) |
+| `BackgroundRun` (`app/src/BackgroundRun.cpp`) | Vista previa de cada herramienta y generador, exportar, importar STEP, medir, miniaturas de recientes |
+| `ViewportImpl::startMeshTask` (`render/src/ViewportImpl.hpp`) | La malla de cada cuerpo nuevo y del sólido de la vista previa |
+| `Recovery::writeAsync` (`app/src/Recovery.cpp`) | La copia de recuperación (su propio hilo, para poder esperarla al descartarla) |
 
-Lo que **todavía** se hace en el hilo de la interfaz y puede tardar (exportar, importar STEP, mallar los cuerpos
-normales…) está analizado en [`auditorias/auditoria-3-fluidez.md`](auditorias/auditoria-3-fluidez.md) y planificado
-en la Oleada 6 de la [hoja de ruta](hoja-de-ruta.md).
+Mientras haya algo cargando, la barra de estado pasa a **ámbar** y gira un **spinner** (en la barra y sobre la vista):
+no mide porcentaje, solo dice que hay trabajo en marcha (`MainWindow::anythingBusy`).
+
+Lo que **todavía** se hace en el hilo de la interfaz y puede tardar está en
+[`auditorias/auditoria-3-fluidez.md`](auditorias/auditoria-3-fluidez.md) y en la Oleada 6 de la
+[hoja de ruta](hoja-de-ruta.md).
 
 ---
 

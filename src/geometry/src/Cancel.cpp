@@ -22,4 +22,10 @@ bool cancelRequested() noexcept
     return gFlag != nullptr && gFlag->load();
 }
 
+const std::atomic<bool>& currentCancelFlag() noexcept
+{
+    static const std::atomic<bool> never{false};
+    return gFlag != nullptr ? *gFlag : never;
+}
+
 } // namespace nuf::geometry

@@ -22,4 +22,8 @@ private:
 // true si el cálculo de este hilo se pidió cancelar.
 bool cancelRequested() noexcept;
 
+// La bandera del cálculo de este hilo (para pasársela a algo que la pide, como prepareMesh); una que nunca se
+// levanta si no hay ningún CancelScope.
+const std::atomic<bool>& currentCancelFlag() noexcept;
+
 } // namespace nuf::geometry
