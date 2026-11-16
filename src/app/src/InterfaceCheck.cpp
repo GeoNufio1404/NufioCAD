@@ -85,11 +85,13 @@ void InterfaceCheck::startWatchdog()
     mainThread_ = currentThreadHandle();
     heartbeat_ = nowMs();
     watching_ = true;
-    watchdog_ = std::thread([this] {
+    // NUF_PRUEBA_PILA_MS: desde cuántos ms de parada se anota la pila (por defecto 1000).
+    const qint64 stackAfterMs = std::max(100, qEnvironmentVariableIntValue("NUF_PRUEBA_PILA_MS") > 0 ? qEnvironmentVariableIntValue("NUF_PRUEBA_PILA_MS") : 1000);
+    watchdog_ = std::thread([this, stackAfterMs] {
         bool sampled = false;
         while (watching_) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(150));
-            if (nowMs() - heartbeat_ < 1000) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            if (nowMs() - heartbeat_ < stackAfterMs) {
                 sampled = false;
                 continue;
             }
@@ -180,7 +182,8 @@ void InterfaceCheck::waitIdle()
            QStringLiteral("el modelo no terminó de calcularse en segundo plano"));
     expect(waitFor([this] { return window_.tool_ == nullptr || !window_.tool_->previewing(); }, 120000),
            QStringLiteral("la vista previa no terminó de calcularse en segundo plano"));
-    expect(waitFor([this] { return !viewBusy_; }, 60000), QStringLiteral("el visor no terminó de preparar el dibujo"));
+    expect(waitFor([this] { return !viewBusy_ && !window_.viewport_->preparingDrawing(); }, 60000),
+           QStringLiteral("el visor no terminó de preparar el dibujo"));
     settle(100);
 }
 
@@ -259,6 +262,11 @@ void InterfaceCheck::undoAll()
 
 void InterfaceCheck::step(const QString& name, const std::function<void()>& body)
 {
+    // NUF_PRUEBA_SOLO=<texto>: solo los pasos cuyo nombre lo contiene (para repetir uno sin esperar a los 44).
+    static const QString only = qEnvironmentVariable("NUF_PRUEBA_SOLO");
+    if (!only.isEmpty() && !name.contains(only, Qt::CaseInsensitive)) {
+        return;
+    }
     results_.push_back({name, true, {}, 0, {}});
     current_ = &results_.back();
     currentStep_ = int(results_.size()) - 1;
@@ -568,13 +576,21 @@ int InterfaceCheck::run()
         settle(300);
         const QImage image = window_.viewport_->grabFramebuffer();
         long bluish = 0;
+        long onEdge = 0;  // azul pegado al borde de la vista: la pieza no cabe (el encuadre se hizo antes de tener los cuerpos)
         for (int y = 0; y < image.height(); ++y) {
             for (int x = 0; x < image.width(); ++x) {
                 const QColor c = image.pixelColor(x, y);
                 if (c.blue() > c.red() + 55 && c.blue() > c.green() + 25 && c.green() < 170) {
                     ++bluish;
+                    if (x < 3 || y < 3 || x >= image.width() - 3 || y >= image.height() - 3) {
+                        ++onEdge;
+                    }
                 }
             }
+        }
+        expect(onEdge == 0, QStringLiteral("la vista previa no cabe en la vista: %1 píxeles azules en el borde").arg(onEdge));
+        if (const QString folder = qEnvironmentVariable("NUF_PRUEBA_CAPTURAS"); !folder.isEmpty()) {
+            image.save(QDir(folder).filePath(QStringLiteral("vista-previa-translucida.png")));  // para mirarla a ojo
         }
         expect(bluish > 500, QStringLiteral("la vista previa no se ve azul translúcida (%1 píxeles azulados)").arg(bluish));
         expect(window_.busyBadge_ != nullptr && !window_.busyBadge_->isVisible(), QStringLiteral("«Calculando…» sigue a la vista al terminar"));
@@ -1481,7 +1497,7 @@ int InterfaceCheck::run()
     {
         std::lock_guard<std::mutex> lock(samplesMutex_);
         if (!samples_.empty()) {
-            text += QStringLiteral("\nParadas de más de un segundo (dónde estaba la interfaz):\n");
+            text += QStringLiteral("\nParadas largas (por defecto más de un segundo; dónde estaba la interfaz):\n");
             int shown = 0;
             for (const auto& [index, stack] : samples_) {
                 if (++shown > 12) {

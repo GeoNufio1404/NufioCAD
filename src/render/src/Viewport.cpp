@@ -5,6 +5,8 @@
 #include <QPixmap>
 #include "ViewportImpl.hpp"
 
+#include <mutex>
+
 namespace nuf::render {
 
 namespace {
@@ -74,6 +76,12 @@ Viewport::~Viewport()
 
 void Viewport::fitAll()
 {
+    // Si faltan cuerpos por mostrar (su malla se prepara en segundo plano), encuadrar ahora vería solo lo anterior:
+    // se encuadra cuando estén.
+    if (impl_->waitingForMesh) {
+        impl_->fitWhenReady = true;
+        return;
+    }
     // Solo lo que es del modelo (las rejillas no cuentan).
     Bnd_Box box;
     for (const auto& body : impl_->bodies) {
@@ -190,6 +198,11 @@ void Viewport::showConstructionAxes(const std::vector<ConstructionAxisView>& axe
     impl_->showConstructionAxes(axes);
     impl_->view->Invalidate();
     update();
+}
+
+bool Viewport::preparingDrawing() const
+{
+    return impl_->waitingForMesh || !impl_->meshTasks.empty();
 }
 
 void Viewport::showBodies(const std::vector<document::Body>& bodies)
@@ -443,6 +456,10 @@ std::vector<sketch::Geometry> Viewport::sketchSection() const
 
 std::vector<sketch::Geometry> Viewport::textOutline(const QString& text, double height, const QString& family) const
 {
+    // Los generadores arman su receta en un hilo de trabajo y el texto del sketch se pide desde la interfaz: el gestor
+    // de fuentes de OpenCASCADE se usa de una en una.
+    static std::mutex fonts;
+    const std::lock_guard<std::mutex> lock(fonts);
     return impl_->textOutline(text, height, family);
 }
 

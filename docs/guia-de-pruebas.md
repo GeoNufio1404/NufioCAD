@@ -49,6 +49,7 @@ Va en el mismo orden que el programa: **1. General**, **2. Sketch**, **3. Sólid
 | 4.5 Todos los generadores: reabrir, recordar y restablecer | `GRE` |
 | 5.4 Vigilante de paradas (`NUF_VIGILANTE`) | `VIG` |
 | 5.5 Llamadas en segundo plano (exportar, importar, medir, recuperar) | `FLU` |
+| 5.6 Dibujo en segundo plano (mallas, vista previa, generadores) | `FLU` |
 
 ---
 
@@ -753,6 +754,8 @@ No hace falta tocar nada: abre la ventana real, recorre las herramientas y los g
 NufioCAD.exe --prueba-interfaz [--informe ruta.txt] [--umbral-ms 20000]
 ```
 
+Variables de entorno útiles al depurar la prueba: `NUF_PRUEBA_SOLO=<texto>` (solo los pasos cuyo nombre lo contiene), `NUF_PRUEBA_PILA_MS=<ms>` (desde cuántos ms de parada se anota la pila, por defecto 1000) y `NUF_PRUEBA_CAPTURAS=<carpeta>` (guarda la captura de la vista previa translúcida).
+
 - Abre cada generador (Lightbox, Caja con tapa, Letrero o llavero, Par de engranajes), cambia un valor, acepta y deshace; hace lo mismo con Rosca, Engranaje, Caja y Cilindro; cancela una herramienta; cambia las unidades a cm y vuelve a mm; activa y desactiva Sección y Medir con un cuerpo; cambia el diámetro de un cilindro con una rosca cortante encima (debe volver al instante y calcular en segundo plano); y comprueba que al final no queda nada.
 - **Pasos de medición de fluidez (Oleada 6, F1):** reproducen lo que hoy se hace en el hilo de la interfaz y puede tardar: exportar STL/OBJ/STEP y contar triángulos de una pieza con rosca; abrir el diálogo de Exportar con 5 cuerpos, marcar y desmarcar y cambiar la calidad; importar un STEP con un engranaje; medir caras de una rosca; recargar la pantalla de inicio con 10 recientes; y un patrón lineal de 50 copias. No fallan por tiempo (solo por el umbral): las llamadas de más de 100 ms salen en el informe con su duración y sirven de línea base para comprobar cada rama de la Oleada 6 (ver [`auditoria-3-fluidez.md`](auditorias/auditoria-3-fluidez.md)).
 - Falla si algo no se abre o no se cierra, si deshacer deja restos, o si la interfaz se para más del umbral (por defecto 20 s: en Debug OpenCASCADE es lento).
@@ -790,6 +793,21 @@ Oleada 6, F2. Todas estas acciones ya no deben dejar la ventana sin responder. U
 | FLU.9 | `NUF_RECOVERY_SECONDS=5`, abre un diseño con un STEP importado grande, edita algo y espera varios ciclos | No hay tirón cada 5 s. Mata el proceso: al abrir ofrece restaurar. Con un cierre normal no queda ninguna copia en `recuperacion` |
 | FLU.10 | Guarda 10 diseños distintos y reinicia con la pantalla de inicio | La lista sale al instante (con «Cargando…») y las miniaturas aparecen de una en una |
 | FLU.11 | Con OneDrive «archivos a petición», que un reciente esté solo en la nube | Sale como «Solo en la nube» y no se descarga para dibujar la lista |
+
+### 5.6 Dibujo en segundo plano: mallas, vista previa y generadores (`FLU`, continuación)
+
+Oleada 6, F3. Los cuerpos nuevos ya no se dibujan hasta tener su malla (se prepara aparte): mientras tanto se sigue viendo lo anterior, y la ventana responde. Usa un par de engranajes, una rosca o un patrón de muchas copias.
+
+| ID | Qué hacer | Qué debería pasar |
+|---|---|---|
+| FLU.12 | Herramientas › Par de engranajes (o Engranaje interno); cambia el módulo o el número de dientes varias veces seguidas | La ventana responde (se puede girar la vista); la vista previa azul se actualiza al terminar de calcular, sin parpadear ni mostrar piezas a medias |
+| FLU.13 | Abre un generador con la vista vacía | La vista previa **queda encuadrada** (se ve entera, sin salirse por los bordes), igual que antes |
+| FLU.14 | Abre un diseño guardado con varias piezas; con el diseño ya abierto, Archivo › Abrir otro | Tras abrirlo, la vista queda **encuadrada** sobre todas las piezas |
+| FLU.15 | Extruir (o Agujero) en modo «Cortar» sobre una pieza; cambia la distancia | El volumen que se quita aparece en **rojo translúcido** poco después del cuerpo, sin congelar la ventana; al aceptar sale lo mismo que se veía |
+| FLU.16 | Letrero o llavero: cambia el texto y la fuente; acepta | El diseño aceptado es idéntico a la vista previa; aceptar no tarda más que antes (la receta de la vista previa se reutiliza) |
+| FLU.17 | Con piezas ya hechas, compara el aspecto con la versión anterior (`git stash` o la rama `develop`) | Mismo sombreado, mismas líneas de borde y misma suavidad de curvas; las roscas igual de lisas |
+
+Si la vista previa de una herramienta tarda más de 150 ms en dibujarse, en la barra de estado debe aparecer «Preparando el dibujo de la pieza…» y desaparecer al terminar; con piezas sencillas no debe parpadear.
 
 ### 5.2 Letrero con fuentes decorativas
 

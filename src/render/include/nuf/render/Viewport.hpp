@@ -89,6 +89,8 @@ public:
     void pickSketchPlane();
     void cancelPickSketchPlane();
     bool isPickingSketchPlane() const;
+    // ¿Hay cuerpos esperando su malla (se prepara en segundo plano)? Mientras tanto se sigue viendo lo anterior.
+    bool preparingDrawing() const;
 
     // Entra al sketch: cámara de frente al plano, rejilla y coordenadas.
     void beginSketch(const sketch::Plane& plane);

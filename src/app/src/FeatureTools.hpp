@@ -148,7 +148,7 @@ protected:
     static Arrow arrowAlong(const sketch::Vec3& from, const sketch::Vec3& dir, double length);
 
     // Dibuja el resultado de la vista previa (en el hilo de la interfaz, cuando el cálculo ya acabó).
-    void showPreview(const document::Feature& feature, const document::Preview& result);
+    void showPreview(const document::Feature& feature, const document::Preview& result, const geometry::Shape& tool);
 
     document::Document& document_;
     render::Viewport& viewport_;

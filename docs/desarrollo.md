@@ -86,6 +86,10 @@ Cómo medir el rendimiento de forma comparable: [`rendimiento/mediciones.md`](re
 |---|---|
 | `NUF_RECOVERY_SECONDS` | Cada cuántos segundos se guarda la copia de recuperación (por defecto 60) |
 | `NUF_WRITE_REFERENCE=1` | Regenera `tests/data/v1.nuf` |
+| `NUF_VIGILANTE=1` (o ms) | Anota en `cierres/paradas.txt` cada parada de la interfaz con su pila (Windows) |
+| `NUF_PRUEBA_SOLO=<texto>` | Con `--prueba-interfaz`, solo los pasos cuyo nombre contiene el texto |
+| `NUF_PRUEBA_PILA_MS=<ms>` | Con `--prueba-interfaz`, umbral de parada para anotar la pila (por defecto 1000) |
+| `NUF_PRUEBA_CAPTURAS=<carpeta>` | Con `--prueba-interfaz`, guarda la captura de la vista previa translúcida |
 | `NUF_SAMPLE_STEP=<ruta>` | Con `nuf_tests "[sample]"`, escribe un STEP de muestra |
 | `QT_QPA_PLATFORM` | En Linux con Wayland la app usa XWayland (`xcb`) salvo que esta variable diga otra cosa |
 

@@ -215,6 +215,18 @@ document::Recipe GeneratorTool::recipe() const
 {
     const document::GeneratorValues v = values();
     const std::string suffix = lead_ != 0 ? suffix_ : document::freeSuffix(document_, generator_, v);
+    if (lastRecipe_ && lastKey_ == suffix + '\n' + document::encodeValues(v)) {
+        // Las mismas respuestas que la vista previa: se copia su receta en vez de armarla otra vez.
+        document::Recipe copy;
+        copy.parameters = lastRecipe_->parameters;
+        copy.bodyNames = lastRecipe_->bodyNames;
+        copy.component = lastRecipe_->component;
+        copy.origin = lastRecipe_->origin;
+        for (const auto& feature : lastRecipe_->features) {
+            copy.features.push_back(feature->clone());
+        }
+        return copy;
+    }
     document::Recipe made = generator_.make(v, suffix);
     made.origin = {generator_.id(), suffix, document::encodeValues(v), 0};
     return made;
@@ -274,30 +286,25 @@ void GeneratorTool::updatePreview()
     if (timer_ != nullptr) {
         timer_->stop();
     }
-    // El diseño se calcula en un hilo aparte (una caja con tapa o un par de engranajes tardan segundos): la
-    // receta se arma aquí, con los valores de los cuadros, y el hilo solo trabaja sobre esa copia.
+    // El diseño se calcula en un hilo aparte (una caja con tapa o un par de engranajes tardan segundos). Aquí, en el
+    // hilo de la interfaz, solo se leen los cuadros y el nombre libre de los parámetros (lo único que toca el documento
+    // o los widgets); armar la receta (en el Letrero incluye buscar la fuente y unir los contornos de las letras) y
+    // aplicarla corren en el hilo de trabajo, sobre copias.
     auto calculation = std::make_shared<Calculation>();
-    try {
-        calculation->recipe = std::make_shared<const document::Recipe>(recipe());
-    } catch (const std::exception& e) {
-        calculation->problem = e.what();
-        if (calculation->problem.find_first_not_of(' ') == std::string::npos) {
-            calculation->problem = "No se pudo calcular con esos valores";
-        }
-    } catch (...) {
-        calculation->problem = "No se pudo calcular con esos valores";
-    }
-    const auto present = [this, calculation, first] {
+    const document::GeneratorValues v = values();
+    const std::string suffix = lead_ != 0 ? suffix_ : document::freeSuffix(document_, generator_, v);
+    const document::Generator& generator = generator_;  // un generador es un objeto fijo, sin estado
+    const std::string key = suffix + '\n' + document::encodeValues(v);
+    const auto present = [this, calculation, first, key] {
         emit computingChanged(false);
         if (panel_) {
+            if (calculation->recipe && calculation->problem.empty()) {
+                lastKey_ = key;
+                lastRecipe_ = calculation->recipe;
+            }
             showResult(*calculation, first);
         }
     };
-    if (!calculation->recipe) {
-        previewRun_.cancel();
-        present();
-        return;
-    }
     okButton_->setEnabled(false);
     QTimer::singleShot(300, this, [this] {
         if (previewRun_.running() && statusLabel_ != nullptr) {
@@ -306,10 +313,19 @@ void GeneratorTool::updatePreview()
     });
     emit computingChanged(true);
     previewRun_.start(
-        [calculation] {
+        [calculation, v, suffix, &generator] {
             document::Document& scratch = calculation->scratch;
             std::string& problem = calculation->problem;
+            const auto explain = [&problem](const char* what) {
+                problem = what;
+                if (problem.find_first_not_of(' ') == std::string::npos) {
+                    problem = "No se pudo calcular con esos valores";
+                }
+            };
             try {
+                document::Recipe made = generator.make(v, suffix);
+                made.origin = {generator.id(), suffix, document::encodeValues(v), 0};
+                calculation->recipe = std::make_shared<const document::Recipe>(std::move(made));
                 document::applyRecipe(scratch, *calculation->recipe);
                 for (std::size_t i = 0; i < scratch.featureCount() && problem.empty(); ++i) {
                     const document::FeatureStatus status = scratch.status(scratch.feature(i).id());
@@ -318,12 +334,9 @@ void GeneratorTool::updatePreview()
                     }
                 }
             } catch (const std::exception& e) {
-                problem = e.what();
-                if (problem.find_first_not_of(' ') == std::string::npos) {
-                    problem = "No se pudo calcular con esos valores";
-                }
+                explain(e.what());
             } catch (...) {
-                problem = "No se pudo calcular con esos valores";
+                explain("");
             }
         },
         present);

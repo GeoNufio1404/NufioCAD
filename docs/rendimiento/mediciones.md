@@ -115,3 +115,25 @@ Qué dicen las paradas largas (la pila que anota el vigilante):
 Lo que queda de parada en esos pasos ya no es el trabajo de archivo: son los 0,6–1,5 s de mostrar cuerpos nuevos
 (mallado del visor, hallazgo A1), que es lo que ataca F3. El tiempo total de exportar o importar no baja (incluso sube
 algo por competir con la interfaz): lo que cambia es que la ventana no se queda sin responder.
+
+### Después de F3: dibujo en segundo plano (rama `feature/fluidez-dibujo`, mismo equipo, Debug)
+
+Tres ejecuciones completas (44 pasos, 0 fallidos en la última); entre ejecuciones los tiempos varían, por eso van como rango.
+
+| Paso | Antes de F3 (tras F2) | Ahora |
+|---|---|---|
+| Generador «Par de engranajes» | 1263 ms | 529–856 ms |
+| Generador «Engranaje interno» | 1396 ms | 591–683 ms |
+| Generador «Cremallera» | 948 ms | 463–646 ms |
+| Generador «Letrero o llavero» | 877 ms | 525–599 ms |
+| Importar un STEP (engranaje) | 769 ms | 440–472 ms |
+| Mover los dos cuerpos de un letrero | 885 ms | 512–774 ms |
+| Patrón lineal de 50 copias | 973 ms | 707–824 ms |
+| La parada más larga de toda la prueba | 1475 ms | 856–904 ms |
+
+**Por qué siguen en 0,5–0,9 s (y por qué es de Debug).** Con el umbral de pila a 350 ms
+(`NUF_PRUEBA_PILA_MS=350 NUF_PRUEBA_SOLO=Generador`), casi todas las paradas que quedan muestran el hilo de la interfaz
+dentro de `RtlEnterCriticalSection` llamado desde `recalloc_dbg` o `free_dbg`: el montón de depuración de MSVC tiene un
+solo candado para todo el proceso, y mientras los hilos de trabajo mallan en paralelo y reservan millones de bloques, la
+interfaz espera para hacer cualquier reserva. No es trabajo de geometría en el hilo de la interfaz. En Release esa
+contención no existe; se confirmará con la columna «Windows Release» (Oleada 7, D2).

@@ -10,6 +10,25 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Oleada 6, F3: dibujar sin parar la ventana (mallas, vista previa y generadores) — 16 nov. 2026
+
+- **Rama:** `feature/fluidez-dibujo` (sale de `feature/fluidez-llamadas`). Sin fusionar hasta la prueba manual (guía FLU.12–FLU.17).
+- **Qué hace:** (1) todos los cuerpos nuevos se mallan en un hilo de trabajo antes de mostrarse (antes solo las roscas), con los mismos parámetros que usa el visor; (2) el sólido rojo de «lo que se quita» se construye y se malla aparte; (3) el generador arma su receta en el hilo de trabajo y al aceptar reutiliza la de la última vista previa; (4) `fitAll` espera a que estén los cuerpos (sin esto, la vista quedaba mal encuadrada: lo encontró la prueba de la vista previa translúcida).
+- **Resultado (Debug):** generadores de engranajes de 1,3–1,4 s a 0,5–0,9 s de parada; la parada más larga de toda la prueba, de 1475 ms a 856–904 ms; 44/44 pasos y 251 pruebas unitarias en verde. Lo que queda es sobre todo el candado del montón de depuración de MSVC (ver [`rendimiento/mediciones.md`](rendimiento/mediciones.md)); falta medir en Release.
+
+| Parte | Dónde (para deshacerla a mano) |
+|---|---|
+| Malla de todos los cuerpos | `ViewportImpl::showBodies`, `startMeshTask`, `meshingFor`, `needsMesh`, `setWaiting` y el bloque de atributos de `AIS_Shape` (`ViewportImpl.hpp`); `Viewport::preparingDrawing` |
+| Encuadre aplazado | `Viewport::fitAll` y `ViewportImpl::fitWhenReady` (se aplica en `meshTaskFinished`) |
+| Sólido que se quita | `FeatureTool::updatePreview` / `showPreview` (`FeatureTools.cpp`); `ViewportImpl::showToolPreview` y `showPendingTool` |
+| Receta del generador | `GeneratorTool::updatePreview`, `recipe()`, `lastRecipe_`, `lastKey_` (`GeneratorTool.cpp/.hpp`); candado en `Viewport::textOutline` |
+| Pruebas y herramientas | `InterfaceCheck.cpp`: espera con `preparingDrawing()`, comprobación de borde de la vista previa, variables `NUF_PRUEBA_*` |
+
+- **Pendiente:** selección de caras al mostrar cada cuerpo, polígonos de las aristas sobre la malla, precalentar las fuentes, medir en Release y en Linux. Un fallo intermitente de foco en la flecha «Mover cuerpo (giro en X)» apareció una vez en la prueba completa y no se repite (pasa sola y en grupo).
+- **Riesgos al volver atrás:** ninguno en archivos guardados (solo cambia cómo se dibuja).
+
+---
+
 ## Oleada 6, F2: exportar, importar, medir y recuperar sin parar la ventana — 16 nov. 2026
 
 - **Rama:** `feature/fluidez-llamadas` (sale de `feature/fluidez-medir`). Sin fusionar hasta la prueba manual (guía FLU.1–FLU.11).

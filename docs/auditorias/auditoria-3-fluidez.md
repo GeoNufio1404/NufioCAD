@@ -28,6 +28,8 @@ La primera rama (`feature/fluidez-medir`) midió estos hallazgos con la prueba d
 
 **F2 (16 nov. 2026) hecho:** A2, A3, A4, A7 (la copia de recuperación), A8 y M3 pasaron a segundo plano; la ventana pasó de paradas de 0,3–2,4 s a menos de 160 ms en esos pasos (769 ms al importar, por el mallado del visor, que es A1). Detalle en la hoja de ruta (Oleada 6, F2) y en [`../rendimiento/mediciones.md`](../rendimiento/mediciones.md).
 
+**F3 (16 nov. 2026) hecho:** A1, M2 y A5. Las paradas de los generadores de engranajes bajaron de 1,3–1,4 s a 0,5–0,9 s; lo que queda es sobre todo contención del candado del montón de depuración de MSVC y se confirmará en Release. Un efecto colateral encontrado y corregido: encuadrar (`fitAll`) antes de tener los cuerpos. Detalle en la hoja de ruta y en [`../rendimiento/mediciones.md`](../rendimiento/mediciones.md).
+
 ## Hallazgos
 
 Cada uno lleva dónde está, por qué para la interfaz y qué se propone. «Patrón conocido» = pasar la llamada a
