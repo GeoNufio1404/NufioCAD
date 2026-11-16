@@ -26,6 +26,8 @@ veces, las búsquedas con coste cuadrático y el uso de memoria. El trabajo sale
 
 La primera rama (`feature/fluidez-medir`) midió estos hallazgos con la prueba de interfaz y el vigilante, y **confirmó A1, A3 y A4 con la pila de llamadas**: paradas de 0,8–1,4 s en generadores de engranajes (mallado de OCCT en el hilo de la interfaz), 260–300 ms **por clic** en el diálogo de Exportar con 5 cuerpos (2,2 s al pasar a calidad Alta), 2,4 s al importar un STEP de un engranaje y 0,4 s al medir caras de una rosca. Cifras completas en [`../rendimiento/mediciones.md`](../rendimiento/mediciones.md). Todo es Debug en Windows.
 
+**F2 (16 nov. 2026) hecho:** A2, A3, A4, A7 (la copia de recuperación), A8 y M3 pasaron a segundo plano; la ventana pasó de paradas de 0,3–2,4 s a menos de 160 ms en esos pasos (769 ms al importar, por el mallado del visor, que es A1). Detalle en la hoja de ruta (Oleada 6, F2) y en [`../rendimiento/mediciones.md`](../rendimiento/mediciones.md).
+
 ## Hallazgos
 
 Cada uno lleva dónde está, por qué para la interfaz y qué se propone. «Patrón conocido» = pasar la llamada a

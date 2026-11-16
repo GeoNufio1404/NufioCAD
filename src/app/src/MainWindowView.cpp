@@ -294,28 +294,60 @@ void MainWindow::updateMeasure()
             }
         }
     }
-    QString html = QStringLiteral("<b>Medir</b>");
+    const auto place = [this](const QString& html) {
+        measurePanel_->setText(html);
+        measurePanel_->adjustSize();
+        measurePanel_->move(16, sectionPanel_ != nullptr && sectionPanel_->isVisible() ? sectionPanel_->geometry().bottom() + 10 : 16);
+    };
     if (elements.empty()) {
-        html += QStringLiteral("<br>Elige una cara o una arista.<br>Con otra más, mide la distancia y el ángulo.");
-    } else {
-        const geometry::Measurement m = geometry::measure(elements);
-        html += QStringLiteral(" — ") + QString::fromStdString(m.title).toHtmlEscaped();
-        for (const std::string& line : m.lines) {
-            html += QStringLiteral("<br>") + QString::fromStdString(line).toHtmlEscaped();
-        }
-        if (selection.faces.size() + selection.edges.size() > 2) {
-            html += QStringLiteral("<br><i>Se miden las dos últimas por orden de lista.</i>");
-        }
+        measureRun_.cancel();
+        place(QStringLiteral("<b>Medir</b><br>Elige una cara o una arista.<br>Con otra más, mide la distancia y el ángulo."));
+        return;
     }
-    measurePanel_->setText(html);
-    measurePanel_->adjustSize();
-    measurePanel_->move(16, sectionPanel_ != nullptr && sectionPanel_->isVisible() ? sectionPanel_->geometry().bottom() + 10 : 16);
+    // La distancia entre superficies complejas (una rosca) tarda: se mide en un hilo y el panel avisa mientras.
+    // Si la selección cambia antes de acabar, el resultado viejo se descarta.
+    place(QStringLiteral("<b>Medir</b> — midiendo…"));
+    const bool moreThanTwo = selection.faces.size() + selection.edges.size() > 2;
+    struct Outcome {
+        geometry::Measurement measurement;
+        QString error;
+    };
+    auto outcome = std::make_shared<Outcome>();
+    measureRun_.start(
+        [outcome, elements = std::move(elements)] {
+            try {
+                outcome->measurement = geometry::measure(elements);
+            } catch (const std::exception& e) {
+                outcome->error = QString::fromUtf8(e.what());
+            } catch (...) {
+                outcome->error = QStringLiteral("error desconocido");
+            }
+        },
+        [outcome, moreThanTwo, place] {
+            if (!outcome->error.isEmpty()) {
+                place(QStringLiteral("<b>Medir</b> — no se pudo medir: ") + outcome->error.toHtmlEscaped());
+                return;
+            }
+            QString html = QStringLiteral("<b>Medir</b> — ") + QString::fromStdString(outcome->measurement.title).toHtmlEscaped();
+            for (const std::string& line : outcome->measurement.lines) {
+                html += QStringLiteral("<br>") + QString::fromStdString(line).toHtmlEscaped();
+            }
+            if (moreThanTwo) {
+                html += QStringLiteral("<br><i>Se miden las dos últimas por orden de lista.</i>");
+            }
+            place(html);
+        });
 }
 
 // Imprimir: revisa la pieza, la exporta a STL en una carpeta temporal y abre el slicer con ella.
+// Mallar y escribir el STL va en un hilo aparte.
 void MainWindow::printBodies()
 {
     if (modelBusy()) {
+        return;
+    }
+    if (exportRun_.running()) {
+        statusBar()->showMessage(QStringLiteral("Ya se está exportando; espera a que termine"), 4000);
         return;
     }
     const std::vector<document::Body>& bodies = document_.result().bodies;
@@ -342,30 +374,49 @@ void MainWindow::printBodies()
     }
     base.replace(QLatin1Char('\\'), QLatin1Char('_'));
     const QString path = folder.filePath(base + QStringLiteral(".stl"));
-    QApplication::setOverrideCursor(Qt::WaitCursor);
-    QString error;
-    try {
-        geometry::writeStl(std::filesystem::path(path.toStdU16String()), shapes, dialog.quality());
-    } catch (const std::exception& e) {
-        error = QString::fromUtf8(e.what());
-    }
-    QApplication::restoreOverrideCursor();
-    if (!error.isEmpty()) {
-        QMessageBox::warning(this, QStringLiteral("Imprimir"), error);
-        return;
-    }
-    if (!QProcess::startDetached(dialog.slicerPath(), {QDir::toNativeSeparators(path)})) {
-        QMessageBox::warning(this, QStringLiteral("Imprimir"),
-                             QStringLiteral("No se pudo abrir el slicer:\n%1\n\nEl archivo quedó en:\n%2")
-                                 .arg(QDir::toNativeSeparators(dialog.slicerPath()), QDir::toNativeSeparators(path)));
-        return;
-    }
-    statusBar()->showMessage(QStringLiteral("Abriendo %1 en el slicer").arg(QFileInfo(path).fileName()), 8000);
+    const QString slicer = dialog.slicerPath();
+    const geometry::MeshQuality quality = dialog.quality();
+
+    struct Outcome {
+        QString error;
+    };
+    auto outcome = std::make_shared<Outcome>();
+    statusBar()->showMessage(QStringLiteral("Preparando el STL para el slicer… puedes seguir mirando el diseño"));
+    exportRun_.start(
+        [outcome, path, shapes = std::move(shapes), quality] {
+            try {
+                geometry::writeStl(std::filesystem::path(path.toStdU16String()), shapes, quality);
+            } catch (const std::exception& e) {
+                outcome->error = QString::fromUtf8(e.what());
+            } catch (...) {
+                outcome->error = QStringLiteral("error desconocido");
+            }
+        },
+        [this, outcome, path, slicer] {
+            updateBusyBadge();
+            statusBar()->clearMessage();
+            if (!outcome->error.isEmpty()) {
+                QMessageBox::warning(this, QStringLiteral("Imprimir"), outcome->error);
+                return;
+            }
+            if (!QProcess::startDetached(slicer, {QDir::toNativeSeparators(path)})) {
+                QMessageBox::warning(this, QStringLiteral("Imprimir"),
+                                     QStringLiteral("No se pudo abrir el slicer:\n%1\n\nEl archivo quedó en:\n%2")
+                                         .arg(QDir::toNativeSeparators(slicer), QDir::toNativeSeparators(path)));
+                return;
+            }
+            statusBar()->showMessage(QStringLiteral("Abriendo %1 en el slicer").arg(QFileInfo(path).fileName()), 8000);
+        });
+    updateBusyBadge();
 }
 
 void MainWindow::exportBodies()
 {
     if (modelBusy()) {
+        return;
+    }
+    if (exportRun_.running()) {
+        statusBar()->showMessage(QStringLiteral("Ya se está exportando; espera a que termine"), 4000);
         return;
     }
     const std::vector<document::Body>& bodies = document_.result().bodies;
@@ -386,7 +437,7 @@ void MainWindow::exportBodies()
     const QString suggested = QString::fromStdString(document_.name());
 
     // Una lista de (archivo, cuerpos) según «un archivo por cuerpo».
-    std::vector<std::pair<QString, std::vector<geometry::Shape>>> jobs;
+    std::vector<ExportJob> jobs;
     if (dialog.onePerBody() && chosen.size() > 1) {
         const QString folder = QFileDialog::getExistingDirectory(this, QStringLiteral("Carpeta donde exportar"));
         if (folder.isEmpty()) {
@@ -415,9 +466,9 @@ void MainWindow::exportBodies()
     // «Un archivo por cuerpo» no pregunta cada nombre: avisa antes de pisar.
     if (jobs.size() > 1) {
         QStringList existing;
-        for (const auto& job : jobs) {
-            if (QFileInfo::exists(job.first)) {
-                existing << QFileInfo(job.first).fileName();
+        for (const ExportJob& job : jobs) {
+            if (QFileInfo::exists(job.path)) {
+                existing << QFileInfo(job.path).fileName();
             }
         }
         if (!existing.isEmpty()
@@ -428,36 +479,60 @@ void MainWindow::exportBodies()
             return;
         }
     }
+    startExport(std::move(jobs), dialog.format(), dialog.quality());
+}
 
-    QApplication::setOverrideCursor(Qt::WaitCursor);
-    QString error;
-    try {
-        for (const auto& [path, shapes] : jobs) {
-            const std::filesystem::path out = path.toStdU16String();
-            switch (dialog.format()) {
-            case ExportDialog::Format::Stl:
-                geometry::writeStl(out, shapes, dialog.quality());
-                break;
-            case ExportDialog::Format::Obj:
-                geometry::writeObj(out, shapes, dialog.quality());
-                break;
-            case ExportDialog::Format::Step:
-                geometry::writeStep(out, shapes);
-                break;
+// Mallar y escribir los archivos va en un hilo de trabajo sobre las formas (inmutables y compartidas): con
+// roscas o engranajes son segundos, y la ventana sigue viva mientras tanto.
+void MainWindow::startExport(std::vector<ExportJob> jobs, ExportDialog::Format format, geometry::MeshQuality quality)
+{
+    if (exportRun_.running()) {
+        statusBar()->showMessage(QStringLiteral("Ya se está exportando; espera a que termine"), 4000);
+        return;
+    }
+    struct Outcome {
+        QString error;
+    };
+    auto outcome = std::make_shared<Outcome>();
+    const std::size_t count = jobs.size();
+    const QString first = count == 0 ? QString() : QDir::toNativeSeparators(jobs.front().path);
+    statusBar()->showMessage(count == 1 ? QStringLiteral("Exportando a %1… puedes seguir mirando el diseño").arg(first)
+                                        : QStringLiteral("Exportando %1 archivos… puedes seguir mirando el diseño").arg(count));
+    exportRun_.start(
+        [outcome, jobs = std::move(jobs), format, quality] {
+            try {
+                for (const ExportJob& job : jobs) {
+                    const std::filesystem::path out = job.path.toStdU16String();
+                    switch (format) {
+                    case ExportDialog::Format::Stl:
+                        geometry::writeStl(out, job.shapes, quality);
+                        break;
+                    case ExportDialog::Format::Obj:
+                        geometry::writeObj(out, job.shapes, quality);
+                        break;
+                    case ExportDialog::Format::Step:
+                        geometry::writeStep(out, job.shapes);
+                        break;
+                    }
+                }
+            } catch (const std::exception& e) {
+                outcome->error = QString::fromUtf8(e.what());
+            } catch (...) {
+                outcome->error = QStringLiteral("error desconocido");
             }
-        }
-    } catch (const std::exception& e) {
-        error = QString::fromUtf8(e.what());
-    }
-    QApplication::restoreOverrideCursor();
-
-    if (!error.isEmpty()) {
-        QMessageBox::warning(this, QStringLiteral("Exportar"), error);
-    } else {
-        statusBar()->showMessage(jobs.size() == 1 ? QStringLiteral("Exportado a %1").arg(QDir::toNativeSeparators(jobs.front().first))
-                                                  : QStringLiteral("Exportados %1 archivos").arg(jobs.size()),
-                                 8000);
-    }
+        },
+        [this, outcome, count, first] {
+            updateBusyBadge();
+            statusBar()->clearMessage();
+            if (!outcome->error.isEmpty()) {
+                QMessageBox::warning(this, QStringLiteral("Exportar"), outcome->error);
+            } else {
+                statusBar()->showMessage(count == 1 ? QStringLiteral("Exportado a %1").arg(first)
+                                                    : QStringLiteral("Exportados %1 archivos").arg(count),
+                                         8000);
+            }
+        });
+    updateBusyBadge();
 }
 
 void MainWindow::refreshModel()

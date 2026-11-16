@@ -513,3 +513,34 @@ TEST_CASE("La miniatura va en el archivo y se lee sin abrir el diseño", "[io][d
     io::loadDocument(path, reopened, view);
     REQUIRE(fingerprint(reopened) == fingerprint(original));
 }
+
+// Guardar en dos tiempos (Oleada 6, F2): armar el plan es rápido y se hace con el documento; escribirlo puede ir en
+// otro hilo mientras el documento sigue cambiando, y el archivo debe quedar igual que con saveDocument.
+TEST_CASE("Guardar en dos tiempos: el plan no depende del documento y escribe lo mismo que saveDocument", "[io][document]")
+{
+    Document original = buildRichDocument();
+    const std::string png = "miniatura de prueba";
+    const auto direct = tempFile("directo.nuf");
+    const auto twoStep = tempFile("dos_tiempos.nuf");
+    Cleanup cleanupDirect{direct};
+    Cleanup cleanupTwoStep{twoStep};
+    io::saveDocument(direct, original, {}, png);
+
+    const std::size_t featuresBefore = original.featureCount();
+    const io::SavePlan plan = io::prepareSave(original, {}, png);
+    // El documento cambia después de armar el plan (como pasa mientras otro hilo escribe): no debe notarse.
+    original.setName("Cambiado después de armar el plan");
+    original.addFeature(sketchOn(rectangleSketch(0, 0, 1, 1)));
+    io::writeSave(twoStep, plan);
+
+    REQUIRE(io::dumpDocument(twoStep) == io::dumpDocument(direct));
+    REQUIRE(io::readThumbnail(twoStep) == png);
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(twoStep, reopened, view);
+    REQUIRE(reopened.featureCount() == featuresBefore);
+    REQUIRE(reopened.name() != "Cambiado después de armar el plan");
+
+    // Un plan vacío no escribe nada y avisa.
+    REQUIRE_THROWS_AS(io::writeSave(tempFile("vacio.nuf"), io::SavePlan{}), io::NufError);
+}

@@ -168,6 +168,7 @@ void MainWindow::newDocument()
     if (!maybeSave()) {
         return;
     }
+    ++documentGeneration_;
     abandonEditing();
     recovery_->discard();
     document_.restore("Sin título", {}, 0, 1);
@@ -194,6 +195,7 @@ void MainWindow::openDocument()
 
 bool MainWindow::openPath(const std::filesystem::path& path, bool recovered, const std::filesystem::path& original)
 {
+    ++documentGeneration_;
     abandonEditing();
     io::ViewState view;
     QApplication::setOverrideCursor(Qt::WaitCursor);
@@ -354,50 +356,75 @@ void MainWindow::importStep()
 
 // Agrega el sólido del STEP como una operación más del historial (se puede
 // deshacer). El diseño guarda el sólido ya reparado, no la ruta del archivo.
+// Leer y reparar el STEP (lo que tarda) va en un hilo aparte; la ventana sigue viva y el historial se toca
+// al terminar. Devuelve true si la importación empezó.
 bool MainWindow::importStepFile(const std::filesystem::path& path)
 {
     if (isEditing()) {
         return false;
     }
-    QApplication::setOverrideCursor(Qt::WaitCursor);
-    QString error;
-    geometry::StepImport imported;
-    try {
-        imported = geometry::readStep(path);
-    } catch (const std::exception& e) {
-        error = QString::fromUtf8(e.what());
-    }
-    QApplication::restoreOverrideCursor();
-    if (!error.isEmpty()) {
-        QMessageBox::warning(this, QStringLiteral("Importar STEP"),
-                             QStringLiteral("No se pudo importar «%1».\n\n%2").arg(fromPath(path.filename()), error));
+    if (importRun_.running()) {
+        statusBar()->showMessage(QStringLiteral("Ya se está importando un STEP; espera a que termine"), 4000);
         return false;
     }
+    struct Outcome {
+        geometry::StepImport imported;
+        QString error;
+    };
+    auto outcome = std::make_shared<Outcome>();
+    const std::uint64_t generation = documentGeneration_;
+    const QString name = fromPath(path.filename());
+    statusBar()->showMessage(QStringLiteral("Importando %1… puedes seguir mirando el diseño").arg(name));
+    importRun_.start(
+        [outcome, path] {
+            try {
+                outcome->imported = geometry::readStep(path);
+            } catch (const std::exception& e) {
+                outcome->error = QString::fromUtf8(e.what());
+            } catch (...) {
+                outcome->error = QStringLiteral("error desconocido al leer el archivo");
+            }
+        },
+        [this, outcome, path, name, generation] {
+            updateBusyBadge();
+            statusBar()->clearMessage();
+            if (!outcome->error.isEmpty()) {
+                QMessageBox::warning(this, QStringLiteral("Importar STEP"),
+                                     QStringLiteral("No se pudo importar «%1».\n\n%2").arg(name, outcome->error));
+                return;
+            }
+            if (generation != documentGeneration_) {
+                statusBar()->showMessage(QStringLiteral("Se descartó la importación de %1: mientras tanto se abrió otro diseño").arg(name), 10000);
+                return;
+            }
+            if (isEditing()) {
+                statusBar()->showMessage(QStringLiteral("«%1» ya se leyó, pero hay un sketch o una herramienta abiertos: ciérralo y vuelve a importarlo").arg(name), 15000);
+                return;
+            }
+            auto feature = std::make_unique<document::ImportFeature>();
+            feature->source = name.toStdString();
+            feature->setName(QString(fromPath(path.stem())).toStdString());
+            feature->brep = std::make_shared<const std::string>(std::move(outcome->imported.brep));
+            feature->notes = std::move(outcome->imported.warnings);
+            const bool wasEmpty = document_.result().bodies.empty();
+            auto command = std::make_unique<commands::AddFeature>(std::move(feature));
+            const commands::AddFeature* raw = command.get();
+            commands_.push(std::move(command));
+            rememberDirectory(fromPath(path));
 
-    auto feature = std::make_unique<document::ImportFeature>();
-    feature->source = QString(fromPath(path.filename())).toStdString();
-    feature->setName(QString(fromPath(path.stem())).toStdString());
-    feature->brep = std::make_shared<const std::string>(std::move(imported.brep));
-    feature->notes = std::move(imported.warnings);
-    const bool wasEmpty = document_.result().bodies.empty();
-    auto command = std::make_unique<commands::AddFeature>(std::move(feature));
-    const commands::AddFeature* raw = command.get();
-    QApplication::setOverrideCursor(Qt::WaitCursor);
-    commands_.push(std::move(command));
-    QApplication::restoreOverrideCursor();
-    rememberDirectory(fromPath(path));
-
-    whenComputed([this, id = raw->id(), name = QString(fromPath(path.filename())), wasEmpty] {
-        const document::FeatureStatus status = document_.status(id);
-        if (status.health == document::Health::Error) {
-            statusBar()->showMessage(QStringLiteral("La importación falló: %1").arg(QString::fromStdString(status.message)), 15000);
-            return;
-        }
-        if (wasEmpty) {
-            viewport_->fitAll();
-        }
-        statusBar()->showMessage(QStringLiteral("Importado %1 (%2 cuerpo(s))").arg(name).arg(document_.result().bodies.size()), 8000);
-    });
+            whenComputed([this, id = raw->id(), name, wasEmpty] {
+                const document::FeatureStatus status = document_.status(id);
+                if (status.health == document::Health::Error) {
+                    statusBar()->showMessage(QStringLiteral("La importación falló: %1").arg(QString::fromStdString(status.message)), 15000);
+                    return;
+                }
+                if (wasEmpty) {
+                    viewport_->fitAll();
+                }
+                statusBar()->showMessage(QStringLiteral("Importado %1 (%2 cuerpo(s))").arg(name).arg(document_.result().bodies.size()), 8000);
+            });
+        });
+    updateBusyBadge();
     return true;
 }
 
@@ -435,7 +462,7 @@ void MainWindow::dropEvent(QDropEvent* event)
 void MainWindow::saveRecovery()
 {
     if (hasUnsavedWork()) {
-        recovery_->write(document_, currentView(), QString::fromStdU16String(path_.u16string()));
+        recovery_->writeAsync(document_, currentView(), QString::fromStdU16String(path_.u16string()));
     } else {
         recovery_->discard();
     }

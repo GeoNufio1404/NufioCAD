@@ -96,3 +96,22 @@ Qué dicen las paradas largas (la pila que anota el vigilante):
   mostrar el resultado): 49 uniones una a una.
 - Fuera de OCCT: una parada de 1 s al arrastrar un anillo está en el controlador de gráficos (`DrvSwapBuffers`) y otra
   en `QFileInfo::filePath` (los iconos de la barra de ayuda): conviene vigilarlas, no son de esta oleada.
+
+### Después de F2: llamadas que bloqueaban (rama `feature/fluidez-llamadas`, mismo equipo, Debug)
+
+44 pasos, 0 fallidos. «Antes» es la tabla de línea base de arriba; «ahora» es la parada de la ventana en el mismo paso
+(el trabajo sigue ocurriendo, pero en un hilo aparte).
+
+| Qué | Antes | Ahora (ventana parada) | El trabajo, ahora en segundo plano |
+|---|---|---|---|
+| Exportar una pieza con rosca (el peor formato, OBJ) | 797 ms | 75 ms | 1232 ms |
+| Exportar STL / STEP | 249 / 260 ms | dentro de los 75 ms | 519 / 534 ms |
+| Diálogo de Exportar con 5 cuerpos: abrirlo | 348 ms | menos de 100 ms | 539 ms (conteo y revisión) |
+| Diálogo: marcar o desmarcar un cuerpo | 260–303 ms cada vez | menos de 100 ms | 380 ms la primera vez; lo ya contado no se repite |
+| Diálogo: calidad Alta | 2200 ms | menos de 160 ms | 3131 ms |
+| Importar un STEP (engranaje de 20 dientes) | 2381 ms | 769 ms | 2530–3994 ms (varía entre ejecuciones) |
+| Pantalla de inicio con 10 recientes | 87 ms | 75 ms | miniaturas pequeñas: casi nada |
+
+Lo que queda de parada en esos pasos ya no es el trabajo de archivo: son los 0,6–1,5 s de mostrar cuerpos nuevos
+(mallado del visor, hallazgo A1), que es lo que ataca F3. El tiempo total de exportar o importar no baja (incluso sube
+algo por competir con la interfaz): lo que cambia es que la ventana no se queda sin responder.

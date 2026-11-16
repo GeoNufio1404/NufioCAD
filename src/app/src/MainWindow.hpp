@@ -3,14 +3,18 @@
 #include <nuf/commands/CommandStack.hpp>
 #include <nuf/document/Document.hpp>
 #include <nuf/document/Features.hpp>
+#include <nuf/geometry/Exchange.hpp>
 #include <nuf/io/DocumentFile.hpp>
 #include <nuf/sketch/Plane.hpp>
 
+#include "BackgroundRun.hpp"
+#include "ExportDialog.hpp"
 #include "SketchSession.hpp"
 
 #include <QByteArray>
 #include <QMainWindow>
 
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <map>
@@ -109,6 +113,12 @@ private:
     void updateExportAction();
     void exportBodies();
     void printBodies();
+    // Un archivo por trabajo (ruta y cuerpos). Mallar y escribir va en un hilo aparte: la ventana sigue viva.
+    struct ExportJob {
+        QString path;
+        std::vector<geometry::Shape> shapes;
+    };
+    void startExport(std::vector<ExportJob> jobs, ExportDialog::Format format, geometry::MeshQuality quality);
     void toggleMeasure(bool on);
     void startGenerator(const document::Generator& generator);
     // Vuelve a abrir el formulario de lo que sacó un generador (la operación «id» es una de ellas).
@@ -146,6 +156,11 @@ private:
     document::Document document_;
     commands::CommandStack commands_{document_};
     std::vector<std::function<void()>> afterCompute_;  // pendientes de que termine el cálculo en segundo plano
+    // Trabajos largos de archivo y medición, en hilos de trabajo (la interfaz no espera).
+    BackgroundRun exportRun_;   // exportar o preparar el STL para el slicer
+    BackgroundRun importRun_;   // leer y reparar un STEP
+    BackgroundRun measureRun_;  // medir (la distancia entre superficies complejas tarda)
+    std::uint64_t documentGeneration_ = 0;  // sube al crear o abrir otro diseño: lo que se calculó para el anterior se descarta
 
     render::Viewport* viewport_ = nullptr;
     QDockWidget* navigatorDock_ = nullptr;

@@ -38,6 +38,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QFile>
+#include <QFileInfo>
 #include <QListWidget>
 #include <QMap>
 #include <QPushButton>
@@ -170,6 +171,11 @@ bool InterfaceCheck::waitFor(const std::function<bool()>& condition, int timeout
 void InterfaceCheck::waitIdle()
 {
     settle(400);  // la vista previa espera 250 ms tras el último cambio
+    // Primero lo que corre aparte: al terminar, importar agrega una operación y eso arranca otro cálculo.
+    expect(waitFor([this] {
+               return !window_.exportRun_.running() && !window_.importRun_.running() && !window_.measureRun_.running();
+           }, 120000),
+           QStringLiteral("una exportación, importación o medición no terminó en segundo plano"));
     expect(waitFor([this] { return !window_.document_.computing(); }, 120000),
            QStringLiteral("el modelo no terminó de calcularse en segundo plano"));
     expect(waitFor([this] { return window_.tool_ == nullptr || !window_.tool_->previewing(); }, 120000),
@@ -1244,7 +1250,9 @@ int InterfaceCheck::run()
     QDir().mkpath(scratch);
     const auto scratchPath = [&](const QString& name) { return std::filesystem::path(QDir(scratch).filePath(name).toStdU16String()); };
 
-    step(QStringLiteral("Exportar STL, OBJ y STEP de una pieza con rosca (lo que hace Archivo › Exportar)"), [&] {
+    // Exportar, el diálogo de Exportar e importar un STEP ya van en segundo plano (Oleada 6, F2): estos pasos usan el
+    // mismo camino que la ventana y comprueban que lanzarlos devuelve al instante.
+    step(QStringLiteral("Exportar STL, OBJ y STEP de una pieza con rosca (Archivo › Exportar, en segundo plano)"), [&] {
         addThreadedCylinder();
         waitIdle();
         std::vector<geometry::Shape> shapes;
@@ -1253,12 +1261,23 @@ int InterfaceCheck::run()
         }
         expect(!shapes.empty(), QStringLiteral("no hay cuerpos que exportar"));
         const geometry::MeshQuality quality = geometry::MeshQuality::medium();
-        timed(QStringLiteral("contar los triángulos"), [&] { geometry::countTriangles(shapes, quality); });
-        timed(QStringLiteral("escribir el STL"), [&] { geometry::writeStl(scratchPath(QStringLiteral("exportar.stl")), shapes, quality); });
-        timed(QStringLiteral("escribir el OBJ"), [&] { geometry::writeObj(scratchPath(QStringLiteral("exportar.obj")), shapes, quality); });
-        timed(QStringLiteral("escribir el STEP"), [&] { geometry::writeStep(scratchPath(QStringLiteral("exportar.step")), shapes); });
-        for (const char* name : {"exportar.stl", "exportar.obj", "exportar.step"}) {
-            QFile::remove(QDir(scratch).filePath(QString::fromLatin1(name)));
+        const std::vector<std::pair<QString, ExportDialog::Format>> formats = {
+            {QStringLiteral("exportar.stl"), ExportDialog::Format::Stl},
+            {QStringLiteral("exportar.obj"), ExportDialog::Format::Obj},
+            {QStringLiteral("exportar.step"), ExportDialog::Format::Step}};
+        for (const auto& [name, format] : formats) {
+            const QString file = QDir(scratch).filePath(name);
+            QFile::remove(file);
+            QElapsedTimer total;
+            total.start();
+            timed(QStringLiteral("lanzar la exportación a %1").arg(name), [&] {
+                window_.startExport({MainWindow::ExportJob{file, shapes}}, format, quality);
+            });
+            expect(window_.exportRun_.running(), QStringLiteral("la exportación a %1 no quedó en segundo plano").arg(name));
+            waitIdle();
+            note(QStringLiteral("%1 listo en %2 ms").arg(name).arg(total.elapsed()));
+            expect(QFileInfo(file).size() > 0, QStringLiteral("%1 no se escribió").arg(name));
+            QFile::remove(file);
         }
         undoAll();
     });
@@ -1277,8 +1296,24 @@ int InterfaceCheck::run()
         }
         std::unique_ptr<ExportDialog> dialog;
         timed(QStringLiteral("abrir el diálogo"), [&] { dialog = std::make_unique<ExportDialog>(bodies, keys, &window_); });
-        lastAction_ = QStringLiteral("la revisión para imprimir del diálogo");
-        settle(900);  // la revisión se lanza tras una breve espera
+        // El conteo de triángulos y la revisión para imprimir corren en segundo plano: se espera a que terminen.
+        const auto working = [&] {
+            for (const QLabel* label : dialog->findChildren<QLabel*>()) {
+                if (label->text().startsWith(QStringLiteral("Contando")) || label->text().startsWith(QStringLiteral("Revisando"))) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        const auto finishWork = [&](const QString& what) {
+            lastAction_ = what;
+            QElapsedTimer total;
+            total.start();
+            settle(300);
+            expect(waitFor([&] { return !working(); }, 180000), QStringLiteral("el diálogo no terminó de contar y revisar"));
+            note(QStringLiteral("%1 listo en %2 ms").arg(what).arg(total.elapsed()));
+        };
+        finishWork(QStringLiteral("el conteo y la revisión iniciales"));
         if (QListWidget* list = dialog->findChild<QListWidget*>()) {
             for (int row = 0; row < list->count(); ++row) {
                 timed(QStringLiteral("quitar la marca de un cuerpo"), [&] { list->item(row)->setCheckState(Qt::Unchecked); });
@@ -1287,19 +1322,20 @@ int InterfaceCheck::run()
         } else {
             expect(false, QStringLiteral("el diálogo no tiene lista de cuerpos"));
         }
+        finishWork(QStringLiteral("el conteo tras marcar y desmarcar"));
         for (QComboBox* combo : dialog->findChildren<QComboBox*>()) {
             if (combo->count() == 3 && combo->itemText(0).startsWith(QStringLiteral("Baja"))) {
                 timed(QStringLiteral("calidad Alta"), [&] { combo->setCurrentIndex(2); });
+                finishWork(QStringLiteral("el conteo en calidad Alta"));
                 timed(QStringLiteral("calidad Baja"), [&] { combo->setCurrentIndex(0); });
+                finishWork(QStringLiteral("el conteo en calidad Baja"));
             }
         }
-        lastAction_ = QStringLiteral("la revisión para imprimir del diálogo");
-        settle(900);
         dialog.reset();
         undoAll();
     });
 
-    step(QStringLiteral("Importar un STEP con un engranaje (Archivo › Importar STEP)"), [&] {
+    step(QStringLiteral("Importar un STEP con un engranaje (Archivo › Importar STEP, en segundo plano)"), [&] {
         auto gear = std::make_unique<document::GearFeature>();
         gear->base.origin = document::OriginPlane::XY;
         gear->spec.teeth = 20;
@@ -1313,10 +1349,14 @@ int InterfaceCheck::run()
             geometry::writeStep(file, {window_.document_.result().bodies.front().shape});
         }
         undoAll();
-        bool imported = false;
-        timed(QStringLiteral("leer y reparar el STEP"), [&] { imported = window_.importStepFile(file); });
-        expect(imported, QStringLiteral("no se importó el STEP"));
+        bool started = false;
+        QElapsedTimer total;
+        total.start();
+        timed(QStringLiteral("lanzar la importación"), [&] { started = window_.importStepFile(file); });
+        expect(started, QStringLiteral("no empezó la importación del STEP"));
+        expect(window_.importRun_.running(), QStringLiteral("la importación no quedó en segundo plano"));
         waitIdle();
+        note(QStringLiteral("importado en %1 ms").arg(total.elapsed()));
         expect(window_.document_.result().bodies.size() == 1, QStringLiteral("el STEP importado no dio un cuerpo"));
         QFile::remove(QString::fromStdU16String(file.u16string()));
         undoAll();
@@ -1369,6 +1409,8 @@ int InterfaceCheck::run()
         expect(window_.startScreen_ != nullptr, QStringLiteral("la ventana no tiene pantalla de inicio"));
         if (window_.startScreen_ != nullptr) {
             timed(QStringLiteral("recargar la lista de recientes"), [&] { window_.startScreen_->reload(); });
+            lastAction_ = QStringLiteral("las miniaturas de los recientes");
+            settle(1500);  // las miniaturas se leen en segundo plano y llegan de una en una
         }
         RecentFiles::clear();
         for (const QString& name : files) {

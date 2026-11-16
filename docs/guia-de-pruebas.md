@@ -48,6 +48,7 @@ Va en el mismo orden que el programa: **1. General**, **2. Sketch**, **3. Sólid
 | 4.4 Par de engranajes | `PAR` |
 | 4.5 Todos los generadores: reabrir, recordar y restablecer | `GRE` |
 | 5.4 Vigilante de paradas (`NUF_VIGILANTE`) | `VIG` |
+| 5.5 Llamadas en segundo plano (exportar, importar, medir, recuperar) | `FLU` |
 
 ---
 
@@ -771,6 +772,24 @@ Para encontrar, **usando la aplicación de verdad**, lo que deja la ventana cong
 | VIG.5 | Abre la aplicación **sin** la variable | No se escribe nada nuevo en `paradas.txt` |
 
 El informe se acumula entre sesiones; bórralo cuando quieras empezar de cero. Mientras se arrastra o se redimensiona la ventana, Windows puede retrasar un instante los eventos y salir alguna parada falsa y corta.
+
+### 5.5 Llamadas en segundo plano: exportar, importar, medir, recuperar (`FLU`)
+
+Oleada 6, F2. Todas estas acciones ya no deben dejar la ventana sin responder. Usa una pieza con rosca (Sólido › Rosca sobre un cilindro) o un engranaje de muchos dientes para que tarden.
+
+| ID | Qué hacer | Qué debería pasar |
+|---|---|---|
+| FLU.1 | Archivo › Exportar, STL, calidad Alta; mientras escribe, gira la vista y mueve el ratón | La ventana responde; la barra dice «Exportando a …» y al terminar «Exportado a …». El archivo abre bien en el slicer |
+| FLU.2 | Lanza una exportación y, sin esperar, otra | La segunda dice «Ya se está exportando; espera a que termine» |
+| FLU.3 | Abre Exportar con varios cuerpos; marca y desmarca cuerpos y cambia la calidad (Baja, Media, Alta) | Aparece «Contando los triángulos…» y luego «Unos N triángulos». Marcar y desmarcar no congela el diálogo; repetir una combinación ya contada es instantáneo |
+| FLU.4 | En ese diálogo, cambia la boquilla o la cama | «Revisando la pieza para imprimir…» y después el resultado, sin congelar |
+| FLU.5 | Archivo › Imprimir con un slicer configurado | «Preparando el STL para el slicer…» y luego se abre el slicer con el archivo |
+| FLU.6 | Importa un STEP grande (de otro programa); mientras importa, mueve la vista | La ventana responde y dice «Importando …»; al terminar aparece la ficha «Importación» y el cuerpo, igual que antes |
+| FLU.7 | Importa un STEP y, antes de que termine, abre otro diseño (Archivo › Nuevo o Abrir) | Al terminar avisa «Se descartó la importación…» y no añade nada al diseño nuevo. Otra prueba: con un sketch abierto al terminar, avisa que lo cierres y vuelvas a importar |
+| FLU.8 | Sólido › Medir; elige una cara de una rosca y luego otra, rápido | El panel dice «midiendo…» y luego el resultado de la **última** selección; no se cuelga |
+| FLU.9 | `NUF_RECOVERY_SECONDS=5`, abre un diseño con un STEP importado grande, edita algo y espera varios ciclos | No hay tirón cada 5 s. Mata el proceso: al abrir ofrece restaurar. Con un cierre normal no queda ninguna copia en `recuperacion` |
+| FLU.10 | Guarda 10 diseños distintos y reinicia con la pantalla de inicio | La lista sale al instante (con «Cargando…») y las miniaturas aparecen de una en una |
+| FLU.11 | Con OneDrive «archivos a petición», que un reciente esté solo en la nube | Sale como «Solo en la nube» y no se descarga para dibujar la lista |
 
 ### 5.2 Letrero con fuentes decorativas
 

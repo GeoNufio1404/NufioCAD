@@ -296,7 +296,7 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
 
 void MainWindow::updateBusyBadge()
 {
-    const bool busy = toolComputing_ || document_.computing();
+    const bool busy = toolComputing_ || document_.computing() || exportRun_.running() || importRun_.running();
     if (busyBadge_ == nullptr || busyBadge_->isVisible() == busy) {
         return;
     }

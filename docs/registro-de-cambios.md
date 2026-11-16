@@ -10,6 +10,27 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Oleada 6, F2: exportar, importar, medir y recuperar sin parar la ventana — 16 nov. 2026
+
+- **Rama:** `feature/fluidez-llamadas` (sale de `feature/fluidez-medir`). Sin fusionar hasta la prueba manual (guía FLU.1–FLU.11).
+- **Qué hace:** pasa a hilos de trabajo lo que hasta ahora corría en el hilo de la interfaz: escribir STL/OBJ/STEP y preparar el STL del slicer; el conteo de triángulos y la revisión para imprimir del diálogo de Exportar (con caché por cuerpo y calidad); leer y reparar un STEP; medir; escribir la copia de recuperación; leer las miniaturas de los recientes (sin abrir los archivos que solo están en la nube de OneDrive).
+- **Resultado (Debug):** 44 pasos, 0 fallidos y 251 pruebas unitarias en verde. Exportar pasó de 797 ms de parada a 75 ms; el diálogo de Exportar, de 2200 ms (y 260–300 ms por clic) a menos de 160 ms; importar un STEP, de 2381 ms a 769 ms. Tabla en [`rendimiento/mediciones.md`](rendimiento/mediciones.md).
+
+| Parte | Dónde (para deshacerla a mano) |
+|---|---|
+| Exportar e Imprimir | `MainWindow::startExport`, `exportBodies`, `printBodies` (`MainWindowView.cpp`); `exportRun_` y `ExportJob` en `MainWindow.hpp` |
+| Diálogo de Exportar | `ExportDialog::refreshTriangleCount`, `showTriangleCount`, `runReview`, `showReview` y los miembros `reviewRun_`, `countRun_`, `triangles_` |
+| Importar STEP | `MainWindow::importStepFile` (`MainWindowFiles.cpp`), `importRun_` y `documentGeneration_` (sube en `newDocument` y `openPath`) |
+| Medir | `MainWindow::updateMeasure` (`MainWindowView.cpp`), `measureRun_` |
+| Guardado en dos tiempos | `io::prepareSave`, `io::SavePlan` y `io::writeSave` (`DocumentFile.cpp/.hpp`); `saveDocument` ahora los llama seguidos; `Recovery::writeAsync` y `discard()` (`Recovery.cpp`) |
+| Pantalla de inicio | `StartScreen::reload` y `isCloudOnly` (`StartScreen.cpp`), `thumbnailsRun_` |
+| Pruebas | `tests/test_document_file.cpp` (caso «Guardar en dos tiempos»); pasos de exportar, diálogo, importar y recientes en `InterfaceCheck.cpp`; `waitIdle` espera también a esos trabajos |
+
+- **Pendiente:** Guardar a mano (Ctrl+S) sigue síncrono; no se reutiliza la malla del conteo al exportar; exportar no se cancela a mitad; la prueba de interfaz no puede elegir caras para Medir (llama a `geometry::measure`); solo Debug en Windows. Lo que queda de parada en esos pasos es el mallado de los cuerpos nuevos en el visor (A1, rama F3).
+- **Riesgos al volver atrás:** ninguno en archivos guardados (el formato `.nuf` no cambia: `saveDocument` escribe lo mismo, comprobado por la prueba nueva).
+
+---
+
 ## Oleada 6, F1: vigilante de paradas y línea base de fluidez — 16 nov. 2026
 
 - **Rama:** `feature/fluidez-medir` (sale de `feature/engranajes-interno-cremallera`, que lleva el plan). Sin fusionar hasta la prueba manual (guía VIG.1–VIG.5).
