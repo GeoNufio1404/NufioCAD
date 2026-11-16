@@ -2,6 +2,7 @@
 #include "InterfaceCheck.hpp"
 #include "MainWindow.hpp"
 #include "SelfCheck.hpp"
+#include "StallWatch.hpp"
 #include "Theme.hpp"
 
 #include <nuf/io/DocumentFile.hpp>
@@ -16,6 +17,7 @@
 
 #include <filesystem>
 #include <iostream>
+#include <memory>
 #include <string_view>
 
 int main(int argc, char* argv[])
@@ -119,6 +121,12 @@ int main(int argc, char* argv[])
             QApplication::exit(code);
         });
         return QApplication::exec();
+    }
+    // NUF_VIGILANTE=1 (o un número de ms): anota en cierres/paradas.txt cada vez que la interfaz se queda parada
+    // más del umbral, con la pila de llamadas (Windows). Es para encontrar, usando la aplicación, lo que la congela.
+    std::unique_ptr<nuf::app::StallWatch> stallWatch;
+    if (const int stallMs = nuf::app::StallWatch::thresholdFromEnvironment(); stallMs > 0) {
+        stallWatch = std::make_unique<nuf::app::StallWatch>(stallMs, nuf::app::StallWatch::defaultDirectory());
     }
     // NufioCAD archivo.nuf (también lo que pasa el sistema al abrir un .nuf).
     const QStringList arguments = QApplication::arguments();

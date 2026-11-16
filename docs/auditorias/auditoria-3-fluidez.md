@@ -22,6 +22,10 @@ veces, las búsquedas con coste cuadrático y el uso de memoria. El trabajo sale
 | Malla de los cuerpos «pesados» (rosca) | `ViewportImpl::startMeshTask` (`ViewportImpl.hpp`) |
 | Abrir un `.nuf` e importar: el **cálculo** (no la lectura del STEP) | `whenComputed` (`MainWindowFiles.cpp`) |
 
+## Línea base medida (F1, 16 nov. 2026)
+
+La primera rama (`feature/fluidez-medir`) midió estos hallazgos con la prueba de interfaz y el vigilante, y **confirmó A1, A3 y A4 con la pila de llamadas**: paradas de 0,8–1,4 s en generadores de engranajes (mallado de OCCT en el hilo de la interfaz), 260–300 ms **por clic** en el diálogo de Exportar con 5 cuerpos (2,2 s al pasar a calidad Alta), 2,4 s al importar un STEP de un engranaje y 0,4 s al medir caras de una rosca. Cifras completas en [`../rendimiento/mediciones.md`](../rendimiento/mediciones.md). Todo es Debug en Windows.
+
 ## Hallazgos
 
 Cada uno lleva dónde está, por qué para la interfaz y qué se propone. «Patrón conocido» = pasar la llamada a

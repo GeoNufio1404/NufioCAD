@@ -47,6 +47,7 @@ Va en el mismo orden que el programa: **1. General**, **2. Sketch**, **3. Sólid
 | 4.3 Letrero o llavero | `LET` |
 | 4.4 Par de engranajes | `PAR` |
 | 4.5 Todos los generadores: reabrir, recordar y restablecer | `GRE` |
+| 5.4 Vigilante de paradas (`NUF_VIGILANTE`) | `VIG` |
 
 ---
 
@@ -752,9 +753,24 @@ NufioCAD.exe --prueba-interfaz [--informe ruta.txt] [--umbral-ms 20000]
 ```
 
 - Abre cada generador (Lightbox, Caja con tapa, Letrero o llavero, Par de engranajes), cambia un valor, acepta y deshace; hace lo mismo con Rosca, Engranaje, Caja y Cilindro; cancela una herramienta; cambia las unidades a cm y vuelve a mm; activa y desactiva Sección y Medir con un cuerpo; cambia el diámetro de un cilindro con una rosca cortante encima (debe volver al instante y calcular en segundo plano); y comprueba que al final no queda nada.
+- **Pasos de medición de fluidez (Oleada 6, F1):** reproducen lo que hoy se hace en el hilo de la interfaz y puede tardar: exportar STL/OBJ/STEP y contar triángulos de una pieza con rosca; abrir el diálogo de Exportar con 5 cuerpos, marcar y desmarcar y cambiar la calidad; importar un STEP con un engranaje; medir caras de una rosca; recargar la pantalla de inicio con 10 recientes; y un patrón lineal de 50 copias. No fallan por tiempo (solo por el umbral): las llamadas de más de 100 ms salen en el informe con su duración y sirven de línea base para comprobar cada rama de la Oleada 6 (ver [`auditoria-3-fluidez.md`](auditorias/auditoria-3-fluidez.md)).
 - Falla si algo no se abre o no se cierra, si deshacer deja restos, o si la interfaz se para más del umbral (por defecto 20 s: en Debug OpenCASCADE es lento).
 - El informe (por defecto `%TEMP%\NufioCAD-prueba-interfaz.txt`) dice la parada más larga de cada paso y qué la provocó, y, si hubo paradas de más de un segundo, **dónde estaba el programa** (la pila de llamadas).
 - Usa ajustes y carpetas propios (no toca tus ajustes, tus recientes ni las copias de recuperación). Devuelve 0 si todo va bien.
+
+### 5.4 Vigilante de paradas (`NUF_VIGILANTE`)
+
+Para encontrar, **usando la aplicación de verdad**, lo que deja la ventana congelada. Un hilo aparte mira si la interfaz sigue dando señales de vida; si se queda parada más de 200 ms anota cuánto duró y, en Windows, dónde estaba (la pila de llamadas).
+
+| ID | Qué hacer | Qué debería pasar |
+|---|---|---|
+| VIG.1 | En PowerShell: `$env:NUF_VIGILANTE = 1; .\NufioCAD.exe` (en Linux: `NUF_VIGILANTE=1 ./NufioCAD`) | La aplicación abre y se usa igual que siempre, sin notar el vigilante |
+| VIG.2 | Trabaja unos minutos con lo más pesado: exportar un STL de una pieza con rosca, abrir **Exportar** con varios cuerpos y marcar y desmarcar, importar un STEP, **Medir** sobre una rosca, abrir un generador con texto. Cierra la aplicación | Cierra con normalidad |
+| VIG.3 | Abre `%APPDATA%\NufioCAD\NufioCAD\cierres\paradas.txt` | Hay una línea `=== Sesión … · umbral 200 ms ===` y, por cada parada, la hora, `parada de N ms` y (Windows) las funciones donde estaba. Las paradas que tú notaste aparecen |
+| VIG.4 | Repite con `$env:NUF_VIGILANTE = 500` | La sesión dice `umbral 500 ms` y solo salen las paradas de medio segundo o más |
+| VIG.5 | Abre la aplicación **sin** la variable | No se escribe nada nuevo en `paradas.txt` |
+
+El informe se acumula entre sesiones; bórralo cuando quieras empezar de cero. Mientras se arrastra o se redimensiona la ventana, Windows puede retrasar un instante los eventos y salir alguna parada falsa y corta.
 
 ### 5.2 Letrero con fuentes decorativas
 

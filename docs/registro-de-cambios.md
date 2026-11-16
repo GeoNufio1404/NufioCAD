@@ -10,6 +10,23 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Oleada 6, F1: vigilante de paradas y línea base de fluidez — 16 nov. 2026
+
+- **Rama:** `feature/fluidez-medir` (sale de `feature/engranajes-interno-cremallera`, que lleva el plan). Sin fusionar hasta la prueba manual (guía VIG.1–VIG.5).
+- **Qué hace:** (1) `NUF_VIGILANTE=1` (o un número de ms) activa un hilo que vigila el latido del bucle de eventos y, si la interfaz se para más del umbral (200 ms por defecto), anota en `cierres/paradas.txt` la hora, la duración y la pila de llamadas (Windows). (2) Seis pasos nuevos en `--prueba-interfaz` reproducen lo que hoy ocupa el hilo de la interfaz: exportar, diálogo de Exportar con 5 cuerpos, importar STEP, medir una rosca, pantalla de inicio con 10 recientes y patrón de 50. (3) Primera línea base en [`rendimiento/mediciones.md`](rendimiento/mediciones.md).
+- **Resultado:** 44 pasos, 0 fallidos; parada máxima 2381 ms (importar un STEP, Debug). La pila confirmó A1 (mallado de OCCT en el hilo de la interfaz), A3 (`countTriangles` en cada clic del diálogo de Exportar) y A4 (reparación `ShapeFix_Solid` al importar).
+
+| Parte | Dónde (para deshacerla a mano) |
+|---|---|
+| Vigilante | `src/app/src/StallWatch.cpp/.hpp` (nuevo), arranque en `main.cpp` (bloque `NUF_VIGILANTE`), fuente en `src/app/CMakeLists.txt` |
+| Captura de pila compartida | `sampleThreadStack`, `currentThreadHandle`, `releaseThreadHandle` en `StallWatch.cpp`; `InterfaceCheck::startWatchdog` y `stopWatchdog` ahora las usan (antes llevaban el código de Windows dentro) |
+| Pasos nuevos | bloque «Pasos de la auditoría de fluidez (F1)» en `InterfaceCheck::run` (`src/app/src/InterfaceCheck.cpp`) |
+
+- **Pendiente:** medir los diálogos modales reales de Exportar y Medir (la prueba llama a las mismas funciones de geometría); las pilas de Qt salen con nombres aproximados (sin símbolos), las de OpenCASCADE son legibles; en Linux el vigilante anota la duración pero no la pila; medir en Release.
+- **Riesgos al volver atrás:** ninguno en archivos guardados; sin la variable `NUF_VIGILANTE` el vigilante no existe y el coste es cero.
+
+---
+
 ## Documentación reorganizada — 16 nov. 2026
 
 - **Rama:** `feature/engranajes-interno-cremallera` (solo documentación; no cambia código).
