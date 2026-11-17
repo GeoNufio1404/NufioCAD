@@ -86,6 +86,12 @@ enum class BooleanOp { Fuse, Cut, Common };
 // nula (un corte que se lleva todo el cuerpo).
 Shape boolean(BooleanOp op, const Shape& target, const Shape& tool);
 
+// Une varias formas de dos en dos, como un torneo (1+2, 3+4… y luego los resultados entre sí), en vez de ir añadiendo
+// una a una a un resultado cada vez más grande: cada unión trabaja con formas pequeñas y el coste de un patrón de 50
+// copias deja de crecer más que lo lineal. Mismo resultado que unirlas una a una (la unión es asociativa; si se
+// solapan entre sí, cada par lo resuelve el kernel). Forma nula si no hay ninguna.
+Shape fuseBalanced(std::vector<Shape> parts);
+
 // true si las formas se tocan o se solapan (para elegir con qué unir).
 bool touches(const Shape& a, const Shape& b);
 

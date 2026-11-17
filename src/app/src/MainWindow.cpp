@@ -34,6 +34,7 @@
 
 #include <QAction>
 #include <QFileInfo>
+#include <QFontMetrics>
 #include <QDir>
 #include <QApplication>
 #include <QActionGroup>
@@ -276,6 +277,13 @@ MainWindow::MainWindow(QWidget* parent)
     // distribución guardada (que ya no encaja) se descarta.
     restoreState(settings.value(QStringLiteral("ui/layout")).toByteArray(), kLayoutVersion);
     propertiesDock_->hide();  // aparece al usar una herramienta
+    // La primera vez que se dibuja un símbolo (⛔ ⚠ ℹ ✓ …) Qt busca la fuente de respaldo entre todas las del sistema
+    // (de 0,5 a 1,5 s en esta PC): se hace aquí, nada más abrir la ventana, y no al abrir el primer panel o generador
+    // que lo use. Tiene que ser en el hilo de la interfaz (la base de fuentes de Qt no se toca desde otro).
+    QTimer::singleShot(0, this, [] {
+        const QFontMetrics metrics{QApplication::font()};
+        metrics.horizontalAdvance(QStringLiteral("⛔⚠ℹ✓⏳→·…«»°²³"));
+    });
 }
 
 MainWindow::~MainWindow()

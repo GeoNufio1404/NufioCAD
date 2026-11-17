@@ -32,6 +32,8 @@ La primera rama (`feature/fluidez-medir`) midió estos hallazgos con la prueba d
 
 **F4 (16 nov. 2026) hecho:** A6 (cancelación en el kernel y cierre que oculta la ventana antes de esperar) y B3 (un solo `TaskPool`). Además, el pedido del usuario de un banner que cambie de color y un spinner mientras algo carga. Detalle en la hoja de ruta.
 
+**F5 (16 nov. 2026) hecho en parte, y primera medición en Release:** M5, M7, M8 (parcial) y M4; M1 y M6 quedan pendientes. En Release la parada máxima de la interfaz es de 133 ms (objetivo: 100 ms) y las paradas largas de Debug resultaron ser el candado del montón de depuración. Un hallazgo nuevo de la medición en Release, resuelto: la búsqueda de la fuente de respaldo de Qt la primera vez que se dibuja un símbolo (0,5–1,5 s). Detalle en la hoja de ruta y en [`../rendimiento/mediciones.md`](../rendimiento/mediciones.md).
+
 ## Hallazgos
 
 Cada uno lleva dónde está, por qué para la interfaz y qué se propone. «Patrón conocido» = pasar la llamada a

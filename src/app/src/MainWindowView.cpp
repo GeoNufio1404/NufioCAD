@@ -546,6 +546,14 @@ void MainWindow::refreshModel()
     const std::size_t upTo = shownUpTo();
     const document::ModelState& state = document_.stateBefore(upTo);
     updateExportAction();
+    // Con el modelo calculándose en segundo plano, los estados de abajo son todavía los anteriores: rehacer los cuerpos,
+    // los sketches y el navegador ahora sería trabajo perdido (al terminar el cálculo vuelve a avisar y se hace una vez).
+    // Solo se refresca lo que ya es de verdad: el historial.
+    if (document_.computing()) {
+        timeline_->updateGeometry();
+        timeline_->update();
+        return;
+    }
 
     // Con una herramienta activa, ella muestra su vista previa.
     if (!tool_) {

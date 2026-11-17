@@ -10,6 +10,26 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Oleada 6, F5: calcular menos, y primera medición en Release — 16 nov. 2026
+
+- **Rama:** `feature/fluidez-hilos`. Sin fusionar hasta la prueba manual (guía FLU.24–FLU.28).
+- **Qué hace:** (1) el patrón y «Unir» con varios cuerpos funden **en árbol** (`geometry::fuseBalanced`) en vez de uno a uno; (2) la forma guarda el índice de nombres de caras y aristas y su caja (`Shape::Impl`); (3) mientras el modelo se calcula, `refreshModel` solo actualiza el historial (los cuerpos y el navegador se rehacen una vez, al terminar); (4) al arrastrar en un sketch, el sombreado de regiones se rehace como mucho cada 100 ms y al soltar; (5) **fuentes de respaldo de Qt al abrir la ventana**: la primera vez que se dibuja un símbolo (⛔ ⚠ ℹ ✓) Qt tardaba de 0,5 a 1,5 s en buscar la fuente, y paraba la ventana al abrir el primer generador.
+- **Resultado (Release, Windows, primera vez que se mide):** prueba de interfaz 44/44, **parada máxima 558 ms → 133 ms**; patrón lineal de 50 copias **2576 ms → 758 ms**; 265 casos de pruebas unitarias en verde en 16 s (en Debug, unos 130 s). Tabla completa en [`rendimiento/mediciones.md`](rendimiento/mediciones.md).
+
+| Parte | Dónde (para deshacerla a mano) |
+|---|---|
+| Unión en árbol | `fuseBalanced` (`Modeling.hpp/.cpp`); usos en `PatternFeature::compute` (`FeaturesMore.cpp`) y la rama «Unir» (`Features.cpp`) |
+| Índice de nombres y caja | `Shape::Impl::NameIndex`, `cacheMutex`, `boundsCache` (`Naming.hpp`); `sameName`, `refOf`, `find` y `Shape::bounds` (`Shape.cpp`) |
+| Refresco | `MainWindow::refreshModel` (`MainWindowView.cpp`): salida temprana si `document_.computing()` |
+| Arrastre del sketch | `ViewportImpl::showSketch`, `rebuildProfiles`, `profilesClock`, `profilesTimer` (`ViewportImpl.hpp`) |
+| Fuentes de respaldo | final del constructor de `MainWindow` (`MainWindow.cpp`) |
+| Pruebas | caso «Buscar caras y aristas por nombre…» en `tests/test_edge_ops.cpp` |
+
+- **Pendiente:** M1 (aceptar sin recalcular la vista previa) y M6 (validez de la booleana una sola vez) sin hacer, con el motivo en la hoja de ruta; el navegador se rehace entero en cada refresco; el arrastre del sketch no se midió con un sketch grande; la cota de un clic en el sketch sigue en 133 ms.
+- **Riesgos al volver atrás:** ninguno en archivos guardados (los resultados de las operaciones no cambian; las pruebas de nombres y de patrones lo comprueban).
+
+---
+
 ## Oleada 6, F4: banner ámbar con spinner, cancelación en el kernel y un solo grupo de hilos — 16 nov. 2026
 
 - **Rama:** `feature/fluidez-hilos` (sale de `feature/fluidez-dibujo`). Sin fusionar hasta la prueba manual (guía FLU.18–FLU.23).

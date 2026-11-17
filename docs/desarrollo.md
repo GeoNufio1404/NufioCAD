@@ -65,7 +65,7 @@ cmake --preset windows-release
 cmake --build --preset windows-release
 ```
 
-vcpkg compila OpenCASCADE solo para Release (triplete `x64-windows-release`) la primera vez, y tarda. **Con Smart App Control activo en Windows 11, el `.exe` no se puede ejecutar** (los binarios sin firmar no cumplen el nivel de firma): hay que probar en otra máquina o en una máquina virtual, o apagarlo (es irreversible en esa instalación de Windows). Ver la Oleada 7 de la [hoja de ruta](hoja-de-ruta.md) y [`decisiones.md`](decisiones.md#distribución-y-firma-de-código-windows).
+vcpkg compila OpenCASCADE solo para Release (triplete `x64-windows-release`) la primera vez, y tarda. **Con Smart App Control activo en Windows 11, el `.exe` no se puede ejecutar** (los binarios sin firmar no cumplen el nivel de firma; probado el 16 nov. 2026, y llegó a bloquear también los Debug): hay que probar en otra máquina o en una máquina virtual, o apagarlo (es irreversible en esa instalación de Windows; en la PC de desarrollo se apagó y desde entonces funciona). Con esa decisión tomada, el Release corre las 265 pruebas en unos 16 s. Ver la Oleada 7 de la [hoja de ruta](hoja-de-ruta.md) y [`decisiones.md`](decisiones.md#distribución-y-firma-de-código-windows).
 
 ## Pruebas
 

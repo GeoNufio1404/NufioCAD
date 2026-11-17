@@ -148,3 +148,31 @@ tarda en soltar el trabajo cancelado**. Lo que se comprueba es, sobre todo, estr
 | Seis construcciones largas (rosca, engranaje helicoidal, redondeo, chaflán, vaciado, unión) abortan si ya se pidió cancelar | Prueba unitaria «Las construcciones largas se interrumpen…» |
 | Cancelar una tarea en cola no la ejecuta; el grupo crea hilos solo si hacen falta y no pasa del máximo; destruirlo cancela y recoge todo | 6 pruebas unitarias del grupo (`[taskpool]`) |
 | Prueba de interfaz completa | 44 pasos, 0 fallidos; parada máxima 955 ms (patrón de 50), generadores de engranajes 508–614 ms, igual que tras F3; el paso de la rosca con el banner ámbar y los spinners: 66 ms |
+
+## Windows Release (16 nov. 2026)
+
+Primera medición de **Release en Windows**, con Smart App Control apagado (ver la Oleada 7 de la
+[hoja de ruta](../hoja-de-ruta.md)). Mismo equipo que las tablas de Debug de arriba, mismas 44 pasos de la prueba de interfaz.
+
+| Medida | Windows Debug | Windows Release |
+|---|---|---|
+| Pruebas unitarias (265 casos) | ~130 s | **16 s** |
+| Parada máxima de la interfaz (prueba completa, antes de F5) | 904–955 ms | 558 ms |
+| Parada máxima tras F5 | — | **133 ms** |
+| Pasos con parada de más de 100 ms | casi todos los de generadores y engranajes | 1 (la cota de un clic en el sketch: 133 ms) |
+| Generador «Par de engranajes» | 529–856 ms | 27 ms |
+| Generador «Letrero o llavero» | 525–599 ms | 78 ms |
+| Mover los dos cuerpos de un letrero | 512–774 ms | 66 ms |
+| Diálogo de Exportar con 5 cuerpos | 89–111 ms | 14 ms |
+| Patrón lineal de 50 copias (cálculo completo, en segundo plano) | 24 042 ms | 2576 ms → **758 ms** tras F5 |
+| Exportar un STL / OBJ / STEP (en segundo plano) | 519–1232 ms | 502 / 531 / 532 ms |
+| Importar un STEP (engranaje, en segundo plano) | 2530–3994 ms | ~505 ms |
+| Cuadro de la vista vacía | 15 ms | 15 ms |
+
+**Lectura.** Confirma lo que se sospechaba en Debug: las paradas de 0,5 a 0,9 s eran sobre todo el candado del montón de
+depuración de MSVC y desaparecen en Release (en Debug se medía el candado, no el trabajo de la interfaz). Quedaban dos
+cosas reales, que F5 resolvió: el patrón de 50 copias (que se calculaba una a una) y **la primera vez que Qt dibuja un
+símbolo** (⛔ ⚠ ℹ ✓), que paraba la ventana de 0,5 a 1,5 s al abrir el primer generador: ahora esa búsqueda de la fuente de
+respaldo se hace al abrir la ventana (la parada de ese paso pasó a ~50 ms). Lo único que sigue pasando de 100 ms es
+la cota de un clic en el sketch (133 ms). El cuadro de la vista vacía (15 ms) lo marca el controlador gráfico
+(`DrvSwapBuffers`), igual que en Fedora.

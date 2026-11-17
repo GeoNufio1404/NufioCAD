@@ -663,6 +663,26 @@ Shape revolve(std::string_view tagView, const SketchRegion& region, const Axis& 
     }
 }
 
+Shape fuseBalanced(std::vector<Shape> parts)
+{
+    if (parts.empty()) {
+        return {};
+    }
+    while (parts.size() > 1) {
+        std::vector<Shape> next;
+        next.reserve(parts.size() / 2 + 1);
+        for (std::size_t i = 0; i + 1 < parts.size(); i += 2) {
+            throwIfCancelled();
+            next.push_back(boolean(BooleanOp::Fuse, parts[i], parts[i + 1]));
+        }
+        if (parts.size() % 2 == 1) {
+            next.push_back(std::move(parts.back()));
+        }
+        parts = std::move(next);
+    }
+    return std::move(parts.front());
+}
+
 Shape boolean(BooleanOp op, const Shape& target, const Shape& tool)
 {
     try {

@@ -1303,16 +1303,48 @@ public:
         const std::size_t fingerprint = sketch::geometryFingerprint(sketch);
         const bool geometryChanged = fingerprint != profilesFingerprint || !context->IsDisplayed(profiles)
                                      || profilesPlaneDirty;
-        if (geometryChanged) {
-            profilesFingerprint = fingerprint;
-            profilesPlaneDirty = false;
-            profiles->SetShape(profileCompound(sketch, toAx3(sketchPlane)));
-            profiles->SetToUpdate();
-            if (context->IsDisplayed(profiles)) {
-                context->Redisplay(profiles, false);
-            } else {
-                context->Display(profiles, AIS_Shaded, -1, false);
+        if (!geometryChanged) {
+            return;
+        }
+        // Al arrastrar, la geometría cambia en cada movimiento del ratón y hallar los perfiles y construir sus caras es
+        // lo más caro: se rehace como mucho cada 100 ms (y al soltar, con lo último).
+        constexpr int kProfilesEveryMs = 100;
+        if (context->IsDisplayed(profiles) && !profilesPlaneDirty && profilesClock.isValid() &&
+            profilesClock.elapsed() < kProfilesEveryMs) {
+            if (profilesTimer == nullptr) {
+                profilesTimer = new QTimer(&widget_);
+                profilesTimer->setSingleShot(true);
+                QObject::connect(profilesTimer, &QTimer::timeout, &widget_, [this] {
+                    rebuildProfiles();
+                    view->Invalidate();
+                    widget_.update();
+                });
             }
+            profilesTimer->start(int(kProfilesEveryMs - profilesClock.elapsed()));
+            return;
+        }
+        rebuildProfiles();
+    }
+
+    // Las regiones cerradas del sketch mostrado, sombreadas.
+    void rebuildProfiles()
+    {
+        if (!shownSketch) {
+            return;  // el sketch se cerró mientras esperaba el temporizador
+        }
+        const std::size_t fingerprint = sketch::geometryFingerprint(*shownSketch);
+        if (fingerprint == profilesFingerprint && context->IsDisplayed(profiles) && !profilesPlaneDirty) {
+            return;
+        }
+        profilesFingerprint = fingerprint;
+        profilesPlaneDirty = false;
+        profilesClock.start();
+        profiles->SetShape(profileCompound(*shownSketch, toAx3(sketchPlane)));
+        profiles->SetToUpdate();
+        if (context->IsDisplayed(profiles)) {
+            context->Redisplay(profiles, false);
+        } else {
+            context->Display(profiles, AIS_Shaded, -1, false);
         }
     }
 
@@ -1798,6 +1830,8 @@ public:
     bool sketchDragging = false;
     std::optional<sketch::Sketch> shownSketch;
     std::size_t profilesFingerprint = 0;  // geometría con la que se calcularon los perfiles sombreados
+    QElapsedTimer profilesClock;           // cuándo se rehicieron por última vez (para no hacerlo más de 10 veces por segundo)
+    QTimer* profilesTimer = nullptr;       // rehace los perfiles con lo último cuando pasa el tiempo
     bool profilesPlaneDirty = true;        // el plano cambió: hay que rehacerlos aunque la geometría sea la misma
     std::vector<sketch::EntityId> shownUnderconstrained;
     SketchHighlight shownHighlight;

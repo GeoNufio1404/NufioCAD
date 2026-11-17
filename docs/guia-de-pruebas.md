@@ -51,6 +51,7 @@ Va en el mismo orden que el programa: **1. General**, **2. Sketch**, **3. Sólid
 | 5.5 Llamadas en segundo plano (exportar, importar, medir, recuperar) | `FLU` |
 | 5.6 Dibujo en segundo plano (mallas, vista previa, generadores) | `FLU` |
 | 5.7 Indicador de carga y cierre con trabajo en marcha | `FLU` |
+| 5.8 Calcular menos (patrones, nombres, refresco y arrastre) | `FLU` |
 
 ---
 
@@ -824,6 +825,18 @@ Oleada 6, F4. Mientras algo carga, la barra de estado se pone **ámbar** y gira 
 | FLU.23 | Edita varias veces seguidas el diámetro de un cilindro con una rosca encima | Solo vale el último; nunca se ve un resultado viejo después de uno nuevo |
 
 Los colores: azul `#0B5CAD` en reposo y ámbar `#A85A00` mientras carga; el parpadeo al cambiar el mensaje se aclara con el color de cada estado. Si el spinner te molesta, es un indicador pequeño (16 px) y solo gira mientras se ve.
+
+### 5.8 Calcular menos: patrones, nombres, refresco y arrastre del sketch (`FLU`, continuación)
+
+Oleada 6, F5. Estas pruebas buscan que lo de siempre siga igual (mismos resultados) y que ahora sea más rápido.
+
+| ID | Qué hacer | Qué debería pasar |
+|---|---|---|
+| FLU.24 | Crea una caja y un **patrón lineal de 50 copias** (Sólido › Patrón), con una distancia mayor que la caja (separadas) y luego menor (solapadas) | Sale la misma pieza de siempre en ambos casos (las solapadas, unidas en una sola); tarda mucho menos que antes. Guárdalo, ábrelo y comprueba que un sketch sobre una cara de una copia sigue funcionando |
+| FLU.25 | Une un cuerpo con varios que toca (extruir en «Unir» sobre dos cuerpos) | Quedan unidos como antes, con los nombres de las caras estables: un sketch sobre una de sus caras sigue enganchado tras editar una operación anterior |
+| FLU.26 | Abre la aplicación y, **sin esperar**, abre el primer generador (Lightbox) | No hay parón al abrirlo (la búsqueda de fuentes se hace sola al abrir la ventana; la propia ventana puede tardar hasta un segundo más en quedar fluida nada más arrancar) |
+| FLU.27 | Agrega un sketch, extruye, deshaz y rehaz varias veces | El navegador y el timeline se actualizan bien en cada paso y no queda nada a medias; con el cálculo en segundo plano, al terminar aparece el resultado y el navegador está al día |
+| FLU.28 | En un sketch con muchas figuras (50 o más líneas cerradas formando regiones), arrastra un punto | El sombreado de las regiones se actualiza unas diez veces por segundo mientras arrastras y queda **exacto** al soltar; el arrastre no se siente más lento |
 
 ### 5.2 Letrero con fuentes decorativas
 

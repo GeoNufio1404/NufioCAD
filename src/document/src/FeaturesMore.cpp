@@ -570,19 +570,15 @@ std::optional<std::string> PatternFeature::compute(ModelState& state) const
     spec.count = count;
     try {
         const std::vector<geometry::Shape> copies = geometry::pattern(tag(), source->shape, spec);
-        // Una a una (no todas juntas): si se solapan entre sí, el kernel las resuelve bien.
+        // De dos en dos, en árbol (no todas juntas, para que si se solapan entre sí cada par lo resuelva el kernel,
+        // ni una a una a un resultado cada vez mayor: con 50 copias eso era lo que más tardaba).
         if (operation == Operation::NewBody) {
-            geometry::Shape all = copies.front();
-            for (std::size_t i = 1; i < copies.size(); ++i) {
-                all = geometry::boolean(geometry::BooleanOp::Fuse, all, copies[i]);
-            }
-            state.bodies.push_back({tag(), "Cuerpo" + std::to_string(++state.bodiesCreated), all});
+            state.bodies.push_back({tag(), "Cuerpo" + std::to_string(++state.bodiesCreated), geometry::fuseBalanced(copies)});
         } else {
-            geometry::Shape all = source->shape;
-            for (const geometry::Shape& copy : copies) {
-                all = geometry::boolean(geometry::BooleanOp::Fuse, all, copy);
-            }
-            source->shape = all;
+            std::vector<geometry::Shape> parts;
+            parts.push_back(source->shape);
+            parts.insert(parts.end(), copies.begin(), copies.end());
+            source->shape = geometry::fuseBalanced(std::move(parts));
         }
     } catch (const geometry::GeometryError& e) {
         throw FeatureError(e.what());
