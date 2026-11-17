@@ -60,7 +60,7 @@ Opciones de CMake: `NUF_BUILD_APP` (la interfaz; `OFF` compila solo el núcleo y
 ### Release en Windows
 
 ```powershell
-$env:VCPKG_ROOT = "C:\devcpkg"; $env:QT_ROOT = "C:\Qt.8.3\msvc2022_64"; $env:VSLANG = "1033"
+$env:VCPKG_ROOT = "C:\dev\vcpkg"; $env:QT_ROOT = "C:\Qt\6.8.3\msvc2022_64"; $env:VSLANG = "1033"
 cmake --preset windows-release
 cmake --build --preset windows-release
 ```
