@@ -2089,6 +2089,24 @@ TEST_CASE("Las construcciones largas se interrumpen cuando el hilo de trabajo pi
     REQUIRE_FALSE(geometry::shell("s", block, {0}, 1.0, false).isNull());
 }
 
+// Si la malla preparada en segundo plano no lleva los polígonos de las aristas, el visor no dibuja el borde entre
+// caras y las caras del mismo color se funden (se vio al mover el mallado de todos los cuerpos fuera de la interfaz).
+TEST_CASE("La malla preparada en segundo plano lleva también el borde de cada cara", "[background][mesh]")
+{
+    const auto plane = sketch::Plane::fromPointAndNormal({0, 0, 0}, {0, 0, 1});
+    const std::atomic<bool> never{false};
+    for (const geometry::Shape& body : {geometry::box("b", plane, 20.0, 10.0, 5.0, false),
+                                        geometry::cylinder("c", plane, 10.0, 8.0)}) {  // el cilindro tiene costura
+        REQUIRE_FALSE(geometry::hasMesh(body));
+        REQUIRE_FALSE(geometry::hasBoundaryPolygons(body));
+        const geometry::PreparedMesh mesh = geometry::prepareMesh(body, 0.05, 0.5, never);
+        REQUIRE(mesh.valid());
+        geometry::applyMesh(body, mesh);
+        REQUIRE(geometry::hasMesh(body));
+        REQUIRE(geometry::hasBoundaryPolygons(body));
+    }
+}
+
 TEST_CASE("Una rosca y un engranaje se colocan en una posición X/Y del plano", "[thread][gear]")
 {
     Document doc;

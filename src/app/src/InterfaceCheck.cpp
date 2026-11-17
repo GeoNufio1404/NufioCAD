@@ -15,6 +15,7 @@
 #include "Units.hpp"
 
 #include <nuf/commands/FeatureCommands.hpp>
+#include <nuf/geometry/DisplayMesh.hpp>
 #include <nuf/geometry/Exchange.hpp>
 #include <nuf/geometry/Measure.hpp>
 #include <nuf/io/DocumentFile.hpp>
@@ -1172,6 +1173,14 @@ int InterfaceCheck::run()
     // Sección y medición con un cuerpo.
     step(QStringLiteral("Sección y medición con un cuerpo"), [&] {
         expect(openChangeAccept(window_.boxAction_, 3) == 1, QStringLiteral("no se creó la caja"));
+        waitIdle();
+        // La malla que prepara el visor aparte debe llevar el borde de cada cara; sin él las caras del mismo color se funden.
+        expect(!window_.document_.result().bodies.empty() &&
+                   geometry::hasBoundaryPolygons(window_.document_.result().bodies.front().shape),
+               QStringLiteral("el cuerpo se dibuja sin el borde de sus caras"));
+        if (const QString folder = qEnvironmentVariable("NUF_PRUEBA_CAPTURAS"); !folder.isEmpty()) {
+            window_.viewport_->grabFramebuffer().save(QDir(folder).filePath(QStringLiteral("cuerpo-solido.png")));  // para mirar las aristas
+        }
         for (QAction* action : {window_.sectionAction_, window_.measureAction_}) {
             expect(action->isEnabled(), QStringLiteral("«%1» no está disponible con un cuerpo").arg(action->text()));
             blocking(QStringLiteral("activar"), [&] { action->trigger(); });

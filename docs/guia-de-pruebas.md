@@ -806,7 +806,7 @@ Oleada 6, F3. Los cuerpos nuevos ya no se dibujan hasta tener su malla (se prepa
 | FLU.14 | Abre un diseño guardado con varias piezas; con el diseño ya abierto, Archivo › Abrir otro | Tras abrirlo, la vista queda **encuadrada** sobre todas las piezas |
 | FLU.15 | Extruir (o Agujero) en modo «Cortar» sobre una pieza; cambia la distancia | El volumen que se quita aparece en **rojo translúcido** poco después del cuerpo, sin congelar la ventana; al aceptar sale lo mismo que se veía |
 | FLU.16 | Letrero o llavero: cambia el texto y la fuente; acepta | El diseño aceptado es idéntico a la vista previa; aceptar no tarda más que antes (la receta de la vista previa se reutiliza) |
-| FLU.17 | Con piezas ya hechas, compara el aspecto con la versión anterior (`git stash` o la rama `develop`) | Mismo sombreado, mismas líneas de borde y misma suavidad de curvas; las roscas igual de lisas |
+| FLU.17 | Con piezas ya hechas (una caja, un cilindro, un engranaje), compara el aspecto con la versión anterior (`develop`) | Mismo sombreado, **misma línea de borde entre cada par de caras** (también en los cilindros) y misma suavidad de curvas; las roscas igual de lisas |
 
 Si la vista previa de una herramienta tarda más de 150 ms en dibujarse, en la barra de estado debe aparecer «Preparando el dibujo de la pieza…» y desaparecer al terminar; con piezas sencillas no debe parpadear.
 

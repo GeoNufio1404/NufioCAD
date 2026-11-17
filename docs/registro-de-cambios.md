@@ -43,7 +43,8 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 | Receta del generador | `GeneratorTool::updatePreview`, `recipe()`, `lastRecipe_`, `lastKey_` (`GeneratorTool.cpp/.hpp`); candado en `Viewport::textOutline` |
 | Pruebas y herramientas | `InterfaceCheck.cpp`: espera con `preparingDrawing()`, comprobación de borde de la vista previa, variables `NUF_PRUEBA_*` |
 
-- **Pendiente:** selección de caras al mostrar cada cuerpo, polígonos de las aristas sobre la malla, precalentar las fuentes, medir en Release y en Linux. Un fallo intermitente de foco en la flecha «Mover cuerpo (giro en X)» apareció una vez en la prueba completa y no se repite (pasa sola y en grupo).
+- **Corregido después de la prueba manual (16 nov. 2026):** con la malla preparada aparte, los cuerpos se dibujaban **sin el borde entre caras** (las caras del mismo color se fundían). `applyMesh` pasaba la malla de las caras pero no los polígonos de las aristas sobre ella, que son los que el visor usa para dibujar ese borde; ahora los pasa (también las costuras de los cilindros) y `hasBoundaryPolygons` lo comprueba (prueba unitaria nueva y comprobación en el paso de la caja de la prueba de interfaz).
+- **Pendiente:** selección de caras al mostrar cada cuerpo, precalentar las fuentes, medir en Release y en Linux. Un fallo intermitente de foco en la flecha «Mover cuerpo (giro en X)» apareció una vez en la prueba completa y no se repite (pasa sola y en grupo).
 - **Riesgos al volver atrás:** ninguno en archivos guardados (solo cambia cómo se dibuja).
 
 ---
