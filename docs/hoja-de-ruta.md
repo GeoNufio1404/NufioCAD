@@ -543,7 +543,7 @@ Resumen de todo lo pendiente que no son pruebas manuales; el detalle sigue en el
 | 1 — Cimientos | Todo | — | Solo las pruebas manuales |
 | 2 — Robustez | Fedora/Ubuntu, partir archivos, cálculo en segundo plano, Release medido (Fedora y Windows) | — | Prueba de interfaz en el CI (Xvfb; hoy el CI solo corre `--self-check`); limitaciones de Fases 2 y 3; filtro `*.exe` en Linux |
 | 3 — Usabilidad | Ayudas de los generadores, vista previa azul, errores claros, unidad en los cuadros | Interfaz Fusion (iconos, cinta, barra de navegación y tema sí) | Selector de unidad y atajos; ocultar HERRAMIENTAS en el sketch; aviso de recuperación; unidades restantes; paleta flotante, barra superior, menú radial, valores junto al cursor en Extruir/Revolución |
-| 4 — Operaciones | — | — | Las 6 líneas |
+| 4 — Operaciones | Lo básico de cada operación (Fases 5, 7, 8 y 9) | — | Sus variantes: patrón de operaciones, chaflán con dos distancias, vaciado cerrado, rosca sobre una cara, guías en barrido y loft, dividir cuerpos, sección por cara, STEP con colores… |
 | 5 — Generadores | Engranaje interno y cremallera | — | SVG/3MF; lightbox con canal LED y variantes de caja; letrero de varias líneas; engranajes de pocos dientes; tarjeta de Herramientas y control de malla |
 | 6 — Fluidez | F1–F6 | M8 (el navegador se rehace entero) | M1 y M6 (aplazadas con motivo) |
 | 7 — Distribución | D2 (Release en Windows) | — | D1 instalador, D3 firma, D4 SmartScreen, D5 falsos positivos, D6 winget/Store, D7 licencias |
@@ -566,7 +566,7 @@ Resumen de todo lo pendiente que no son pruebas manuales; el detalle sigue en el
 - [x] `hasHeavySurface`/`hasMesh` sin recorrer todas las caras en cada refresco: el resultado se guarda en la propia forma (`Shape::Impl`, inmutable): «pesada» se calcula una vez y «con malla» se recuerda cuando es cierta.
 - [x] **Cálculo del historial y de las vistas previas en segundo plano** (pedido en las pruebas: una rosca cortante colgaba la app al cambiar el diámetro del cilindro): hilo aparte sobre copias, un cambio nuevo cancela el cálculo en curso, las booleanas se interrumpen a media operación, «Calculando…» sobre la vista. Falta probarlo a mano (guía B.1–B.8).
 - [x] **Bucle de repintado en los cuadros numéricos** (la etiqueta de unidad pedía un layout sin parar y dejaba la vista a ~9 imágenes por segundo con cualquier herramienta abierta): corregido, el cuadro de la vista pasó de 110 ms a 14 ms (Debug).
-- [ ] Limitaciones de Fase 2 y 3 (ver tabla de Estado): lo proyectado y el texto bloqueados; recortar/extender/desfase solo con líneas, arcos y círculos; «hasta una cara» con conos y superficies libres. (Elegir cuerpos en unir/cortar y la flecha de la revolución ya están.)
+- [ ] Limitaciones de Fase 2 y 3 (ver tabla de Estado): el texto del sketch queda como curvas (no se vuelve a editar como texto); recortar/extender/desfase solo con líneas, arcos y círculos (elipses y splines no); «hasta una cara» con conos y superficies libres. (Ya están: lo proyectado se vuelve a proyectar cuando cambia la pieza, elegir cuerpos en unir/cortar y la flecha de la revolución.)
 
 **Oleada 3 — Usabilidad**
 - [x] Generadores: la ayuda de cada campo sale como tooltip (se probó un texto fijo bajo el campo y no gustó) y las últimas respuestas se recuerdan por generador (`QSettings`, `generator/<id>/<clave>`; se guardan al aceptar un diseño nuevo). Falta probarlo a mano (guía G.17–G.18; la flecha de medida ya lo comprueba la prueba de interfaz). **Hecho después:** botón «Restablecer valores» (guía R.1–R.3). **Pendiente:** agrupar los campos por secciones (medidas, tapa, cable…) con títulos plegables.
@@ -586,12 +586,14 @@ Resumen de todo lo pendiente que no son pruebas manuales; el detalle sigue en el
 - **Pendiente de las flechas:** sin probar a mano ni en la prueba automática: Revolución, conicidad de Extruir, Unión, Rosca (holgura: la fila solo está con «Cortar») y los generadores con la caja con tapa (esquina, postes, agujeros) y el Letrero (anilla); la flecha del ángulo de presión es una guía, no mide sobre el diente real; sin flecha: holgura y agujero del cable de los generadores, ángulo de presión y de hélice del par de engranajes, tamaño del texto del Letrero, ángulo de la cabeza del Agujero. Redondeo, Vaciado y Agujero tampoco están en la prueba automática (necesitan elegir aristas, caras o un sketch).
 
 **Oleada 4 — Ampliaciones de modelado**
-- [ ] Repetir y reflejar operaciones (no solo cuerpos); patrón por trayectoria; espejo de varios cuerpos.
-- [ ] Redondeo/chaflán: dos distancias, ángulo, radio variable, redondear una cara entera.
-- [ ] Vaciado cerrado y espesores por cara; agujeros con punto y clic en cara; roscas sobre caras cilíndricas.
-- [ ] Barrido y loft con guías, torsión y tangencias; (mover con gizmo: hecho, falta arrastrar sobre un plano); dividir cuerpos; componentes con origen propio; uniones cilíndricas.
-- [ ] Medir con línea dibujada y copiar; Sección con caras y planos de construcción; voladizos y soportes en la revisión.
-- [ ] STEP: pulgadas, colores, nombres y ensamblajes (XDE); reimportar; guardar la cámara; calidad de malla «Personalizada».
+
+Todas las operaciones de esta lista **ya existen en su forma básica** (Fases 5, 7, 8 y 9: patrón y espejo de cuerpos, redondeo y chaflán, vaciado, agujeros, roscas, barrido, loft, mover, uniones, medir, sección, importar STEP). Lo que sigue son **variantes que aún no tienen**; se comprobó en el código el 16 nov. 2026.
+- [ ] Patrón y espejo: hoy copian **un cuerpo**. Falta repetir o reflejar **operaciones** (una extrusión, un agujero), el patrón a lo largo de una trayectoria y el espejo de varios cuerpos a la vez.
+- [ ] Redondeo y chaflán: hoy una sola medida sobre las aristas elegidas. Falta chaflán con dos distancias o distancia y ángulo, radio variable a lo largo de la arista y redondear todas las aristas de una cara con un clic.
+- [ ] Vaciado, agujeros y roscas: el vaciado exige quitar al menos una cara y usa un solo espesor; falta el vaciado **cerrado** (hueco por dentro, sin abrir) y espesores distintos por cara. Los agujeros se colocan con un sketch; falta ponerlos con un clic en una cara. La rosca se crea como sólido nuevo en un punto; falta aplicarla **sobre un cilindro o agujero que ya existe** (eligiendo su cara).
+- [ ] Barrido y loft: hoy el barrido solo elige si el perfil sigue la trayectoria y el loft si es recto o suave; faltan curvas guía, torsión y condiciones de tangencia. Mover: el gizmo ya está, falta arrastrar libre sobre un plano. Faltan también dividir un cuerpo con un plano o una cara, componentes con origen propio y la unión cilíndrica (hay rígida, giratoria y deslizante).
+- [ ] Medir y Sección: Medir muestra el valor en el panel; falta dibujar la línea de la medida y copiar el valor. La sección solo usa los planos XY, XZ y YZ; falta cortar por una cara o un plano de construcción. La revisión para imprimir no avisa de voladizos ni de soportes.
+- [ ] STEP y archivos: hoy se importa la geometría en mm. Falta leer pulgadas, colores, nombres y ensamblajes (XDE), volver a importar un STEP que cambió, guardar la cámara en el diseño y una calidad de malla «Personalizada» al exportar.
 
 **Oleada 5 — Generadores y salida**
 - [ ] SVG como sketch (letrero y lightbox); 3MF multicuerpo con filamentos.
