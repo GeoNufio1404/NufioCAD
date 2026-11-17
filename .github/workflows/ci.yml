@@ -35,6 +35,34 @@ jobs:
       - name: Autoprueba de la app
         run: ./build/linux-release/src/app/NufioCAD --self-check
 
+      # Prueba de interfaz con la ventana real sobre una pantalla virtual (Xvfb) y OpenGL por software (Mesa):
+      # abre cada herramienta, dibuja, comprueba píxeles (guía naranja, vista previa, temas) y que ninguna parada
+      # de la interfaz pase del umbral. Las capturas de los dos temas se suben para mirarlas a ojo.
+      # PRUEBA: va con continue-on-error hasta que se vea estable en GitHub; cuando lo esté, se quita para que
+      # bloquee. Ver docs/hoja-de-ruta.md (Fase 14, P3).
+      - name: Instalar pantalla virtual
+        run: sudo apt-get install -y xvfb libgl1-mesa-dri libxcb-cursor0 libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0 libxcb-randr0 fonts-dejavu-core
+
+      - name: Prueba de interfaz (Xvfb)
+        continue-on-error: true
+        env:
+          QT_QPA_PLATFORM: xcb
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          MESA_GL_VERSION_OVERRIDE: "4.5"
+          MESA_GLSL_VERSION_OVERRIDE: "450"
+        run: |
+          mkdir -p capturas
+          xvfb-run -a -s "-screen 0 1600x900x24" ./build/linux-release/src/app/NufioCAD --prueba-interfaz --informe capturas/informe.txt --umbral-ms 1000
+          xvfb-run -a -s "-screen 0 1600x900x24" ./build/linux-release/src/app/NufioCAD --captura-temas capturas
+
+      - name: Subir informe y capturas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prueba-de-interfaz-linux
+          path: capturas
+          if-no-files-found: ignore
+
   windows:
     name: Windows (MSVC + vcpkg)
     runs-on: windows-latest

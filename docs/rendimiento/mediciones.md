@@ -149,6 +149,24 @@ tarda en soltar el trabajo cancelado**. Lo que se comprueba es, sobre todo, estr
 | Cancelar una tarea en cola no la ejecuta; el grupo crea hilos solo si hacen falta y no pasa del máximo; destruirlo cancela y recoge todo | 6 pruebas unitarias del grupo (`[taskpool]`) |
 | Prueba de interfaz completa | 44 pasos, 0 fallidos; parada máxima 955 ms (patrón de 50), generadores de engranajes 508–614 ms, igual que tras F3; el paso de la rosca con el banner ámbar y los spinners: 66 ms |
 
+## Pendiente: medir la Fase 13 en Linux
+
+Hecho en Windows (Debug y Release) pero **no en Linux**. Para cerrarlo (en tu Fedora, con la máquina en reposo: `cat /proc/loadavg` < 1):
+
+1. `git switch develop && git pull`, y limpia lo viejo: `rm -rf build/linux-debug build/linux-release` (las cabeceras no recompilan solas).
+2. Para cada preset (`linux-debug` y `linux-release`):
+   ```bash
+   cmake --preset linux-release && cmake --build --preset linux-release
+   ctest --preset linux-release                      # anota el tiempo total
+   ./build/linux-release/src/app/NufioCAD --prueba-interfaz --informe informe-release.txt
+   NUF_VIGILANTE=1 ./build/linux-release/src/app/NufioCAD --prueba-interfaz --informe informe-release-vigilante.txt
+   ```
+   (el vigilante en Linux anota la duración de cada parada, no su pila).
+3. De cada `informe-*.txt` copia la **parada más larga** (línea final) y la de cada paso de exportar, importar STEP y medir. Metas de la Fase 13: ninguna parada de más de **100 ms en Release** y **250 ms en Debug**.
+4. La prueba de memoria `nuf_tests "[.memory]"` es solo de Windows: en Linux déjala; si quieres medirla, hay que escribir el equivalente con `/proc/self/status` (VmHWM).
+5. Añade una columna «Linux Debug / Linux Release» en la tabla de «Fluidez» de arriba y una línea de conclusión («igual que Windows» o qué pasos se pasan del umbral y por qué). Si algún paso se pasa, anótalo en el «Pendiente de…» de la Fase 13 y avisa para arreglarlo.
+6. Cuando esté, marca el último punto de P3 en la [hoja de ruta](../hoja-de-ruta.md) y borra esta sección.
+
 ## Windows Release (16 nov. 2026)
 
 Primera medición de **Release en Windows**, con Smart App Control apagado (ver la Fase 19 de la

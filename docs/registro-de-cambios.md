@@ -10,6 +10,15 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Fase 14, P3: partir el visor y prueba de interfaz en el CI — 17 nov. 2026
+
+- **Rama:** `feature/partir-viewportimpl` (sale de `develop`). Sin cambios de comportamiento: lo único visible es la compilación.
+- **Qué cambia:** (1) `src/render/src/ViewportImpl.hpp` pasa de 2375 a ~500 líneas; sus 86 métodos se mueven, sin tocar su cuerpo, a `ViewportBodies.cpp`, `ViewportHandles.cpp`, `ViewportSketch.cpp`, `ViewportSketchDraw.cpp` y `ViewportScene.cpp` (agregados en `src/render/CMakeLists.txt`); las funciones libres de `ViewportDrawing.hpp` pasan a `inline` para poder incluirlo en varios archivos. (2) `rebuildSketch` usa una tabla por id en vez de recorrer las restricciones por cada anotación. (3) `.github/workflows/ci.yml`: el job de Linux corre la prueba de interfaz con Xvfb (con `continue-on-error`) y sube el informe y las capturas. (4) El filtro `*.exe` del slicer solo en Windows.
+- **Cómo volver atrás:** `git revert -m 1` de la fusión; o, solo el reparto, revertir el commit «Parte ViewportImpl.hpp…» (los demás cambios no dependen de él).
+- **Riesgos:** una compilación existente con objetos viejos puede dar avisos de símbolos duplicados (LNK4006): borrar `build/<preset>/src/render` y recompilar (ya está en [`desarrollo.md`](desarrollo.md)).
+
+---
+
 ## Hoja de ruta ordenada por fases — 16 nov. 2026
 
 - **Rama:** `feature/hoja-de-ruta-por-fases` (solo documentación y comentarios; no cambia el comportamiento).
