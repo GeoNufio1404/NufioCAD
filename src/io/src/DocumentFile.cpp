@@ -587,7 +587,8 @@ FeatureRow rowOf(const Feature& f)
                   {"gearType", g.spec.type == geometry::GearType::Internal ? "internal"
                                : g.spec.type == geometry::GearType::Rack   ? "rack"
                                                                            : "external"},
-                  {"rim", g.spec.rim}, {"length", g.spec.length}};
+                  {"rim", g.spec.rim}, {"length", g.spec.length},
+                  {"backlash", g.spec.backlash}, {"baseChamfer", g.spec.baseChamfer}};
         break;
     }
     case FeatureKind::ConstructionAxis: {
@@ -802,6 +803,8 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
                                               : geometry::GearType::External;
             g->spec.rim = p.value("rim", 5.0);
             g->spec.length = p.value("length", 0.0);  // los anteriores: barra de dientes completos
+            g->spec.backlash = p.value("backlash", 0.0);  // los anteriores: sin juego ni chaflán
+            g->spec.baseChamfer = p.value("baseChamfer", 0.0);
         }
         g->operation = parseEnum(kOperations, text(p, "operation"), "operación");
         feature = std::move(g);

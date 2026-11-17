@@ -56,7 +56,10 @@
 #include <ShapeUpgrade_UnifySameDomain.hxx>
 #include <Standard_Failure.hxx>
 #include <Standard_Version.hxx>
+#include <TopExp.hxx>
 #include <TopExp_Explorer.hxx>
+#include <NCollection_IndexedDataMap.hxx>
+#include <TopTools_ShapeMapHasher.hxx>
 #include <TopoDS_Iterator.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Compound.hxx>
@@ -968,8 +971,12 @@ Shape rackGear(const std::string& tag, const sketch::Plane& plane, const GearSpe
     const double m = spec.module;
     const double p = kPi * m;
     const double t = std::tan(spec.pressureAngle);
-    const double tipHalf = p / 4.0 - m * t;
-    const double rootHalf = p / 4.0 + 1.25 * m * t;
+    if (spec.backlash < 0.0) {
+        throw GeometryError("El juego entre dientes no puede ser negativo");
+    }
+    // El juego adelgaza cada diente: medio juego por lado.
+    const double tipHalf = p / 4.0 - m * t - spec.backlash / 2.0;
+    const double rootHalf = p / 4.0 + 1.25 * m * t - spec.backlash / 2.0;
     if (tipHalf <= 0.02 * p) {
         throw GeometryError("Los dientes salen puntiagudos: prueba con menos ángulo de presión");
     }
@@ -1081,7 +1088,9 @@ Shape rackGear(const std::string& tag, const sketch::Plane& plane, const GearSpe
 
 } // namespace
 
-Shape gear(std::string_view tagView, const sketch::Plane& plane, const GearSpec& spec)
+namespace {
+
+Shape gearSolid(std::string_view tagView, const sketch::Plane& plane, const GearSpec& spec)
 {
     const std::string tag(tagView);
     if (spec.type == GearType::Rack) {
@@ -1122,8 +1131,14 @@ Shape gear(std::string_view tagView, const sketch::Plane& plane, const GearSpec&
     }
     const auto inv = [](double a) { return std::tan(a) - a; };
     // Mitad del ancho angular del diente a un radio r (la evolvente).
+    if (spec.backlash < 0.0) {
+        throw GeometryError("El juego entre dientes no puede ser negativo");
+    }
+    // El juego adelgaza el diente (medio juego por lado, medido sobre la primitiva): un giro constante a cualquier
+    // radio. En el interno lo que se dibuja es el hueco, y el diente de la corona se adelgaza ensanchándolo.
+    const double slack = (internal ? -1.0 : 1.0) * spec.backlash / (2.0 * rp);
     const auto half = [&](double r) {
-        return kPi / (2.0 * z) - (inv(std::acos(std::min(1.0, rb / r))) - inv(spec.pressureAngle));
+        return kPi / (2.0 * z) - slack - (inv(std::acos(std::min(1.0, rb / r))) - inv(spec.pressureAngle));
     };
     const double r0 = std::max(rb, rf);  // dónde empieza la evolvente
     const double thetaS = half(r0);
@@ -1371,6 +1386,67 @@ Shape gear(std::string_view tagView, const sketch::Plane& plane, const GearSpec&
     } catch (const Standard_Failure& e) {
         throw kernelFailure("generar el engranaje", "prueba con otro módulo, otro número de dientes o menos ángulo de presión y de hélice", e);
     }
+}
+
+// Chaflán en el contorno de la cara inicial (la primera capa al imprimir), sin tocar el agujero central.
+Shape chamferStart(const std::string& tag, const Shape& body, double distance)
+{
+    const Shape::Impl& in = *body.impl();
+    int start = -1;
+    for (int i = 0; i < body.faceCount(); ++i) {
+        if (body.faceName(i) == tag + ":inicio") {
+            start = i;
+            break;
+        }
+    }
+    if (start < 0) {
+        throw GeometryError("No se encontró la cara inicial del engranaje");
+    }
+    NCollection_IndexedDataMap<TopoDS_Shape, NCollection_List<TopoDS_Shape>, TopTools_ShapeMapHasher> ancestors;
+    TopExp::MapShapesAndAncestors(in.shape, TopAbs_EDGE, TopAbs_FACE, ancestors);
+    std::vector<int> edges;
+    for (TopExp_Explorer ex(in.faces(start + 1), TopAbs_EDGE); ex.More(); ex.Next()) {
+        const int index = in.edges.FindIndex(ex.Current());
+        if (index <= 0) {
+            continue;
+        }
+        bool bore = false;
+        for (const TopoDS_Shape& face : ancestors.FindFromKey(ex.Current())) {
+            const int faceIndex = in.faces.FindIndex(face);
+            if (faceIndex > 0 && in.faceNames[std::size_t(faceIndex - 1)].ends_with(":lado:agujero")) {
+                bore = true;
+            }
+        }
+        if (!bore && std::ranges::find(edges, index - 1) == edges.end()) {
+            edges.push_back(index - 1);
+        }
+    }
+    try {
+        return chamfer(tag, body, edges, distance);
+    } catch (const GeometryError&) {
+        throw GeometryError("No se pudo achaflanar la base del engranaje: prueba con una distancia menor");
+    }
+}
+
+} // namespace
+
+Shape gear(std::string_view tagView, const sketch::Plane& plane, const GearSpec& spec)
+{
+    if (spec.baseChamfer < 0.0) {
+        throw GeometryError("El chaflán de la base no puede ser negativo");
+    }
+    if (spec.baseChamfer > kTiny && std::abs(spec.helixAngle) > kTiny) {
+        // Las caras laterales de la hélice son superficies libres: el kernel no las achaflanó en la prueba (0,15 mm).
+        throw GeometryError("El chaflán de la base solo se hace con dientes rectos (sin ángulo de hélice)");
+    }
+    Shape solid = gearSolid(tagView, plane, spec);
+    if (spec.baseChamfer <= kTiny) {
+        return solid;
+    }
+    if (spec.baseChamfer >= 0.5 * std::abs(spec.thickness) || spec.baseChamfer >= spec.module) {
+        throw GeometryError("El chaflán de la base es demasiado grande para el módulo o el ancho del engranaje");
+    }
+    return chamferStart(std::string(tagView), solid, spec.baseChamfer);
 }
 
 Shape box(std::string_view tagView, const sketch::Plane& plane, double width, double depth, double height, bool centered,

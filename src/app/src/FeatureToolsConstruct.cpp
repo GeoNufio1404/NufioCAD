@@ -425,6 +425,12 @@ void GearTool::createFields(QFormLayout* form)
     field("helixAngle", helix_);
     rim_ = lengthBox(5.0);
     field("rim", rim_);
+    backlash_ = lengthBox(0.0);
+    backlash_->setMinimum(0.0);
+    field("backlash", backlash_);
+    baseChamfer_ = lengthBox(0.0);
+    baseChamfer_->setMinimum(0.0);
+    field("baseChamfer", baseChamfer_);
     type_ = combo({QStringLiteral("Exterior"), QStringLiteral("Interno (corona)"), QStringLiteral("Cremallera")});
     operation_ = combo({QStringLiteral("Cuerpo nuevo"), QStringLiteral("Unir"), QStringLiteral("Cortar")});
     if (original != nullptr) {
@@ -432,6 +438,8 @@ void GearTool::createFields(QFormLayout* form)
                                : original->spec.type == geometry::GearType::Rack   ? 2
                                                                                    : 0);
         rim_->setValue(original->spec.rim);
+        backlash_->setValue(original->spec.backlash);
+        baseChamfer_->setValue(original->spec.baseChamfer);
         module_->setValue(original->spec.module);
         teeth_->setValue(original->spec.teeth);
         pressure_->setValue(original->spec.pressureAngle / kDegree);
@@ -451,13 +459,15 @@ void GearTool::createFields(QFormLayout* form)
     form->addRow(QStringLiteral("Agujero central"), bore_);
     form->addRow(QStringLiteral("Ángulo de hélice"), helix_);
     form->addRow(QStringLiteral("Aro (interno) o base (cremallera)"), rim_);
+    form->addRow(QStringLiteral("Juego del diente"), backlash_);
+    form->addRow(QStringLiteral("Chaflán de la base"), baseChamfer_);
     form->addRow(QStringLiteral("Operación"), operation_);
     connect(operation_, &QComboBox::currentIndexChanged, this, [this] {
         adjustDirection();
         updatePreview();
     });
     connect(type_, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
-    for (QDoubleSpinBox* box : {teeth_, rotation_, module_, pressure_, thickness_, bore_, helix_, rim_}) {
+    for (QDoubleSpinBox* box : {teeth_, rotation_, module_, pressure_, thickness_, bore_, helix_, rim_, backlash_, baseChamfer_}) {
         connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
     }
 }
@@ -497,6 +507,8 @@ std::unique_ptr<document::Feature> GearTool::build() const
     f->spec.bore = bore_->value();
     f->spec.helixAngle = helix_->value() * kDegree;
     f->spec.rim = rim_->value();
+    f->spec.backlash = backlash_->value();
+    f->spec.baseChamfer = baseChamfer_->value();
     f->spec.type = type_->currentIndex() == 1   ? geometry::GearType::Internal
                    : type_->currentIndex() == 2 ? geometry::GearType::Rack
                                                 : geometry::GearType::External;
