@@ -1,5 +1,7 @@
 #include "ViewportImpl.hpp"
 
+#include <unordered_map>
+
 // Dibujo del sketch: geometría, cotas, medidas y vista previa de la herramienta.
 // Métodos de Viewport::Impl; el estado y las declaraciones están en ViewportImpl.hpp.
 
@@ -238,19 +240,23 @@ void Viewport::Impl::rebuildSketch()
         }
         return diagonalPx(points);
     };
+    // Cada anotación busca su restricción: una tabla hecha una vez evita recorrer todas las restricciones por cada
+    // anotación (cuadrático con cientos de cotas).
+    std::unordered_map<sketch::ConstraintId, const sketch::Constraint*> constraintById;
+    constraintById.reserve(sketch.constraints().size());
+    for (const sketch::Constraint& c : sketch.constraints()) {
+        constraintById.emplace(c.id, &c);
+    }
     for (const sketch::Annotation& note : sketch::layoutAnnotations(sketch, annotationScale, &layoutMemory)) {
+        const auto owner = constraintById.find(note.constraint);
+        const sketch::Constraint* ownerConstraint = owner == constraintById.end() ? nullptr : owner->second;
         const bool picked =
             std::ranges::find(highlight.selectedConstraints, note.constraint) != highlight.selectedConstraints.end();
         const bool hovered = note.constraint == highlight.hoveredConstraint;
         const bool pinned = std::ranges::find(highlight.pinnedConstraints, note.constraint) != highlight.pinnedConstraints.end();
         bool relevant = note.dimension || constraintsAll || picked || hovered || pinned;
-        if (!relevant) {
-            for (const sketch::Constraint& c : sketch.constraints()) {
-                if (c.id == note.constraint) {
-                    relevant = touchesFocus(c);
-                    break;
-                }
-            }
+        if (!relevant && ownerConstraint != nullptr) {
+            relevant = touchesFocus(*ownerConstraint);
         }
         if (!relevant) {
             continue;
@@ -261,14 +267,9 @@ void Viewport::Impl::rebuildSketch()
             double size = 1e300;
             if (note.dimension) {
                 size = extentPx(note);
-            } else {
-                for (const sketch::Constraint& c : sketch.constraints()) {
-                    if (c.id == note.constraint) {
-                        if (const sketch::Entity* e = sketch.entity(c.first.entity)) {
-                            size = diagonalPx(sketch::polyline(e->geometry));
-                        }
-                        break;
-                    }
+            } else if (ownerConstraint != nullptr) {
+                if (const sketch::Entity* e = sketch.entity(ownerConstraint->first.entity)) {
+                    size = diagonalPx(sketch::polyline(e->geometry));
                 }
             }
             if (size < 24.0) {
