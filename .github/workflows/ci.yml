@@ -38,13 +38,12 @@ jobs:
       # Prueba de interfaz con la ventana real sobre una pantalla virtual (Xvfb) y OpenGL por software (Mesa):
       # abre cada herramienta, dibuja, comprueba píxeles (guía naranja, vista previa, temas) y que ninguna parada
       # de la interfaz pase del umbral. Las capturas de los dos temas se suben para mirarlas a ojo.
-      # PRUEBA: va con continue-on-error hasta que se vea estable en GitHub; cuando lo esté, se quita para que
-      # bloquee. Ver docs/hoja-de-ruta.md (Fase 14, P3).
+      # Bloquea el CI desde el 17 nov. 2026 (la primera ejecución dio 44 pasos, 0 fallidos, parada máx. 278 ms).
+      # Si falla por una parada lenta del runner y no por el código, subir --umbral-ms. Ver docs/hoja-de-ruta.md (Fase 14, P3).
       - name: Instalar pantalla virtual
         run: sudo apt-get install -y xvfb libgl1-mesa-dri libxcb-cursor0 libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0 libxcb-randr0 fonts-dejavu-core
 
       - name: Prueba de interfaz (Xvfb)
-        continue-on-error: true
         env:
           QT_QPA_PLATFORM: xcb
           LIBGL_ALWAYS_SOFTWARE: "1"
