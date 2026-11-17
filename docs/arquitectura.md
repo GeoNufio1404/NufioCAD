@@ -94,7 +94,7 @@ flowchart TB
 | `document` | `Document` (historial, marcador, parámetros, estados calculados, cálculo en segundo plano), las 21 operaciones (`Feature`), expresiones, generadores (recetas), `Signal<>` propio | `Document.hpp`, `Feature.hpp`, `Features.hpp` (`Features.cpp`, `FeaturesMore.cpp`), `Expression.hpp`, `Generators.hpp`, `Signal.hpp` |
 | `commands` | Cambios reversibles: agregar, editar, borrar, suprimir, mover, marcador, parámetros, nombres de cuerpos, recetas de generadores | `Command.hpp`, `CommandStack.hpp`, `FeatureCommands.hpp`, `AddRecipe.hpp`, `ReplaceRecipe.hpp`, `SetParameters.hpp` |
 | `io` | El `.nuf`: esquema SQLite, serialización JSON de cada operación, guardado atómico, miniatura, `--dump` | `NufFile.hpp`, `DocumentFile.hpp` |
-| `render` | `Viewport` (un `QOpenGLWidget` con el visor V3d/AIS de OCCT): cuerpos, sketch, selección, gizmos, flechas de medida, sección, ViewCube, mallas en segundo plano | `Viewport.hpp`, `ViewportImpl.hpp` (privado), `ViewportDrawing.hpp` |
+| `render` | `Viewport` (un `QOpenGLWidget` con el visor V3d/AIS de OCCT): cuerpos, sketch, selección, gizmos, flechas de medida, sección, ViewCube, mallas en segundo plano | `Viewport.hpp`, `ViewportImpl.hpp` (privado: estado y declaraciones), `ViewportDrawing.hpp`; los métodos de `Impl` por responsabilidad: `ViewportBodies.cpp`, `ViewportHandles.cpp`, `ViewportSketch.cpp`, `ViewportSketchDraw.cpp`, `ViewportScene.cpp` |
 | `app` | El ejecutable: ventana, cinta, navegador y timeline, herramientas de modelado y generadores, sesión de sketch, diálogos, temas, unidades, recuperación, informe de cierres, prueba automática de la interfaz | ver la tabla de abajo |
 
 ### Dentro de `app/`
@@ -332,7 +332,7 @@ flowchart LR
 |---|---|
 | `Document::startBackground` (`document/src/Document.cpp`) | El historial desde la primera operación que cambió |
 | `BackgroundRun` (`app/src/BackgroundRun.cpp`) | Vista previa de cada herramienta y generador, exportar, importar STEP, medir, miniaturas de recientes |
-| `ViewportImpl::startMeshTask` (`render/src/ViewportImpl.hpp`) | La malla de cada cuerpo nuevo y del sólido de la vista previa |
+| `Viewport::Impl::startMeshTask` (`render/src/ViewportBodies.cpp`) | La malla de cada cuerpo nuevo y del sólido de la vista previa |
 | `Recovery::writeAsync` (`app/src/Recovery.cpp`) | La copia de recuperación (su propio hilo, para poder esperarla al descartarla) |
 
 Mientras haya algo cargando, la barra de estado pasa a **ámbar** y gira un **spinner** (en la barra y sobre la vista):
@@ -390,7 +390,7 @@ erDiagram
 |---|---|
 | Añadir una operación nueva | `document/Features.hpp` (clase), `geometry/Modeling.hpp` (la geometría con nombres), `io/DocumentFile.cpp` (guardarla), `app/FeatureTools*.cpp` (herramienta), `tests/` |
 | Añadir un generador | `document/src/Generators.cpp` (clase `Generator` y su receta) y [`generadores.md`](generadores.md) |
-| Cambiar cómo se dibuja algo | `render/src/ViewportImpl.hpp` |
+| Cambiar cómo se dibuja algo | `render/src/Viewport*.cpp` (cuerpos, gizmo y flechas, sketch, escena; el estado en `ViewportImpl.hpp`) |
 | Una herramienta de dibujo del sketch | `sketch/include/nuf/sketch/Tools.hpp` y `sketch/src/*Tools.cpp` |
 | El solver de restricciones | `sketch/src/PlaneGcsSolver.cpp` y `third_party/planegcs/` |
 | El formato del archivo | `io/src/DocumentFile.cpp` y `io/src/NufFile.cpp` |
