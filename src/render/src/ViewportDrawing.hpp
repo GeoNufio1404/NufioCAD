@@ -156,7 +156,7 @@ public:
 // principal y no winId() del viewport: eso lo convertiría en una ventana X11
 // propia que Qt alterna con la principal (al maximizar o desacoplar paneles),
 // y OCCT se quedaría con una que ya no existe al cerrar la app.
-Aspect_Drawable nativeDrawable(QWidget& widget)
+inline Aspect_Drawable nativeDrawable(QWidget& widget)
 {
 #ifdef _WIN32
     (void)widget;
@@ -166,7 +166,7 @@ Aspect_Drawable nativeDrawable(QWidget& widget)
 #endif
 }
 
-Aspect_VKeyMouse toOcctButtons(Qt::MouseButtons buttons)
+inline Aspect_VKeyMouse toOcctButtons(Qt::MouseButtons buttons)
 {
     Aspect_VKeyMouse result = Aspect_VKeyMouse_NONE;
     if (buttons & Qt::LeftButton) {
@@ -181,7 +181,7 @@ Aspect_VKeyMouse toOcctButtons(Qt::MouseButtons buttons)
     return result;
 }
 
-Aspect_VKeyFlags toOcctModifiers(Qt::KeyboardModifiers modifiers)
+inline Aspect_VKeyFlags toOcctModifiers(Qt::KeyboardModifiers modifiers)
 {
     Aspect_VKeyFlags result = Aspect_VKeyFlags_NONE;
     if (modifiers & Qt::ShiftModifier) {
@@ -199,7 +199,7 @@ Aspect_VKeyFlags toOcctModifiers(Qt::KeyboardModifiers modifiers)
 // OCCT busca "sans-serif" con una lista fija de familias (DejaVu, Arial…)
 // que no siempre está instalada (Fedora 44 usa Noto/Adwaita). Se prefiere la
 // fuente de la interfaz de Qt y luego alternativas comunes.
-TCollection_AsciiString pickLabelFont()
+inline TCollection_AsciiString pickLabelFont()
 {
     const QStringList candidates{QFontDatabase::systemFont(QFontDatabase::GeneralFont).family(),
                                  QStringLiteral("Segoe UI"),     QStringLiteral("Arial"),
@@ -216,7 +216,7 @@ TCollection_AsciiString pickLabelFont()
     return TCollection_AsciiString("sans-serif");
 }
 
-Quantity_Color rgb(int r, int g, int b)
+inline Quantity_Color rgb(int r, int g, int b)
 {
     return Quantity_Color(r / 255.0, g / 255.0, b / 255.0, Quantity_TOC_sRGB);
 }
@@ -230,7 +230,7 @@ using geometry::toPnt;
 using geometry::toVec3;
 
 // Todas las caras de los perfiles, juntas (para sombrearlas).
-TopoDS_Shape profileCompound(const sketch::Sketch& sketch, const gp_Ax3& plane)
+inline TopoDS_Shape profileCompound(const sketch::Sketch& sketch, const gp_Ax3& plane)
 {
     BRep_Builder builder;
     TopoDS_Compound compound;
