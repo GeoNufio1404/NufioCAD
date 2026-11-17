@@ -102,8 +102,13 @@ ExportDialog::ExportDialog(const std::vector<document::Body>& bodies, const std:
         choose->hide();
     }
     connect(choose, &QPushButton::clicked, this, [this] {
-        const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("Elegir el slicer"), QString(),
-                                                          QStringLiteral("Programas (*.exe);;Todos los archivos (*)"));
+#ifdef Q_OS_WIN
+        // En Windows los programas son *.exe; en Linux y macOS no tienen extensión, así que no se filtra.
+        const QString filter = QStringLiteral("Programas (*.exe);;Todos los archivos (*)");
+#else
+        const QString filter = QStringLiteral("Todos los archivos (*)");
+#endif
+        const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("Elegir el slicer"), QString(), filter);
         if (!path.isEmpty()) {
             slicer_->setText(path);
         }
