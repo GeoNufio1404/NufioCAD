@@ -688,9 +688,9 @@ void Document::startBackground(std::size_t index)
     auto job = std::make_shared<Job>();
     job->generation = ++generation_;
     job->from = from;
-    std::vector<std::unique_ptr<Feature>> features;
+    std::vector<std::unique_ptr<Feature>> copies;
     for (std::size_t i = from; i < features_.size(); ++i) {
-        features.push_back(features_[i]->clone());
+        copies.push_back(features_[i]->clone());
     }
     ModelState before = from == 0 ? empty_ : states_[from - 1];
     const std::size_t marker = marker_;
@@ -703,7 +703,7 @@ void Document::startBackground(std::size_t index)
     job->task = geometry::TaskPool::instance().submit(
         // std::function exige un objeto copiable: las operaciones (únicas) viajan en un shared_ptr.
         [raw, self, post, alive, generation, from, marker, lookup = snapshotLookup(),
-         owned = std::make_shared<std::vector<std::unique_ptr<Feature>>>(std::move(features)),
+         owned = std::make_shared<std::vector<std::unique_ptr<Feature>>>(std::move(copies)),
          before = std::move(before)]() mutable {
         const std::vector<std::unique_ptr<Feature>>& features = *owned;
         try {

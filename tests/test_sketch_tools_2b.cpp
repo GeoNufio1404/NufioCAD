@@ -14,6 +14,17 @@
 #include <numbers>
 
 using namespace nuf::sketch;
+
+// Opciones del snap con nombre de campo: un inicializador agregado parcial ({0.5, 1.0}) hace que GCC avise de los
+// campos que faltan (-Wmissing-field-initializers) y, con -Werror, el CI de Linux no compila.
+static SnapOptions snapOptions(double tolerance, double gridStep, bool enabled = true)
+{
+    SnapOptions result;
+    result.tolerance = tolerance;
+    result.gridStep = gridStep;
+    result.enabled = enabled;
+    return result;
+}
 using Catch::Matchers::WithinAbs;
 
 namespace {
@@ -22,7 +33,7 @@ constexpr double kTol = 1e-6;
 
 struct Session {
     Sketch sketch;
-    SnapOptions options{0.5, 0.0};
+    SnapOptions options = snapOptions(0.5, 0.0);
 
     Snap at(double x, double y) const { return snap(sketch, {x, y}, options); }
     bool click(SketchTool& tool, double x, double y)

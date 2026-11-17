@@ -11,6 +11,17 @@
 #include <numbers>
 
 using namespace nuf::sketch;
+
+// Opciones del snap con nombre de campo: un inicializador agregado parcial ({0.5, 1.0}) hace que GCC avise de los
+// campos que faltan (-Wmissing-field-initializers) y, con -Werror, el CI de Linux no compila.
+static SnapOptions snapOptions(double tolerance, double gridStep, bool enabled = true)
+{
+    SnapOptions result;
+    result.tolerance = tolerance;
+    result.gridStep = gridStep;
+    result.enabled = enabled;
+    return result;
+}
 using Catch::Matchers::WithinAbs;
 
 namespace {
@@ -20,7 +31,7 @@ constexpr double kTol = 1e-9;
 // Simula el uso desde la UI: cada clic pasa por el snap, como en la app.
 struct Session {
     Sketch sketch;
-    SnapOptions options{0.5, 1.0};
+    SnapOptions options = snapOptions(0.5, 1.0);
 
     Snap at(double x, double y) const { return snap(sketch, {x, y}, options); }
 
@@ -54,7 +65,7 @@ TEST_CASE("Snap: puntos antes que la rejilla", "[sketch][snap]")
 {
     Sketch s;
     EntityId line = s.addLine({2.3, 4.1}, {10.0, 4.1});
-    SnapOptions options{0.5, 1.0};
+    SnapOptions options = snapOptions(0.5, 1.0);
 
     Snap end = snap(s, {2.5, 4.0}, options);
     REQUIRE(end.kind == SnapKind::Point);
@@ -84,7 +95,7 @@ TEST_CASE("Snap: puntos antes que la rejilla", "[sketch][snap]")
     REQUIRE_THAT(grid.point.x, WithinAbs(7.0, kTol));
     REQUIRE_THAT(grid.point.y, WithinAbs(-3.0, kTol));
 
-    Snap free = snap(s, {7.3, -2.6}, SnapOptions{0.5, 0.0});
+    Snap free = snap(s, {7.3, -2.6}, snapOptions(0.5, 0.0));
     REQUIRE(free.kind == SnapKind::None);
     REQUIRE_THAT(free.point.x, WithinAbs(7.3, kTol));
 }
@@ -227,7 +238,7 @@ TEST_CASE("Snap: intersecciones y sobre curva", "[sketch][snap]")
     Sketch s;
     EntityId line = s.addLine({-20, 3}, {20, 3});
     EntityId circle = s.addCircle({0, 0}, 5);
-    SnapOptions options{0.5, 1.0};
+    SnapOptions options = snapOptions(0.5, 1.0);
 
     // La línea y = 3 corta al círculo en (±4, 3).
     Snap cross = snap(s, {4.2, 3.1}, options);
@@ -248,7 +259,7 @@ TEST_CASE("Snap: intersecciones y sobre curva", "[sketch][snap]")
     REQUIRE_THAT(on.point.y, WithinAbs(3.0, kTol));
 
     // Ctrl: sin snap ni inferencias.
-    Snap free = snap(s, {4.2, 3.1}, SnapOptions{0.5, 1.0, false});
+    Snap free = snap(s, {4.2, 3.1}, snapOptions(0.5, 1.0, false));
     REQUIRE(free.kind == SnapKind::None);
     REQUIRE(free.free);
     REQUIRE_THAT(free.point.x, WithinAbs(4.2, kTol));
@@ -280,7 +291,7 @@ TEST_CASE("Ctrl: la línea no se endereza", "[sketch][tools]")
 {
     Sketch s;
     auto tool = makeLineTool();
-    const SnapOptions off{0.5, 1.0, false};
+    const SnapOptions off = snapOptions(0.5, 1.0, false);
     tool->click(s, snap(s, {0.0, 0.0}, off));
     tool->click(s, snap(s, {20.0, 0.5}, off));
     REQUIRE(count(s, ConstraintType::Horizontal) == 0);
