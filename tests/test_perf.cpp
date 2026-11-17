@@ -5,6 +5,7 @@
 
 #include <nuf/document/Document.hpp>
 #include <nuf/document/Features.hpp>
+#include <nuf/geometry/Exchange.hpp>
 #include <nuf/geometry/Modeling.hpp>
 #include <nuf/sketch/Annotations.hpp>
 #include <nuf/sketch/Pick.hpp>
@@ -15,9 +16,17 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <atomic>
 #include <chrono>
 #include <cstdio>
+#include <filesystem>
 #include <functional>
+#include <thread>
+
+#ifdef _WIN32
+#include <windows.h>
+#include <psapi.h>
+#endif
 
 using namespace nuf;
 using Clock = std::chrono::steady_clock;
@@ -174,3 +183,69 @@ TEST_CASE("Dónde se va el tiempo de una operación sobre un cuerpo complejo", "
                 "  booleana unir                    %8.1f ms\n  booleana cortar                  %8.1f ms\n  isValid                          %8.1f ms\n",
                 body.faceCount(), makeTool, touchesMs, int(touching), fuseMs, cutMs, validMs);
 }
+
+// Memoria al exportar una malla grande (Oleada 6, F6): cuánto sube el uso de memoria del proceso mientras se escribe un
+// STL y un OBJ. Solo en Windows (mide el conjunto de trabajo cada 2 ms). Uso: nuf_tests "[.memory]".
+#ifdef _WIN32
+namespace {
+
+std::size_t workingSetBytes()
+{
+    PROCESS_MEMORY_COUNTERS counters{};
+    GetProcessMemoryInfo(GetCurrentProcess(), &counters, sizeof counters);
+    return counters.WorkingSetSize;
+}
+
+// Lo más que sube la memoria sobre la de partida mientras corre «work».
+double peakGrowthMB(const std::function<void()>& work)
+{
+    const std::size_t base = workingSetBytes();
+    std::atomic<bool> done{false};
+    std::atomic<std::size_t> peak{base};
+    std::thread sampler([&] {
+        while (!done) {
+            const std::size_t now = workingSetBytes();
+            std::size_t seen = peak.load();
+            while (now > seen && !peak.compare_exchange_weak(seen, now)) {
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    });
+    work();
+    done = true;
+    sampler.join();
+    return double(peak.load() > base ? peak.load() - base : 0) / (1024.0 * 1024.0);
+}
+
+} // namespace
+
+TEST_CASE("Memoria al exportar una malla grande", "[.memory]")
+{
+    geometry::GearSpec spec;
+    spec.teeth = 150;
+    spec.module = 1.5;
+    spec.thickness = 40.0;
+    spec.helixAngle = 0.35;
+    const geometry::Shape gear = geometry::gear("g", sketch::Plane::xy(), spec);
+    const geometry::MeshQuality quality{0.003, 0.1};
+    const std::size_t triangles = geometry::countTriangles({gear}, quality);
+    const auto stl = std::filesystem::temp_directory_path() / "nuf_memoria.stl";
+    const auto obj = std::filesystem::temp_directory_path() / "nuf_memoria.obj";
+    double stlMs = 0.0;
+    double objMs = 0.0;
+    const double countMB = peakGrowthMB([&] { (void)geometry::countTriangles({gear}, quality); });
+    const double stlMB = peakGrowthMB([&] { stlMs = millis([&] { geometry::writeStl(stl, {gear}, quality); }); });
+    const double objMB = peakGrowthMB([&] { objMs = millis([&] { geometry::writeObj(obj, {gear}, quality); }); });
+    std::printf("
+malla de %zu triángulos
+  contar los triángulos   +%7.1f MB   %8.1f ms
+  escribir el STL         +%7.1f MB   %8.1f ms
+"
+                "  escribir el OBJ         +%7.1f MB   %8.1f ms
+",
+                triangles, countMB, 0.0, stlMB, stlMs, objMB, objMs);
+    std::filesystem::remove(stl);
+    std::filesystem::remove(obj);
+    REQUIRE(triangles > 0);
+}
+#endif
