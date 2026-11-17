@@ -1533,6 +1533,40 @@ public:
         // Las cotas seleccionadas se colocan primero y ganan los huecos.
         layoutMemory.priority.clear();
         layoutMemory.priority.insert(highlight.selectedConstraints.begin(), highlight.selectedConstraints.end());
+        // Los textos de las cotas se añaden al final: así el recuadro de un icono vecino no los tapa.
+        struct PendingText {
+            sketch::Vec2 at;
+            std::string text;
+            Quantity_Color color;
+            double size;
+        };
+        std::vector<PendingText> pendingTexts;
+        // Lo que mide en píxeles lo que ocupa una lista de puntos (diagonal de su caja).
+        const auto diagonalPx = [&](const std::vector<sketch::Vec2>& points) {
+            double x0 = 1e300, y0 = 1e300, x1 = -1e300, y1 = -1e300;
+            for (const sketch::Vec2& p : points) {
+                x0 = std::min(x0, p.x);
+                x1 = std::max(x1, p.x);
+                y0 = std::min(y0, p.y);
+                y1 = std::max(y1, p.y);
+            }
+            return x1 < x0 ? 1e300 : std::hypot(x1 - x0, y1 - y0) / annotationScale;
+        };
+        // Lo que mide la anotación: la línea de cota si la hay, si no lo que ocupan sus líneas.
+        const auto extentPx = [&](const sketch::Annotation& note) {
+            if (note.lines.size() >= 3) {
+                if (const auto* base = std::get_if<sketch::Line>(&note.lines[2])) {
+                    return std::hypot(base->end.x - base->start.x, base->end.y - base->start.y) / annotationScale;
+                }
+            }
+            std::vector<sketch::Vec2> points;
+            for (const sketch::Geometry& g : note.lines) {
+                for (const sketch::Vec2& p : sketch::polyline(g)) {
+                    points.push_back(p);
+                }
+            }
+            return diagonalPx(points);
+        };
         for (const sketch::Annotation& note : sketch::layoutAnnotations(sketch, annotationScale, &layoutMemory)) {
             const bool picked =
                 std::ranges::find(highlight.selectedConstraints, note.constraint) != highlight.selectedConstraints.end();
@@ -1549,6 +1583,26 @@ public:
             }
             if (!relevant) {
                 continue;
+            }
+            // Alejándose, las cotas (y los iconos) de lo que ya se ve diminuto se ocultan, como las medidas sueltas,
+            // y vuelven al acercarse. Lo seleccionado, señalado o fijado se queda.
+            if (!picked && !hovered && !pinned) {
+                double size = 1e300;
+                if (note.dimension) {
+                    size = extentPx(note);
+                } else {
+                    for (const sketch::Constraint& c : sketch.constraints()) {
+                        if (c.id == note.constraint) {
+                            if (const sketch::Entity* e = sketch.entity(c.first.entity)) {
+                                size = diagonalPx(sketch::polyline(e->geometry));
+                            }
+                            break;
+                        }
+                    }
+                }
+                if (size < 24.0) {
+                    continue;
+                }
             }
             Quantity_Color color = note.dimension ? (note.reference ? dimmed : accent) : dimmed;
             if (picked) {
@@ -1568,8 +1622,11 @@ public:
                     drawing->addGeometryOver(part, {color, 1.6});
                 }
             } else {
-                drawing->addText(note.anchor, note.text, color, box, note.dimension ? 13.0 : 11.0);
+                pendingTexts.push_back({note.anchor, note.text, color, note.dimension ? 13.0 : 11.0});
             }
+        }
+        for (const PendingText& pending : pendingTexts) {
+            drawing->addText(pending.at, pending.text, pending.color, box, pending.size);
         }
         if (measuresVisible) {
             addMeasures(sketch, focus, dimmed, text);
