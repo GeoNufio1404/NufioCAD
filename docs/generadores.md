@@ -5,6 +5,19 @@ le pone a las cosas y cómo se relaciona cada parámetro con la geometría. El e
 está en [`hoja-de-ruta.md`](hoja-de-ruta.md) (Fase 10) y cómo probarlos, en
 [`guia-de-pruebas.md`](guia-de-pruebas.md).
 
+## Familias de herramientas
+
+La pestaña **HERRAMIENTAS** y el menú Herramientas agrupan los generadores por familia (cada uno declara la suya con
+`Generator::category()`):
+
+| Familia | Generadores |
+|---|---|
+| **Cajas** | Lightbox, Caja con tapa |
+| **Letreros** | Letrero o llavero |
+| **Engranajes** | Par de engranajes, Engranaje interno, Cremallera |
+
+Un generador nuevo elige su familia (o crea una); las familias van seguidas en la lista.
+
 ## Cómo funciona un generador
 
 1. Hace unas preguntas (el formulario del panel de la derecha); las medidas se escriben en la unidad elegida en
@@ -290,7 +303,8 @@ Es el mismo engranaje con **Tipo = Cremallera** (los «Dientes» son los de la b
 
 | Qué | Fórmula |
 |---|---|
-| Paso | `π × módulo` (largo de la barra = `dientes × π × módulo`) |
+| Paso | `π × módulo` (con el modo por dientes, largo de la barra = `dientes × π × módulo`) |
+| Dientes con el largo en mm | exacto: `ceil(largo / (π × módulo))` y la barra se corta a `largo`; con dientes completos: `max(2; round(largo / (π × módulo)))` |
 | Avance por vuelta de la rueda | `π × módulo × dientes de la rueda` |
 | Posición de la barra | línea primitiva a `Y = −(módulo × dientes rueda / 2) − juego` (tangente a la rueda, alejada el juego) |
 | Giro de la rueda | `270°` reducido a un paso (`giro_rueda`, calculado): un diente de la rueda apunta hacia abajo, justo sobre un hueco de la barra |
@@ -299,12 +313,23 @@ Es el mismo engranaje con **Tipo = Cremallera** (los «Dientes» son los de la b
 | Pregunta | Parámetro | Por defecto | Mín. – máx. |
 |---|---|---|---|
 | Módulo | `modulo` | 2 mm | 0,3 – 20 |
-| Dientes de la rueda / de la cremallera | `dientes_rueda`, `dientes_cremallera` | 20 / 10 | 6 – 300 / 2 – 300 |
+| Dientes de la rueda | `dientes_rueda` | 20 | 6 – 300 |
+| **Largo de la barra** (elige cómo darlo) | `largo_modo` | Por número de dientes | por número de dientes · **largo exacto** (el último diente queda cortado) · **largo con dientes completos** (se ajusta al entero más cercano) |
+| Dientes de la cremallera (solo en el modo por dientes) | `dientes_cremallera` | 10 | 2 – 300 |
+| Largo exacto de la barra (solo en el modo exacto) | `largo_exacto` → parámetro `largo` | 60 mm | 8 – 2000 (máximo `300 × π × módulo`) |
+| Largo aproximado (solo en el modo con dientes completos) | `largo_aprox` → parámetro `largo` | 60 mm | 8 – 2000 |
 | Ángulo de presión | `presion` | 20° | 5 – 30 (la barra no admite más: el diente se solaparía en la raíz) |
 | Ancho | `ancho_rueda` | 8 mm | 1 – 200 |
 | Grosor de la base de la barra | `base` | 5 mm | 1 – 100 |
 | Agujero de la rueda | `agujero_rueda` | 5 mm | 0 – 100 |
 | Juego entre dientes | `juego` | 0,15 mm | 0 – 2 |
+
+**Largo en milímetros.** Con el modo exacto, la barra mide justo lo pedido: se hacen los dientes que hagan falta y lo que
+pasa del largo se **recorta en el propio perfil** (`GearSpec::length`), de modo que el último diente puede quedar
+cortado y la cara de corte se llama `lado:extremo_d`; no hay ninguna booleana ni toca a la rueda. El largo queda
+**ligado al parámetro `largo`**: se puede cambiar en Sólido › Parámetros y la barra se rehace (los dientes salen de la
+expresión `ceil(largo/(pi*modulo))`). Los diseños hechos antes del modo de largo se reabren por dientes, como estaban.
+El largo no puede pasar de `dientes × π × módulo` (se avisa) ni ser menor que un paso.
 
 Operaciones: «Engranaje: rueda» y «Engranaje: cremallera» (tipo Cremallera); cuerpos **Rueda** y **Cremallera** en el
 componente «Cremallera». Caras de la barra: `lado:d<i>:flanco_d|flanco_i|cabeza|raiz_d`, `lado:raiz_i`, `lado:base`,

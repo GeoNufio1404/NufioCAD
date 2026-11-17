@@ -135,6 +135,8 @@ struct GearSpec {
     double thickness = 10.0;             // mm a lo largo de la normal del plano (el signo da el sentido)
     double bore = 0.0;                   // diámetro del agujero central (0 = macizo)
     double helixAngle = 0.0;             // rad; 0 = recto, el signo es el sentido de la hélice
+    double length = 0.0;                 // cremallera: largo de la barra en mm; 0 = «teeth»·π·módulo. Si es menor, la barra
+                                         // se corta a esa medida (el último diente queda cortado); no puede ser mayor
 };
 
 // Interno: «teeth» dientes de la corona, cuyo hueco con forma de diente de rueda lleva cabeza −1 módulo y raíz

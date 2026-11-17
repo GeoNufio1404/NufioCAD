@@ -71,6 +71,8 @@ public:
 
     virtual std::string id() const = 0;
     virtual std::string title() const = 0;
+    // A qué familia pertenece («Cajas», «Letreros», «Engranajes»): la pestaña y el menú Herramientas las agrupan así.
+    virtual std::string category() const { return "Otros"; }
     virtual std::string description() const = 0;
     // Un resumen de lo que saldría con esos valores (relación de transmisión…), para mostrarlo en el formulario.
     virtual std::string summary(const GeneratorValues& /*values*/) const { return {}; }

@@ -10,6 +10,26 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Largo de la cremallera y herramientas por familia — 16 nov. 2026
+
+- **Rama:** `feature/cremallera-largo` (sale de `develop`). Sin fusionar hasta la prueba manual (guía CRE.1–CRE.8).
+- **Qué hace:** (1) **largo de la cremallera en milímetros**: una pregunta «Largo de la barra» con tres modos (por dientes, como antes; **largo exacto**, que corta el último diente; y **largo con dientes completos**) y el largo ligado al parámetro `largo`; los diseños anteriores se reabren por dientes; (2) **la pestaña y el menú Herramientas agrupan los generadores por familia**: Cajas (Lightbox, Caja con tapa), Letreros y Engranajes; (3) plan de las **familias de engranajes** (espina de pescado, chaflán de la base, holgura, tornillo sin fin, cónicos y selector de tipo en la herramienta) en la hoja de ruta (Oleada 8).
+- **Resultado (Release):** 269 casos de pruebas unitarias en verde (nuevas: cremallera cortada a varios largos, los tres modos del generador, guardar y reabrir con el largo, y las familias).
+
+| Parte | Dónde (para deshacerla a mano) |
+|---|---|
+| Largo en la geometría | `GearSpec::length` (`Modeling.hpp`); `rackGear` (`Modeling.cpp`): segmentos de arriba recortados en `x = length` |
+| Campo y archivo | `GearFeature::numericFields` (`FeaturesMore.cpp`); `"length"` en `DocumentFile.cpp` (los archivos anteriores no lo traen: 0 = barra entera) |
+| Generador | `RackAndPinion` (`Generators.cpp`): `largo_modo`, `largo_exacto`, `largo_aprox`, `rackSize`, `summary`, `make` |
+| Familias | `Generator::category` (`Generators.hpp`) y su override en cada generador; `MainWindowMenus.cpp` (menú con `addSection` y un grupo de la cinta por familia); `generatorGroups_` |
+| Pruebas | casos «Una cremallera se puede cortar a un largo exacto», «El generador de cremallera da el largo…», «El largo de la cremallera se guarda…» y «Cada generador tiene su familia…» en `tests/test_edge_ops.cpp` |
+
+- **Corregido de paso:** `tests/test_perf.cpp` estaba **roto en `develop`** (un literal con saltos de línea, de la prueba de memoria): se trae la versión corregida de `feature/fluidez-memoria`, idéntica, para que no haya conflicto al fusionarla.
+- **Pendiente:** flecha de medida para el largo de la barra; el aviso del máximo de dientes solo sale al calcular; el resto de familias de engranajes (Oleada 8).
+- **Riesgos al volver atrás:** ninguno en archivos guardados (el campo `length` es nuevo y opcional).
+
+---
+
 ## Oleada 6, F5: calcular menos, y primera medición en Release — 16 nov. 2026
 
 - **Rama:** `feature/fluidez-hilos`. Sin fusionar hasta la prueba manual (guía FLU.24–FLU.28).

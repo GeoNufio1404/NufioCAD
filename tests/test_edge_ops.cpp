@@ -2952,6 +2952,156 @@ TEST_CASE("La cremallera engrana con su rueda: distancia, hueco bajo el diente y
     }
 }
 
+// El largo de la cremallera: «length» corta la barra a esa medida (el último diente queda cortado) sin cambiar el resto.
+TEST_CASE("Una cremallera se puede cortar a un largo exacto", "[gear][rack]")
+{
+    const double p = kPi * 2.0;
+    const auto make = [&](double length, int teeth) {
+        Document doc;
+        auto g = std::make_unique<GearFeature>();
+        g->base.origin = OriginPlane::XY;
+        g->spec.type = geometry::GearType::Rack;
+        g->spec.module = 2.0;
+        g->spec.teeth = teeth;
+        g->spec.rim = 5.0;
+        g->spec.thickness = 8.0;
+        g->spec.length = length;
+        const FeatureId id = doc.addFeature(std::move(g));
+        return std::make_pair(doc.status(id), doc.result().bodies.empty() ? geometry::Shape() : doc.result().bodies.front().shape);
+    };
+    const auto [fullStatus, full] = make(0.0, 10);
+    REQUIRE(fullStatus.health == Health::Ok);
+    // Largos que caen en un diente, en un hueco y justo en un paso: siempre mide lo pedido y es un sólido válido.
+    for (const double length : {5.5 * p + 1.0, 6.0 * p, 7.5 * p, 3.2 * p, 9.0 * p + 0.01}) {
+        INFO("largo " << length);
+        const auto [status, rack] = make(length, 10);
+        REQUIRE(status.health == Health::Ok);
+        REQUIRE_FALSE(rack.isNull());
+        REQUIRE(rack.isValid());
+        const geometry::Box box = rack.bounds();
+        REQUIRE_THAT(box.min.x, Catch::Matchers::WithinAbs(0.0, 1e-6));
+        REQUIRE_THAT(box.max.x, Catch::Matchers::WithinAbs(length, 1e-6));
+        REQUIRE(rack.volume() < full.volume());
+        REQUIRE(rack.volume() > 0.0);
+    }
+    // El largo completo es la barra de siempre, y pasarse de largo o quedarse en un paso es un error claro.
+    const auto [sameStatus, same] = make(10.0 * p, 10);
+    REQUIRE(sameStatus.health == Health::Ok);
+    REQUIRE_THAT(same.volume(), WithinRel(full.volume(), 1e-9));
+    const auto [longStatus, tooLong] = make(10.0 * p + 1.0, 10);
+    REQUIRE(longStatus.health == Health::Error);
+    REQUIRE(longStatus.message.find("no puede pasar") != std::string::npos);
+    const auto [shortStatus, tooShort] = make(p * 0.9, 10);
+    REQUIRE(shortStatus.health == Health::Error);
+    REQUIRE(shortStatus.message.find("mayor que un paso") != std::string::npos);
+}
+
+TEST_CASE("El generador de cremallera da el largo por dientes, exacto o con dientes completos", "[generator][gear][rack]")
+{
+    const document::Generator* generator = document::findGenerator("cremallera");
+    REQUIRE(generator != nullptr);
+    const double p = kPi * 2.0;
+    const auto rackBox = [&](document::GeneratorValues values) {
+        Document doc;
+        document::applyRecipe(doc, generator->make(values, ""));
+        REQUIRE(doc.result().bodies.size() == 2);
+        for (std::size_t i = 0; i < doc.featureCount(); ++i) {
+            INFO(doc.feature(i).name());
+            REQUIRE(doc.status(doc.feature(i).id()).health != Health::Error);
+        }
+        return doc.result().bodies[1].shape.bounds();
+    };
+    // Por dientes (lo de siempre): 10 dientes miden 10·p.
+    document::GeneratorValues byTeeth = generator->defaults();
+    {
+        const geometry::Box box = rackBox(byTeeth);
+        REQUIRE_THAT(box.max.x - box.min.x, Catch::Matchers::WithinAbs(10.0 * p, 1e-3));
+    }
+    // Largo exacto: mide lo pedido aunque no sea un número entero de dientes.
+    document::GeneratorValues exact = generator->defaults();
+    exact["largo_modo"] = 1.0;
+    for (const double length : {100.0, 77.7, 40.0}) {
+        exact["largo_exacto"] = length;
+        const geometry::Box box = rackBox(exact);
+        INFO("largo exacto " << length);
+        REQUIRE_THAT(box.max.x - box.min.x, Catch::Matchers::WithinAbs(length, 1e-3));
+    }
+    // Largo con dientes completos: se ajusta al número entero de dientes más cercano.
+    document::GeneratorValues rounded = generator->defaults();
+    rounded["largo_modo"] = 2.0;
+    rounded["largo_aprox"] = 100.0;  // 100 / 6,283 = 15,9 → 16 dientes
+    {
+        const geometry::Box box = rackBox(rounded);
+        REQUIRE_THAT(box.max.x - box.min.x, Catch::Matchers::WithinAbs(16.0 * p, 1e-3));
+    }
+    // Un diseño de antes (sin el modo de largo entre sus respuestas) sigue saliendo por dientes.
+    document::GeneratorValues old = generator->defaults();
+    old.erase("largo_modo");
+    old.erase("largo_exacto");
+    old.erase("largo_aprox");
+    {
+        const geometry::Box box = rackBox(old);
+        REQUIRE_THAT(box.max.x - box.min.x, Catch::Matchers::WithinAbs(10.0 * p, 1e-3));
+    }
+    // El resumen del panel dice el largo y los dientes de cada modo.
+    REQUIRE(generator->summary(exact).find("40.0 mm") != std::string::npos);
+    REQUIRE(generator->summary(rounded).find("16 dientes") != std::string::npos);
+}
+
+TEST_CASE("El largo de la cremallera se guarda en el archivo y se reabre igual", "[gear][io][rack]")
+{
+    const document::Generator* generator = document::findGenerator("cremallera");
+    document::GeneratorValues values = generator->defaults();
+    values["largo_modo"] = 1.0;
+    values["largo_exacto"] = 83.3;
+    Document doc;
+    document::applyRecipe(doc, generator->make(values, ""));
+    const auto path = std::filesystem::temp_directory_path() / "nuf_cremallera_largo.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    const auto* rack = static_cast<const GearFeature*>(reopened.findFeature(doc.feature(1).id()));
+    REQUIRE(rack->expressions.at("length") == "largo");  // el largo vive en la expresión, ligada al parámetro
+    const geometry::Box box = reopened.result().bodies[1].shape.bounds();
+    REQUIRE_THAT(box.max.x - box.min.x, Catch::Matchers::WithinAbs(83.3, 1e-3));
+    // Cambiar el largo en la tabla de parámetros rehace la barra (queda ligada).
+    auto params = reopened.parameters();
+    for (document::Parameter& param : params) {
+        if (param.name == "largo") {
+            param.expression = "50";
+        }
+    }
+    reopened.setParameters(params);
+    const geometry::Box shorter = reopened.result().bodies[1].shape.bounds();
+    REQUIRE_THAT(shorter.max.x - shorter.min.x, Catch::Matchers::WithinAbs(50.0, 1e-3));
+}
+
+// La pestaña y el menú Herramientas agrupan los generadores por familia: cada uno declara la suya y las familias van
+// seguidas (no se mezclan en la lista).
+TEST_CASE("Cada generador tiene su familia y las familias no se mezclan", "[generator]")
+{
+    std::vector<std::string> seen;
+    for (const document::Generator* generator : document::generators()) {
+        const std::string category = generator->category();
+        INFO(generator->id());
+        REQUIRE_FALSE(category.empty());
+        REQUIRE(category != "Otros");
+        if (seen.empty() || seen.back() != category) {
+            REQUIRE(std::ranges::find(seen, category) == seen.end());  // una familia no vuelve a aparecer después de otra
+            seen.push_back(category);
+        }
+    }
+    REQUIRE(seen == std::vector<std::string>{"Cajas", "Letreros", "Engranajes"});
+    REQUIRE(document::findGenerator("lightbox")->category() == document::findGenerator("caja-con-tapa")->category());
+    for (const char* id : {"par-engranajes", "engranaje-interno", "cremallera"}) {
+        REQUIRE(document::findGenerator(id) != nullptr);
+        REQUIRE(document::findGenerator(id)->category() == "Engranajes");
+    }
+}
+
 TEST_CASE("El tipo y el aro del engranaje se guardan y la rueda sigue siendo exterior", "[gear][io]")
 {
     const document::Generator* generator = document::findGenerator("cremallera");
