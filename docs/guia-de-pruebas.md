@@ -260,7 +260,8 @@ Código: **SKF**. Estado: en prueba.
 | SKF.6 | Con una figura abierta pulsa **Esc**; luego otra vez **Esc** | El primero cierra la edición (la figura se queda); el segundo sale de la herramienta |
 | SKF.7 | Crea una figura, cámbiala y pulsa **Deshacer** | Vuelve al paso anterior; si sigues escribiendo no pasa nada raro |
 | SKF.8 | **Círculo por 2 y 3 puntos**, **rectángulo por 3 puntos** y **ranura**: termina la figura y escribe un valor (diámetro, longitud/alto, ancho) | Cambia la misma figura; con Deshacer vuelve a antes de crearla (un solo paso) |
-| SKF.9 | **Anota** qué te falta o molesta | Son los pendientes |
+| SKF.9 | **Elipse** (no el arco): dibuja una y, sin hacer clic, escribe los semiejes mayor y menor | Cambia la misma elipse (también si solo escribes uno); con Deshacer vuelve a antes de crearla |
+| SKF.10 | **Anota** qué te falta o molesta | Son los pendientes |
 
 ### 2.3 Inferencias y guías
 
@@ -1160,6 +1161,7 @@ Los IDs antiguos se repetían entre secciones (por ejemplo había tres `R.1`); l
 | `M.7` | Figuras abiertas | `SKF.7` |
 | `M.8` | Figuras abiertas | `SKF.8` |
 | `M.9` | Figuras abiertas | `SKF.9` |
+| `M.10` | Figuras abiertas | `SKF.10` |
 | `L.1` | Tangente e histéresis | `SKI.25` |
 | `L.2` | Tangente e histéresis | `SKI.26` |
 | `L.3` | Tangente e histéresis | `SKI.15` |

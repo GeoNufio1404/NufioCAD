@@ -213,3 +213,33 @@ TEST_CASE("Figuras abiertas: rectángulo por 3 puntos y ranura", "[sketch][open]
         REQUIRE_FALSE(tool->applyValues(s, {std::nullopt}));
     }
 }
+
+TEST_CASE("Figuras abiertas: la elipse sigue editable y se rehace con otros semiejes", "[sketch][open]")
+{
+    Sketch s;
+    auto tool = makeEllipseTool();
+    clickAt(*tool, s, {0, 0});
+    clickAt(*tool, s, {10, 0});
+    clickAt(*tool, s, {0, 4});
+    REQUIRE(tool->valueFields() == std::vector<std::string>{"Semieje mayor", "Semieje menor"});
+    REQUIRE_THAT(tool->currentValues().at(0), WithinAbs(10.0, 1e-9));
+    REQUIRE_THAT(tool->currentValues().at(1), WithinAbs(4.0, 1e-9));
+
+    // Solo se cambia el menor: el mayor se queda; sigue habiendo una sola elipse.
+    REQUIRE(tool->applyValues(s, {std::nullopt, 6.0}));
+    REQUIRE(tool->amendedLast());
+    REQUIRE(makePlaneGcsSolver()->solve(s).status == SolveStatus::Solved);
+    std::size_t ellipses = 0;
+    for (const Entity& e : s.entities()) {
+        if (const auto* el = std::get_if<Ellipse>(&e.geometry); el && !e.reference) {
+            ++ellipses;
+            REQUIRE_THAT(el->majorRadius, WithinAbs(10.0, 1e-6));
+            REQUIRE_THAT(el->minorRadius, WithinAbs(6.0, 1e-6));
+        }
+    }
+    REQUIRE(ellipses == 1);
+
+    // Enter sin valores la deja como está y cierra la edición.
+    REQUIRE_FALSE(tool->applyValues(s, {std::nullopt, std::nullopt}));
+    REQUIRE(tool->valueFields().empty());
+}
