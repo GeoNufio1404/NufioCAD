@@ -2050,7 +2050,7 @@ TEST_CASE("Una booleana se interrumpe cuando el hilo de trabajo pide cancelar", 
     REQUIRE_FALSE(geometry::boolean(geometry::BooleanOp::Cut, block, rod).isNull());
 }
 
-// Oleada 6, F4: cerrar la ventana o cambiar algo no debe esperar a que termine una rosca, un engranaje helicoidal, un
+// Fase 13, F4: cerrar la ventana o cambiar algo no debe esperar a que termine una rosca, un engranaje helicoidal, un
 // redondeo, un vaciado ni una unión de partes: todas las construcciones largas miran la petición de cancelar.
 TEST_CASE("Las construcciones largas se interrumpen cuando el hilo de trabajo pide cancelar", "[background][thread]")
 {
@@ -2107,7 +2107,7 @@ TEST_CASE("La malla preparada en segundo plano lleva también el borde de cada c
     }
 }
 
-// Oleada 6, F5: el índice de nombres y la caja se guardan en la forma; los resultados no deben cambiar, ni siquiera
+// Fase 13, F5: el índice de nombres y la caja se guardan en la forma; los resultados no deben cambiar, ni siquiera
 // con nombres repetidos (una cara partida por un corte) ni al pedirlos desde varios hilos a la vez.
 TEST_CASE("Buscar caras y aristas por nombre da lo mismo con el índice guardado, también desde varios hilos", "[background][names]")
 {

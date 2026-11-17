@@ -2,7 +2,7 @@
 
 Hecha el 16 de noviembre de 2026 sobre `feature/engranajes-interno-cremallera` (commit `ab4080b`). **Solo plan: no se
 cambió código.** Alcance: todo lo que la aplicación hace en el hilo de la interfaz y puede tardar, lo que se calcula dos
-veces, las búsquedas con coste cuadrático y el uso de memoria. El trabajo sale como **Oleada 6 — Fluidez** en la
+veces, las búsquedas con coste cuadrático y el uso de memoria. El trabajo sale como **Fase 13 — Fluidez** en la
 [hoja de ruta](../hoja-de-ruta.md).
 
 ## Objetivo medible
@@ -26,7 +26,7 @@ veces, las búsquedas con coste cuadrático y el uso de memoria. El trabajo sale
 
 La primera rama (`feature/fluidez-medir`) midió estos hallazgos con la prueba de interfaz y el vigilante, y **confirmó A1, A3 y A4 con la pila de llamadas**: paradas de 0,8–1,4 s en generadores de engranajes (mallado de OCCT en el hilo de la interfaz), 260–300 ms **por clic** en el diálogo de Exportar con 5 cuerpos (2,2 s al pasar a calidad Alta), 2,4 s al importar un STEP de un engranaje y 0,4 s al medir caras de una rosca. Cifras completas en [`../rendimiento/mediciones.md`](../rendimiento/mediciones.md). Todo es Debug en Windows.
 
-**F2 (16 nov. 2026) hecho:** A2, A3, A4, A7 (la copia de recuperación), A8 y M3 pasaron a segundo plano; la ventana pasó de paradas de 0,3–2,4 s a menos de 160 ms en esos pasos (769 ms al importar, por el mallado del visor, que es A1). Detalle en la hoja de ruta (Oleada 6, F2) y en [`../rendimiento/mediciones.md`](../rendimiento/mediciones.md).
+**F2 (16 nov. 2026) hecho:** A2, A3, A4, A7 (la copia de recuperación), A8 y M3 pasaron a segundo plano; la ventana pasó de paradas de 0,3–2,4 s a menos de 160 ms en esos pasos (769 ms al importar, por el mallado del visor, que es A1). Detalle en la hoja de ruta (Fase 13, F2) y en [`../rendimiento/mediciones.md`](../rendimiento/mediciones.md).
 
 **F3 (16 nov. 2026) hecho:** A1, M2 y A5. Las paradas de los generadores de engranajes bajaron de 1,3–1,4 s a 0,5–0,9 s; lo que queda es sobre todo contención del candado del montón de depuración de MSVC y se confirmará en Release. Un efecto colateral encontrado y corregido: encuadrar (`fitAll`) antes de tener los cuerpos. Detalle en la hoja de ruta y en [`../rendimiento/mediciones.md`](../rendimiento/mediciones.md).
 
@@ -34,7 +34,7 @@ La primera rama (`feature/fluidez-medir`) midió estos hallazgos con la prueba d
 
 **F5 (16 nov. 2026) hecho en parte, y primera medición en Release:** M5, M7, M8 (parcial) y M4; M1 y M6 quedan pendientes. En Release la parada máxima de la interfaz es de 133 ms (objetivo: 100 ms) y las paradas largas de Debug resultaron ser el candado del montón de depuración. Un hallazgo nuevo de la medición en Release, resuelto: la búsqueda de la fuente de respaldo de Qt la primera vez que se dibuja un símbolo (0,5–1,5 s). Detalle en la hoja de ruta y en [`../rendimiento/mediciones.md`](../rendimiento/mediciones.md).
 
-**F6 (16 nov. 2026) hecho:** B1 (exportar sin guardar los triángulos: de 245–297 MB a 194–209 MB con 2,2 millones de triángulos); B2 y B4 se descartan con su motivo en la hoja de ruta. Con esto la Oleada 6 queda cerrada salvo M1 y M6.
+**F6 (16 nov. 2026) hecho:** B1 (exportar sin guardar los triángulos: de 245–297 MB a 194–209 MB con 2,2 millones de triángulos); B2 y B4 se descartan con su motivo en la hoja de ruta. Con esto la Fase 13 queda cerrada salvo M1 y M6.
 
 ## Hallazgos
 
@@ -113,7 +113,7 @@ entrada en el [registro de cambios](../registro-de-cambios.md), y no se fusiona 
 | S2: falta la línea de llamada | Hecha | `7ee7df2` |
 | S5: sin hacer | A medias: la colocación evita líneas y puntos; falta el fondo opaco | `3d68eeb` |
 | Auditoría del sketch: sin hacer | Hecha (bisección, perfiles, cotas, banco de medidas) | `fa455f7` |
-| Oleada 2: compilar en Fedora y el CI de Ubuntu | Hecho; solo queda el filtro `*.exe` del slicer en Linux | `4dbe602`, `9d5f009`, `66ccf04` |
-| Oleada 2: medir en Release | Hecho en Fedora y el solver en Windows; falta la app en Windows | `b72757a`, `18e5bec` |
-| Estado: «205 pruebas, 33 pasos»; Fase 6 «pendiente: cotas ligadas» | 250 pruebas y 36 pasos; las cotas ligadas están hechas (Oleada 1) | — |
+| Robustez (Fase 11): compilar en Fedora y el CI de Ubuntu | Hecho; solo queda el filtro `*.exe` del slicer en Linux | `4dbe602`, `9d5f009`, `66ccf04` |
+| Robustez (Fase 11): medir en Release | Hecho en Fedora y el solver en Windows; falta la app en Windows | `b72757a`, `18e5bec` |
+| Estado: «205 pruebas, 33 pasos»; Fase 6 «pendiente: cotas ligadas» | 250 pruebas y 36 pasos; las cotas ligadas están hechas (Fase 11) | — |
 | Sin mención | Temas claro/oscuro con contraste, banner de la barra de estado, ayuda en todas las herramientas, iconos de restricciones dibujados | `4c081e4`, `3d48051`, `e9a47e1`, `04b30e0` |

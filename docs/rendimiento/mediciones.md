@@ -1,7 +1,7 @@
 # Mediciones de rendimiento (Debug y Release)
 
 Para comparar sistemas y versiones. La columna de Windows se llena cuando exista su build Release
-(hoy Smart App Control bloquea las DLL sin firmar de OCCT; ver el backlog de la hoja de ruta).
+(desde el 16 nov. 2026 ya existe: Smart App Control se apagó en la PC de pruebas; ver la Fase 19 de la hoja de ruta).
 
 ## Cómo medir
 
@@ -53,12 +53,12 @@ Pasos donde Debug y Release se separan (parada máxima de la interfaz):
   «Windows Release» de arriba.
 - Los 33 pasos pasan en las dos configuraciones, así que Release no cambia el comportamiento, solo el tiempo.
 
-## Fluidez: línea base de la Oleada 6 (Windows, Debug, 16 nov. 2026)
+## Fluidez: línea base de la Fase 13 (Windows, Debug, 16 nov. 2026)
 
 Medida con `NufioCAD.exe --prueba-interfaz` (44 pasos, 0 fallidos) en la rama `feature/fluidez-medir`, antes de tocar
 nada. **Es Debug** (OCCT y Qt también): en Release se espera unas 5 a 6 veces menos (ver Fedora arriba), pero lo que
-vale es el orden de magnitud y **qué parte del trabajo ocupa el hilo de la interfaz**. El objetivo de la Oleada 6 es
-**menos de 100 ms en Release** (250 ms en Debug) en todo lo de esta tabla. Cada rama de la Oleada 6 repite la prueba y
+vale es el orden de magnitud y **qué parte del trabajo ocupa el hilo de la interfaz**. El objetivo de la Fase 13 es
+**menos de 100 ms en Release** (250 ms en Debug) en todo lo de esta tabla. Cada rama de la Fase 13 repite la prueba y
 añade su columna.
 
 | Qué (paso de la prueba de interfaz) | Hallazgo | Parada de la ventana (Debug) |
@@ -95,7 +95,7 @@ Qué dicen las paradas largas (la pila que anota el vigilante):
 - **M5.** El patrón de 50 tarda 24 s en total en segundo plano (la ventana sigue viva, pero hay una parada de 1 s al
   mostrar el resultado): 49 uniones una a una.
 - Fuera de OCCT: una parada de 1 s al arrastrar un anillo está en el controlador de gráficos (`DrvSwapBuffers`) y otra
-  en `QFileInfo::filePath` (los iconos de la barra de ayuda): conviene vigilarlas, no son de esta oleada.
+  en `QFileInfo::filePath` (los iconos de la barra de ayuda): conviene vigilarlas, no son de esta fase.
 
 ### Después de F2: llamadas que bloqueaban (rama `feature/fluidez-llamadas`, mismo equipo, Debug)
 
@@ -136,7 +136,7 @@ Tres ejecuciones completas (44 pasos, 0 fallidos en la última); entre ejecucion
 dentro de `RtlEnterCriticalSection` llamado desde `recalloc_dbg` o `free_dbg`: el montón de depuración de MSVC tiene un
 solo candado para todo el proceso, y mientras los hilos de trabajo mallan en paralelo y reservan millones de bloques, la
 interfaz espera para hacer cualquier reserva. No es trabajo de geometría en el hilo de la interfaz. En Release esa
-contención no existe; se confirmará con la columna «Windows Release» (Oleada 7, D2).
+contención no existe; se confirmará con la columna «Windows Release» (Fase 19, D2).
 
 ### Después de F4: un solo grupo de hilos y cancelación en el kernel (rama `feature/fluidez-hilos`, mismo equipo, Debug)
 
@@ -151,7 +151,7 @@ tarda en soltar el trabajo cancelado**. Lo que se comprueba es, sobre todo, estr
 
 ## Windows Release (16 nov. 2026)
 
-Primera medición de **Release en Windows**, con Smart App Control apagado (ver la Oleada 7 de la
+Primera medición de **Release en Windows**, con Smart App Control apagado (ver la Fase 19 de la
 [hoja de ruta](../hoja-de-ruta.md)). Mismo equipo que las tablas de Debug de arriba, mismas 44 pasos de la prueba de interfaz.
 
 | Medida | Windows Debug | Windows Release |
@@ -177,7 +177,7 @@ respaldo se hace al abrir la ventana (la parada de ese paso pasó a ~50 ms). Lo 
 la cota de un clic en el sketch (133 ms). El cuadro de la vista vacía (15 ms) lo marca el controlador gráfico
 (`DrvSwapBuffers`), igual que en Fedora.
 
-## Memoria al exportar (Oleada 6, F6; Windows Release, 16 nov. 2026)
+## Memoria al exportar (Fase 13, F6; Windows Release, 16 nov. 2026)
 
 Prueba oculta `nuf_tests "[.memory]"` (`tests/test_perf.cpp`, solo Windows): un engranaje helicoidal de 150 dientes mallado
 con una desviación de 0,0003 mm, **2 162 548 triángulos**. «+ MB» es lo más que sube el conjunto de trabajo del proceso

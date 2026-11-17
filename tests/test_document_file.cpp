@@ -514,7 +514,7 @@ TEST_CASE("La miniatura va en el archivo y se lee sin abrir el diseño", "[io][d
     REQUIRE(fingerprint(reopened) == fingerprint(original));
 }
 
-// Guardar en dos tiempos (Oleada 6, F2): armar el plan es rápido y se hace con el documento; escribirlo puede ir en
+// Guardar en dos tiempos (Fase 13, F2): armar el plan es rápido y se hace con el documento; escribirlo puede ir en
 // otro hilo mientras el documento sigue cambiando, y el archivo debe quedar igual que con saveDocument.
 TEST_CASE("Guardar en dos tiempos: el plan no depende del documento y escribe lo mismo que saveDocument", "[io][document]")
 {

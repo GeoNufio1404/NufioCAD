@@ -19,7 +19,7 @@
 1. El [README del proyecto](../README.md): qué es y con qué está hecho.
 2. [`arquitectura.md`](arquitectura.md) §1–§3: los módulos y el modelo del documento.
 3. [`desarrollo.md`](desarrollo.md): compilar y pasar las pruebas.
-4. [`hoja-de-ruta.md`](hoja-de-ruta.md), sección «Estado» y el backlog consolidado: dónde está el trabajo.
+4. [`hoja-de-ruta.md`](hoja-de-ruta.md), secciones «Dónde estamos» y «Lo que sigue, en orden»: qué está hecho y qué viene, por fases.
 
 ## Contenido de la carpeta
 
@@ -29,7 +29,7 @@ docs/
 ├── arquitectura.md            cómo está hecho (con diagramas)
 ├── decisiones.md              qué se usó, por qué y qué se descartó
 ├── desarrollo.md              compilar, probar, herramientas, ramas
-├── hoja-de-ruta.md            fases, estado, backlog y planes
+├── hoja-de-ruta.md            fases hechas y por hacer, estado y orden
 ├── registro-de-cambios.md     entregas, archivos tocados y cómo volver atrás
 ├── guia-de-pruebas.md         pruebas manuales con IDs (SKC.12, ACA.6…)
 ├── generadores.md             medidas de cada generador

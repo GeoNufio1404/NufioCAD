@@ -1,9 +1,13 @@
 # Hoja de ruta — NufioCAD (CAD paramétrico de escritorio en C++)
 
-> **Cómo leer este documento.** Es el registro vivo del proyecto: la visión y las fases (con lo hecho y su
-> «Pendiente de …» en cada bloque), el [backlog consolidado](#backlog-consolidado-revisión-del-9-nov-2026-versión-010)
-> por oleadas y la tabla de [estado](#estado) al final. Cómo está hecho el código: [`arquitectura.md`](arquitectura.md);
-> por qué cada tecnología: [`decisiones.md`](decisiones.md); compilar y ramas: [`desarrollo.md`](desarrollo.md).
+> **Cómo leer este documento.** Todo el trabajo se ordena en **fases** numeradas. Las **0–13 están hechas** y las
+> **14–19 son lo que sigue, en el orden en que se harán**. Arriba está [dónde estamos](#dónde-estamos-16-nov-2026);
+> después, [lo que sigue](#lo-que-sigue-en-orden); al final, el [historial de las fases hechas](#fases-hechas) y los
+> [fundamentos](#fundamentos-decisiones-de-partida). Cada punto pendiente lleva un identificador (P1, U3, E2…) para
+> nombrarlo en ramas, commits y la guía de pruebas. **Convención:** cada bloque termina con su «**Pendiente de …**»
+> (lo que no se hizo, lo que no se probó a mano, límites conocidos); lo que salga después se anota ahí y, si es trabajo
+> aparte, en la fase pendiente que toque. Cómo está hecho el código: [`arquitectura.md`](arquitectura.md); por qué cada
+> tecnología: [`decisiones.md`](decisiones.md); compilar y ramas: [`desarrollo.md`](desarrollo.md).
 
 ## Visión
 
@@ -16,57 +20,127 @@ Un CAD paramétrico de escritorio para **Windows y Linux**, **offline y con arch
 
 ---
 
-## Stack tecnológico
+## Dónde estamos (16 nov. 2026)
 
-| Capa | Tecnología (decidida) |
+`main` está en la **v0.1.0** (9 nov. 2026). `develop` (subido a GitHub) tiene además las Fases 11, 12 y 13 y la parte nueva de la 10; compila en Windows (Debug y Release) y pasan los 269 casos de pruebas unitarias y los 44 pasos de la prueba de interfaz. Casi todo lo nuevo espera la prueba manual: es la Fase 14.
+
+| Fase | Estado |
 |---|---|
-| Lenguaje | C++20 |
-| Kernel geométrico (B-Rep) | OpenCASCADE (OCCT) 7.6–8.0 |
-| Interfaz | Qt 6 Widgets |
-| Archivo nativo | `.nuf` sobre SQLite (parámetros en JSON con nlohmann/json) |
-| Render 3D | Visor V3d/AIS de OCCT dentro de un `QOpenGLWidget` |
-| Solver de restricciones 2D | PlaneGCS (de FreeCAD, en `third_party/planegcs`) + Eigen |
-| Plataformas | Windows y Linux, compilación nativa (sin Docker para distribuir) |
-| Build | CMake + CMakePresets + vcpkg (manifiesto); Catch2; CI en Windows y Ubuntu |
+| 0 — Diseño y fundamentos | ✅ Mockups, formatos de archivo, arquitectura, entorno (CMake, vcpkg, pruebas y CI) y nombre |
+| 1 — Visor y navegación | ✅ Probada en Fedora y Windows |
+| 2 — Sketcher 2D | ✅ 2a–2d; faltan pruebas manuales (P1) y algunas limitaciones (U9) |
+| 3 — Modelado básico y timeline | ✅ 3a–3c; faltan pruebas manuales (P1); «hasta una cara» sin conos ni superficies libres (U9) |
+| 4 — Archivos y exportación | ✅ 4a–4f; faltan pruebas manuales (P1) |
+| 5 — Operaciones de acabado | ✅ 5a–5e; sus variantes, en la Fase 18 |
+| 6 — Geometría de referencia y parámetros | ✅ 6a–6c |
+| 7 — Generadores de piezas | ✅ 7a–7d |
+| 8 — Multi-cuerpo y ensambles | ✅ 8a–8c, con flechas y anillos para mover y girar |
+| 9 — Pulido para impresión 3D | ✅ 9a–9d; voladizos y control de malla, en las Fases 17 y 18 |
+| 10 — Herramientas generadoras | ✅ 10a–10e, engranaje interno, cremallera con largo en mm y herramientas por familia ([`generadores.md`](generadores.md)) |
+| 11 — Cimientos, robustez y pedidos de las pruebas | ✅ Falta la prueba manual |
+| 12 — Sketch al estilo Onshape | ✅ Falta la prueba manual; restos en P2 |
+| 13 — Fluidez | ✅ F1–F6 (parada máxima en Release: 133 ms); M1 y M6 aplazadas, M8 a medias; falta la prueba manual |
+| **14 — Cerrar lo hecho y publicar la v0.2.0** | ⏳ **La siguiente** |
+| 15 — Usabilidad e interfaz estilo Fusion 360 | 📋 Planificada |
+| 16 — Familias de engranajes | 📋 Planificada (E1–E7) |
+| 17 — Generadores y salida | 📋 Planificada |
+| 18 — Ampliaciones de modelado | 📋 Planificada |
+| 19 — Distribución y firma de código | 📋 Planificada; D2 (Release en Windows) ya hecho |
 
-Alternativas y motivos: [`decisiones.md`](decisiones.md).
+**Fuera de las fases:** Windows y Linux (Fedora 44 y Ubuntu 24.04 del CI) compilan y pasan las pruebas; documentación reorganizada el 16 nov. 2026 (índice en [`README.md`](README.md)); auditorías de código en [`auditorias/`](auditorias/).
 
-**Capacidades de OCCT que aprovechamos:** extrusión, revolución, sweep, loft, booleanas, chaflán, fillet, shell; exportación STEP (`STEPControl_Writer`); mallado para STL (`BRepMesh_IncrementalMesh` + `StlAPI_Writer`).
+**Equivalencias con los nombres anteriores.** Hasta el 16 nov. 2026 lo pendiente se agrupaba en «oleadas» (los commits y algunas ramas de esas fechas usan ese nombre):
 
----
+| Antes | Ahora |
+|---|---|
+| Oleada 1 — Cimientos | Fase 11 |
+| Oleada 2 — Robustez | Lo hecho, Fase 11; lo pendiente, Fase 14 (P3) y Fase 15 (U9) |
+| Oleada 3 — Usabilidad | Lo hecho, Fase 11; lo pendiente, Fase 15 |
+| Oleada 4 — Ampliaciones de modelado | Fase 18 |
+| Oleada 5 — Generadores y salida | Fase 17 (engranaje interno y cremallera, en la Fase 10; pocos dientes, E7 de la Fase 16) |
+| Oleada 6 — Fluidez | Fase 13 |
+| Oleada 7 — Distribución | Fase 19 |
+| Oleada 8 — Familias de engranajes | Fase 16 (familias y largo de la cremallera, en la Fase 10) |
+| Plan «Sketch al estilo Onshape» | Fase 12 |
 
-## Principios de UX (referencia: Fusion 360)
+## Lo que sigue, en orden
 
-1. **Timeline** abajo, siempre visible: arrastrar, editar o suprimir operaciones.
-2. **Un solo espacio de trabajo**, sin workbenches separados.
-3. **Manipuladores en pantalla**: flechas para extruir, valores editables junto al cursor.
-4. **Sketch con restricciones automáticas** (horizontal, tangente, coincidente) mientras se dibuja.
-5. **Menú radial** con clic derecho y **atajos de una tecla** (E = extruir, L = línea).
-6. **Vista previa en vivo** antes de confirmar cada operación.
+```mermaid
+flowchart LR
+    F14["14 · Cerrar y<br/>publicar v0.2.0"] --> F15["15 · Usabilidad e<br/>interfaz Fusion"]
+    F15 --> F16["16 · Familias de<br/>engranajes"]
+    F16 --> F17["17 · Generadores<br/>y salida"]
+    F17 --> F18["18 · Ampliaciones<br/>de modelado"]
+    F18 --> F19["19 · Distribución<br/>y firma"]
+```
 
----
+**Por qué este orden:** primero se asegura lo hecho (14) y se publica; luego lo que más se nota al usar la app cada día (15); después los engranajes que se pidieron (16), que son independientes y empiezan por puntos pequeños; luego los generadores y los formatos de salida (17); la ampliación del modelado (18) es la más grande y cada punto es independiente, así que uno suelto se puede adelantar si una pieza real lo pide; y la distribución (19) cuando haya una versión que compartir. Si alguien más va a probar NufioCAD antes, el instalador (D1) puede adelantarse sin depender de lo demás.
 
-## Concepto central: modelado paramétrico
+Cada fase se hace en ramas `feature/…` desde `develop`, una por punto o por grupo pequeño, con su prueba manual antes de fusionar.
 
-- El modelo es un **árbol/historial de operaciones** (Sketch1 → Extrude1 → Fillet1 → …).
-- Cada operación guarda sus **parámetros**, no su resultado; al editar una, se reconstruye todo lo que viene después.
-- **Riesgo principal: problema de nombrado topológico.** Las referencias a caras y aristas (ej. "arista 7") pueden cambiar al editar operaciones anteriores. Debe resolverse en la Fase 3 (OCCT ofrece OCAF/TNaming como apoyo); si se pospone, chaflanes y fillets romperán el historial.
+### Fase 14 — Cerrar lo hecho y publicar la v0.2.0 (la siguiente)
 
----
+**Por qué va primero:** `develop` lleva las Fases 11, 12 y 13 (y la parte nueva de la 10) sin prueba manual, y `main` sigue en la v0.1.0. Antes de ampliar se prueba lo hecho, se corrige lo que salga y se publica una versión estable sobre la que construir.
+- [ ] **P1 — Pruebas manuales** de [`guia-de-pruebas.md`](guia-de-pruebas.md), todas las filas sin marcar. Primero lo más reciente y lo que más riesgo tiene: 5.4–5.9 (vigilante y fluidez: `VIG`, `FLU`), 4.6 (familias y largo de la cremallera: `CRE`), 2.2–2.5 (figuras abiertas, inferencias, cotas, restricciones), 1.2–1.6 (ayudas, temas, unidades, cálculo en segundo plano, vista previa, errores), 3.3–3.4 (flechas, mover y girar), 4.1–4.5 (generadores) y después lo que quede de las secciones 1–3. Lo que falle se anota en el «Pendiente de…» de su bloque y se arregla aquí.
+- [ ] **P2 — Restos del sketch (Fase 12):** tangente con una referencia lejana (I5); fondo opaco de los iconos y de los textos para que se lean sobre las líneas (I6, S5); campos para corregir la elipse recién dibujada (F1); ⊥ y ∥ con arcos (I4); despertar también los puntos medios (I3); la caja de la línea de cota y correr el texto a lo largo de ella (S1, S2).
+- [ ] **P3 — Robustez:** prueba de interfaz en el CI con una pantalla virtual (Xvfb) y que compruebe también cómo se ve (hoy el CI solo corre `--self-check`); el filtro `*.exe` al elegir el slicer en Linux (`ExportDialog.cpp`); medir la Fase 13 en Linux (Debug y Release); partir `ViewportImpl.hpp` por responsabilidades (sketch, selección, vista previa).
+- [ ] **P4 — Publicar la v0.2.0:** fusionar `develop` en `main` con la etiqueta `v0.2.0` y sus notas (resumen del [registro de cambios](registro-de-cambios.md)), y mover `estable-windows` / `estable-fedora` cuando se pruebe en cada sistema. Ver [`desarrollo.md`](desarrollo.md#ramas-y-versiones).
 
-## Formatos de archivo (decisión)
+### Fase 15 — Usabilidad e interfaz estilo Fusion 360
 
-| Uso | Formato | Notas |
-|---|---|---|
-| Nativo (guardar/abrir) | **`.nuf`** | Formato propio sobre SQLite: local, privado, guarda el historial completo, guardado atómico |
-| Exportar | STL, OBJ, STEP | STL/OBJ como malla para el slicer; STEP como sólido exacto |
-| Importar | STEP | Entra como sólido sin historial (una operación «Importación» en el timeline), igual que en Fusion 360 |
+Lo que más se nota al usar la aplicación cada día. Lo ya hecho está en «Interfaz estilo Fusion 360» y en la Fase 11.
+- [ ] **U1** — Selector de unidad en la barra de estado; atajos para Caja, Cilindro y generadores. Hoy solo tienen atajo los archivos, Extruir (E), Redondeo (F), Agujero (H) y las herramientas del sketch.
+- [ ] **U2** — Ocultar la pestaña HERRAMIENTAS dentro de un sketch; aviso de recuperación menos molesto. Hoy la recuperación es un diálogo al abrir.
+- [ ] **U3** — Unidades restantes: Medir (hoy en mm fijos), avisos de impresión, lista de parámetros, área y volumen, rejilla del sketch, unidad por documento y las ayudas de los generadores con «mm» fijo.
+- [ ] **U4** — Paleta flotante del sketch sobre el lienzo (casillas: medidas, restricciones, puntos, rejilla), como la de Fusion; evitar que los textos se tapen entre sí.
+- [ ] **U5** — Barra de aplicación superior (Guardar, Deshacer, Rehacer y pestaña del documento) y selector de espacio de trabajo, como en Fusion; el navegador con el nombre del documento como raíz; controles de reproducción en el timeline; los comandos como diálogo flotante sobre el lienzo en vez de un panel acoplado.
+- [ ] **U6** — Menú radial con clic derecho y atajos de una tecla para todo (hoy hay atajos de sketch, E y Mayús+P).
+- [ ] **U7** — Valores editables junto al cursor también en Extruir/Revolución (hoy solo en el sketch y en el panel).
+- [ ] **U8** — Pulido de lo hecho (de los «Pendiente de…» de las Fases 8, 11 y 13): barra de progreso o botón «Cancelar» en los cálculos largos; vista previa translúcida que siga el tema y también en Caja, Rosca y demás herramientas; errores con sugerencias según la causa concreta y el detalle técnico en español; flechas que faltan (holgura y cable de los generadores, presión y hélice del par, tamaño del texto del Letrero, cabeza del Agujero); mover arrastrando con ajuste a la rejilla y a otros cuerpos, gizmo de tamaño constante y gizmo también para Patrón, Espejo y Unión; campos de los generadores agrupados en secciones plegables.
+- [ ] **U9** — Limitaciones de las Fases 2 y 3: el texto del sketch queda como curvas (no se vuelve a editar como texto); recortar/extender/desfase solo con líneas, arcos y círculos (elipses y splines no); «hasta una cara» con conos y superficies libres. (Ya están: lo proyectado se vuelve a proyectar cuando cambia la pieza, elegir cuerpos en unir/cortar y la flecha de la revolución.)
 
-**Descartado: `.f3d` de Fusion 360.** Es un formato propietario de Autodesk sin documentación pública; su geometría usa el formato del kernel de Autodesk (ShapeManager), que OCCT no lee, y reconstruir su historial implicaría replicar el comportamiento interno de Fusion. Solo lo abre Fusion, así que no aporta como estándar de intercambio.
+### Fase 16 — Familias de engranajes (pedido del usuario)
 
----
+Idea: que el **generador de engranajes** cubra los perfiles que más se piden y que la herramienta suelta **Sólido › Engranaje** tenga un **selector de tipo** para elegir cualquiera de ellos. Algunas ideas valen solo para el generador (los conjuntos con su pareja); otras también para la herramienta. Como paso previo ya se hizo (Fase 10): las herramientas agrupadas por familia y el largo de la cremallera en milímetros.
+- [ ] **E1 — Engranaje doble helicoidal (espina de pescado):** dos mitades con la hélice contraria que cancelan el empuje axial. En geometría, `GearSpec::herringbone` (dos lofts espejados, cada uno la mitad del ancho, unidos en un solo sólido, con un surco opcional en el centro); en el generador «Par de engranajes», una pregunta «Dientes» con rectos, helicoidales y espina de pescado; en la herramienta, el mismo selector. **Tamaño: mediano** (la hélice sencilla ya existe).
+- [ ] **E2 — Chaflán en la base («pata de elefante»):** `GearSpec::baseChamfer` (mm) que achaflana el borde de la primera capa para compensar la expansión de la primera capa en FDM; pregunta en todos los generadores de engranajes y en la herramienta. **Tamaño: pequeño a mediano** (chaflán sobre las aristas de la cara inicial por nombre).
+- [ ] **E3 — Juego entre dientes (holgura) como adelgazamiento del diente:** hoy el «Juego entre dientes» (0,15 mm por defecto, el rango de 0,15 a 0,25 que se recomienda para FDM) aleja los ejes o la barra; añadir también la opción de **afinar el diente** (`GearSpec::backlash`) para que una rueda suelta del generador o de la herramienta engrane con otra sin cambiar la distancia entre ejes. **Tamaño: pequeño.**
+- [ ] **E4 — Tornillo sin fin y rueda (worm gear):** el tornillo (de 1 a 4 entradas, módulo, diámetro primitivo, largo y ángulo de presión) y la rueda helicoidal que engrana con él, a la distancia correcta y con el giro de fase; reducciones grandes con autobloqueo. Geometría: el tornillo es un barrido helicoidal del perfil de cremallera (parecido a la rosca, que ya existe), y la rueda es un engranaje helicoidal con el ángulo de hélice igual al de avance. Solo generador («Tornillo sin fin y rueda») y en la herramienta como tipo «Tornillo sin fin». **Tamaño: grande.**
+- [ ] **E5 — Engranajes cónicos (bevel):** par de ruedas cónicas a 90° (o a otro ángulo): perfil de involuta aproximado por un diente que se escala a lo largo del cono (un loft entre el perfil exterior y el interior, recortado por los conos). Generador «Engranajes cónicos» (relación, módulo exterior, ancho de cara, ángulo entre ejes) y tipo «Cónico» en la herramienta. **Tamaño: grande, el más difícil de verificar** (el engrane se comprueba sin interferencia con la booleana, como el de la cremallera).
+- [ ] **E6 — Selector de tipo en Sólido › Engranaje:** exterior, interno, cremallera (ya existen) y, según se vayan haciendo, espina de pescado, tornillo sin fin y cónico; el panel muestra solo los campos del tipo elegido.
+- [ ] **E7 — Pocos dientes y aviso de compatibilidad:** la forma de las ruedas de menos de 10 dientes sale puntiaguda (falta el socavado o la corrección de perfil), y el panel del Engranaje suelto no avisa si su módulo, ángulo de presión o hélice no casan con otro engranaje cercano. **Tamaño: mediano.**
+- **Orden propuesto:** E1 → E2 → E3 → E7 → E6 (a medida que salen tipos) → E4 → E5. Cada uno con su prueba de volumen/nombres y su prueba de engrane, y su «Pendiente de…».
 
-## Fases
+### Fase 17 — Generadores y salida
+
+Más variantes de los generadores y los formatos que piden (SVG para letreros y lightbox, 3MF para imprimir en varios colores). Los engranajes van aparte, en la Fase 16.
+- [ ] **G1** — SVG como sketch (letrero y lightbox); 3MF multicuerpo con filamentos.
+- [ ] **G2** — Lightbox: canal para tira LED. Caja con tapa: redonda, bisagra, ventilación, patas, divisiones, catálogo de tornillos M2–M6.
+- [ ] **G3** — Letrero: varias líneas, alineación y cambio de texto sin rehacer.
+- [ ] **G4** — Tarjeta «Herramientas» sobre el lienzo vacío; control de calidad de malla al exportar.
+
+### Fase 18 — Ampliaciones de modelado
+
+Todas las operaciones de esta lista **ya existen en su forma básica** (Fases 5, 7, 8 y 9: patrón y espejo de cuerpos, redondeo y chaflán, vaciado, agujeros, roscas, barrido, loft, mover, uniones, medir, sección, importar STEP). Lo que sigue son **variantes que aún no tienen**; se comprobó en el código el 16 nov. 2026.
+- [ ] **O1** — Patrón y espejo: hoy copian **un cuerpo**. Falta repetir o reflejar **operaciones** (una extrusión, un agujero), el patrón a lo largo de una trayectoria y el espejo de varios cuerpos a la vez.
+- [ ] **O2** — Redondeo y chaflán: hoy una sola medida sobre las aristas elegidas. Falta chaflán con dos distancias o distancia y ángulo, radio variable a lo largo de la arista y redondear todas las aristas de una cara con un clic.
+- [ ] **O3** — Vaciado, agujeros y roscas: el vaciado exige quitar al menos una cara y usa un solo espesor; falta el vaciado **cerrado** (hueco por dentro, sin abrir) y espesores distintos por cara. Los agujeros se colocan con un sketch; falta ponerlos con un clic en una cara. La rosca se crea como sólido nuevo en un punto; falta aplicarla **sobre un cilindro o agujero que ya existe** (eligiendo su cara).
+- [ ] **O4** — Barrido y loft: hoy el barrido solo elige si el perfil sigue la trayectoria y el loft si es recto o suave; faltan curvas guía, torsión y condiciones de tangencia. Mover: el gizmo ya está, falta arrastrar libre sobre un plano. Faltan también dividir un cuerpo con un plano o una cara, componentes con origen propio y la unión cilíndrica (hay rígida, giratoria y deslizante).
+- [ ] **O5** — Medir y Sección: Medir muestra el valor en el panel; falta dibujar la línea de la medida y copiar el valor. La sección solo usa los planos XY, XZ y YZ; falta cortar por una cara o un plano de construcción. La revisión para imprimir no avisa de voladizos ni de soportes.
+- [ ] **O6** — STEP y archivos: hoy se importa la geometría en mm. Falta leer pulgadas, colores, nombres y ensamblajes (XDE), volver a importar un STEP que cambió, guardar la cámara en el diseño y una calidad de malla «Personalizada» al exportar.
+
+### Fase 19 — Distribución y firma de código (plan del 16 nov. 2026)
+
+Para que otra persona pueda instalar NufioCAD en Windows sin que SmartScreen, Defender o Smart App Control lo traten como amenaza. **No hay una auditoría obligatoria de Microsoft** para programas de escritorio: decide la reputación (SmartScreen), el antivirus (Defender) y, en Windows 11, Smart App Control, que solo deja correr binarios firmados o con buena reputación y no ofrece «ejecutar de todas formas». Motivos y alternativas en [`decisiones.md`](decisiones.md#distribución-y-firma-de-código-windows).
+- [ ] **D1 — Instalador:** Windows con CPack (NSIS o WiX) y `windeployqt` para reunir las DLL de Qt y de OpenCASCADE, con asociación de `.nuf`, entrada en el menú Inicio y desinstalador; Linux con AppImage (después Flatpak o RPM). El lanzador `.desktop`, el tipo MIME y `install-local.sh` de `packaging/linux/` ya existen.
+- [x] **D2 — Probar Release en Windows ✅ (16 nov. 2026, con Smart App Control apagado):** el preset `windows-release` compila (vcpkg compila OpenCASCADE solo para Release; `VCPKG_ROOT`, `QT_ROOT` y `VSLANG=1033` puestos, ver [`desarrollo.md`](desarrollo.md)). Con Smart App Control activo (modo estricto) Windows **bloquea la ejecución** del `.exe` («did not meet the Enterprise signing level», eventos 3077 y 3118 de Code Integrity) y, desde ese día, también la de los binarios Debug recién compilados; el usuario lo apagó (irreversible en esa instalación de Windows) y desde entonces corre todo. Medido: las 265 pruebas unitarias tardan 16 s en Release y unos 130 s en Debug; la prueba de interfaz, 44/44. Esto es lo que firmar el código (D3) evitaría en otras máquinas.
+- [ ] **D3 — Firmar:** elegir el firmante (firma en la nube de Azure, unos 10 USD al mes según país y tipo de cuenta; un certificado OV con clave en token o en la nube, de cientos de dólares al año; o SignPath Foundation, gratis para proyectos abiertos) y firmar con marca de tiempo el `.exe`, **todas las DLL** y el instalador. La firma va en el CI de GitHub con secretos del repositorio: la clave no vive en ningún PC.
+- [ ] **D4 — Reputación de SmartScreen:** publicar siempre firmado con el mismo certificado (la reputación es del certificado, no de cada compilación), con el SHA-256 de cada descarga en las notas de la versión. Se espera ver la advertencia en las primeras descargas aunque esté firmado.
+- [ ] **D5 — Falsos positivos:** compilar en el CI público, sin empaquetadores ni ofuscadores, y, si Defender marca un archivo, enviarlo a Microsoft (portal de envío de muestras de Defender; es gratis y es la única revisión a la que se puede recurrir). Dejar el procedimiento escrito.
+- [ ] **D6 — Opcional:** winget (revisa el manifiesto y escanea el instalador) y Microsoft Store (MSIX, con certificación y firma de Microsoft, pago único pequeño).
+- [ ] **D7 — Licencias en el instalador:** incluir los avisos de PlaneGCS (LGPL-2.1+, enlazado estáticamente: ofrecer el código y permitir reenlazar), Qt (LGPL-3), OpenCASCADE y los demás.
+
+## Fases hechas
 
 ### Fase 0 — Diseño y fundamentos
 - Principios de UX documentados.
@@ -82,7 +156,7 @@ Alternativas y motivos: [`decisiones.md`](decisiones.md).
 - Selección de caras y aristas con resaltado al pasar el cursor.
 - Barra de navegación flotante sobre el visor (inicio, ajustar, mirar al sketch, y herramientas Orbitar, Desplazar y Zoom).
 
-### Interfaz estilo Fusion 360 (transversal)
+### Interfaz estilo Fusion 360 (transversal; lo que falta está en la Fase 15)
 
 Hecho (probado en Windows; en Linux falta compilar con `qt6-qtsvg`):
 - [x] Iconos SVG (Lucide, ISC) con nombre y tooltip en todas las acciones; se recolorean con el tema claro/oscuro en caliente.
@@ -92,11 +166,6 @@ Hecho (probado en Windows; en Linux falta compilar con `qt6-qtsvg`):
 - [x] Como Fusion 360 (revisado contra su documentación): la aplicación abre **directo en un lienzo vacío**, sin pantalla de inicio; los recientes con miniatura están en Archivo › Recientes… (Ctrl+Mayús+O, se cierra con Esc) y en Abrir reciente. El panel de propiedades ya no está fijo y vacío: aparece solo mientras hay un comando activo, como los diálogos de Fusion.
 - [x] Medidas visibles en el sketch: largo de cada línea y Ø/R de círculos y arcos, sin tener que acotar (lo que ya tiene cota propia, lo proyectado y la construcción no se rotulan). Se apagan en Ver › Mostrar medidas del sketch.
 - [x] Sketch sin saturar (referencias: Fusion 360 para el flujo y la jerarquía, Onshape para mostrar lo secundario solo donde se mira): las **medidas y las restricciones solo se ven en lo que tiene el cursor encima o está seleccionado**; Ver › «Medidas/Restricciones de todo el sketch a la vez» las muestra todas. Tres niveles visuales: las cotas que pone el usuario, en azul y con sus líneas; las restricciones, como iconos pequeños y apagados; y las medidas automáticas, como texto simple sin recuadro.
-- [ ] Paleta flotante del sketch sobre el lienzo (casillas: medidas, restricciones, puntos, rejilla), como la de Fusion; evitar que los textos se tapen entre sí.
-- [ ] Barra de aplicación superior (Guardar, Deshacer, Rehacer y pestaña del documento) y selector de espacio de trabajo, como en Fusion; el navegador con el nombre del documento como raíz; controles de reproducción en el timeline; los comandos como diálogo flotante sobre el lienzo en vez de un panel acoplado.
-- [ ] Menú radial con clic derecho y atajos de una tecla para todo (hoy hay atajos de sketch, E y Mayús+P).
-- [ ] Valores editables junto al cursor también en Extruir/Revolución (hoy solo en el sketch y en el panel).
-- [ ] Rendimiento de la vista previa medido en Release (en Debug quedan ~25 ms por paso; Smart App Control de esta PC bloquea las DLL de OCCT en Release).
 
 ### Fase 2 — Sketcher 2D
 
@@ -324,7 +393,7 @@ Después, el formato:
 37. **Importar un STEP real**: uno de otro programa (con varios sólidos y en pulgadas, si se puede) → Ctrl+I: aparece la ficha «Importación», cada sólido es un cuerpo, y se puede hacer un sketch en una cara y cortar. Guardar, mover el STEP, abrir: igual.
 38. **Recientes**: guardar varios diseños → cerrar → la pantalla de inicio los lista con miniatura; borrar uno desde el explorador → aparece «ya no existe» y se quita; clic derecho › Quitar de la lista.
 
-### Fase 5 — Operaciones de acabado 🚧
+### Fase 5 — Operaciones de acabado
 
 Todas siguen el patrón de las operaciones actuales: una clase en `document/Features`, su función en `geometry/Modeling` con nombres de cara estables, serialización en `io/DocumentFile`, una herramienta con vista previa en `app/FeatureTools`, y pruebas.
 
@@ -376,8 +445,8 @@ Todas siguen el patrón de las operaciones actuales: una clase en `document/Feat
 - **6a Planos de construcción ✅:** `ConstructionPlaneFeature` (plano base —de origen, una cara plana u otro plano de construcción—, giro alrededor del eje X o Y del plano y desfase a lo largo de su normal; se publica en `ModelState::planes`). Un sitio (`SketchAttachment`) puede apuntar a un plano de construcción (`reference`), así que sirven para sketches y para el plano de simetría del espejo, y siguen al plano si se edita. Se ven como cuadrados translúcidos turquesa (tamaño según la pieza), con carpeta «Planos de construcción» en el navegador (casilla para ocultar) y se eligen en «Crear sketch». Herramienta Sólido › Plano (grupo CONSTRUIR). Se guarda como `plane`. 3 pruebas nuevas.
 - **6b Ejes de construcción ✅:** `ConstructionAxisFeature` (intersección de dos planos —de origen, cara o de construcción— o, con uno solo, la perpendicular a él por su origen; planos paralelos dan error). Se publica en `ModelState::axes`, se ve como una línea turquesa y se usa como eje de **Revolución** (`AxisRef::Kind::Construction`) y de **Patrón** (lineal: su dirección; circular: eje de giro, ya sin limitarse al origen). Herramienta Sólido › Eje; carpeta «Ejes de construcción» en el navegador. Se guarda como `axis`. 2 pruebas nuevas. Con esto el patrón y la revolución ya aceptan ejes propios.
 - **6c Parámetros y expresiones ✅:** tabla de parámetros del documento (`Document::parameters`, se guarda en la tabla `parameters` del `.nuf`; cambios por el comando `SetParameters`, con deshacer). Evaluador propio (`Expression.hpp`): números con punto o coma, `+ - * / ^`, paréntesis, otros parámetros, funciones (`sin cos tan asin acos atan sqrt abs round floor ceil min max pow`; argumentos con `;`; trigonometría en grados), constantes `pi` y `e`, unidades tras un número (`mm cm m in deg rad`), referencias circulares detectadas. Las operaciones guardan una expresión por campo (`Feature::expressions`, campos declarados en `numericFields()`): extrusión (distancias y desfase), revolución (ángulos), redondeo/chaflán (tamaño), vaciado (espesor), agujeros (diámetros, profundidades, ángulo), patrón (distancia, ángulo, cantidad) y plano de construcción (distancia, ángulo). Al calcular se evalúan sobre una copia, así que al cambiar un parámetro todo lo ligado se recalcula; si falta o falla un parámetro la operación queda en error con un mensaje. En la interfaz, los cuadros numéricos de las herramientas aceptan expresiones (`ExpressionSpinBox`: «alto*2» muestra el valor en el tooltip y la expresión se conserva al editar); botón Sólido › Parámetros (grupo CONSTRUIR) con la tabla, valores en vivo y avisos. 3 pruebas nuevas.
-- **Renombrar parámetros ✅ (backlog, oleada 1):** al cambiar el nombre de una fila en Sólido › Parámetros, las expresiones de las demás filas se reescriben al instante y, al aceptar, también las de las operaciones (`renameInExpression`, `Document::setParameters(tabla, renombrados)`; el comando `SetParameters` guarda las expresiones anteriores y se deshace entero). Funciona token a token (no toca `grosor_2` al renombrar `grosor`, ni funciones ni unidades). 1 prueba nueva ([params]). Probado solo con pruebas automáticas (pasos 6.17–6.19 de la guía, sin hacer a mano).
-- **Cotas del sketch ligadas a parámetros ✅ (backlog, oleada 1):** el cuadro de una cota (doble clic) acepta un número o una expresión (`radio`, `grosor*2`; longitudes en la unidad elegida, ángulos en grados). Mientras se edita, la expresión vive en `Constraint::expression`; al terminar el sketch pasa a las expresiones de la operación (clave `c<id>`, como cualquier otro campo ligado), así que se guarda en el `.nuf`, se renombra con el parámetro y se deshace igual. `SketchFeature::numericFields` expone las cotas con valor; al calcular, la operación evalúa las expresiones y **vuelve a resolver el sketch** (si el solver no converge o hay conflicto, la operación queda en error con el motivo; radios, diámetros y longitudes deben ser > 0; se conserva el signo de las distancias en X/Y). Al reabrir el sketch se parte del ya calculado con las expresiones puestas en sus cotas. 1 prueba nueva (círculo con radio ligado: cambio de volumen, renombrado, guardar y abrir, error y recuperación).
+- **Renombrar parámetros ✅ (Fase 11):** al cambiar el nombre de una fila en Sólido › Parámetros, las expresiones de las demás filas se reescriben al instante y, al aceptar, también las de las operaciones (`renameInExpression`, `Document::setParameters(tabla, renombrados)`; el comando `SetParameters` guarda las expresiones anteriores y se deshace entero). Funciona token a token (no toca `grosor_2` al renombrar `grosor`, ni funciones ni unidades). 1 prueba nueva ([params]). Probado solo con pruebas automáticas (pasos 6.17–6.19 de la guía, sin hacer a mano).
+- **Cotas del sketch ligadas a parámetros ✅ (Fase 11):** el cuadro de una cota (doble clic) acepta un número o una expresión (`radio`, `grosor*2`; longitudes en la unidad elegida, ángulos en grados). Mientras se edita, la expresión vive en `Constraint::expression`; al terminar el sketch pasa a las expresiones de la operación (clave `c<id>`, como cualquier otro campo ligado), así que se guarda en el `.nuf`, se renombra con el parámetro y se deshace igual. `SketchFeature::numericFields` expone las cotas con valor; al calcular, la operación evalúa las expresiones y **vuelve a resolver el sketch** (si el solver no converge o hay conflicto, la operación queda en error con el motivo; radios, diámetros y longitudes deben ser > 0; se conserva el signo de las distancias en X/Y). Al reabrir el sketch se parte del ya calculado con las expresiones puestas en sus cotas. 1 prueba nueva (círculo con radio ligado: cambio de volumen, renombrado, guardar y abrir, error y recuperación).
 - **Aviso de compilación (Windows en español):** MSVC escribe «Nota: inclusión del archivo» y ninja no la reconoce, así que **no detecta cambios en cabeceras** y deja objetos viejos enlazados con nuevos (síntoma: caídas absurdas en pruebas que antes pasaban). Compilar siempre con `VSLANG=1033` (salida de MSVC en inglés) y, si hubo cambios de cabecera sin esa variable, reconstruir con `--clean-first`.
 - **Pendiente de 6c:** la cota ligada no se distingue a simple vista en el sketch (falta una marca, p. ej. «ƒ»); editar una cota ligada con un número suelto quita la expresión sin avisar; el diálogo no permite intercambiar dos nombres a la vez (a↔b se bloquea por «repetido»); solo cotas con valor (no restricciones como la curvatura); no probado a mano en la ventana.
 
@@ -393,7 +462,7 @@ Todas siguen el patrón de las operaciones actuales: una clase en `document/Feat
 - **Dibujo de cuerpos pesados en segundo plano ✅:** `geometry::DisplayMesh` (`prepareMesh` en un hilo de trabajo sobre una copia: mallado en paralelo con desviación absoluta de 0,1 mm y normales de cada nodo; `applyMesh` en el hilo de la interfaz solo pasa punteros a las caras del cuerpo original; `hasHeavySurface` = más de 2000 puntos de control en caras spline). El visor, ante un cuerpo pesado sin malla, la prepara en segundo plano, sigue mostrando lo anterior (barra de estado: «Preparando el dibujo de la pieza…») y lo pinta al terminar; si llega otra petición, cancela la anterior; al cerrar espera a los hilos. Medido en la app (Debug, cronómetro y vigilante del bucle de eventos temporales): **sin pausas de la interfaz** al abrir Rosca y al cambiar diámetro o largo (10, 30, 60; tres cambios seguidos); el dibujo nuevo aparece a los 0,3–1,3 s. Cerrar la app durante el cálculo sale limpio (código 0). 1 prueba nueva ([thread]).
 - **Pendiente del segundo plano (dibujo):** el dibujo antiguo se ve unos instantes mientras se prepara el nuevo; el borde de las caras de una rosca se dibuja sin la malla de aristas (lo discretiza el visor). (Los cálculos de geometría, rosca y booleanas, ya van en segundo plano: ver «Cálculo del historial y vistas previas en segundo plano».)
 - **Cálculo del historial y vistas previas en segundo plano ✅ (pedido en las pruebas: cilindro Ø10 con una rosca cortante encima; al cambiar el diámetro a 20 y volver a 10 la app se quedaba colgada):** `Document::enableBackgroundCompute` (la ventana lo activa; las pruebas y los documentos de trabajo siguen calculando en el acto): cada cambio del historial copia lo que hace falta (operaciones desde la primera afectada, el estado anterior y los valores de los parámetros) y recalcula en un hilo aparte; la interfaz sigue viva viendo el resultado anterior (barra de estado: «Calculando el modelo…»), un cambio nuevo **cancela** el cálculo en curso (`geometry::CancelScope`: las booleanas se interrumpen a media operación) y al acabar se instala el resultado y se avisa con `changed` (`computingChanged` al empezar y al terminar). Mientras se calcula no se abren herramientas, sketches ni exportación (avisa «El modelo todavía se está calculando»); deshacer, rehacer, mover el marcador y editar siguen disponibles. Abrir un archivo e importar un STEP también calculan en segundo plano (el encuadre y el resumen salen al terminar). Las **vistas previas** de las herramientas y de los generadores (`BackgroundRun`) también: se arma la operación con los valores de los cuadros, se calcula en un hilo sobre copias y se dibuja al terminar; «Aceptar» queda deshabilitado mientras tanto y aparece «Calculando…» si pasa de 300 ms. En la prueba de interfaz, cambiar el diámetro del cilindro con la rosca encima paró la ventana **60 ms** (antes, lo que tardaba la rosca). 3 pruebas nuevas ([background]) y 1 paso nuevo de la prueba de interfaz.
-- **Pendiente del cálculo en segundo plano:** el cálculo en curso solo se interrumpe dentro de las booleanas (la construcción de la rosca, un engranaje helicoidal o un redondeo grande terminan antes de poder cancelarse, aunque su resultado se descarta); no hay barra de progreso ni botón «Cancelar» (solo se cancela cambiando algo); el hilo de cálculo y el visor comparten los cuerpos ya dibujados (solo lectura): se comprobó en las pruebas, pero no con piezas muy grandes ni en Release; el dibujo en pantalla del resultado (mallado de cuerpos que no son «pesados») sigue en el hilo de la interfaz y en generadores grandes todavía da paradas de 1–2 s; el cálculo corre en un solo hilo por documento (las operaciones independientes del historial no se reparten); los generadores calculan en su propio documento de trabajo, así que al aceptar se vuelve a calcular dentro del documento. (Todo esto tiene plan en la **Oleada 6 — Fluidez** del backlog.)
+- **Pendiente del cálculo en segundo plano:** el cálculo en curso solo se interrumpe dentro de las booleanas (la construcción de la rosca, un engranaje helicoidal o un redondeo grande terminan antes de poder cancelarse, aunque su resultado se descarta); no hay barra de progreso ni botón «Cancelar» (solo se cancela cambiando algo); el hilo de cálculo y el visor comparten los cuerpos ya dibujados (solo lectura): se comprobó en las pruebas, pero no con piezas muy grandes ni en Release; el dibujo en pantalla del resultado (mallado de cuerpos que no son «pesados») sigue en el hilo de la interfaz y en generadores grandes todavía da paradas de 1–2 s; el cálculo corre en un solo hilo por documento (las operaciones independientes del historial no se reparten); los generadores calculan en su propio documento de trabajo, así que al aceptar se vuelve a calcular dentro del documento. (Se trabajó en la **Fase 13 — Fluidez**.)
 - **(Resuelto con el dibujo en segundo plano)** El tiempo que quedaba al abrir la herramienta Rosca (~3 s en Debug, casi todo el visor calculando normales) ya no para la interfaz.
 - **(Resuelto)** El mallado dejó el hilo de la interfaz (ver «Dibujo de cuerpos pesados en segundo plano»); queda medir en Release.
 - **Pendiente de 7b:** Unir/Cortar con un cuerpo sigue costando ~2 s en Debug (todo en la booleana de OpenCASCADE: intersección de planos con la superficie spline); probar en Release y, si hace falta, hacer la rosca en 4 caras (cresta, flancos, fondo) para simplificar la intersección; el engranaje helicoidal usa el mismo tipo de loft y puede tener el mismo problema; rosca sobre una cara cilíndrica existente, perfiles no métricos (trapezoidal, UNC) y chaflán de entrada.
@@ -459,27 +528,56 @@ Asistentes que hacen preguntas («redonda o rectangular», grosor de paredes, gr
 - **10e Par de engranajes ✅:** generador «Par de engranajes»: dos ruedas (módulo, dientes de cada una, ángulo de presión, ancho, hélice, agujeros y juego) a la distancia entre ejes `módulo × (z1 + z2) / 2 + juego`, la segunda **girada** para que los dientes encajen (parámetro calculado `giro_rueda_2`) y, con hélice, de sentido contrario; el formulario muestra la relación de transmisión, la distancia y los diámetros primitivos. Para esto: el engranaje tiene **Giro inicial** (`GearFeature::rotation`, también en su herramienta), el número de dientes de su herramienta admite expresiones, y los formularios de los generadores aceptan cantidades y ángulos y un resumen (`Generator::summary`). Se comprobó con una booleana que las ruedas no se solapan con el giro y que sí se solapan sin él. Medidas y fórmulas en [`generadores.md`](generadores.md). 3 pruebas nuevas.
 - **Corregido de paso:** las expresiones de campos en grados (ángulo de presión, hélice, ángulos de extrusiones…) se convertían dos veces a radianes al calcular; ahora valen lo que dicen (antes un ángulo ligado a un parámetro daba un valor casi nulo).
 - **Pendiente de 10e:** el aviso de compatibilidad en el panel del engranaje suelto (módulo, ángulo de presión, hélice) cuando hay otro cerca no se hizo; la forma de las ruedas con pocos dientes (< 10) sale puntiaguda (ver 7a); con hélice no se comprobó el engrane con una booleana (solo se comprueba en dientes rectos); no hay opción de ruedas separadas para imprimir ni de rueda interior/cremallera.
+- **Engranaje interno y cremallera ✅ (pedido del usuario):** `GearSpec::type` (Exterior, Interno, Cremallera) y `GearSpec::rim` (aro de la corona o base de la barra); generadores «Engranaje interno» (corona + piñón a `m·(z corona − z piñón)/2 − juego`, aviso con menos de 8 dientes de diferencia) y «Cremallera» (barra + rueda con un diente sobre un hueco). Ver [`generadores.md`](generadores.md). **Pendiente:** corona y cremallera helicoidales (ahora avisan y no se hacen); cremallera inclinada o con chaflán de punta; corona con aro no circular (brida, orejas); rueda y cremallera con corrección de dentado; el aviso de interferencia del engranaje interno es solo en el formulario del generador (la herramienta suelta del Engranaje no avisa); pruebas de engrane solo con la booleana en el punto de contacto inicial (no se simuló el giro completo); con muchos dientes en la corona (> 100) la vista previa en Debug no se midió; el campo «Aro o base» del panel del Engranaje se muestra siempre (solo cuenta en Interno y Cremallera).
+- **Herramientas por familia ✅ (16 nov. 2026):** pestaña y menú Herramientas con **Cajas** (Lightbox y Caja con tapa), **Letreros** y **Engranajes** (`Generator::category`).
+- **Largo de la cremallera ✅ (16 nov. 2026):** modo por dientes (como antes), **largo exacto** (el último diente se corta; `GearSpec::length`) y **largo con dientes completos**; ligado al parámetro `largo`.
 - **Más adelante (aparte):** litofanías y relieves desde imagen (mallas, camino fuera de OpenCASCADE) y letreros multicolor (requiere exportar 3MF).
-
----
 
 ### Prueba automática de la interfaz ✅ (de la segunda auditoría)
 `NufioCAD.exe --prueba-interfaz` (`InterfaceCheck`): con la ventana real recorre generadores y herramientas (abrir, cambiar un valor, aceptar, deshacer, cancelar), las unidades, la sección y la medición, y escribe un informe con la parada más larga de la interfaz por paso. Un **vigilante** en otro hilo, si la interfaz lleva más de un segundo sin dar señales, la detiene un instante, copia su pila y la descifra, así que el informe dice **dónde** estaba parada. Aisla ajustes y carpetas (`QStandardPaths::setTestModeEnabled`, ajustes en un `.ini` temporal). Cómo usarla: ver la guía de pruebas.
 - **Encontró un fallo real:** al aceptar o cancelar una herramienta con vista previa, la vista previa pendiente (la que espera 250 ms) se calculaba y se dibujaba **después** de cerrarla (hasta 6 s de parada en Debug y un dibujo de más tras aceptar). Ahora `stopPreview()` la cancela al cerrar; las paradas de las herramientas pasaron de 5–6 s a 60–130 ms.
 - **Pendiente de la prueba de interfaz:** no comprueba cómo se ve (solo que hay o no cuerpos, errores y paradas); no pulsa con el ratón sino con el código de los botones; solo Windows para el vigilante de pilas (en Linux no vigila); falta añadirla al CI cuando haya una pantalla virtual (Xvfb); los generadores con muchas operaciones en Debug aún paran la interfaz 1–2 s (el Letrero, al calcular las regiones de las letras, y el Par de engranajes).
 
-### Fase de pruebas (manual, transversal)
-Guía paso a paso para probar cada fase y dar feedback: [`guia-de-pruebas.md`](guia-de-pruebas.md) (con plantilla para reportar). Se hace fase por fase cuando haya tiempo; lo que salga se anota aquí como pendiente de la fase correspondiente.
+### Fase 11 — Cimientos, robustez y pedidos de las pruebas ✅ (9–12 nov. 2026)
 
-**Convención:** cada bloque termina con su línea «**Pendiente de …**» (lo que no se hizo, lo que no se probó a mano, límites conocidos). Todo pendiente nuevo se documenta ahí al cerrar el bloque, y al hacer la segunda auditoría de código se repasan todos.
+Lo que se hizo tras la v0.1.0 a partir de la revisión del 9 nov. 2026 (antes «Oleadas 1, 2 y 3»). Lo que quedó sin hacer pasó a las Fases 14 y 15.
 
-## Sketch al estilo Onshape (plan del 10 nov. 2026)
+**Cimientos**
+- [x] Cotas del sketch ligadas a parámetros (6c). Falta probarlo a mano (guía 6.20–6.24).
+- [x] Renombrar un parámetro actualiza las expresiones que lo usan (6c). Falta probarlo a mano (guía 6.17–6.19).
+- [x] Cantidad del patrón ligable desde la interfaz (6c): el cuadro acepta expresiones y se redondea al entero (mínimo 2). Falta probarlo a mano (guía 5.12–5.14).
+- [x] Generadores reabribles (10a): cada operación guarda de qué generador salió y, la primera, las respuestas; clic derecho › «Reabrir…». Falta probarlo a mano (guía G.12–G.16).
+- [x] Completar la guía de pruebas: las fases 5–8, 9c, 9d, unidades y Fase 10 ya estaban; se ordenaron (las secciones sueltas tras la plantilla pasaron a su sitio), se quitó lo caducado y se añadieron 5.12–5.14 y G.12–G.16.
+
+**Robustez**
+- [x] Compilar y probar en Fedora/CI de Ubuntu: Fedora 44 (OCCT 7.9, GCC) y Ubuntu 24.04 del CI (OCCT 7.6) compilan y pasan las pruebas; en Fedora también los pasos de la prueba de interfaz (`4dbe602`, `9d5f009`, `66ccf04`). **Pendiente:** el filtro `*.exe` al elegir el slicer en Linux (`ExportDialog.cpp`).
+- [x] Medir en Release: hecho en Fedora (parada máxima 899 ms → 150 ms) y, desde el 16 nov. 2026, en Windows (D2: Smart App Control apagado; parada máxima 133 ms tras F5). Ver [`rendimiento/mediciones.md`](rendimiento/mediciones.md). **Pendiente:** Linux (P3 de la Fase 14).
+- [x] Partir `FeatureTools.cpp` (en 4 archivos más `FeatureToolsCommon.hpp`) y `Features.cpp` (en 2 más `FeaturesCommon.hpp`): solo se movió código, sin cambiar nada.
+- [x] Partir `Viewport.cpp` (queda el widget, ~600 líneas; el `Impl` y los dibujos pasaron a `ViewportImpl.hpp` y `ViewportDrawing.hpp`, privadas) y `MainWindow.cpp` (en `MainWindowMenus.cpp`, `MainWindowView.cpp` y `MainWindowCommon.hpp`). Solo se movió código; pruebas y prueba de interfaz pasan. Pendiente: partir `ViewportImpl.hpp` (1700 líneas) por responsabilidades (sketch, selección, vista previa).
+- [x] `hasHeavySurface`/`hasMesh` sin recorrer todas las caras en cada refresco: el resultado se guarda en la propia forma (`Shape::Impl`, inmutable): «pesada» se calcula una vez y «con malla» se recuerda cuando es cierta.
+- [x] **Cálculo del historial y de las vistas previas en segundo plano** (pedido en las pruebas: una rosca cortante colgaba la app al cambiar el diámetro del cilindro): hilo aparte sobre copias, un cambio nuevo cancela el cálculo en curso, las booleanas se interrumpen a media operación, «Calculando…» sobre la vista. Falta probarlo a mano (guía B.1–B.8).
+- [x] **Bucle de repintado en los cuadros numéricos** (la etiqueta de unidad pedía un layout sin parar y dejaba la vista a ~9 imágenes por segundo con cualquier herramienta abierta): corregido, el cuadro de la vista pasó de 110 ms a 14 ms (Debug).
+
+**Usabilidad**
+- [x] Generadores: la ayuda de cada campo sale como tooltip (se probó un texto fijo bajo el campo y no gustó) y las últimas respuestas se recuerdan por generador (`QSettings`, `generator/<id>/<clave>`; se guardan al aceptar un diseño nuevo). Falta probarlo a mano (guía G.17–G.18; la flecha de medida ya lo comprueba la prueba de interfaz). **Hecho después:** botón «Restablecer valores» (guía R.1–R.3). **Pendiente:** agrupar los campos por secciones (medidas, tapa, cable…) con títulos plegables.
+- [x] Vista previa de generadores en azul translúcido y «⏳ Calculando…» sobre la vista: los cuerpos con clave `gen:` (la vista previa de un generador, que aún no está en el diseño) se dibujan en azul con 45 % de transparencia; el distintivo (abajo a la izquierda de la vista) sale mientras el historial se recalcula o se calcula la vista previa de una herramienta (`FeatureTool::computingChanged`, `MainWindow::updateBusyBadge`). La prueba de interfaz comprueba por píxeles que la vista previa de Lightbox es azulada y que el distintivo no queda al terminar. **Pendiente:** el azul es fijo (no sigue el tema), no hay opción para verla opaca, y el distintivo no dice cuánto falta ni deja cancelar; las vistas previas de las demás herramientas (Caja, Rosca…) siguen siendo opacas y grises; el «Preparando el dibujo de la pieza…» del visor sigue en la barra de estado.
+- [x] Errores de geometría en lenguaje claro: los fallos del kernel de OpenCASCADE («Error del kernel al extruir: …») ahora dicen qué se intentaba, qué probar y, al final y entre paréntesis, el detalle técnico (`kernelFailure` en `Modeling.cpp`: extruir, revolucionar, combinar cuerpos, reflejar, repetir, engranaje, caja, cilindro, rosca, barrer, loft, mover, colocar, agujero); la booleana que falla explica que puede ser por cuerpos que solo se tocan en una arista o por caras casi coincidentes; el «Error inesperado» del documento sugiere probar otros valores o deshacer. Los mensajes que ya eran claros (validaciones de medidas, redondeo, vaciado) no cambian. **Pendiente:** las sugerencias son fijas por operación (no distinguen la causa concreta que dio el kernel); sin traducir el detalle técnico, que sigue en inglés; las ayudas con «mm» fijo en los textos de los generadores («M3: 2,5») no siguen la unidad elegida.
+- [x] **Mover y girar con el ratón, estilo Orca Slicer** (pedido del usuario): sobre el cuerpo salen flechas X/Y/Z para mover y anillos con marcas cada 45° para girar; al arrastrar solo se mueve una **sombra azul translúcida** y el modelo se calcula al soltar; los anillos miden el ángulo absoluto desde su perilla (0°), se pegan a las marcas con **softblock** (se pegan a menos de 4° y se sueltan a más de 9°) y dibujan una **recta amarilla de alineación**; mientras se arrastra uno se quitan los otros dos; cada anillo gira sobre su eje del mundo; se pueden mover y girar **varios cuerpos a la vez** como un bloque (Shift + clic, o casillas; un llavero son placa y texto). Falta probarlo a mano (guía O.1–O.18). Detalle y pendientes en la Fase 8.
+- [x] **Hecho y no anotado hasta ahora (11–12 nov. 2026, detalle en el [registro de cambios](registro-de-cambios.md)):** temas claro y oscuro con capas y contraste WCAG, colores de aviso por tema y `--captura-temas` (`4c081e4`, `7ee7df2`); banner de la barra de estado siempre presente, con parpadeo al cambiar el mensaje (`3d48051`); ayuda breve en todas las herramientas (`e9a47e1`); iconos de restricciones dibujados con líneas y fijos al aplicarlos (`04b30e0`, `f3eea6a`); guía de pruebas reorganizada con IDs únicos. **Pendiente:** cuadros estrechos de la cama en Exportar; fondo de los iconos sobre líneas; falta la prueba manual (TEM, AYU, SKR).
+- [x] Flecha de doble punta en la vista para la medida que se edita (pedido del usuario): `FeatureTool::track/dimensionArrow/dimensionArc` + `Viewport::showDimensionArrow/Arc` (flecha recta o arco para ángulos, color turquesa). Hecha para Extruir (distancia, distancia 2, desfase), Caja, Cilindro, Plano (distancia y ángulo), Mover (X/Y/Z y ángulo), Patrón (distancia y ángulo circular), Rosca (diámetro, largo, paso), Engranaje (módulo/dientes, ancho, agujero), Redondeo/Chaflán (tamaño, aristas rectas), Vaciado (espesor), Agujero (diámetro, profundidad, cabeza), la posición X/Y de las colocaciones y los generadores (`Generator::arrows()`: Lightbox, Caja con tapa, Letrero, Par de engranajes, en las medidas que son una pieza). La prueba de interfaz comprueba por píxeles Caja, Cilindro, Rosca, Engranaje, Plano, Mover, Patrón, Lightbox y Caja con tapa. Falta probarla a mano (guía F.1–F.10).
+- [x] **Flechas que faltaban ✅:** `document::axisOf` (la recta de un eje, para dibujar alrededor de ella) y `ArrowSpec::at/length` en los generadores (un punto concreto de la pieza y una medida calculada). Nuevas: Revolución (arco de «Ángulo» y «Ángulo 2» alrededor del eje, pasando por el centro del perfil; en simétrica empieza a −ángulo/2), conicidad de Extruir (arco entre la normal y la pared), Unión (distancia y desplazamiento en la cara fija, arco del ángulo alrededor de su normal), Engranaje (arcos del giro inicial, del ángulo de presión en el punto primitivo y del de hélice), radio de esquinas de la Caja, holgura de la Rosca (marca el diámetro del agujero resultante, porque 0,15 mm no se vería), y en generadores: radio de esquinas (Lightbox, Caja con tapa, Letrero), grosor del labio, postes, agujero del poste y de la tapa, grosor del labio de la tapa, margen, anilla y agujero de la anilla del Letrero, módulo y dientes del par (Ø primitivo) y los agujeros del par, que ahora se marcan en el centro de la rueda (antes salían en su borde). La prueba de interfaz encuadra la pieza antes de contar píxeles (una medida pequeña en una vista lejana son pocos píxeles) y guarda una captura en `%TEMP%\flecha-*.png` de cada flecha que falla; suma Caja (radio), Engranaje (presión, giro, hélice) y Par de engranajes (módulo).
+- **Prueba de las flechas más robusta (10 nov. 2026):** en Windows, tras volver a ejecutarla, «Plano (ángulo)» y «Engranaje (ángulo de presión)» fallaban por 0–4 píxeles (también con la versión anterior): contar «cualquier turquesa» sobre un mínimo fijo era frágil (el plano ya es turquesa, y el arco de presión del engranaje medía solo 6 mm). Ahora la prueba cuenta los píxeles del **color exacto de la flecha** (3FD0E0, sin mezclar), que sin flecha son siempre 0, con un mínimo de 15; y el arco del ángulo de presión del engranaje mide **medio radio primitivo** (unos 10 mm en una rueda de 20 dientes y módulo 2) en vez de 6 mm. Todas las flechas suman entre 34 y 1286 píxeles de su color.
+- **Pendiente de las flechas:** sin probar a mano ni en la prueba automática: Revolución, conicidad de Extruir, Unión, Rosca (holgura: la fila solo está con «Cortar») y los generadores con la caja con tapa (esquina, postes, agujeros) y el Letrero (anilla); la flecha del ángulo de presión es una guía, no mide sobre el diente real; sin flecha: holgura y agujero del cable de los generadores, ángulo de presión y de hélice del par de engranajes, tamaño del texto del Letrero, ángulo de la cabeza del Agujero. Redondeo, Vaciado y Agujero tampoco están en la prueba automática (necesitan elegir aristas, caras o un sketch).
+
+### Fase 12 — Sketch al estilo Onshape ✅ (10–12 nov. 2026; lo que queda, en la Fase 14)
 
 Pedido del usuario tras usar Onshape: medidas escritas después del clic (no antes), «softblocks» con líneas naranjas al alinear o al formar ángulos rectos, y cotas que nunca se pisen. Se hace por entregas, cada una en su rama `feature/…` desde `develop`, con su prueba manual antes de fusionar, y al final una auditoría de código del sketch para que siga siendo eficiente.
 
-**Entrega 1 — Cotas sobre el lienzo ✅ (rama `feature/cotas-en-el-lienzo`, fusionada en `develop` con `7ae4c23`):** campo de valor junto al cursor en vez de diálogo, herramienta Cota de un clic, cotas de círculos concéntricos a ángulos distintos. Detalle en la Oleada 3 del backlog; registro de cambios para volver atrás en [`registro-de-cambios.md`](registro-de-cambios.md); prueba manual C.1–C.16 en la guía.
+**Entrega 1 — Cotas sobre el lienzo ✅ (rama `feature/cotas-en-el-lienzo`, fusionada en `develop` con `7ae4c23`):** campo de valor junto al cursor en vez de diálogo, herramienta Cota de un clic, cotas de círculos concéntricos a ángulos distintos. detalle justo abajo; registro de cambios para volver atrás en [`registro-de-cambios.md`](registro-de-cambios.md); prueba manual C.1–C.16 en la guía.
 
-### Qué hace Onshape (investigado el 10 nov. 2026)
+- [x] **Cotas sobre el lienzo, al estilo Onshape (primera entrega; rama `feature/cotas-en-el-lienzo`, fusionada en `develop` con `7ae4c23`):** (1) el valor de una cota ya no se pide en un diálogo: sale un **campo pequeño sobre el lienzo, junto al cursor** («Ø 44.000 mm»; acepta números y expresiones con parámetros), Enter acepta y Esc o un clic fuera lo cancelan; (2) nueva herramienta **Cota de un clic** (tecla D sin nada elegido, o el botón Cota): un clic en un círculo, arco, elipse o línea crea su cota y abre el campo; dos clics para una distancia (punto con punto o con línea) o un ángulo (dos líneas); un clic en una cota existente la reabre; Esc quita lo elegido y, sin nada, sale del modo; con algo ya seleccionado, D funciona como antes; (3) las cotas de **círculos con el mismo centro** van a ángulos distintos (30° más cada una) y no se pisan. La prueba de interfaz abre un sketch, dibuja un círculo con clics, lo acota con un clic escribiendo un valor en el campo, lo reabre, cancela con Esc y comprueba tres círculos concéntricos; y una prueba unitaria comprueba la colocación de las cotas. **Pendiente:** el campo sale junto al cursor, no sobre el texto de la cota, y no sigue el zoom si se mueve la vista con él abierto; con una línea, el primer clic abre ya el campo de su longitud (para acotar un ángulo o una distancia hay que cancelar con Esc y hacer clic en la otra línea: la primera queda elegida); si se hace clic fuera mientras el campo está abierto, ese clic solo lo cierra; las cotas de arcos concéntricos y los textos que se tapan por otras causas no se reparten; no hay cota «de referencia» a partir de un clic. **Siguiente entrega (`feature/figuras-abiertas`):** que el polígono (y luego el círculo y el rectángulo) quede abierto tras el último clic, con su campo de lados y de tamaño para ajustarlos después.
+
+#### Qué hace Onshape (investigado el 10 nov. 2026)
 Fuentes: ayuda de Onshape, «Automatic Inferencing» ([en](https://cad.onshape.com/help/Content/Sketch/automatic_inferencing.htm), [es](https://cad.onshape.com/help/es/Content/inferencing.htm), [fr](https://cad.onshape.com/help/fr_FR/Content/Sketch/automatic_inferencing.htm)) y un [plan de clase que usa Onshape](https://mdecadp2018.github.io/site-40623206/downloads/2-1-Lesson%20Plan.pdf). Lo que dice la documentación:
 - Mientras se dibuja, Onshape **infiere** restricciones y las muestra antes del clic: **alineación horizontal y vertical** con el origen y con otras entidades, **paralela**, **punto medio** y **coincidente**.
 - **Horizontal / vertical:** una **línea discontinua naranja** (en una página en inglés se describe amarilla) desde el punto de referencia hasta el cursor; el cursor «se pega» a esa recta (lo que el usuario llama *softblock*).
@@ -489,11 +587,11 @@ Fuentes: ayuda de Onshape, «Automatic Inferencing» ([en](https://cad.onshape.c
 - **Suprimirlas:** se mantiene pulsado **Mayús** mientras se mueve el ratón.
 - Lo que la documentación no detalla (y se toma de cómo se ve al usarlo, a confirmar por el usuario): **perpendicular** con indicador al formar 90° con la línea anterior, **tangente** al encadenar un arco, y que al hacer clic con la inferencia activa **se crea la restricción** que mostraba.
 
-### Qué tenemos hoy (punto de partida)
+#### Qué tenemos hoy (punto de partida)
 - `sketch::snap` atrae el cursor a puntos, centros, puntos medios, intersecciones, sobre una curva y a la rejilla (con un marcador), y **Ctrl** dibuja libre.
 - La línea se endereza si queda a menos de 3° de horizontal o vertical respecto a **su propio** punto inicial y recibe esa restricción (`kStraightenAngle`), pero **sin ninguna línea guía** que lo avise, y **sin** alineación con otros puntos, ni perpendicular/paralela/tangente.
 
-### Plan de inferencias («softblocks») — entrega 2 o 3, rama `feature/inferencias-sketch`
+#### Plan de inferencias («softblocks») — entrega 2 o 3, rama `feature/inferencias-sketch`
 ```mermaid
 flowchart LR
     A["Cursor se mueve"] --> B{"¿Punto o centro<br/>existente cerca?"}
@@ -519,7 +617,7 @@ Orden de prioridad de las inferencias (lo que gana cuando coinciden varias):
 - [x] **I8 — Pruebas (hechas: las unitarias del motor, de la restricción y de la histéresis en `test_sketch_inference.cpp`, `229f1f1`, y el paso «Guía naranja de alineación al dibujar» de la prueba de interfaz, que cuenta los píxeles naranjas, `3d68eeb`):** unitarias del motor (cada inferencia, su prioridad, la histéresis y la restricción que crea) y pasos en la prueba de interfaz que mueven el cursor y hacen clic (como la de las cotas), contando los píxeles naranjas de la guía.
 - **Riesgos:** demasiadas guías a la vez confunden (se muestran como máximo dos); el coste de buscar alineaciones en sketches grandes (se limita a los puntos despiertos y al punto inicial; nada de recorrer todos los puntos en cada movimiento); que las restricciones automáticas sobrerrestrinjan el sketch (se comprueba con `canAdd` antes de añadirlas, como hoy).
 
-### Plan para que las cotas no se pisen nunca — rama `feature/cotas-sin-solaparse`
+#### Plan para que las cotas no se pisen nunca — rama `feature/cotas-sin-solaparse`
 Hoy cada cota (y cada icono de restricción) se coloca sola en `layoutAnnotations` sin mirar a las demás: dos cotas paralelas cercanas, una cota sobre un icono, o el texto de una cota sobre otra línea de cota se pisan. Solo los círculos concéntricos se reparten (entrega 1).
 - [x] **S1 — Cajas de texto — hecho (11 nov. 2026):** cada texto ocupa una caja de ~8 px por carácter + 8 px de margen y 18 px de alto, en píxeles pasados a mm con `pixelSize` (`textBox`). **Pendiente:** la caja de la línea de cota (hoy solo se evitan los textos entre sí). Plan original: cada anotación lleva el rectángulo que ocupa su texto (ancho por número de caracteres y alto de la letra, en píxeles pasados a mm con `pixelSize`) y, para las cotas, su línea de cota.
 - [x] **S2 — Colocación — hecho (con una diferencia):** en vez de un paso aparte, `layoutAnnotations` prueba hasta 8 posiciones de cada anotación (`placeAnnotation`) moviendo su grado de libertad natural (cota lineal: renglones más lejos; radial: +30°; ángulo: arco mayor; icono: el siguiente hueco) y se queda con la primera que no pisa a ninguna colocada, o la menos solapada. Se colocan antes las cotas y luego los iconos. **Hecho (11 nov. 2026): las cotas seleccionadas se colocan primero** y toman su sitio natural (lo «bajo el cursor» no, para que no salten al pasar el ratón). **Hecho después (12 nov., `7ee7df2`):** la línea de llamada cuando ningún renglón queda libre. **Pendiente:** mover el texto a lo largo de la línea de cota. Plan original: se recorren las anotaciones en orden (seleccionadas y bajo el cursor primero, luego las cotas de más a menos importantes, los iconos al final) y cada una que choca con una ya colocada se **desplaza por su grado de libertad natural**: cota lineal → más lejos de la geometría, en saltos de un renglón (y si ya está lejos, su texto se corre a lo largo de la línea de cota); cota radial o de diámetro → otro ángulo (30° más); ángulo → radio del arco mayor; icono → al siguiente hueco de su fila. Se prueban hasta N posiciones (por ejemplo 8); si ninguna queda libre, se usa la menos solapada y el texto lleva una **línea de llamada** hasta su cota.
@@ -529,80 +627,10 @@ Hoy cada cota (y cada icono de restricción) se coloca sola en `layoutAnnotation
 - [~] **F1 — Figuras abiertas — hecho (11 nov. 2026; falta la prueba manual M.1–M.9):** polígono, círculo (centro y radio, 2 y 3 puntos), rectángulo (esquinas, centro y 3 puntos) y ranura: tras el último clic la figura sigue editable hasta un clic nuevo, Esc o Enter sin valores, y corregirla no añade pasos a Deshacer. **Pendiente:** la elipse no tiene campos que editar.
 - [x] **S6 — Pruebas — hechas:** `tests/test_annotations_overlap.cpp` (paralelas a 1 mm, rectángulo pequeño con cotas e iconos, cota con icono, diez círculos concéntricos y 500 cotas, a varios zooms). Falta el paso de la prueba de interfaz. Plan original: unitarias con casos que hoy se pisan (cotas paralelas a 1 mm, una cota y un icono, diez círculos concéntricos, un rectángulo pequeño con sus cuatro cotas) que comprueban que ningún par de cajas de texto se solapa, a varios zooms; y la medición del tiempo de colocación con 500 cotas (prueba de rendimiento).
 
-### Después: auditoría del sketch
+#### Después: auditoría del sketch
 - [x] **Hecha el 11 nov. 2026 (`fa455f7`; cifras en el registro de cambios):** búsqueda de entidades por bisección, perfiles sin bucles cuadráticos, colocación de cotas más rápida y banco de medidas `[.bench]`; el solver se midió en Release y se deja como está. Plan original: tras la prueba manual de las entregas, auditoría de código del sketch (`SketchSession`, herramientas, `Annotations`, snap) para simplificar y optimizar: coste de `layoutAnnotations` y del snap por movimiento del ratón, repintados, duplicación entre herramientas; con mediciones antes y después.
 
-## Backlog consolidado (revisión del 9 nov. 2026, versión 0.1.0)
-
-Resumen de todo lo pendiente que no son pruebas manuales; el detalle sigue en el «Pendiente de …» de cada bloque. Se trabaja por oleadas y al cerrar cada punto se tacha aquí y en su bloque. Lo ya hecho está marcado con [x]; al final hay un resumen de lo pendiente (nuevo, de lo último que se hizo) y la lista de pruebas manuales que faltan.
-
-**Resumen por oleada (revisión del 16 nov. 2026).** ✅ hecho · 🟡 a medias · ⬜ falta. Todo lo hecho está fusionado en `develop` (no en `main`, que sigue en la v0.1.0); casi todo espera la prueba manual de la guía.
-
-| Oleada | ✅ Hecho | 🟡 A medias | ⬜ Falta |
-|---|---|---|---|
-| 1 — Cimientos | Todo | — | Solo las pruebas manuales |
-| 2 — Robustez | Fedora/Ubuntu, partir archivos, cálculo en segundo plano, Release medido (Fedora y Windows) | — | Prueba de interfaz en el CI (Xvfb; hoy el CI solo corre `--self-check`); limitaciones de Fases 2 y 3; filtro `*.exe` en Linux |
-| 3 — Usabilidad | Ayudas de los generadores, vista previa azul, errores claros, unidad en los cuadros | Interfaz Fusion (iconos, cinta, barra de navegación y tema sí) | Selector de unidad y atajos; ocultar HERRAMIENTAS en el sketch; aviso de recuperación; unidades restantes; paleta flotante, barra superior, menú radial, valores junto al cursor en Extruir/Revolución |
-| 4 — Operaciones | Lo básico de cada operación (Fases 5, 7, 8 y 9) | — | Sus variantes: patrón de operaciones, chaflán con dos distancias, vaciado cerrado, rosca sobre una cara, guías en barrido y loft, dividir cuerpos, sección por cara, STEP con colores… |
-| 5 — Generadores | Engranaje interno y cremallera | — | SVG/3MF; lightbox con canal LED y variantes de caja; letrero de varias líneas; engranajes de pocos dientes; tarjeta de Herramientas y control de malla |
-| 6 — Fluidez | F1–F6 | M8 (el navegador se rehace entero) | M1 y M6 (aplazadas con motivo) |
-| 7 — Distribución | D2 (Release en Windows) | — | D1 instalador, D3 firma, D4 SmartScreen, D5 falsos positivos, D6 winget/Store, D7 licencias |
-| 8 — Engranajes | Herramientas por familia, largo de la cremallera | — | E1–E6 |
-| Sketch (plan del 10 nov.) | Inferencias y cotas sin solaparse | I5 tangente, I6 aspecto, S5 textos sobre la geometría, F1 figuras abiertas (falta la elipse) | — |
-
-**Oleada 1 — Cimientos (hacer antes de ampliar generadores)**
-- [x] Cotas del sketch ligadas a parámetros (6c). Falta probarlo a mano (guía 6.20–6.24).
-- [x] Renombrar un parámetro actualiza las expresiones que lo usan (6c). Falta probarlo a mano (guía 6.17–6.19).
-- [x] Cantidad del patrón ligable desde la interfaz (6c): el cuadro acepta expresiones y se redondea al entero (mínimo 2). Falta probarlo a mano (guía 5.12–5.14).
-- [x] Generadores reabribles (10a): cada operación guarda de qué generador salió y, la primera, las respuestas; clic derecho › «Reabrir…». Falta probarlo a mano (guía G.12–G.16).
-- [x] Completar la guía de pruebas: las fases 5–8, 9c, 9d, unidades y Fase 10 ya estaban; se ordenaron (las secciones sueltas tras la plantilla pasaron a su sitio), se quitó lo caducado y se añadieron 5.12–5.14 y G.12–G.16.
-
-**Oleada 2 — Robustez**
-- [x] Compilar y probar en Fedora/CI de Ubuntu: Fedora 44 (OCCT 7.9, GCC) y Ubuntu 24.04 del CI (OCCT 7.6) compilan y pasan las pruebas; en Fedora también los pasos de la prueba de interfaz (`4dbe602`, `9d5f009`, `66ccf04`). **Pendiente:** el filtro `*.exe` al elegir el slicer en Linux (`ExportDialog.cpp`).
-- [ ] Prueba de interfaz en el CI (Xvfb) y que compruebe también cómo se ve.
-- [x] Medir en Release: hecho en Fedora (parada máxima 899 ms → 150 ms) y, desde el 16 nov. 2026, en Windows (D2: Smart App Control apagado; parada máxima 133 ms tras F5). Ver [`rendimiento/mediciones.md`](rendimiento/mediciones.md). **Pendiente:** Linux tras la Oleada 6.
-- [x] Partir `FeatureTools.cpp` (en 4 archivos más `FeatureToolsCommon.hpp`) y `Features.cpp` (en 2 más `FeaturesCommon.hpp`): solo se movió código, sin cambiar nada.
-- [x] Partir `Viewport.cpp` (queda el widget, ~600 líneas; el `Impl` y los dibujos pasaron a `ViewportImpl.hpp` y `ViewportDrawing.hpp`, privadas) y `MainWindow.cpp` (en `MainWindowMenus.cpp`, `MainWindowView.cpp` y `MainWindowCommon.hpp`). Solo se movió código; pruebas y prueba de interfaz pasan. Pendiente: partir `ViewportImpl.hpp` (1700 líneas) por responsabilidades (sketch, selección, vista previa).
-- [x] `hasHeavySurface`/`hasMesh` sin recorrer todas las caras en cada refresco: el resultado se guarda en la propia forma (`Shape::Impl`, inmutable): «pesada» se calcula una vez y «con malla» se recuerda cuando es cierta.
-- [x] **Cálculo del historial y de las vistas previas en segundo plano** (pedido en las pruebas: una rosca cortante colgaba la app al cambiar el diámetro del cilindro): hilo aparte sobre copias, un cambio nuevo cancela el cálculo en curso, las booleanas se interrumpen a media operación, «Calculando…» sobre la vista. Falta probarlo a mano (guía B.1–B.8).
-- [x] **Bucle de repintado en los cuadros numéricos** (la etiqueta de unidad pedía un layout sin parar y dejaba la vista a ~9 imágenes por segundo con cualquier herramienta abierta): corregido, el cuadro de la vista pasó de 110 ms a 14 ms (Debug).
-- [ ] Limitaciones de Fase 2 y 3 (ver tabla de Estado): el texto del sketch queda como curvas (no se vuelve a editar como texto); recortar/extender/desfase solo con líneas, arcos y círculos (elipses y splines no); «hasta una cara» con conos y superficies libres. (Ya están: lo proyectado se vuelve a proyectar cuando cambia la pieza, elegir cuerpos en unir/cortar y la flecha de la revolución.)
-
-**Oleada 3 — Usabilidad**
-- [x] Generadores: la ayuda de cada campo sale como tooltip (se probó un texto fijo bajo el campo y no gustó) y las últimas respuestas se recuerdan por generador (`QSettings`, `generator/<id>/<clave>`; se guardan al aceptar un diseño nuevo). Falta probarlo a mano (guía G.17–G.18; la flecha de medida ya lo comprueba la prueba de interfaz). **Hecho después:** botón «Restablecer valores» (guía R.1–R.3). **Pendiente:** agrupar los campos por secciones (medidas, tapa, cable…) con títulos plegables.
-- [x] Vista previa de generadores en azul translúcido y «⏳ Calculando…» sobre la vista: los cuerpos con clave `gen:` (la vista previa de un generador, que aún no está en el diseño) se dibujan en azul con 45 % de transparencia; el distintivo (abajo a la izquierda de la vista) sale mientras el historial se recalcula o se calcula la vista previa de una herramienta (`FeatureTool::computingChanged`, `MainWindow::updateBusyBadge`). La prueba de interfaz comprueba por píxeles que la vista previa de Lightbox es azulada y que el distintivo no queda al terminar. **Pendiente:** el azul es fijo (no sigue el tema), no hay opción para verla opaca, y el distintivo no dice cuánto falta ni deja cancelar; las vistas previas de las demás herramientas (Caja, Rosca…) siguen siendo opacas y grises; el «Preparando el dibujo de la pieza…» del visor sigue en la barra de estado.
-- [x] Errores de geometría en lenguaje claro: los fallos del kernel de OpenCASCADE («Error del kernel al extruir: …») ahora dicen qué se intentaba, qué probar y, al final y entre paréntesis, el detalle técnico (`kernelFailure` en `Modeling.cpp`: extruir, revolucionar, combinar cuerpos, reflejar, repetir, engranaje, caja, cilindro, rosca, barrer, loft, mover, colocar, agujero); la booleana que falla explica que puede ser por cuerpos que solo se tocan en una arista o por caras casi coincidentes; el «Error inesperado» del documento sugiere probar otros valores o deshacer. Los mensajes que ya eran claros (validaciones de medidas, redondeo, vaciado) no cambian. **Pendiente:** las sugerencias son fijas por operación (no distinguen la causa concreta que dio el kernel); sin traducir el detalle técnico, que sigue en inglés; las ayudas con «mm» fijo en los textos de los generadores («M3: 2,5») no siguen la unidad elegida.
-- [x] **Mover y girar con el ratón, estilo Orca Slicer** (pedido del usuario): sobre el cuerpo salen flechas X/Y/Z para mover y anillos con marcas cada 45° para girar; al arrastrar solo se mueve una **sombra azul translúcida** y el modelo se calcula al soltar; los anillos miden el ángulo absoluto desde su perilla (0°), se pegan a las marcas con **softblock** (se pegan a menos de 4° y se sueltan a más de 9°) y dibujan una **recta amarilla de alineación**; mientras se arrastra uno se quitan los otros dos; cada anillo gira sobre su eje del mundo; se pueden mover y girar **varios cuerpos a la vez** como un bloque (Shift + clic, o casillas; un llavero son placa y texto). Falta probarlo a mano (guía O.1–O.18). Detalle y pendientes en la Fase 8.
-- [x] **Cotas sobre el lienzo, al estilo Onshape (primera entrega; rama `feature/cotas-en-el-lienzo`, fusionada en `develop` con `7ae4c23`):** (1) el valor de una cota ya no se pide en un diálogo: sale un **campo pequeño sobre el lienzo, junto al cursor** («Ø 44.000 mm»; acepta números y expresiones con parámetros), Enter acepta y Esc o un clic fuera lo cancelan; (2) nueva herramienta **Cota de un clic** (tecla D sin nada elegido, o el botón Cota): un clic en un círculo, arco, elipse o línea crea su cota y abre el campo; dos clics para una distancia (punto con punto o con línea) o un ángulo (dos líneas); un clic en una cota existente la reabre; Esc quita lo elegido y, sin nada, sale del modo; con algo ya seleccionado, D funciona como antes; (3) las cotas de **círculos con el mismo centro** van a ángulos distintos (30° más cada una) y no se pisan. La prueba de interfaz abre un sketch, dibuja un círculo con clics, lo acota con un clic escribiendo un valor en el campo, lo reabre, cancela con Esc y comprueba tres círculos concéntricos; y una prueba unitaria comprueba la colocación de las cotas. **Pendiente:** el campo sale junto al cursor, no sobre el texto de la cota, y no sigue el zoom si se mueve la vista con él abierto; con una línea, el primer clic abre ya el campo de su longitud (para acotar un ángulo o una distancia hay que cancelar con Esc y hacer clic en la otra línea: la primera queda elegida); si se hace clic fuera mientras el campo está abierto, ese clic solo lo cierra; las cotas de arcos concéntricos y los textos que se tapan por otras causas no se reparten; no hay cota «de referencia» a partir de un clic. **Siguiente entrega (`feature/figuras-abiertas`):** que el polígono (y luego el círculo y el rectángulo) quede abierto tras el último clic, con su campo de lados y de tamaño para ajustarlos después.
-- [ ] Selector de unidad en la barra de estado; atajos para Caja, Cilindro y generadores.
-- [ ] Ocultar la pestaña HERRAMIENTAS dentro de un sketch; aviso de recuperación menos molesto.
-- [ ] Unidades restantes: Medir, avisos de impresión, lista de parámetros, área/volumen, por documento.
-- [ ] Interfaz Fusion: paleta flotante del sketch, barra superior, menú radial, valores junto al cursor en Extruir/Revolución.
-- [x] **Hecho y no anotado hasta ahora (11–12 nov. 2026, detalle en el [registro de cambios](registro-de-cambios.md)):** temas claro y oscuro con capas y contraste WCAG, colores de aviso por tema y `--captura-temas` (`4c081e4`, `7ee7df2`); banner de la barra de estado siempre presente, con parpadeo al cambiar el mensaje (`3d48051`); ayuda breve en todas las herramientas (`e9a47e1`); iconos de restricciones dibujados con líneas y fijos al aplicarlos (`04b30e0`, `f3eea6a`); guía de pruebas reorganizada con IDs únicos. **Pendiente:** cuadros estrechos de la cama en Exportar; fondo de los iconos sobre líneas; falta la prueba manual (TEM, AYU, SKR).
-
-- [x] Flecha de doble punta en la vista para la medida que se edita (pedido del usuario): `FeatureTool::track/dimensionArrow/dimensionArc` + `Viewport::showDimensionArrow/Arc` (flecha recta o arco para ángulos, color turquesa). Hecha para Extruir (distancia, distancia 2, desfase), Caja, Cilindro, Plano (distancia y ángulo), Mover (X/Y/Z y ángulo), Patrón (distancia y ángulo circular), Rosca (diámetro, largo, paso), Engranaje (módulo/dientes, ancho, agujero), Redondeo/Chaflán (tamaño, aristas rectas), Vaciado (espesor), Agujero (diámetro, profundidad, cabeza), la posición X/Y de las colocaciones y los generadores (`Generator::arrows()`: Lightbox, Caja con tapa, Letrero, Par de engranajes, en las medidas que son una pieza). La prueba de interfaz comprueba por píxeles Caja, Cilindro, Rosca, Engranaje, Plano, Mover, Patrón, Lightbox y Caja con tapa. Falta probarla a mano (guía F.1–F.10).
-- [x] **Flechas que faltaban ✅:** `document::axisOf` (la recta de un eje, para dibujar alrededor de ella) y `ArrowSpec::at/length` en los generadores (un punto concreto de la pieza y una medida calculada). Nuevas: Revolución (arco de «Ángulo» y «Ángulo 2» alrededor del eje, pasando por el centro del perfil; en simétrica empieza a −ángulo/2), conicidad de Extruir (arco entre la normal y la pared), Unión (distancia y desplazamiento en la cara fija, arco del ángulo alrededor de su normal), Engranaje (arcos del giro inicial, del ángulo de presión en el punto primitivo y del de hélice), radio de esquinas de la Caja, holgura de la Rosca (marca el diámetro del agujero resultante, porque 0,15 mm no se vería), y en generadores: radio de esquinas (Lightbox, Caja con tapa, Letrero), grosor del labio, postes, agujero del poste y de la tapa, grosor del labio de la tapa, margen, anilla y agujero de la anilla del Letrero, módulo y dientes del par (Ø primitivo) y los agujeros del par, que ahora se marcan en el centro de la rueda (antes salían en su borde). La prueba de interfaz encuadra la pieza antes de contar píxeles (una medida pequeña en una vista lejana son pocos píxeles) y guarda una captura en `%TEMP%\flecha-*.png` de cada flecha que falla; suma Caja (radio), Engranaje (presión, giro, hélice) y Par de engranajes (módulo).
-- **Prueba de las flechas más robusta (10 nov. 2026):** en Windows, tras volver a ejecutarla, «Plano (ángulo)» y «Engranaje (ángulo de presión)» fallaban por 0–4 píxeles (también con la versión anterior): contar «cualquier turquesa» sobre un mínimo fijo era frágil (el plano ya es turquesa, y el arco de presión del engranaje medía solo 6 mm). Ahora la prueba cuenta los píxeles del **color exacto de la flecha** (3FD0E0, sin mezclar), que sin flecha son siempre 0, con un mínimo de 15; y el arco del ángulo de presión del engranaje mide **medio radio primitivo** (unos 10 mm en una rueda de 20 dientes y módulo 2) en vez de 6 mm. Todas las flechas suman entre 34 y 1286 píxeles de su color.
-- **Pendiente de las flechas:** sin probar a mano ni en la prueba automática: Revolución, conicidad de Extruir, Unión, Rosca (holgura: la fila solo está con «Cortar») y los generadores con la caja con tapa (esquina, postes, agujeros) y el Letrero (anilla); la flecha del ángulo de presión es una guía, no mide sobre el diente real; sin flecha: holgura y agujero del cable de los generadores, ángulo de presión y de hélice del par de engranajes, tamaño del texto del Letrero, ángulo de la cabeza del Agujero. Redondeo, Vaciado y Agujero tampoco están en la prueba automática (necesitan elegir aristas, caras o un sketch).
-
-**Oleada 4 — Ampliaciones de modelado**
-
-Todas las operaciones de esta lista **ya existen en su forma básica** (Fases 5, 7, 8 y 9: patrón y espejo de cuerpos, redondeo y chaflán, vaciado, agujeros, roscas, barrido, loft, mover, uniones, medir, sección, importar STEP). Lo que sigue son **variantes que aún no tienen**; se comprobó en el código el 16 nov. 2026.
-- [ ] Patrón y espejo: hoy copian **un cuerpo**. Falta repetir o reflejar **operaciones** (una extrusión, un agujero), el patrón a lo largo de una trayectoria y el espejo de varios cuerpos a la vez.
-- [ ] Redondeo y chaflán: hoy una sola medida sobre las aristas elegidas. Falta chaflán con dos distancias o distancia y ángulo, radio variable a lo largo de la arista y redondear todas las aristas de una cara con un clic.
-- [ ] Vaciado, agujeros y roscas: el vaciado exige quitar al menos una cara y usa un solo espesor; falta el vaciado **cerrado** (hueco por dentro, sin abrir) y espesores distintos por cara. Los agujeros se colocan con un sketch; falta ponerlos con un clic en una cara. La rosca se crea como sólido nuevo en un punto; falta aplicarla **sobre un cilindro o agujero que ya existe** (eligiendo su cara).
-- [ ] Barrido y loft: hoy el barrido solo elige si el perfil sigue la trayectoria y el loft si es recto o suave; faltan curvas guía, torsión y condiciones de tangencia. Mover: el gizmo ya está, falta arrastrar libre sobre un plano. Faltan también dividir un cuerpo con un plano o una cara, componentes con origen propio y la unión cilíndrica (hay rígida, giratoria y deslizante).
-- [ ] Medir y Sección: Medir muestra el valor en el panel; falta dibujar la línea de la medida y copiar el valor. La sección solo usa los planos XY, XZ y YZ; falta cortar por una cara o un plano de construcción. La revisión para imprimir no avisa de voladizos ni de soportes.
-- [ ] STEP y archivos: hoy se importa la geometría en mm. Falta leer pulgadas, colores, nombres y ensamblajes (XDE), volver a importar un STEP que cambió, guardar la cámara en el diseño y una calidad de malla «Personalizada» al exportar.
-
-**Oleada 5 — Generadores y salida**
-- [ ] SVG como sketch (letrero y lightbox); 3MF multicuerpo con filamentos.
-- [ ] Lightbox: canal para tira LED. Caja con tapa: redonda, bisagra, ventilación, patas, divisiones, catálogo de tornillos M2–M6.
-- [ ] Letrero: varias líneas, alineación y cambio de texto sin rehacer. Engranajes: pocos dientes, aviso de compatibilidad.
-- [x] **Engranaje interno y cremallera ✅ (pedido del usuario):** `GearSpec::type` (Exterior, Interno, Cremallera) y `GearSpec::rim` (aro de la corona o base de la barra); generadores «Engranaje interno» (corona + piñón a `m·(z corona − z piñón)/2 − juego`, aviso con menos de 8 dientes de diferencia) y «Cremallera» (barra + rueda con un diente sobre un hueco). Ver [`generadores.md`](generadores.md). **Pendiente:** corona y cremallera helicoidales (ahora avisan y no se hacen); cremallera inclinada o con chaflán de punta; corona con aro no circular (brida, orejas); rueda y cremallera con corrección de dentado; el aviso de interferencia del engranaje interno es solo en el formulario del generador (la herramienta suelta del Engranaje no avisa); pruebas de engrane solo con la booleana en el punto de contacto inicial (no se simuló el giro completo); con muchos dientes en la corona (> 100) la vista previa en Debug no se midió; el campo «Aro o base» del panel del Engranaje se muestra siempre (solo cuenta en Interno y Cremallera).
-- [ ] Tarjeta «Herramientas» sobre el lienzo vacío; control de calidad de malla al exportar.
-
-**Oleada 6 — Fluidez: que la ventana nunca llegue a «No responde» (plan del 16 nov. 2026)**
+### Fase 13 — Fluidez: que la ventana nunca llegue a «No responde» ✅ (16 nov. 2026)
 
 Detalle, dónde está cada cosa y por qué en [`auditorias/auditoria-3-fluidez.md`](auditorias/auditoria-3-fluidez.md). Objetivo: ninguna parada de la interfaz de más de 100 ms en Release (250 ms en Debug) en la prueba de interfaz, y cerrar o abrir otro diseño en mitad de un cálculo sin esperar. Se hace **en este orden**, una rama por paso, midiendo antes y después en [`rendimiento/mediciones.md`](rendimiento/mediciones.md).
 - [x] **F1 — Medir primero ✅ (16 nov. 2026, rama `feature/fluidez-medir`, fusionada en `develop`; falta la prueba manual VIG.1–VIG.5; línea base en [`rendimiento/mediciones.md`](rendimiento/mediciones.md)):** `StallWatch` (`app/src/StallWatch.cpp`, con `NUF_VIGILANTE`) y 6 pasos nuevos en la prueba de interfaz (44 en total, 0 fallidos). **Confirmó A1, A3 y A4 con la pila de llamadas** (mallado de OCCT en el hilo de la interfaz; `countTriangles` en cada clic del diálogo; reparación de `ShapeFix_Solid` al importar) y dio las cifras de partida. **Pendiente de F1:** medir el diálogo real de Exportar y el de Medir (la prueba llama a las mismas funciones de geometría, no a los diálogos modales); la revisión para imprimir del diálogo no sale aparte (cuenta dentro de la parada del paso); solo Debug en Windows; el vigilante solo captura la pila en Windows (en Linux anota la duración) y las pilas de Qt salen con nombres aproximados (sin símbolos). Plan original: vigilante de pilas también en uso normal (`NUF_VIGILANTE=1`, anota en `cierres` las paradas de más de 200 ms) y pasos nuevos en la prueba de interfaz que reproduzcan cada hallazgo: exportar, diálogo de Exportar con 5 cuerpos, importar STEP, Medir sobre una rosca, Letrero, inicio con 10 recientes, patrón de 50.
@@ -642,69 +670,58 @@ Detalle, dónde está cada cosa y por qué en [`auditorias/auditoria-3-fluidez.m
   - **Pendiente de F6:** mallar por caras para no tener nunca la malla entera de una forma enorme (arriesgado: las aristas compartidas deben discretizarse igual para que el STL salga hermético); la memoria de los estados del historial con cuerpos grandes (cada operación deja su cuerpo distinto: es inherente a poder editar el pasado); Linux sin medir.
 - **No se toca:** el solver del sketch (medido: bien hasta ~100 entidades conectadas) ni el cálculo en paralelo de operaciones independientes del historial (complejo; solo si F5 no basta).
 
-**Oleada 8 — Familias de engranajes (plan del 16 nov. 2026, pedido del usuario; puede hacerse antes de la 7)**
+## Fundamentos (decisiones de partida)
 
-Idea: que el **generador de engranajes** cubra los perfiles que más se piden y que la herramienta suelta **Sólido › Engranaje** tenga un **selector de tipo** para elegir cualquiera de ellos. Algunas ideas valen solo para el generador (los conjuntos con su pareja); otras también para la herramienta. Hecho (rama `feature/cremallera-largo`, fusionada en `develop`): las herramientas ya van **agrupadas por familia** (Cajas, Letreros, Engranajes) y la cremallera acepta su largo en milímetros.
-- [x] **Herramientas por familia:** pestaña y menú Herramientas con **Cajas** (Lightbox y Caja con tapa), **Letreros** y **Engranajes** (`Generator::category`).
-- [x] **Largo de la cremallera:** modo por dientes (como antes), **largo exacto** (el último diente se corta; `GearSpec::length`) y **largo con dientes completos**; ligado al parámetro `largo`.
-- [ ] **E1 — Engranaje doble helicoidal (espina de pescado):** dos mitades con la hélice contraria que cancelan el empuje axial. En geometría, `GearSpec::herringbone` (dos lofts espejados, cada uno la mitad del ancho, unidos en un solo sólido, con un surco opcional en el centro); en el generador «Par de engranajes», una pregunta «Dientes» con rectos, helicoidales y espina de pescado; en la herramienta, el mismo selector. **Tamaño: mediano** (la hélice sencilla ya existe).
-- [ ] **E2 — Chaflán en la base («pata de elefante»):** `GearSpec::baseChamfer` (mm) que achaflana el borde de la primera capa para compensar la expansión de la primera capa en FDM; pregunta en todos los generadores de engranajes y en la herramienta. **Tamaño: pequeño a mediano** (chaflán sobre las aristas de la cara inicial por nombre).
-- [ ] **E3 — Juego entre dientes (holgura) como adelgazamiento del diente:** hoy el «Juego entre dientes» (0,15 mm por defecto, el rango de 0,15 a 0,25 que se recomienda para FDM) aleja los ejes o la barra; añadir también la opción de **afinar el diente** (`GearSpec::backlash`) para que una rueda suelta del generador o de la herramienta engrane con otra sin cambiar la distancia entre ejes. **Tamaño: pequeño.**
-- [ ] **E4 — Tornillo sin fin y rueda (worm gear):** el tornillo (de 1 a 4 entradas, módulo, diámetro primitivo, largo y ángulo de presión) y la rueda helicoidal que engrana con él, a la distancia correcta y con el giro de fase; reducciones grandes con autobloqueo. Geometría: el tornillo es un barrido helicoidal del perfil de cremallera (parecido a la rosca, que ya existe), y la rueda es un engranaje helicoidal con el ángulo de hélice igual al de avance. Solo generador («Tornillo sin fin y rueda») y en la herramienta como tipo «Tornillo sin fin». **Tamaño: grande.**
-- [ ] **E5 — Engranajes cónicos (bevel):** par de ruedas cónicas a 90° (o a otro ángulo): perfil de involuta aproximado por un diente que se escala a lo largo del cono (un loft entre el perfil exterior y el interior, recortado por los conos). Generador «Engranajes cónicos» (relación, módulo exterior, ancho de cara, ángulo entre ejes) y tipo «Cónico» en la herramienta. **Tamaño: grande, el más difícil de verificar** (el engrane se comprueba sin interferencia con la booleana, como el de la cremallera).
-- [ ] **E6 — Selector de tipo en Sólido › Engranaje:** exterior, interno, cremallera (ya existen) y, según se vayan haciendo, espina de pescado, tornillo sin fin y cónico; el panel muestra solo los campos del tipo elegido.
-- **Orden propuesto:** E1 → E2 → E3 → E6 (a medida que salen tipos) → E4 → E5. Cada uno con su prueba de volumen/nombres y su prueba de engrane, y su «Pendiente de…».
+### Stack tecnológico
 
-**Oleada 7 — Distribución y firma de código (plan del 16 nov. 2026, después de todo lo anterior)**
+| Capa | Tecnología (decidida) |
+|---|---|
+| Lenguaje | C++20 |
+| Kernel geométrico (B-Rep) | OpenCASCADE (OCCT) 7.6–8.0 |
+| Interfaz | Qt 6 Widgets |
+| Archivo nativo | `.nuf` sobre SQLite (parámetros en JSON con nlohmann/json) |
+| Render 3D | Visor V3d/AIS de OCCT dentro de un `QOpenGLWidget` |
+| Solver de restricciones 2D | PlaneGCS (de FreeCAD, en `third_party/planegcs`) + Eigen |
+| Plataformas | Windows y Linux, compilación nativa (sin Docker para distribuir) |
+| Build | CMake + CMakePresets + vcpkg (manifiesto); Catch2; CI en Windows y Ubuntu |
 
-Para que otra persona pueda instalar NufioCAD en Windows sin que SmartScreen, Defender o Smart App Control lo traten como amenaza. **No hay una auditoría obligatoria de Microsoft** para programas de escritorio: decide la reputación (SmartScreen), el antivirus (Defender) y, en Windows 11, Smart App Control, que solo deja correr binarios firmados o con buena reputación y no ofrece «ejecutar de todas formas». Motivos y alternativas en [`decisiones.md`](decisiones.md#distribución-y-firma-de-código-windows).
-- [ ] **D1 — Instalador:** Windows con CPack (NSIS o WiX) y `windeployqt` para reunir las DLL de Qt y de OpenCASCADE, con asociación de `.nuf`, entrada en el menú Inicio y desinstalador; Linux con AppImage (después Flatpak o RPM). El lanzador `.desktop`, el tipo MIME y `install-local.sh` de `packaging/linux/` ya existen.
-- [x] **D2 — Probar Release en Windows ✅ (16 nov. 2026, con Smart App Control apagado):** el preset `windows-release` compila (vcpkg compila OpenCASCADE solo para Release; `VCPKG_ROOT`, `QT_ROOT` y `VSLANG=1033` puestos, ver [`desarrollo.md`](desarrollo.md)). Con Smart App Control activo (modo estricto) Windows **bloquea la ejecución** del `.exe` («did not meet the Enterprise signing level», eventos 3077 y 3118 de Code Integrity) y, desde ese día, también la de los binarios Debug recién compilados; el usuario lo apagó (irreversible en esa instalación de Windows) y desde entonces corre todo. Medido: las 265 pruebas unitarias tardan 16 s en Release y unos 130 s en Debug; la prueba de interfaz, 44/44. Esto es lo que firmar el código (D3) evitaría en otras máquinas.
-- [ ] **D3 — Firmar:** elegir el firmante (firma en la nube de Azure, unos 10 USD al mes según país y tipo de cuenta; un certificado OV con clave en token o en la nube, de cientos de dólares al año; o SignPath Foundation, gratis para proyectos abiertos) y firmar con marca de tiempo el `.exe`, **todas las DLL** y el instalador. La firma va en el CI de GitHub con secretos del repositorio: la clave no vive en ningún PC.
-- [ ] **D4 — Reputación de SmartScreen:** publicar siempre firmado con el mismo certificado (la reputación es del certificado, no de cada compilación), con el SHA-256 de cada descarga en las notas de la versión. Se espera ver la advertencia en las primeras descargas aunque esté firmado.
-- [ ] **D5 — Falsos positivos:** compilar en el CI público, sin empaquetadores ni ofuscadores, y, si Defender marca un archivo, enviarlo a Microsoft (portal de envío de muestras de Defender; es gratis y es la única revisión a la que se puede recurrir). Dejar el procedimiento escrito.
-- [ ] **D6 — Opcional:** winget (revisa el manifiesto y escanea el instalador) y Microsoft Store (MSIX, con certificación y firma de Microsoft, pago único pequeño).
-- [ ] **D7 — Licencias en el instalador:** incluir los avisos de PlaneGCS (LGPL-2.1+, enlazado estáticamente: ofrecer el código y permitir reenlazar), Qt (LGPL-3), OpenCASCADE y los demás.
+Alternativas y motivos: [`decisiones.md`](decisiones.md).
 
-**Resumen de lo pendiente de lo último que se hizo (9 nov. 2026)**
-- **Mover y girar con el ratón:** probar a mano (O.1–O.18); arrastre libre sobre un plano; ajuste a rejilla y a otros cuerpos; copiar varios cuerpos a la vez; elegir un componente entero desde el navegador; gizmo con tamaño constante sin parpadeo al hacer zoom (`Graphic3d_TransformPers`, sin probar); gizmo para Patrón, Espejo y Unión; texto del ángulo junto a la recta de alineación; el 0° del anillo es una dirección fija del mundo.
-- **Cálculo en segundo plano:** (actualizado el 16 nov. 2026 con la Oleada 6) ya se cancelan también loft, redondeo, chaflán, vaciado, barrido, rosca y engranaje helicoidal, y la malla del visor se prepara en segundo plano. Sigue sin barra de progreso ni botón «Cancelar».
-- **Flechas de medida:** sin flecha holgura y agujero del cable de los generadores, ángulo de presión y de hélice del par, tamaño del texto del Letrero y ángulo de la cabeza del Agujero; sin probar a mano Revolución, conicidad de Extruir, Unión, holgura de la Rosca, postes y agujeros de Caja con tapa y la anilla del Letrero.
-- **Errores en lenguaje claro:** las sugerencias son fijas por operación y el detalle técnico sigue en inglés; las ayudas con «mm» fijo en los generadores no siguen la unidad.
-- **Vista previa translúcida:** el azul es fijo (no sigue el tema); las demás herramientas siguen con vista previa opaca.
-- **Rendimiento en Release:** (actualizado el 16 nov. 2026) medido en Fedora (899 → 150 ms) y en Windows (133 ms tras F5): ver [`rendimiento/mediciones.md`](rendimiento/mediciones.md).
+**Capacidades de OCCT que aprovechamos:** extrusión, revolución, sweep, loft, booleanas, chaflán, fillet, shell; exportación STEP (`STEPControl_Writer`); mallado para STL (`BRepMesh_IncrementalMesh` + `StlAPI_Writer`).
 
-**Pruebas manuales que faltan (guía [`guia-de-pruebas.md`](guia-de-pruebas.md)):** 5.12–5.14 (cantidad del patrón), 6.17–6.24 (parámetros), G.12–G.18 (generadores reabribles y valores recordados), F.1–F.16 (flechas de medida), B.1–B.8 (cálculo en segundo plano), M.1–M.4 (errores en lenguaje claro), O.1–O.18 (mover y girar con el ratón), R.1–R.3 (restablecer valores), T.1–T.5 (vista previa translúcida) y las de las fases 1–9 que siguen sin marcar.
+---
+
+### Principios de UX (referencia: Fusion 360)
+
+1. **Timeline** abajo, siempre visible: arrastrar, editar o suprimir operaciones.
+2. **Un solo espacio de trabajo**, sin workbenches separados.
+3. **Manipuladores en pantalla**: flechas para extruir, valores editables junto al cursor.
+4. **Sketch con restricciones automáticas** (horizontal, tangente, coincidente) mientras se dibuja.
+5. **Menú radial** con clic derecho y **atajos de una tecla** (E = extruir, L = línea).
+6. **Vista previa en vivo** antes de confirmar cada operación.
+
+---
+
+### Concepto central: modelado paramétrico
+
+- El modelo es un **árbol/historial de operaciones** (Sketch1 → Extrude1 → Fillet1 → …).
+- Cada operación guarda sus **parámetros**, no su resultado; al editar una, se reconstruye todo lo que viene después.
+- **Riesgo principal: problema de nombrado topológico.** Las referencias a caras y aristas (ej. "arista 7") pueden cambiar al editar operaciones anteriores. Debe resolverse en la Fase 3 (OCCT ofrece OCAF/TNaming como apoyo); si se pospone, chaflanes y fillets romperán el historial.
+
+---
+
+### Formatos de archivo (decisión)
+
+| Uso | Formato | Notas |
+|---|---|---|
+| Nativo (guardar/abrir) | **`.nuf`** | Formato propio sobre SQLite: local, privado, guarda el historial completo, guardado atómico |
+| Exportar | STL, OBJ, STEP | STL/OBJ como malla para el slicer; STEP como sólido exacto |
+| Importar | STEP | Entra como sólido sin historial (una operación «Importación» en el timeline), igual que en Fusion 360 |
+
+**Descartado: `.f3d` de Fusion 360.** Es un formato propietario de Autodesk sin documentación pública; su geometría usa el formato del kernel de Autodesk (ShapeManager), que OCCT no lee, y reconstruir su historial implicaría replicar el comportamiento interno de Fusion. Solo lo abre Fusion, así que no aporta como estándar de intercambio.
 
 ## Notas de planificación
 
-- **Orden:** la Fase 4 va justo después del modelado básico para tener un flujo útil de punta a punta lo antes posible; cada fase siguiente agrega valor real.
-- **Esfuerzo:** las Fases 1–3 son alcanzables en semanas; las Fases 4–5 bien hechas (incluyendo robustez del historial) concentran la mayor parte del esfuerzo.
 - **Versiones, ramas y marcadores por sistema** (`main`, `develop`, `feature/*`, `estable-windows`, `estable-fedora`): ver [`desarrollo.md`](desarrollo.md#ramas-y-versiones).
-
-## Estado
-
-| Fase | Estado |
-|---|---|
-| Hoja de ruta | ✅ Aprobada |
-| Fase 0 | ✅ Completa — mockups, formatos de archivo, arquitectura, entorno (repositorio con CMake, vcpkg, pruebas y CI) y nombre de trabajo NufioCAD |
-| Fase 1 | ✅ Implementada y probada en Linux (Fedora) y Windows (MSVC + vcpkg + Qt 6.8.3, build Debug): visor OCCT en Qt, órbita/pan/zoom estilo Fusion, ViewCube, resaltado y selección de caras y aristas, barra de navegación con Orbitar/Desplazar/Zoom |
-| Interfaz Fusion | 🚧 Iconos, cinta con pestañas Sólido/Sketch, barra de navegación y tema en caliente hechos (ver sección «Interfaz estilo Fusion 360»). Pendiente: paleta flotante del sketch, barra superior, menú radial, valores junto al cursor en Extruir/Revolución, y verificar en Fedora |
-| Windows | 🚧 Compila (MSVC) en Debug y Release; los 269 casos de pruebas unitarias y los 44 pasos de la prueba de interfaz pasan (16 nov. 2026). Pendiente: las pruebas manuales en Windows, el instalador y la firma (Oleada 7) |
-| Fase 2 | 🚧 Implementada (2a–2d) — sketch completo: dibujo con variantes, elipse, spline y cónica; restricciones (incluida G2), cotas y valores junto al cursor; selección (también por rectángulo), deshacer, arrastre y perfiles; edición (recortar, extender, partir, empalme, chaflán, desfase, simetría, patrones, mover/copiar/girar/escalar); proyectar aristas, intersección, texto, imagen de referencia e importar DXF; los sketches terminados se guardan, sus perfiles y curvas se seleccionan en la vista 3D y se reabren con doble clic. Pendiente: las pruebas manuales de abajo y probar en Windows. Limitaciones: lo proyectado y el texto quedan bloqueados (no se actualizan con la pieza ni se editan como texto hasta la Fase 3); recortar/extender/partir y desfase trabajan con líneas, arcos y círculos; los patrones son copias independientes |
-| Fase 3 | 🚧 Implementada (3a–3c) — núcleo paramétrico con nombres estables de caras y aristas; sketches en el historial (sobre planos de origen o caras que siguen a la pieza); Extruir (todas sus variantes, empujar una cara) y Revolución con vista previa y flecha; timeline editable (editar, marcador, reordenar, suprimir, borrar, renombrar), navegador y deshacer/rehacer; lo proyectado sigue a su arista. Pendiente: las pruebas manuales 20–30 y probar en Windows. «Hasta una cara» admite caras planas, cilíndricas, esféricas y toroidales (pruebas H.1–H.8 de la guía). En una cara curva, la extrusión llega al primer cruce que cae en el trozo real de la cara y atraviesa los cruces con la superficie fuera de él (en una cara plana se usa todo el plano). Limitación: no admite conos ni superficies libres |
-| Fase 4 | ✅ 4a (Exportar), 4b (serialización), 4c (Nuevo/Abrir/Guardar/Guardar como con aviso de cambios), 4d (importar STEP), 4e (pantalla de inicio con recientes) y 4f (recuperación) implementadas. Compila y pasa las pruebas en Fedora y en el CI de Ubuntu. Pendiente: probar a mano las pruebas 31–38 |
-| Fase 5 | ✅ 5a (redondeo y chaflán), 5b (shell), 5c (agujeros), 5d (patrones de cuerpos) y 5e (espejo de cuerpos) implementadas; pendiente repetir/reflejar operaciones |
-| Fase 6 | ✅ 6a (planos de construcción), 6b (ejes de construcción) y 6c (parámetros con nombre y expresiones) implementadas. Las cotas del sketch ligadas a parámetros y el renombrado también están (Oleada 1); falta probarlos a mano (6.17–6.24) |
-| Fase 7 | ✅ 7a (engranajes), 7b (roscas), 7c (barrido) y 7d (loft) implementadas. Siguiente paso: Fase 8 |
-| Fase 8 | ✅ 8a (mover/copiar/combinar cuerpos, ahora **con flechas y anillos arrastrables, sombra, softblock y varios cuerpos a la vez**), 8b (nombres y componentes) y 8c (uniones entre caras planas) implementadas |
-| Fase 9 | ✅ 9a (revisión antes de exportar), 9b (Imprimir), 9c (Medir) y 9d (Sección) implementadas; sin calidad de malla ni línea de medida dibujada |
-| Fase 10 | ✅ 10a (base), 10b (Lightbox), 10c (Caja con tapa), 10d (Letrero o llavero), 10e (Par de engranajes), engranaje interno y cremallera (con largo en mm) implementados, agrupados por familia; más engranajes en la Oleada 8; ver [`generadores.md`](generadores.md) |
-| Cálculo en segundo plano | ✅ El historial, las vistas previas, la malla del visor, exportar, importar y medir se calculan en un grupo de hilos (`TaskPool`), con cancelación y banner ámbar con spinner; falta probarlo a mano (B.1–B.8, FLU) |
-| Flechas de medida | ✅ En casi todas las herramientas y generadores (flechas rectas y arcos para ángulos); ver sus pendientes arriba |
-| Versión | 🏷️ **v0.1.0** (9 nov. 2026): primera versión de NufioCAD en `main`; el trabajo sigue en `develop` y `feature/*` |
-| Pruebas manuales | ⏳ Guía en [`guia-de-pruebas.md`](guia-de-pruebas.md), completa hasta la última función; el usuario irá probando y dando feedback (lista de lo que falta, en el backlog consolidado) |
-| Fluidez | ✅ Oleada 6 hecha y fusionada en `develop` (16 nov. 2026; F1–F6, quedan M1, M6 y parte de M8): ver [`auditorias/auditoria-3-fluidez.md`](auditorias/auditoria-3-fluidez.md); falta la prueba manual (VIG, FLU) |
-| Distribución | 📋 Planificada (16 nov. 2026): D2 (Release en Windows) hecho; faltan instalador, firma de código en el CI y reputación de SmartScreen (Oleada 7) |
-| Documentación | ✅ Reorganizada (16 nov. 2026): índice en [`README.md`](README.md), arquitectura actual con diagramas, decisiones y guía de desarrollo |
-| Auditoría de código | ✅ Segunda auditoría hecha: [`auditorias/auditoria-2.md`](auditorias/auditoria-2.md) (hallazgos arreglados, pendientes por prioridad, usabilidad y rendimiento) |
+- **Pruebas manuales:** guía paso a paso en [`guia-de-pruebas.md`](guia-de-pruebas.md), con plantilla para reportar. Lo que salga se anota en el «Pendiente de …» del bloque correspondiente.
+- **Medir antes y después** de cualquier cambio de rendimiento: [`rendimiento/mediciones.md`](rendimiento/mediciones.md).
