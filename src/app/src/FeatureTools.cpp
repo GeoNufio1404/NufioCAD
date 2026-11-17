@@ -383,12 +383,12 @@ void FeatureTool::updatePreview()
             if (removes && calculation->result.status.health != document::Health::Error) {
                 // El sólido que se quita se construye aquí y no al terminar, en el hilo de la interfaz.
                 try {
-                    const document::Feature& feature = *calculation->feature;
-                    if (const auto* e = dynamic_cast<const document::ExtrudeFeature*>(&feature)) {
+                    const document::Feature& previewed = *calculation->feature;
+                    if (const auto* e = dynamic_cast<const document::ExtrudeFeature*>(&previewed)) {
                         calculation->tool = e->tool(state);
-                    } else if (const auto* r = dynamic_cast<const document::RevolveFeature*>(&feature)) {
+                    } else if (const auto* r = dynamic_cast<const document::RevolveFeature*>(&previewed)) {
                         calculation->tool = r->tool(state);
-                    } else if (const auto* h = dynamic_cast<const document::HoleFeature*>(&feature)) {
+                    } else if (const auto* h = dynamic_cast<const document::HoleFeature*>(&previewed)) {
                         calculation->tool = h->tool(state);
                     }
                 } catch (...) {
