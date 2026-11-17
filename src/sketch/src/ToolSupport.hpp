@@ -52,8 +52,13 @@ Straight straighten(Vec2 start, Snap& end);
 // segmento start→end queda a menos de kStraightenAngle de la paralela o de la
 // perpendicular a «reference», lo endereza (conserva el largo proyectado) y la
 // devuelve. No si el extremo se apoya en algo, está alineado o es libre.
-enum class Relation { None, Parallel, Perpendicular };
+enum class Relation { None, Parallel, Perpendicular, Tangent };
 Relation relate(Vec2 start, const Line& reference, Snap& end);
+
+// Lo mismo con un arco o un círculo lejano: Tangent si el segmento queda a menos de kStraightenAngle de una de las
+// dos tangentes que salen de «start»; Perpendicular si apunta al centro (o se aleja de él, en la misma recta).
+// Con «start» dentro del círculo no hay tangente.
+Relation relateRound(Vec2 start, const Circle& round, Snap& end);
 
 // Curva (línea, círculo o arco, incluidos los ejes) sobre la que se hizo
 // clic, según el snap. 0 si no hay ninguna.

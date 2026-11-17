@@ -32,13 +32,18 @@ void attach(Sketch& sketch, Ref created, const Snap& snapped)
         break;
     }
     // Alineación inferida con otro punto: horizontal o vertical entre ambos.
-    if (!snapped.alignY.empty() && !(snapped.alignY == created)) {
+    // (Un punto medio de línea, una referencia a la línea entera, solo alinea: no hay punto al que restringir.)
+    const auto restrictable = [&sketch](const Ref& ref) {
+        const Entity* e = sketch.entity(ref.entity);
+        return !(ref.part == Part::Whole && e && std::holds_alternative<Line>(e->geometry));
+    };
+    if (!snapped.alignY.empty() && !(snapped.alignY == created) && restrictable(snapped.alignY)) {
         const Constraint c = Constraint::horizontal(created, snapped.alignY);
         if (sketch.canAdd(c)) {
             sketch.addConstraint(c);
         }
     }
-    if (!snapped.alignX.empty() && !(snapped.alignX == created)) {
+    if (!snapped.alignX.empty() && !(snapped.alignX == created) && restrictable(snapped.alignX)) {
         const Constraint c = Constraint::vertical(created, snapped.alignX);
         if (sketch.canAdd(c)) {
             sketch.addConstraint(c);
@@ -127,6 +132,57 @@ Relation relate(Vec2 start, const Line& reference, Snap& end)
     if (std::abs(along) <= tolerance * std::abs(across)) {
         end.point = {start.x - d.y * across, start.y + d.x * across};
         return Relation::Perpendicular;
+    }
+    return Relation::None;
+}
+
+Relation relateRound(Vec2 start, const Circle& round, Snap& end)
+{
+    if (end.free || (end.kind != SnapKind::None && end.kind != SnapKind::Grid) || !end.alignX.empty()
+        || !end.alignY.empty()) {
+        return Relation::None;
+    }
+    const double cx = round.center.x - start.x;
+    const double cy = round.center.y - start.y;
+    const double reach = std::hypot(cx, cy);
+    const double vx = end.point.x - start.x;
+    const double vy = end.point.y - start.y;
+    const double vlen = std::hypot(vx, vy);
+    if (reach < kMinLength || vlen < kMinLength || round.radius < kMinLength) {
+        return Relation::None;
+    }
+    const double tolerance = std::tan(kStraightenAngle);
+    const auto close = [&](Vec2 d) {  // d unitario: el ángulo con v es menor que la tolerancia
+        const double along = vx * d.x + vy * d.y;
+        const double across = -vx * d.y + vy * d.x;
+        return along > 0.0 && std::abs(across) <= tolerance * along;
+    };
+    const auto project = [&](Vec2 d) {
+        const double along = vx * d.x + vy * d.y;
+        end.point = {start.x + d.x * along, start.y + d.y * along};
+    };
+    // Perpendicular al círculo: la recta pasa por el centro.
+    const Vec2 toCenter{cx / reach, cy / reach};
+    if (close(toCenter)) {
+        project(toCenter);
+        return Relation::Perpendicular;
+    }
+    const Vec2 away{-toCenter.x, -toCenter.y};
+    if (close(away)) {
+        project(away);
+        return Relation::Perpendicular;
+    }
+    if (reach > round.radius * (1.0 + 1e-9)) {
+        const double half = std::asin(round.radius / reach);
+        for (const double sign : {1.0, -1.0}) {
+            const double c = std::cos(sign * half);
+            const double s = std::sin(sign * half);
+            const Vec2 d{toCenter.x * c - toCenter.y * s, toCenter.x * s + toCenter.y * c};
+            if (close(d)) {
+                project(d);
+                return Relation::Tangent;
+            }
+        }
     }
     return Relation::None;
 }
