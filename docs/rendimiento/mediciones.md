@@ -176,3 +176,18 @@ símbolo** (⛔ ⚠ ℹ ✓), que paraba la ventana de 0,5 a 1,5 s al abrir el p
 respaldo se hace al abrir la ventana (la parada de ese paso pasó a ~50 ms). Lo único que sigue pasando de 100 ms es
 la cota de un clic en el sketch (133 ms). El cuadro de la vista vacía (15 ms) lo marca el controlador gráfico
 (`DrvSwapBuffers`), igual que en Fedora.
+
+## Memoria al exportar (Oleada 6, F6; Windows Release, 16 nov. 2026)
+
+Prueba oculta `nuf_tests "[.memory]"` (`tests/test_perf.cpp`, solo Windows): un engranaje helicoidal de 150 dientes mallado
+con una desviación de 0,0003 mm, **2 162 548 triángulos**. «+ MB» es lo más que sube el conjunto de trabajo del proceso
+mientras corre la operación.
+
+| Operación | Antes (se guardaban los triángulos) | Después (en flujo) |
+|---|---|---|
+| Contar los triángulos | +245 MB | **+194 MB** |
+| Escribir el STL | +297 MB (7,7 s) | **+209 MB** (6,9 s) |
+| Escribir el OBJ | +257 MB (27 s) | **+205 MB** (31 s, escritura de 6,5 millones de líneas de texto) |
+
+Cada triángulo ocupaba 72 bytes en un vector (tres puntos de tres `double`); ya no se guardan. Lo que queda es la malla de
+OpenCASCADE de la forma, que se necesita para recorrerla. El tiempo no cambia (el OBJ varía entre ejecuciones por el disco).

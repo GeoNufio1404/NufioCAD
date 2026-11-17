@@ -34,6 +34,7 @@
 #include <fstream>
 #include <locale>
 #include <sstream>
+#include <system_error>
 
 namespace nuf::geometry {
 
@@ -45,9 +46,12 @@ struct Triangle {
     Point a, b, c;  // sentido antihorario visto desde fuera del sólido
 };
 
-std::vector<Triangle> triangulate(const std::vector<Shape>& shapes, const MeshQuality& quality)
+// Malla cada forma y recorre sus caras, UNA FORMA A LA VEZ: la copia mallada se suelta antes de pasar a la siguiente. Antes
+// se guardaban todos los triángulos de todas las formas en un vector (72 bytes cada uno, más de 150 MB con dos millones de
+// triángulos) solo para contarlos o escribirlos.
+template <typename FaceVisitor>
+void forEachMeshedFace(const std::vector<Shape>& shapes, const MeshQuality& quality, FaceVisitor&& visit)
 {
-    std::vector<Triangle> triangles;
     for (const Shape& shape : shapes) {
         if (shape.isNull()) {
             continue;
@@ -64,24 +68,30 @@ std::vector<Triangle> triangulate(const std::vector<Shape>& shapes, const MeshQu
             if (mesh.IsNull()) {
                 continue;
             }
-            const bool reversed = face.Orientation() == TopAbs_REVERSED;
-            const gp_Trsf transform = location.Transformation();
-            const auto node = [&](int index) {
-                gp_Pnt p = mesh->Node(index);
-                p.Transform(transform);
-                return Point{p.X(), p.Y(), p.Z()};
-            };
-            for (int i = 1; i <= mesh->NbTriangles(); ++i) {
-                int a = 0, b = 0, c = 0;
-                mesh->Triangle(i).Get(a, b, c);
-                if (reversed) {
-                    std::swap(b, c);
-                }
-                triangles.push_back({node(a), node(b), node(c)});
-            }
+            visit(*mesh, location.Transformation(), face.Orientation() == TopAbs_REVERSED);
         }
     }
-    return triangles;
+}
+
+// Cada triángulo mallado, sin guardarlos.
+template <typename TriangleVisitor>
+void forEachTriangle(const std::vector<Shape>& shapes, const MeshQuality& quality, TriangleVisitor&& visit)
+{
+    forEachMeshedFace(shapes, quality, [&](const Poly_Triangulation& mesh, const gp_Trsf& transform, bool reversed) {
+        const auto node = [&](int index) {
+            gp_Pnt p = mesh.Node(index);
+            p.Transform(transform);
+            return Point{p.X(), p.Y(), p.Z()};
+        };
+        for (int i = 1; i <= mesh.NbTriangles(); ++i) {
+            int a = 0, b = 0, c = 0;
+            mesh.Triangle(i).Get(a, b, c);
+            if (reversed) {
+                std::swap(b, c);
+            }
+            visit(Triangle{node(a), node(b), node(c)});
+        }
+    });
 }
 
 Point cross(const Point& u, const Point& v)
@@ -149,70 +159,94 @@ void putLittleEndian(std::ofstream& out, T value)
 
 std::size_t countTriangles(const std::vector<Shape>& shapes, const MeshQuality& quality)
 {
-    return triangulate(shapes, quality).size();
+    std::size_t count = 0;
+    forEachMeshedFace(shapes, quality, [&](const Poly_Triangulation& mesh, const gp_Trsf&, bool) { count += std::size_t(mesh.NbTriangles()); });
+    return count;
 }
 
 double meshVolume(const std::vector<Shape>& shapes, const MeshQuality& quality)
 {
     double volume = 0.0;
-    for (const Triangle& t : triangulate(shapes, quality)) {
+    forEachTriangle(shapes, quality, [&](const Triangle& t) {
         const Point n = cross(t.b, t.c);
         volume += (t.a[0] * n[0] + t.a[1] * n[1] + t.a[2] * n[2]) / 6.0;
-    }
+    });
     return volume;
 }
 
 void writeStl(const std::filesystem::path& path, const std::vector<Shape>& shapes, const MeshQuality& quality)
 {
     requireShapes(shapes);
-    const std::vector<Triangle> triangles = triangulate(shapes, quality);
-    if (triangles.empty()) {
-        throw GeometryError("No se pudo mallar el cuerpo");
-    }
     std::ofstream out = openForWriting(path);
-    std::array<char, 80> header{};
-    constexpr char kTitle[] = "NufioCAD STL (mm)";
-    std::memcpy(header.data(), kTitle, sizeof(kTitle) - 1);
-    out.write(header.data(), header.size());
-    putLittleEndian<std::uint32_t>(out, static_cast<std::uint32_t>(triangles.size()));
-    for (const Triangle& t : triangles) {
-        const Point n = normalOf(t);
-        for (const Point* p : {&n, &t.a, &t.b, &t.c}) {
-            for (double v : *p) {
-                putLittleEndian<float>(out, static_cast<float>(v));
+    try {
+        std::array<char, 80> header{};
+        constexpr char kTitle[] = "NufioCAD STL (mm)";
+        std::memcpy(header.data(), kTitle, sizeof(kTitle) - 1);
+        out.write(header.data(), header.size());
+        // El número de triángulos va antes que ellos: se deja en cero y se corrige al terminar (así no hace falta
+        // guardar la malla entera para saber cuántos son).
+        putLittleEndian<std::uint32_t>(out, 0);
+        std::uint32_t count = 0;
+        forEachTriangle(shapes, quality, [&](const Triangle& t) {
+            const Point n = normalOf(t);
+            for (const Point* p : {&n, &t.a, &t.b, &t.c}) {
+                for (double v : *p) {
+                    putLittleEndian<float>(out, static_cast<float>(v));
+                }
             }
+            putLittleEndian<std::uint16_t>(out, 0);
+            ++count;
+        });
+        if (count == 0) {
+            throw GeometryError("No se pudo mallar el cuerpo");
         }
-        putLittleEndian<std::uint16_t>(out, 0);
+        out.seekp(static_cast<std::streamoff>(header.size()));
+        putLittleEndian<std::uint32_t>(out, count);
+        out.seekp(0, std::ios::end);
+        finish(out, path);
+    } catch (...) {
+        out.close();
+        std::error_code ignored;
+        std::filesystem::remove(path, ignored);  // sin archivo a medias
+        throw;
     }
-    finish(out, path);
 }
 
 void writeObj(const std::filesystem::path& path, const std::vector<Shape>& shapes, const MeshQuality& quality)
 {
     requireShapes(shapes);
-    const std::vector<Triangle> triangles = triangulate(shapes, quality);
-    if (triangles.empty()) {
-        throw GeometryError("No se pudo mallar el cuerpo");
-    }
     std::ofstream out = openForWriting(path);
-    out.imbue(std::locale::classic());
-    out.precision(8);
-    out << "# NufioCAD (mm)\n";
-    // Cada triángulo con sus tres vértices y su normal; sin soldar vértices
-    // (los slicers lo hacen al importar) para no mezclar aristas vivas.
-    for (const Triangle& t : triangles) {
-        const Point n = normalOf(t);
-        out << "vn " << n[0] << ' ' << n[1] << ' ' << n[2] << '\n';
-        for (const Point* p : {&t.a, &t.b, &t.c}) {
-            out << "v " << (*p)[0] << ' ' << (*p)[1] << ' ' << (*p)[2] << '\n';
+    try {
+        out.imbue(std::locale::classic());
+        out.precision(8);
+        out << "# NufioCAD (mm)\n";
+        // Cada triángulo con sus tres vértices y su normal; sin soldar vértices
+        // (los slicers lo hacen al importar) para no mezclar aristas vivas. Los triángulos no se guardan: se escriben
+        // según salen, y las caras (que solo dependen del número de triángulos) se escriben al final.
+        std::size_t count = 0;
+        forEachTriangle(shapes, quality, [&](const Triangle& t) {
+            const Point n = normalOf(t);
+            out << "vn " << n[0] << ' ' << n[1] << ' ' << n[2] << '\n';
+            for (const Point* p : {&t.a, &t.b, &t.c}) {
+                out << "v " << (*p)[0] << ' ' << (*p)[1] << ' ' << (*p)[2] << '\n';
+            }
+            ++count;
+        });
+        if (count == 0) {
+            throw GeometryError("No se pudo mallar el cuerpo");
         }
+        for (std::size_t i = 0; i < count; ++i) {
+            const std::size_t v = 3 * i + 1;
+            const std::size_t n = i + 1;
+            out << "f " << v << "//" << n << ' ' << v + 1 << "//" << n << ' ' << v + 2 << "//" << n << '\n';
+        }
+        finish(out, path);
+    } catch (...) {
+        out.close();
+        std::error_code ignored;
+        std::filesystem::remove(path, ignored);
+        throw;
     }
-    for (std::size_t i = 0; i < triangles.size(); ++i) {
-        const std::size_t v = 3 * i + 1;
-        const std::size_t n = i + 1;
-        out << "f " << v << "//" << n << ' ' << v + 1 << "//" << n << ' ' << v + 2 << "//" << n << '\n';
-    }
-    finish(out, path);
 }
 
 void writeStep(const std::filesystem::path& path, const std::vector<Shape>& shapes)

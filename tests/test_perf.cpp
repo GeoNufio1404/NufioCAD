@@ -227,7 +227,7 @@ TEST_CASE("Memoria al exportar una malla grande", "[.memory]")
     spec.thickness = 40.0;
     spec.helixAngle = 0.35;
     const geometry::Shape gear = geometry::gear("g", sketch::Plane::xy(), spec);
-    const geometry::MeshQuality quality{0.003, 0.1};
+    const geometry::MeshQuality quality{0.0003, 0.03};
     const std::size_t triangles = geometry::countTriangles({gear}, quality);
     const auto stl = std::filesystem::temp_directory_path() / "nuf_memoria.stl";
     const auto obj = std::filesystem::temp_directory_path() / "nuf_memoria.obj";
@@ -236,14 +236,9 @@ TEST_CASE("Memoria al exportar una malla grande", "[.memory]")
     const double countMB = peakGrowthMB([&] { (void)geometry::countTriangles({gear}, quality); });
     const double stlMB = peakGrowthMB([&] { stlMs = millis([&] { geometry::writeStl(stl, {gear}, quality); }); });
     const double objMB = peakGrowthMB([&] { objMs = millis([&] { geometry::writeObj(obj, {gear}, quality); }); });
-    std::printf("
-malla de %zu triángulos
-  contar los triángulos   +%7.1f MB   %8.1f ms
-  escribir el STL         +%7.1f MB   %8.1f ms
-"
-                "  escribir el OBJ         +%7.1f MB   %8.1f ms
-",
-                triangles, countMB, 0.0, stlMB, stlMs, objMB, objMs);
+    std::printf("\nmalla de %zu triángulos\n  contar los triángulos   +%7.1f MB\n  escribir el STL         +%7.1f MB   %8.1f ms\n"
+                "  escribir el OBJ         +%7.1f MB   %8.1f ms\n",
+                triangles, countMB, stlMB, stlMs, objMB, objMs);
     std::filesystem::remove(stl);
     std::filesystem::remove(obj);
     REQUIRE(triangles > 0);

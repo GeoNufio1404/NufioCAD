@@ -34,6 +34,8 @@ La primera rama (`feature/fluidez-medir`) midió estos hallazgos con la prueba d
 
 **F5 (16 nov. 2026) hecho en parte, y primera medición en Release:** M5, M7, M8 (parcial) y M4; M1 y M6 quedan pendientes. En Release la parada máxima de la interfaz es de 133 ms (objetivo: 100 ms) y las paradas largas de Debug resultaron ser el candado del montón de depuración. Un hallazgo nuevo de la medición en Release, resuelto: la búsqueda de la fuente de respaldo de Qt la primera vez que se dibuja un símbolo (0,5–1,5 s). Detalle en la hoja de ruta y en [`../rendimiento/mediciones.md`](../rendimiento/mediciones.md).
 
+**F6 (16 nov. 2026) hecho:** B1 (exportar sin guardar los triángulos: de 245–297 MB a 194–209 MB con 2,2 millones de triángulos); B2 y B4 se descartan con su motivo en la hoja de ruta. Con esto la Oleada 6 queda cerrada salvo M1 y M6.
+
 ## Hallazgos
 
 Cada uno lleva dónde está, por qué para la interfaz y qué se propone. «Patrón conocido» = pasar la llamada a
