@@ -2107,6 +2107,55 @@ TEST_CASE("La malla preparada en segundo plano lleva también el borde de cada c
     }
 }
 
+// Oleada 6, F5: el índice de nombres y la caja se guardan en la forma; los resultados no deben cambiar, ni siquiera
+// con nombres repetidos (una cara partida por un corte) ni al pedirlos desde varios hilos a la vez.
+TEST_CASE("Buscar caras y aristas por nombre da lo mismo con el índice guardado, también desde varios hilos", "[background][names]")
+{
+    const auto plane = sketch::Plane::fromPointAndNormal({0, 0, 0}, {0, 0, 1});
+    geometry::Shape body = geometry::box("b", plane, 40.0, 20.0, 10.0, false);
+    const geometry::Shape slot = geometry::box("s", plane, 10.0, 30.0, 4.0, false);
+    // Un surco que atraviesa la cara de arriba: la parte en dos con el mismo nombre.
+    const geometry::Shape moved = geometry::moveBody("m", slot, sketch::Vec3{15.0, -5.0, 6.0}, geometry::Axis{}, 0.0, false);
+    const geometry::Shape cut = geometry::boolean(geometry::BooleanOp::Cut, body, moved);
+    REQUIRE_FALSE(cut.isNull());
+
+    const auto roundTrip = [](const geometry::Shape& shape) {
+        for (int i = 0; i < shape.faceCount(); ++i) {
+            const auto found = shape.findFace(shape.faceRef(i));
+            REQUIRE(found.has_value());
+            REQUIRE(*found == i);
+        }
+        for (int i = 0; i < shape.edgeCount(); ++i) {
+            const auto found = shape.findEdge(shape.edgeRef(i));
+            REQUIRE(found.has_value());
+            REQUIRE(*found == i);
+        }
+    };
+    roundTrip(cut);
+    // Una consulta repetida y otra desde varios hilos a la vez dan lo mismo.
+    const geometry::Box first = cut.bounds();
+    std::vector<std::thread> threads;
+    std::atomic<int> mismatches{0};
+    for (int k = 0; k < 4; ++k) {
+        threads.emplace_back([&] {
+            for (int i = 0; i < cut.faceCount(); ++i) {
+                const auto found = cut.findFace(cut.faceRef(i));
+                if (!found || *found != i) {
+                    ++mismatches;
+                }
+            }
+            const geometry::Box again = cut.bounds();
+            if (again.min.x != first.min.x || again.max.z != first.max.z) {
+                ++mismatches;
+            }
+        });
+    }
+    for (std::thread& thread : threads) {
+        thread.join();
+    }
+    REQUIRE(mismatches == 0);
+}
+
 TEST_CASE("Una rosca y un engranaje se colocan en una posición X/Y del plano", "[thread][gear]")
 {
     Document doc;

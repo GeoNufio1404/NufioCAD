@@ -12,7 +12,10 @@
 #include <TopTools_ShapeMapHasher.hxx>
 #include <TopoDS_Shape.hxx>
 
+#include <mutex>
+#include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace nuf::geometry {
@@ -28,6 +31,19 @@ struct Shape::Impl {
     // Resultados guardados para no recorrer todas las caras en cada refresco del visor (la forma no cambia).
     mutable std::atomic<signed char> heavy{-1};  // hasHeavySurface: -1 sin calcular, 0 no, 1 sí
     mutable std::atomic<bool> meshed{false};     // hasMesh: una vez mallada, sigue mallada
+
+    // Consultas guardadas (la forma no cambia): los índices de cada nombre, ya ordenados por posición, y la caja. Antes
+    // cada búsqueda recorría todos los nombres y, con nombres repetidos (patrones, caras partidas), volvía a calcular el
+    // centro de masa de cada cara repetida; se pide en cada arista de un redondeo, en cada sketch sobre una cara, al
+    // medir… Se arman la primera vez que se piden (con candado: la forma se comparte entre hilos).
+    struct NameIndex {
+        bool built = false;
+        std::unordered_map<std::string, std::vector<int>> byName;  // índices 0-based; los repetidos, por posición
+    };
+    mutable std::mutex cacheMutex;
+    mutable NameIndex faceIndex;
+    mutable NameIndex edgeIndex;
+    mutable std::optional<Box> boundsCache;
 };
 
 // Reúne los nombres de las caras de un resultado.
