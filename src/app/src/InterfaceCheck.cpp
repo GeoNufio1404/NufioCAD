@@ -1291,7 +1291,7 @@ int InterfaceCheck::run()
     QDir().mkpath(scratch);
     const auto scratchPath = [&](const QString& name) { return std::filesystem::path(QDir(scratch).filePath(name).toStdU16String()); };
 
-    // Exportar, el diálogo de Exportar e importar un STEP ya van en segundo plano (Oleada 6, F2): estos pasos usan el
+    // Exportar, el diálogo de Exportar e importar un STEP ya van en segundo plano (Fase 13, F2): estos pasos usan el
     // mismo camino que la ventana y comprueban que lanzarlos devuelve al instante.
     step(QStringLiteral("Exportar STL, OBJ y STEP de una pieza con rosca (Archivo › Exportar, en segundo plano)"), [&] {
         addThreadedCylinder();

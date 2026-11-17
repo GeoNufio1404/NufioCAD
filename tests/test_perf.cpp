@@ -184,7 +184,7 @@ TEST_CASE("Dónde se va el tiempo de una operación sobre un cuerpo complejo", "
                 body.faceCount(), makeTool, touchesMs, int(touching), fuseMs, cutMs, validMs);
 }
 
-// Memoria al exportar una malla grande (Oleada 6, F6): cuánto sube el uso de memoria del proceso mientras se escribe un
+// Memoria al exportar una malla grande (Fase 13, F6): cuánto sube el uso de memoria del proceso mientras se escribe un
 // STL y un OBJ. Solo en Windows (mide el conjunto de trabajo cada 2 ms). Uso: nuf_tests "[.memory]".
 #ifdef _WIN32
 namespace {

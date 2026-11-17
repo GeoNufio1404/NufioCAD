@@ -10,10 +10,19 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Hoja de ruta ordenada por fases — 16 nov. 2026
+
+- **Rama:** `feature/hoja-de-ruta-por-fases` (solo documentación y comentarios; no cambia el comportamiento).
+- **Qué cambia:** la hoja de ruta deja de mezclar «fases» y «oleadas»: todo son **fases**. Las 0–13 están hechas (las antiguas Oleadas 1, 6 y el plan del sketch pasan a ser las Fases 11, 13 y 12) y las 14–19 son lo pendiente **en el orden en que se hará**: 14 cerrar lo hecho y publicar la v0.2.0, 15 usabilidad, 16 engranajes, 17 generadores y salida, 18 modelado, 19 distribución. Cada punto pendiente tiene un identificador (P1, U3, E2, G1, O4, D1…). Arriba van «Dónde estamos» (tabla de estado por fase y equivalencias con los nombres anteriores) y «Lo que sigue, en orden»; el historial y los fundamentos, al final.
+- **Otros archivos:** las menciones a «Oleada N» en los demás documentos, en la guía de pruebas y en los comentarios de `InterfaceCheck.cpp` y de las pruebas pasan a su fase nueva; la sección 5.3 de la guía se llama «Pruebas transversales».
+- **Riesgos al volver atrás:** ninguno (solo documentación y comentarios).
+
+---
+
 ## Largo de la cremallera y herramientas por familia — 16 nov. 2026
 
 - **Rama:** `feature/cremallera-largo` (sale de `develop`). Sin fusionar hasta la prueba manual (guía CRE.1–CRE.8).
-- **Qué hace:** (1) **largo de la cremallera en milímetros**: una pregunta «Largo de la barra» con tres modos (por dientes, como antes; **largo exacto**, que corta el último diente; y **largo con dientes completos**) y el largo ligado al parámetro `largo`; los diseños anteriores se reabren por dientes; (2) **la pestaña y el menú Herramientas agrupan los generadores por familia**: Cajas (Lightbox, Caja con tapa), Letreros y Engranajes; (3) plan de las **familias de engranajes** (espina de pescado, chaflán de la base, holgura, tornillo sin fin, cónicos y selector de tipo en la herramienta) en la hoja de ruta (Oleada 8).
+- **Qué hace:** (1) **largo de la cremallera en milímetros**: una pregunta «Largo de la barra» con tres modos (por dientes, como antes; **largo exacto**, que corta el último diente; y **largo con dientes completos**) y el largo ligado al parámetro `largo`; los diseños anteriores se reabren por dientes; (2) **la pestaña y el menú Herramientas agrupan los generadores por familia**: Cajas (Lightbox, Caja con tapa), Letreros y Engranajes; (3) plan de las **familias de engranajes** (espina de pescado, chaflán de la base, holgura, tornillo sin fin, cónicos y selector de tipo en la herramienta) en la hoja de ruta (Fase 16).
 - **Resultado (Release):** 269 casos de pruebas unitarias en verde (nuevas: cremallera cortada a varios largos, los tres modos del generador, guardar y reabrir con el largo, y las familias).
 
 | Parte | Dónde (para deshacerla a mano) |
@@ -25,12 +34,12 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 | Pruebas | casos «Una cremallera se puede cortar a un largo exacto», «El generador de cremallera da el largo…», «El largo de la cremallera se guarda…» y «Cada generador tiene su familia…» en `tests/test_edge_ops.cpp` |
 
 - **Corregido de paso:** `tests/test_perf.cpp` estaba **roto en `develop`** (un literal con saltos de línea, de la prueba de memoria): se trae la versión corregida de `feature/fluidez-memoria`, idéntica, para que no haya conflicto al fusionarla.
-- **Pendiente:** flecha de medida para el largo de la barra; el aviso del máximo de dientes solo sale al calcular; el resto de familias de engranajes (Oleada 8).
+- **Pendiente:** flecha de medida para el largo de la barra; el aviso del máximo de dientes solo sale al calcular; el resto de familias de engranajes (Fase 16).
 - **Riesgos al volver atrás:** ninguno en archivos guardados (el campo `length` es nuevo y opcional).
 
 ---
 
-## Oleada 6, F6: exportar con menos memoria — 16 nov. 2026
+## Fase 13, F6: exportar con menos memoria — 16 nov. 2026
 
 - **Rama:** `feature/fluidez-memoria` (sale de `develop`, ya con F1 a F5 fusionadas). Sin fusionar hasta la prueba manual (guía FLU.29–FLU.30).
 - **Qué hace:** contar triángulos, escribir STL y escribir OBJ ya no guardan todos los triángulos en un vector (72 bytes cada uno): cada forma se malla, se recorre y se suelta. El STL deja el número de triángulos para el final (lo corrige en la cabecera) y el OBJ escribe las caras al terminar. Una exportación que falla no deja un archivo a medias.
@@ -46,7 +55,7 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
-## Oleada 6, F5: calcular menos, y primera medición en Release — 16 nov. 2026
+## Fase 13, F5: calcular menos, y primera medición en Release — 16 nov. 2026
 
 - **Rama:** `feature/fluidez-hilos`. Sin fusionar hasta la prueba manual (guía FLU.24–FLU.28).
 - **Qué hace:** (1) el patrón y «Unir» con varios cuerpos funden **en árbol** (`geometry::fuseBalanced`) en vez de uno a uno; (2) la forma guarda el índice de nombres de caras y aristas y su caja (`Shape::Impl`); (3) mientras el modelo se calcula, `refreshModel` solo actualiza el historial (los cuerpos y el navegador se rehacen una vez, al terminar); (4) al arrastrar en un sketch, el sombreado de regiones se rehace como mucho cada 100 ms y al soltar; (5) **fuentes de respaldo de Qt al abrir la ventana**: la primera vez que se dibuja un símbolo (⛔ ⚠ ℹ ✓) Qt tardaba de 0,5 a 1,5 s en buscar la fuente, y paraba la ventana al abrir el primer generador.
@@ -66,7 +75,7 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
-## Oleada 6, F4: banner ámbar con spinner, cancelación en el kernel y un solo grupo de hilos — 16 nov. 2026
+## Fase 13, F4: banner ámbar con spinner, cancelación en el kernel y un solo grupo de hilos — 16 nov. 2026
 
 - **Rama:** `feature/fluidez-hilos` (sale de `feature/fluidez-dibujo`). Sin fusionar hasta la prueba manual (guía FLU.18–FLU.23).
 - **Qué hace:** (1) **a petición del usuario**, mientras algo carga la barra de estado se pone ámbar y gira un spinner (también dentro del distintivo «Calculando…»); no mide porcentaje; (2) el kernel abandona a media operación el loft, el redondeo, el chaflán, el vaciado, el barrido, la unión de partes, el engranaje helicoidal y la rosca cuando se pide cancelar, y al cerrar la ventana se oculta antes de esperar a los hilos; (3) un solo `geometry::TaskPool` sustituye a los tres mecanismos de hilos que había.
@@ -85,7 +94,7 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
-## Oleada 6, F3: dibujar sin parar la ventana (mallas, vista previa y generadores) — 16 nov. 2026
+## Fase 13, F3: dibujar sin parar la ventana (mallas, vista previa y generadores) — 16 nov. 2026
 
 - **Rama:** `feature/fluidez-dibujo` (sale de `feature/fluidez-llamadas`). Sin fusionar hasta la prueba manual (guía FLU.12–FLU.17).
 - **Qué hace:** (1) todos los cuerpos nuevos se mallan en un hilo de trabajo antes de mostrarse (antes solo las roscas), con los mismos parámetros que usa el visor; (2) el sólido rojo de «lo que se quita» se construye y se malla aparte; (3) el generador arma su receta en el hilo de trabajo y al aceptar reutiliza la de la última vista previa; (4) `fitAll` espera a que estén los cuerpos (sin esto, la vista quedaba mal encuadrada: lo encontró la prueba de la vista previa translúcida).
@@ -105,7 +114,7 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
-## Oleada 6, F2: exportar, importar, medir y recuperar sin parar la ventana — 16 nov. 2026
+## Fase 13, F2: exportar, importar, medir y recuperar sin parar la ventana — 16 nov. 2026
 
 - **Rama:** `feature/fluidez-llamadas` (sale de `feature/fluidez-medir`). Sin fusionar hasta la prueba manual (guía FLU.1–FLU.11).
 - **Qué hace:** pasa a hilos de trabajo lo que hasta ahora corría en el hilo de la interfaz: escribir STL/OBJ/STEP y preparar el STL del slicer; el conteo de triángulos y la revisión para imprimir del diálogo de Exportar (con caché por cuerpo y calidad); leer y reparar un STEP; medir; escribir la copia de recuperación; leer las miniaturas de los recientes (sin abrir los archivos que solo están en la nube de OneDrive).
@@ -126,7 +135,7 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
-## Oleada 6, F1: vigilante de paradas y línea base de fluidez — 16 nov. 2026
+## Fase 13, F1: vigilante de paradas y línea base de fluidez — 16 nov. 2026
 
 - **Rama:** `feature/fluidez-medir` (sale de `feature/engranajes-interno-cremallera`, que lleva el plan). Sin fusionar hasta la prueba manual (guía VIG.1–VIG.5).
 - **Qué hace:** (1) `NUF_VIGILANTE=1` (o un número de ms) activa un hilo que vigila el latido del bucle de eventos y, si la interfaz se para más del umbral (200 ms por defecto), anota en `cierres/paradas.txt` la hora, la duración y la pila de llamadas (Windows). (2) Seis pasos nuevos en `--prueba-interfaz` reproducen lo que hoy ocupa el hilo de la interfaz: exportar, diálogo de Exportar con 5 cuerpos, importar STEP, medir una rosca, pantalla de inicio con 10 recientes y patrón de 50. (3) Primera línea base en [`rendimiento/mediciones.md`](rendimiento/mediciones.md).
@@ -146,7 +155,7 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 ## Documentación reorganizada — 16 nov. 2026
 
 - **Rama:** `feature/engranajes-interno-cremallera` (solo documentación; no cambia código).
-- **Qué cambia:** índice nuevo [`README.md`](README.md) en `docs/`; [`arquitectura.md`](arquitectura.md) reescrita según el código actual (9 diagramas Mermaid: contexto, módulos y dependencias, modelo del documento, generadores, estados de una herramienta, flujo de extruir, nombrado topológico, hilos y esquema del `.nuf`); nuevos [`decisiones.md`](decisiones.md) (qué se usó, por qué y qué se descartó) y [`desarrollo.md`](desarrollo.md) (compilar, pruebas, opciones de línea de comandos, variables `NUF_*`, ramas). README raíz al día. Tercera auditoría (fluidez) y Oleada 6 en la hoja de ruta.
+- **Qué cambia:** índice nuevo [`README.md`](README.md) en `docs/`; [`arquitectura.md`](arquitectura.md) reescrita según el código actual (9 diagramas Mermaid: contexto, módulos y dependencias, modelo del documento, generadores, estados de una herramienta, flujo de extruir, nombrado topológico, hilos y esquema del `.nuf`); nuevos [`decisiones.md`](decisiones.md) (qué se usó, por qué y qué se descartó) y [`desarrollo.md`](desarrollo.md) (compilar, pruebas, opciones de línea de comandos, variables `NUF_*`, ramas). README raíz al día. Tercera auditoría (fluidez) y Fase 13 en la hoja de ruta.
 - **Archivos movidos:** `arquitectura-cad.md` → `arquitectura.md`, `hoja-de-ruta-cad.md` → `hoja-de-ruta.md`, `mediciones-rendimiento.md` → `rendimiento/mediciones.md`, `auditoria-2.md` → `auditorias/auditoria-2.md`. Las entradas antiguas de este registro que citan los nombres viejos se dejan como estaban.
 - **Borrado:** `aqtinstall.log` (registro de instalación de Qt), capturas temporales de `build/capturas` y la entrada `graphify-out/` de `.gitignore`.
 - **Corregido:** la arquitectura antigua decía que `sketch` dependía de `geometry` (es al revés) y que el recálculo en segundo plano estaba por decidir. Una entrada anterior decía que el build ya fuerza `VSLANG=1033`; no está en los presets: se documenta como paso manual en `desarrollo.md`.

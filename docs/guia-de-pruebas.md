@@ -774,7 +774,7 @@ NufioCAD.exe --prueba-interfaz [--informe ruta.txt] [--umbral-ms 20000]
 Variables de entorno útiles al depurar la prueba: `NUF_PRUEBA_SOLO=<texto>` (solo los pasos cuyo nombre lo contiene), `NUF_PRUEBA_PILA_MS=<ms>` (desde cuántos ms de parada se anota la pila, por defecto 1000) y `NUF_PRUEBA_CAPTURAS=<carpeta>` (guarda la captura de la vista previa translúcida).
 
 - Abre cada generador (Lightbox, Caja con tapa, Letrero o llavero, Par de engranajes), cambia un valor, acepta y deshace; hace lo mismo con Rosca, Engranaje, Caja y Cilindro; cancela una herramienta; cambia las unidades a cm y vuelve a mm; activa y desactiva Sección y Medir con un cuerpo; cambia el diámetro de un cilindro con una rosca cortante encima (debe volver al instante y calcular en segundo plano); y comprueba que al final no queda nada.
-- **Pasos de medición de fluidez (Oleada 6, F1):** reproducen lo que hoy se hace en el hilo de la interfaz y puede tardar: exportar STL/OBJ/STEP y contar triángulos de una pieza con rosca; abrir el diálogo de Exportar con 5 cuerpos, marcar y desmarcar y cambiar la calidad; importar un STEP con un engranaje; medir caras de una rosca; recargar la pantalla de inicio con 10 recientes; y un patrón lineal de 50 copias. No fallan por tiempo (solo por el umbral): las llamadas de más de 100 ms salen en el informe con su duración y sirven de línea base para comprobar cada rama de la Oleada 6 (ver [`auditoria-3-fluidez.md`](auditorias/auditoria-3-fluidez.md)).
+- **Pasos de medición de fluidez (Fase 13, F1):** reproducen lo que hoy se hace en el hilo de la interfaz y puede tardar: exportar STL/OBJ/STEP y contar triángulos de una pieza con rosca; abrir el diálogo de Exportar con 5 cuerpos, marcar y desmarcar y cambiar la calidad; importar un STEP con un engranaje; medir caras de una rosca; recargar la pantalla de inicio con 10 recientes; y un patrón lineal de 50 copias. No fallan por tiempo (solo por el umbral): las llamadas de más de 100 ms salen en el informe con su duración y sirven de línea base para comprobar cada rama de la Fase 13 (ver [`auditoria-3-fluidez.md`](auditorias/auditoria-3-fluidez.md)).
 - Falla si algo no se abre o no se cierra, si deshacer deja restos, o si la interfaz se para más del umbral (por defecto 20 s: en Debug OpenCASCADE es lento).
 - El informe (por defecto `%TEMP%\NufioCAD-prueba-interfaz.txt`) dice la parada más larga de cada paso y qué la provocó, y, si hubo paradas de más de un segundo, **dónde estaba el programa** (la pila de llamadas).
 - Usa ajustes y carpetas propios (no toca tus ajustes, tus recientes ni las copias de recuperación). Devuelve 0 si todo va bien.
@@ -795,7 +795,7 @@ El informe se acumula entre sesiones; bórralo cuando quieras empezar de cero. M
 
 ### 5.5 Llamadas en segundo plano: exportar, importar, medir, recuperar (`FLU`)
 
-Oleada 6, F2. Todas estas acciones ya no deben dejar la ventana sin responder. Usa una pieza con rosca (Sólido › Rosca sobre un cilindro) o un engranaje de muchos dientes para que tarden.
+Fase 13, F2. Todas estas acciones ya no deben dejar la ventana sin responder. Usa una pieza con rosca (Sólido › Rosca sobre un cilindro) o un engranaje de muchos dientes para que tarden.
 
 | ID | Qué hacer | Qué debería pasar |
 |---|---|---|
@@ -813,7 +813,7 @@ Oleada 6, F2. Todas estas acciones ya no deben dejar la ventana sin responder. U
 
 ### 5.6 Dibujo en segundo plano: mallas, vista previa y generadores (`FLU`, continuación)
 
-Oleada 6, F3. Los cuerpos nuevos ya no se dibujan hasta tener su malla (se prepara aparte): mientras tanto se sigue viendo lo anterior, y la ventana responde. Usa un par de engranajes, una rosca o un patrón de muchas copias.
+Fase 13, F3. Los cuerpos nuevos ya no se dibujan hasta tener su malla (se prepara aparte): mientras tanto se sigue viendo lo anterior, y la ventana responde. Usa un par de engranajes, una rosca o un patrón de muchas copias.
 
 | ID | Qué hacer | Qué debería pasar |
 |---|---|---|
@@ -828,7 +828,7 @@ Si la vista previa de una herramienta tarda más de 150 ms en dibujarse, en la b
 
 ### 5.7 Indicador de carga y cierre con trabajo en marcha (`FLU`, continuación)
 
-Oleada 6, F4. Mientras algo carga, la barra de estado se pone **ámbar** y gira un **spinner**; al terminar, vuelve al azul.
+Fase 13, F4. Mientras algo carga, la barra de estado se pone **ámbar** y gira un **spinner**; al terminar, vuelve al azul.
 
 | ID | Qué hacer | Qué debería pasar |
 |---|---|---|
@@ -843,7 +843,7 @@ Los colores: azul `#0B5CAD` en reposo y ámbar `#A85A00` mientras carga; el parp
 
 ### 5.8 Calcular menos: patrones, nombres, refresco y arrastre del sketch (`FLU`, continuación)
 
-Oleada 6, F5. Estas pruebas buscan que lo de siempre siga igual (mismos resultados) y que ahora sea más rápido.
+Fase 13, F5. Estas pruebas buscan que lo de siempre siga igual (mismos resultados) y que ahora sea más rápido.
 
 | ID | Qué hacer | Qué debería pasar |
 |---|---|---|
@@ -855,7 +855,7 @@ Oleada 6, F5. Estas pruebas buscan que lo de siempre siga igual (mismos resultad
 
 ### 5.9 Memoria al exportar (`FLU`, continuación)
 
-Oleada 6, F6. Mismos archivos que antes, con menos memoria.
+Fase 13, F6. Mismos archivos que antes, con menos memoria.
 
 | ID | Qué hacer | Qué debería pasar |
 |---|---|---|
@@ -867,7 +867,7 @@ Oleada 6, F6. Mismos archivos que antes, con menos memoria.
 1. Generadores → Letrero o llavero, texto «Nufio», fuente **Ravie** (o Jokerman, Curlz, etc.).
 2. Debe aparecer la placa con las letras; si algo falla, el panel muestra el motivo en rojo (nunca en blanco).
 
-### 5.3 Fase de pruebas transversal (cuando tengas tiempo)
+### 5.3 Pruebas transversales (cuando tengas tiempo)
 
 1. **Flujo completo**: diseña algo tuyo (por ejemplo una carcasa con tapa y tornillos) usando varias fases a la vez; guarda, cierra, abre, edita algo del principio del historial.
 2. **Estrés**: sketches con muchas figuras, piezas con 10+ operaciones, patrones de 20+ copias. Anota qué se siente lento.

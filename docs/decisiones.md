@@ -97,7 +97,7 @@ forma nativa en Windows (MSVC + vcpkg) y Linux (GCC + paquetes del sistema o vcp
 
 En la Fase 0 quedó como «cuando los modelos lo pidan». **Se hizo tras las pruebas** (una rosca cortante colgaba la
 app): el historial, las vistas previas y la malla de los cuerpos pesados se calculan en hilos sobre copias, y un
-cambio nuevo cancela el anterior. Desde la Oleada 6 (F4) todos usan **un solo grupo de hilos** (`geometry::TaskPool`, sin Qt) en lugar de un hilo por tarea: cancelar una tarea en cola la descarta, los hilos se reutilizan y al cerrar se cancela y se espera de un solo sitio. Lo que falta está en [`auditorias/auditoria-3-fluidez.md`](auditorias/auditoria-3-fluidez.md).
+cambio nuevo cancela el anterior. Desde la Fase 13 (F4) todos usan **un solo grupo de hilos** (`geometry::TaskPool`, sin Qt) en lugar de un hilo por tarea: cancelar una tarea en cola la descarta, los hilos se reutilizan y al cerrar se cancela y se espera de un solo sitio. Lo que falta está en [`auditorias/auditoria-3-fluidez.md`](auditorias/auditoria-3-fluidez.md).
 
 ## Detalles de plataforma que condicionan el código
 
@@ -113,7 +113,7 @@ cambio nuevo cancela el anterior. Desde la Oleada 6 (F4) todos usan **un solo gr
 
 ## Distribución y firma de código (Windows)
 
-Decidido el 16 nov. 2026; sin hacer todavía (ver la Oleada 7 de la [hoja de ruta](hoja-de-ruta.md)).
+Decidido el 16 nov. 2026; sin hacer todavía (ver la Fase 19 de la [hoja de ruta](hoja-de-ruta.md)).
 
 - **No hay una auditoría obligatoria de Microsoft** para un programa de escritorio. Lo que decide si Windows lo trata como amenaza son tres mecanismos automáticos:
   **SmartScreen** (reputación del archivo y del firmante; avisa pero deja seguir), **Defender** (firmas, heurísticas y aprendizaje automático en la nube; da falsos positivos, sobre todo con código que se genera en ejecución) y **Smart App Control** (Windows 11: solo ejecuta binarios firmados por una entidad de confianza o con buena reputación, sin opción de ejecutar de todas formas).

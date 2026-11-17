@@ -339,7 +339,7 @@ Mientras haya algo cargando, la barra de estado pasa a **ámbar** y gira un **sp
 no mide porcentaje, solo dice que hay trabajo en marcha (`MainWindow::anythingBusy`).
 
 Lo que **todavía** se hace en el hilo de la interfaz y puede tardar está en
-[`auditorias/auditoria-3-fluidez.md`](auditorias/auditoria-3-fluidez.md) y en la Oleada 6 de la
+[`auditorias/auditoria-3-fluidez.md`](auditorias/auditoria-3-fluidez.md) y en la Fase 13 de la
 [hoja de ruta](hoja-de-ruta.md).
 
 ---
