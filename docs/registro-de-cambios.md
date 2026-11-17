@@ -10,6 +10,22 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Oleada 6, F6: exportar con menos memoria — 16 nov. 2026
+
+- **Rama:** `feature/fluidez-memoria` (sale de `develop`, ya con F1 a F5 fusionadas). Sin fusionar hasta la prueba manual (guía FLU.29–FLU.30).
+- **Qué hace:** contar triángulos, escribir STL y escribir OBJ ya no guardan todos los triángulos en un vector (72 bytes cada uno): cada forma se malla, se recorre y se suelta. El STL deja el número de triángulos para el final (lo corrige en la cabecera) y el OBJ escribe las caras al terminar. Una exportación que falla no deja un archivo a medias.
+- **Resultado (Release, 2,16 millones de triángulos):** contar 245 → 194 MB; STL 297 → 209 MB; OBJ 257 → 205 MB de memoria de más. 265 casos de pruebas unitarias en verde.
+
+| Parte | Dónde (para deshacerla a mano) |
+|---|---|
+| Recorrido en flujo | `forEachMeshedFace` y `forEachTriangle` en `src/geometry/src/Exchange.cpp` (antes `triangulate`); `countTriangles`, `meshVolume`, `writeStl` y `writeObj` |
+| Medida de memoria | caso oculto «Memoria al exportar una malla grande» en `tests/test_perf.cpp` (`nuf_tests "[.memory]"`, Windows) |
+
+- **Pendiente:** mallar por caras (arriesgado para que el STL salga hermético), Linux sin medir; B2 y B4 descartados con su motivo en la hoja de ruta.
+- **Riesgos al volver atrás:** ninguno en archivos guardados; los STL, OBJ y STEP exportados son los mismos.
+
+---
+
 ## Oleada 6, F5: calcular menos, y primera medición en Release — 16 nov. 2026
 
 - **Rama:** `feature/fluidez-hilos`. Sin fusionar hasta la prueba manual (guía FLU.24–FLU.28).

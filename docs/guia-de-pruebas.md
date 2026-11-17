@@ -52,6 +52,7 @@ Va en el mismo orden que el programa: **1. General**, **2. Sketch**, **3. Sólid
 | 5.6 Dibujo en segundo plano (mallas, vista previa, generadores) | `FLU` |
 | 5.7 Indicador de carga y cierre con trabajo en marcha | `FLU` |
 | 5.8 Calcular menos (patrones, nombres, refresco y arrastre) | `FLU` |
+| 5.9 Memoria al exportar | `FLU` |
 
 ---
 
@@ -837,6 +838,15 @@ Oleada 6, F5. Estas pruebas buscan que lo de siempre siga igual (mismos resultad
 | FLU.26 | Abre la aplicación y, **sin esperar**, abre el primer generador (Lightbox) | No hay parón al abrirlo (la búsqueda de fuentes se hace sola al abrir la ventana; la propia ventana puede tardar hasta un segundo más en quedar fluida nada más arrancar) |
 | FLU.27 | Agrega un sketch, extruye, deshaz y rehaz varias veces | El navegador y el timeline se actualizan bien en cada paso y no queda nada a medias; con el cálculo en segundo plano, al terminar aparece el resultado y el navegador está al día |
 | FLU.28 | En un sketch con muchas figuras (50 o más líneas cerradas formando regiones), arrastra un punto | El sombreado de las regiones se actualiza unas diez veces por segundo mientras arrastras y queda **exacto** al soltar; el arrastre no se siente más lento |
+
+### 5.9 Memoria al exportar (`FLU`, continuación)
+
+Oleada 6, F6. Mismos archivos que antes, con menos memoria.
+
+| ID | Qué hacer | Qué debería pasar |
+|---|---|---|
+| FLU.29 | Exporta a STL, OBJ y STEP una pieza con muchas curvas (un engranaje de 100 dientes helicoidal) en calidad **Alta**, mirando el uso de memoria en el Administrador de tareas | La exportación termina bien; los archivos abren en tu slicer, **cerrados, en mm y con el mismo aspecto que antes**; la memoria sube menos que antes |
+| FLU.30 | Abre Exportar, elige calidad Alta con varios cuerpos y mira «Unos N triángulos» | El número sale igual que antes (misma cuenta) y el diálogo no se queda sin responder |
 
 ### 5.2 Letrero con fuentes decorativas
 
