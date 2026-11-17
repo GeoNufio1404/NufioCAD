@@ -27,6 +27,9 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 - **Corregido de paso:** `tests/test_perf.cpp` estaba **roto en `develop`** (un literal con saltos de línea, de la prueba de memoria): se trae la versión corregida de `feature/fluidez-memoria`, idéntica, para que no haya conflicto al fusionarla.
 - **Pendiente:** flecha de medida para el largo de la barra; el aviso del máximo de dientes solo sale al calcular; el resto de familias de engranajes (Oleada 8).
 - **Riesgos al volver atrás:** ninguno en archivos guardados (el campo `length` es nuevo y opcional).
+
+---
+
 ## Oleada 6, F6: exportar con menos memoria — 16 nov. 2026
 
 - **Rama:** `feature/fluidez-memoria` (sale de `develop`, ya con F1 a F5 fusionadas). Sin fusionar hasta la prueba manual (guía FLU.29–FLU.30).
