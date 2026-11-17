@@ -242,11 +242,12 @@ std::optional<std::string> applyOperation(ModelState& state, const Feature& feat
             return std::nullopt;
         }
         // Todo se une en el primer cuerpo tocado; los demás desaparecen.
-        geometry::Shape joined = tool;
+        std::vector<geometry::Shape> parts;
+        parts.push_back(tool);
         for (std::size_t i : touched) {
-            joined = geometry::boolean(geometry::BooleanOp::Fuse, state.bodies[i].shape, joined);
+            parts.push_back(state.bodies[i].shape);
         }
-        state.bodies[touched.front()].shape = joined;
+        state.bodies[touched.front()].shape = geometry::fuseBalanced(std::move(parts));
         for (auto it = touched.rbegin(); it != touched.rend() - 1; ++it) {
             state.bodies.erase(state.bodies.begin() + std::ptrdiff_t(*it));
         }

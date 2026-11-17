@@ -1,12 +1,138 @@
 ﻿# Registro de cambios — NufioCAD
 
-Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo sale mal. Las entregas nuevas van arriba. Para el detalle de lo pendiente, ver la [hoja de ruta](hoja-de-ruta-cad.md); para probarlas, la [guía de pruebas](guia-de-pruebas.md).
+Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo sale mal. Las entregas nuevas van arriba. Para el detalle de lo pendiente, ver la [hoja de ruta](hoja-de-ruta.md); para probarlas, la [guía de pruebas](guia-de-pruebas.md).
 
 **Cómo se vuelve atrás, en general**
 - **Si la rama aún no está fusionada** en `develop`: no se fusiona y listo (se puede borrar con `git branch -D feature/<nombre>`; `develop` no se entera).
 - **Si ya está fusionada:** `git revert -m 1 <commit de la fusión>` en `develop` crea un commit que deshace toda la entrega sin reescribir la historia (y se puede volver a aplicar después con otro `revert` de ese revert).
 - **Si solo hay que quitar una parte:** cada entrada dice qué funciones o bloques cambió cada parte, para deshacerla a mano en una rama `feature/` nueva.
 - **Versiones publicadas:** la etiqueta `v0.1.0` (rama `main`) es la primera versión estable; `git switch --detach v0.1.0` la deja a mano para comparar.
+
+---
+
+## Oleada 6, F5: calcular menos, y primera medición en Release — 16 nov. 2026
+
+- **Rama:** `feature/fluidez-hilos`. Sin fusionar hasta la prueba manual (guía FLU.24–FLU.28).
+- **Qué hace:** (1) el patrón y «Unir» con varios cuerpos funden **en árbol** (`geometry::fuseBalanced`) en vez de uno a uno; (2) la forma guarda el índice de nombres de caras y aristas y su caja (`Shape::Impl`); (3) mientras el modelo se calcula, `refreshModel` solo actualiza el historial (los cuerpos y el navegador se rehacen una vez, al terminar); (4) al arrastrar en un sketch, el sombreado de regiones se rehace como mucho cada 100 ms y al soltar; (5) **fuentes de respaldo de Qt al abrir la ventana**: la primera vez que se dibuja un símbolo (⛔ ⚠ ℹ ✓) Qt tardaba de 0,5 a 1,5 s en buscar la fuente, y paraba la ventana al abrir el primer generador.
+- **Resultado (Release, Windows, primera vez que se mide):** prueba de interfaz 44/44, **parada máxima 558 ms → 133 ms**; patrón lineal de 50 copias **2576 ms → 758 ms**; 265 casos de pruebas unitarias en verde en 16 s (en Debug, unos 130 s). Tabla completa en [`rendimiento/mediciones.md`](rendimiento/mediciones.md).
+
+| Parte | Dónde (para deshacerla a mano) |
+|---|---|
+| Unión en árbol | `fuseBalanced` (`Modeling.hpp/.cpp`); usos en `PatternFeature::compute` (`FeaturesMore.cpp`) y la rama «Unir» (`Features.cpp`) |
+| Índice de nombres y caja | `Shape::Impl::NameIndex`, `cacheMutex`, `boundsCache` (`Naming.hpp`); `sameName`, `refOf`, `find` y `Shape::bounds` (`Shape.cpp`) |
+| Refresco | `MainWindow::refreshModel` (`MainWindowView.cpp`): salida temprana si `document_.computing()` |
+| Arrastre del sketch | `ViewportImpl::showSketch`, `rebuildProfiles`, `profilesClock`, `profilesTimer` (`ViewportImpl.hpp`) |
+| Fuentes de respaldo | final del constructor de `MainWindow` (`MainWindow.cpp`) |
+| Pruebas | caso «Buscar caras y aristas por nombre…» en `tests/test_edge_ops.cpp` |
+
+- **Pendiente:** M1 (aceptar sin recalcular la vista previa) y M6 (validez de la booleana una sola vez) sin hacer, con el motivo en la hoja de ruta; el navegador se rehace entero en cada refresco; el arrastre del sketch no se midió con un sketch grande; la cota de un clic en el sketch sigue en 133 ms.
+- **Riesgos al volver atrás:** ninguno en archivos guardados (los resultados de las operaciones no cambian; las pruebas de nombres y de patrones lo comprueban).
+
+---
+
+## Oleada 6, F4: banner ámbar con spinner, cancelación en el kernel y un solo grupo de hilos — 16 nov. 2026
+
+- **Rama:** `feature/fluidez-hilos` (sale de `feature/fluidez-dibujo`). Sin fusionar hasta la prueba manual (guía FLU.18–FLU.23).
+- **Qué hace:** (1) **a petición del usuario**, mientras algo carga la barra de estado se pone ámbar y gira un spinner (también dentro del distintivo «Calculando…»); no mide porcentaje; (2) el kernel abandona a media operación el loft, el redondeo, el chaflán, el vaciado, el barrido, la unión de partes, el engranaje helicoidal y la rosca cuando se pide cancelar, y al cerrar la ventana se oculta antes de esperar a los hilos; (3) un solo `geometry::TaskPool` sustituye a los tres mecanismos de hilos que había.
+- **Resultado:** las pruebas unitarias en verde (nuevas: 6 del grupo de hilos y la de cancelación de construcciones largas; 263 casos con los ocultos de medida) y la prueba de interfaz completa (44 pasos, 0 fallidos, parada máxima 955 ms: las mismas cifras que tras F3); la de la rosca comprueba ahora que el banner se pone ámbar con spinner y vuelve a azul.
+
+| Parte | Dónde (para deshacerla a mano) |
+|---|---|
+| Banner y spinner | `BusySpinner.cpp/.hpp` y `StatusBanner.cpp/.hpp` (nuevos: la barra de estado propia dibuja el mensaje a mano para dejar el spinner **lo más a la izquierda posible**, con el texto a su derecha; QStatusBar no permite correr el mensaje); `MainWindow::anythingBusy`, `paintBanner`, `setBannerBusy`, `updateBusyBadge` (`MainWindow.cpp`); `viewBusy_`, `statusSpinner_`, `badgeSpinner_`, `bannerBlink_` en `MainWindow.hpp`; llamadas en `updateMeasure` (`MainWindowView.cpp`) |
+| Cancelación en el kernel | `ProgressCanceller`, `throwIfCancelled`, `buildCancellable` en `Modeling.cpp` (antes `BooleanCanceller`) y sus llamadas en `fuseAll`, `unify`, `edgeOperation`, el engranaje helicoidal, la rosca, el barrido, el loft y el vaciado |
+| Grupo de hilos | `geometry/TaskPool.hpp` y `src/TaskPool.cpp` (nuevos); `currentCancelFlag()` en `Cancel.hpp`; `BackgroundRun.cpp` reescrito; `Document::Job` y `stopBackground`/`reapRetired`/`finishBackground` (`Document.cpp`); `MeshTask` y `cancelMeshTasks` (`ViewportImpl.hpp`) |
+| Cierre | `MainWindow::closeEvent`: `hide()` antes de salir |
+| Pruebas | `tests/test_task_pool.cpp` (nuevo), caso nuevo en `tests/test_edge_ops.cpp`, pasos de la rosca en `InterfaceCheck.cpp` |
+
+- **Pendiente:** sin barra de progreso ni botón «Cancelar»; `UnifySameDomain`, el cosido y el ajuste de curvas no admiten progreso (solo se interrumpen entre pasos); el grupo no crece si todos sus hilos están ocupados por tareas canceladas que aún no notan la bandera; OCCT 7.6 (CI de Ubuntu) sin probar; solo Debug en Windows.
+- **Riesgos al volver atrás:** ninguno en archivos guardados.
+
+---
+
+## Oleada 6, F3: dibujar sin parar la ventana (mallas, vista previa y generadores) — 16 nov. 2026
+
+- **Rama:** `feature/fluidez-dibujo` (sale de `feature/fluidez-llamadas`). Sin fusionar hasta la prueba manual (guía FLU.12–FLU.17).
+- **Qué hace:** (1) todos los cuerpos nuevos se mallan en un hilo de trabajo antes de mostrarse (antes solo las roscas), con los mismos parámetros que usa el visor; (2) el sólido rojo de «lo que se quita» se construye y se malla aparte; (3) el generador arma su receta en el hilo de trabajo y al aceptar reutiliza la de la última vista previa; (4) `fitAll` espera a que estén los cuerpos (sin esto, la vista quedaba mal encuadrada: lo encontró la prueba de la vista previa translúcida).
+- **Resultado (Debug):** generadores de engranajes de 1,3–1,4 s a 0,5–0,9 s de parada; la parada más larga de toda la prueba, de 1475 ms a 856–904 ms; 44/44 pasos y 251 pruebas unitarias en verde. Lo que queda es sobre todo el candado del montón de depuración de MSVC (ver [`rendimiento/mediciones.md`](rendimiento/mediciones.md)); falta medir en Release.
+
+| Parte | Dónde (para deshacerla a mano) |
+|---|---|
+| Malla de todos los cuerpos | `ViewportImpl::showBodies`, `startMeshTask`, `meshingFor`, `needsMesh`, `setWaiting` y el bloque de atributos de `AIS_Shape` (`ViewportImpl.hpp`); `Viewport::preparingDrawing` |
+| Encuadre aplazado | `Viewport::fitAll` y `ViewportImpl::fitWhenReady` (se aplica en `meshTaskFinished`) |
+| Sólido que se quita | `FeatureTool::updatePreview` / `showPreview` (`FeatureTools.cpp`); `ViewportImpl::showToolPreview` y `showPendingTool` |
+| Receta del generador | `GeneratorTool::updatePreview`, `recipe()`, `lastRecipe_`, `lastKey_` (`GeneratorTool.cpp/.hpp`); candado en `Viewport::textOutline` |
+| Pruebas y herramientas | `InterfaceCheck.cpp`: espera con `preparingDrawing()`, comprobación de borde de la vista previa, variables `NUF_PRUEBA_*` |
+
+- **Corregido después de la prueba manual (16 nov. 2026):** con la malla preparada aparte, los cuerpos se dibujaban **sin el borde entre caras** (las caras del mismo color se fundían). `applyMesh` pasaba la malla de las caras pero no los polígonos de las aristas sobre ella, que son los que el visor usa para dibujar ese borde; ahora los pasa (también las costuras de los cilindros) y `hasBoundaryPolygons` lo comprueba (prueba unitaria nueva y comprobación en el paso de la caja de la prueba de interfaz).
+- **Pendiente:** selección de caras al mostrar cada cuerpo, precalentar las fuentes, medir en Release y en Linux. Un fallo intermitente de foco en la flecha «Mover cuerpo (giro en X)» apareció una vez en la prueba completa y no se repite (pasa sola y en grupo).
+- **Riesgos al volver atrás:** ninguno en archivos guardados (solo cambia cómo se dibuja).
+
+---
+
+## Oleada 6, F2: exportar, importar, medir y recuperar sin parar la ventana — 16 nov. 2026
+
+- **Rama:** `feature/fluidez-llamadas` (sale de `feature/fluidez-medir`). Sin fusionar hasta la prueba manual (guía FLU.1–FLU.11).
+- **Qué hace:** pasa a hilos de trabajo lo que hasta ahora corría en el hilo de la interfaz: escribir STL/OBJ/STEP y preparar el STL del slicer; el conteo de triángulos y la revisión para imprimir del diálogo de Exportar (con caché por cuerpo y calidad); leer y reparar un STEP; medir; escribir la copia de recuperación; leer las miniaturas de los recientes (sin abrir los archivos que solo están en la nube de OneDrive).
+- **Resultado (Debug):** 44 pasos, 0 fallidos y 251 pruebas unitarias en verde. Exportar pasó de 797 ms de parada a 75 ms; el diálogo de Exportar, de 2200 ms (y 260–300 ms por clic) a menos de 160 ms; importar un STEP, de 2381 ms a 769 ms. Tabla en [`rendimiento/mediciones.md`](rendimiento/mediciones.md).
+
+| Parte | Dónde (para deshacerla a mano) |
+|---|---|
+| Exportar e Imprimir | `MainWindow::startExport`, `exportBodies`, `printBodies` (`MainWindowView.cpp`); `exportRun_` y `ExportJob` en `MainWindow.hpp` |
+| Diálogo de Exportar | `ExportDialog::refreshTriangleCount`, `showTriangleCount`, `runReview`, `showReview` y los miembros `reviewRun_`, `countRun_`, `triangles_` |
+| Importar STEP | `MainWindow::importStepFile` (`MainWindowFiles.cpp`), `importRun_` y `documentGeneration_` (sube en `newDocument` y `openPath`) |
+| Medir | `MainWindow::updateMeasure` (`MainWindowView.cpp`), `measureRun_` |
+| Guardado en dos tiempos | `io::prepareSave`, `io::SavePlan` y `io::writeSave` (`DocumentFile.cpp/.hpp`); `saveDocument` ahora los llama seguidos; `Recovery::writeAsync` y `discard()` (`Recovery.cpp`) |
+| Pantalla de inicio | `StartScreen::reload` y `isCloudOnly` (`StartScreen.cpp`), `thumbnailsRun_` |
+| Pruebas | `tests/test_document_file.cpp` (caso «Guardar en dos tiempos»); pasos de exportar, diálogo, importar y recientes en `InterfaceCheck.cpp`; `waitIdle` espera también a esos trabajos |
+
+- **Pendiente:** Guardar a mano (Ctrl+S) sigue síncrono; no se reutiliza la malla del conteo al exportar; exportar no se cancela a mitad; la prueba de interfaz no puede elegir caras para Medir (llama a `geometry::measure`); solo Debug en Windows. Lo que queda de parada en esos pasos es el mallado de los cuerpos nuevos en el visor (A1, rama F3).
+- **Riesgos al volver atrás:** ninguno en archivos guardados (el formato `.nuf` no cambia: `saveDocument` escribe lo mismo, comprobado por la prueba nueva).
+
+---
+
+## Oleada 6, F1: vigilante de paradas y línea base de fluidez — 16 nov. 2026
+
+- **Rama:** `feature/fluidez-medir` (sale de `feature/engranajes-interno-cremallera`, que lleva el plan). Sin fusionar hasta la prueba manual (guía VIG.1–VIG.5).
+- **Qué hace:** (1) `NUF_VIGILANTE=1` (o un número de ms) activa un hilo que vigila el latido del bucle de eventos y, si la interfaz se para más del umbral (200 ms por defecto), anota en `cierres/paradas.txt` la hora, la duración y la pila de llamadas (Windows). (2) Seis pasos nuevos en `--prueba-interfaz` reproducen lo que hoy ocupa el hilo de la interfaz: exportar, diálogo de Exportar con 5 cuerpos, importar STEP, medir una rosca, pantalla de inicio con 10 recientes y patrón de 50. (3) Primera línea base en [`rendimiento/mediciones.md`](rendimiento/mediciones.md).
+- **Resultado:** 44 pasos, 0 fallidos; parada máxima 2381 ms (importar un STEP, Debug). La pila confirmó A1 (mallado de OCCT en el hilo de la interfaz), A3 (`countTriangles` en cada clic del diálogo de Exportar) y A4 (reparación `ShapeFix_Solid` al importar).
+
+| Parte | Dónde (para deshacerla a mano) |
+|---|---|
+| Vigilante | `src/app/src/StallWatch.cpp/.hpp` (nuevo), arranque en `main.cpp` (bloque `NUF_VIGILANTE`), fuente en `src/app/CMakeLists.txt` |
+| Captura de pila compartida | `sampleThreadStack`, `currentThreadHandle`, `releaseThreadHandle` en `StallWatch.cpp`; `InterfaceCheck::startWatchdog` y `stopWatchdog` ahora las usan (antes llevaban el código de Windows dentro) |
+| Pasos nuevos | bloque «Pasos de la auditoría de fluidez (F1)» en `InterfaceCheck::run` (`src/app/src/InterfaceCheck.cpp`) |
+
+- **Pendiente:** medir los diálogos modales reales de Exportar y Medir (la prueba llama a las mismas funciones de geometría); las pilas de Qt salen con nombres aproximados (sin símbolos), las de OpenCASCADE son legibles; en Linux el vigilante anota la duración pero no la pila; medir en Release.
+- **Riesgos al volver atrás:** ninguno en archivos guardados; sin la variable `NUF_VIGILANTE` el vigilante no existe y el coste es cero.
+
+---
+
+## Documentación reorganizada — 16 nov. 2026
+
+- **Rama:** `feature/engranajes-interno-cremallera` (solo documentación; no cambia código).
+- **Qué cambia:** índice nuevo [`README.md`](README.md) en `docs/`; [`arquitectura.md`](arquitectura.md) reescrita según el código actual (9 diagramas Mermaid: contexto, módulos y dependencias, modelo del documento, generadores, estados de una herramienta, flujo de extruir, nombrado topológico, hilos y esquema del `.nuf`); nuevos [`decisiones.md`](decisiones.md) (qué se usó, por qué y qué se descartó) y [`desarrollo.md`](desarrollo.md) (compilar, pruebas, opciones de línea de comandos, variables `NUF_*`, ramas). README raíz al día. Tercera auditoría (fluidez) y Oleada 6 en la hoja de ruta.
+- **Archivos movidos:** `arquitectura-cad.md` → `arquitectura.md`, `hoja-de-ruta-cad.md` → `hoja-de-ruta.md`, `mediciones-rendimiento.md` → `rendimiento/mediciones.md`, `auditoria-2.md` → `auditorias/auditoria-2.md`. Las entradas antiguas de este registro que citan los nombres viejos se dejan como estaban.
+- **Borrado:** `aqtinstall.log` (registro de instalación de Qt), capturas temporales de `build/capturas` y la entrada `graphify-out/` de `.gitignore`.
+- **Corregido:** la arquitectura antigua decía que `sketch` dependía de `geometry` (es al revés) y que el recálculo en segundo plano estaba por decidir. Una entrada anterior decía que el build ya fuerza `VSLANG=1033`; no está en los presets: se documenta como paso manual en `desarrollo.md`.
+- **Riesgos al volver atrás:** ninguno (solo documentación).
+
+---
+
+## Engranaje interno y cremallera — 12 nov. 2026
+
+- **Rama:** `feature/engranajes-interno-cremallera` (desde `develop`). **Sin fusionar** hasta la prueba manual (guía PAR.7–PAR.17).
+- **Qué hace:** el Engranaje gana un **Tipo**: Exterior (como siempre), **Interno (corona)** (aro con los dientes hacia dentro) y **Cremallera** (barra dentada de flancos rectos). Dos generadores nuevos: **Engranaje interno** (corona + piñón) y **Cremallera** (barra + rueda), con parámetros con nombre, cuerpos con nombre (Corona/Piñón, Rueda/Cremallera), componente, reapertura del formulario y deshacer de una vez, como el Par de engranajes. Los archivos anteriores abren igual (tipo exterior, aro 5).
+- **Dónde:**
+
+| Parte | Dónde (para deshacerla a mano) |
+|---|---|
+| Geometría | `GearType` y `GearSpec::type/rim` en `src/geometry/include/nuf/geometry/Modeling.hpp`; `rackGear` y los cambios de `gear` (cabeza/raíz del hueco, aro exterior) en `src/geometry/src/Modeling.cpp` |
+| Operación | `GearFeature::numericFields` (campo `rim`) en `src/document/src/FeaturesMore.cpp` |
+| Archivo | `gearType` y `rim` en la fila `gear` de `src/io/src/DocumentFile.cpp` (opcionales al leer) |
+| Interfaz | `GearTool` (combo «Tipo» y campo «Aro o base») en `src/app/src/FeatureToolsConstruct.cpp` y `FeatureTools.hpp`; los generadores salen solos en Herramientas |
+| Generadores | `InternalGear` y `RackAndPinion` en `src/document/src/Generators.cpp` |
+| Pruebas | `tests/test_edge_ops.cpp` (5 casos: corona, piñón engranado, cremallera, rueda con cremallera, guardado); la prueba de interfaz suma un paso por generador nuevo (38 en vez de 36) |
+| Docs | `generadores.md`, `guia-de-pruebas.md`, `hoja-de-ruta.md` |
 
 ---
 
@@ -21,7 +147,7 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 | Lightbox | `Lightbox::make` y `arrows` en `src/document/src/Generators.cpp`: el marco, su hueco y la cara central se sustituyen por «Lightbox: tapa»; el labio pasa de Cuerpo nuevo a Unir (empieza 0,01 mm dentro de la placa); las flechas de frente, labio y grosor del labio miran al cuerpo 1 |
 | Letrero | `Sign::fields/make` en el mismo archivo: opción 3 «En relieve (un solo cuerpo)» (por defecto), extrusión «Unir» desde `grosor − 0,01` |
 | Pruebas | `tests/test_edge_ops.cpp` (lightbox, lightbox redondo, cable, reabrir generador, letreros); `InterfaceCheck.cpp/.hpp`: el paso «Mover los dos cuerpos» elige «En relieve (otro cuerpo)» en el letrero |
-| Docs | `generadores.md`, `guia-de-pruebas.md`, `hoja-de-ruta-cad.md` |
+| Docs | `generadores.md`, `guia-de-pruebas.md`, `hoja-de-ruta.md` |
 
 - **Pruebas:** 250 unitarias y 36/36 pasos de la prueba de interfaz en verde (Windows, Debug). Al principio fallaba «Cota de un clic»: el paso «Mover los dos cuerpos» usaba un Lightbox y dejaba la vista muy alejada, y el sketch siguiente (con las tolerancias de captura en unidades de pantalla) no creaba los círculos. Se arregló volviendo a usar el letrero, eligiendo «En relieve (otro cuerpo)» (`openChangeAccept` gana un parámetro `choice`).
 - **Riesgos:** los diseños de Lightbox guardados antes conservan sus cuatro cuerpos hasta que se reabra el generador (al reabrir se rehacen con la tapa unida); el Lightbox ya no permite otro filamento solo para la cara central.
@@ -327,5 +453,5 @@ flowchart TD
 | `896c86b` | Fusión de la extrusión hasta una cara curva (cilindro, esfera y toro) |
 | `272404b` | Icono de la aplicación en el lanzador de Linux y en el `.exe` de Windows |
 | `66ccf04`, `9d5f009`, `4dbe602` | Compatibilidad con Fedora y Ubuntu (OCCT 7.6 a 7.9, GCC) y el CI en `main`, `develop`, `feature/*` y pull requests |
-| `b72757a` | Mediciones de rendimiento en Fedora ([`mediciones-rendimiento.md`](mediciones-rendimiento.md)) |
+| `b72757a` | Mediciones de rendimiento en Fedora ([`rendimiento/mediciones.md`](rendimiento/mediciones.md)) |
 | `ab1fae7` | Marcadores `estable-windows` y `estable-fedora` en la hoja de ruta |

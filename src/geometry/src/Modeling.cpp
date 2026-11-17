@@ -99,11 +99,38 @@ GeometryError kernelFailure(const std::string& action, const std::string& hint, 
     return GeometryError("No se pudo " + action + ": " + hint + (detail.empty() ? std::string() : " (detalle técnico: " + detail + ")"));
 }
 
+// Deja que el kernel se detenga a media operación cuando el hilo de trabajo pide cancelar (cerrar la ventana, un
+// cambio nuevo en el historial). Lo usan las booleanas y todas las construcciones que tardan: loft, redondeo, chaflán,
+// vaciado, barrido y la unión de partes. Las que no admiten progreso (UnifySameDomain) se comprueban antes y después.
+class ProgressCanceller final : public Message_ProgressIndicator {
+protected:
+    bool UserBreak() override { return cancelRequested(); }
+    void Show(const Message_ProgressScope&, const bool) override {}
+};
+
+void throwIfCancelled()
+{
+    if (cancelRequested()) {
+        throw GeometryError("Cálculo cancelado");
+    }
+}
+
+// «builder.Build()» interrumpible: si se pidió cancelar, lanza «Cálculo cancelado».
+template <typename Builder>
+void buildCancellable(Builder& builder)
+{
+    occ::handle<ProgressCanceller> canceller = new ProgressCanceller();
+    builder.Build(canceller->Start());
+    throwIfCancelled();
+}
+
 // Une las caras coplanares (y aristas colineales) que dejan las booleanas.
 Shape unify(const Shape& input, const std::string& tag)
 {
+    throwIfCancelled();
     ShapeUpgrade_UnifySameDomain unifier(occtShape(input), true, true, false);
     unifier.Build();
+    throwIfCancelled();
     Namer namer(unifier.Shape());
     namer.inherit(input, *unifier.History());
     return namer.finish(tag);
@@ -124,7 +151,8 @@ Shape fuseAll(const std::vector<Shape>& parts, const std::string& tag)
     BRepAlgoAPI_Fuse fuse;
     fuse.SetArguments(arguments);
     fuse.SetTools(tools);
-    fuse.Build();
+    fuse.SetRunParallel(true);
+    buildCancellable(fuse);
     if (!fuse.IsDone() || fuse.HasErrors()) {
         throw GeometryError("No se pudieron unir las partes");
     }
@@ -635,16 +663,25 @@ Shape revolve(std::string_view tagView, const SketchRegion& region, const Axis& 
     }
 }
 
-namespace {
-
-// Deja que el kernel se detenga a media booleana cuando el hilo de trabajo pide cancelar.
-class BooleanCanceller final : public Message_ProgressIndicator {
-protected:
-    bool UserBreak() override { return cancelRequested(); }
-    void Show(const Message_ProgressScope&, const bool) override {}
-};
-
-} // namespace
+Shape fuseBalanced(std::vector<Shape> parts)
+{
+    if (parts.empty()) {
+        return {};
+    }
+    while (parts.size() > 1) {
+        std::vector<Shape> next;
+        next.reserve(parts.size() / 2 + 1);
+        for (std::size_t i = 0; i + 1 < parts.size(); i += 2) {
+            throwIfCancelled();
+            next.push_back(boolean(BooleanOp::Fuse, parts[i], parts[i + 1]));
+        }
+        if (parts.size() % 2 == 1) {
+            next.push_back(std::move(parts.back()));
+        }
+        parts = std::move(next);
+    }
+    return std::move(parts.front());
+}
 
 Shape boolean(BooleanOp op, const Shape& target, const Shape& tool)
 {
@@ -671,11 +708,7 @@ Shape boolean(BooleanOp op, const Shape& target, const Shape& tool)
         algo->SetArguments(objects);
         algo->SetTools(tools);
         algo->SetRunParallel(true);
-        occ::handle<BooleanCanceller> canceller = new BooleanCanceller();
-        algo->Build(canceller->Start());
-        if (cancelRequested()) {
-            throw GeometryError("Cálculo cancelado");
-        }
+        buildCancellable(*algo);
         if (!algo->IsDone() || algo->HasErrors()) {
             throw GeometryError("No se pudo combinar los cuerpos: puede que solo se toquen en una arista o un punto, o que tengan caras casi coincidentes; prueba a moverlos una décima de milímetro");
         }
@@ -757,7 +790,7 @@ Shape edgeOperation(std::string_view tag, const std::string& label, const Shape&
         for (int edge : edges) {
             maker.Add(size, edgeAt(body, edge));
         }
-        maker.Build();
+        buildCancellable(maker);
         if (!maker.IsDone() || maker.Shape().IsNull()) {
             throw GeometryError(failure);
         }
@@ -907,9 +940,114 @@ std::vector<Shape> pattern(std::string_view tag, const Shape& body, const Patter
     }
 }
 
+namespace {
+
+// Cremallera: barra recta con dientes trapezoidales (la involuta de radio infinito son flancos rectos).
+Shape rackGear(const std::string& tag, const sketch::Plane& plane, const GearSpec& spec)
+{
+    constexpr double kPi = std::numbers::pi;
+    constexpr double kDeg = kPi / 180.0;
+    if (spec.teeth < 2 || spec.teeth > 300) {
+        throw GeometryError("El número de dientes de la cremallera debe estar entre 2 y 300");
+    }
+    if (spec.module <= kTiny) {
+        throw GeometryError("El módulo debe ser mayor que cero");
+    }
+    if (std::abs(spec.thickness) <= kTiny) {
+        throw GeometryError("El ancho de la cremallera debe ser distinto de cero");
+    }
+    if (spec.pressureAngle < 5.0 * kDeg || spec.pressureAngle > 35.0 * kDeg) {
+        throw GeometryError("El ángulo de presión debe estar entre 5° y 35°");
+    }
+    if (std::abs(spec.helixAngle) > kTiny) {
+        throw GeometryError("La cremallera solo se hace con dientes rectos (sin ángulo de hélice)");
+    }
+    if (spec.rim <= kTiny) {
+        throw GeometryError("El grosor de la base de la cremallera debe ser mayor que cero");
+    }
+    const double m = spec.module;
+    const double p = kPi * m;
+    const double t = std::tan(spec.pressureAngle);
+    const double tipHalf = p / 4.0 - m * t;
+    const double rootHalf = p / 4.0 + 1.25 * m * t;
+    if (tipHalf <= 0.02 * p) {
+        throw GeometryError("Los dientes salen puntiagudos: prueba con menos ángulo de presión");
+    }
+    if (p - 2.0 * rootHalf <= 0.02 * p) {
+        throw GeometryError("Los dientes se solapan en la raíz: prueba con menos ángulo de presión");
+    }
+    try {
+        const double length = spec.teeth * p;
+        const double bottom = -(1.25 * m + spec.rim);
+        const auto at = [&](double x, double y) { return toPnt(plane.toWorld({x, y})); };
+        std::vector<std::pair<TopoDS_Edge, std::string>> edges;
+        const auto line = [&](double x1, double y1, double x2, double y2, const std::string& name) {
+            edges.emplace_back(BRepBuilderAPI_MakeEdge(at(x1, y1), at(x2, y2)).Edge(), name);
+        };
+        line(0.0, bottom, length, bottom, "base");
+        line(length, bottom, length, -1.25 * m, "extremo_d");
+        double x = length;  // se recorre de derecha a izquierda por arriba
+        for (int i = spec.teeth - 1; i >= 0; --i) {
+            const double c = p / 2.0 + i * p;
+            const std::string name = "d" + std::to_string(i + 1) + ":";
+            line(x, -1.25 * m, c + rootHalf, -1.25 * m, name + "raiz_d");
+            line(c + rootHalf, -1.25 * m, c + tipHalf, m, name + "flanco_d");
+            line(c + tipHalf, m, c - tipHalf, m, name + "cabeza");
+            line(c - tipHalf, m, c - rootHalf, -1.25 * m, name + "flanco_i");
+            x = c - rootHalf;
+        }
+        line(x, -1.25 * m, 0.0, -1.25 * m, "raiz_i");
+        line(0.0, -1.25 * m, 0.0, bottom, "extremo_i");
+        BRepBuilderAPI_MakeWire outline;
+        for (const auto& [edge, name] : edges) {
+            outline.Add(edge);
+            if (!outline.IsDone()) {
+                throw GeometryError("No se pudo cerrar el contorno de la cremallera");
+            }
+        }
+        {
+            TopoDS_Iterator children(outline.Wire());
+            for (auto& [edge, name] : edges) {
+                if (!children.More()) {
+                    throw GeometryError("El contorno de la cremallera quedó incompleto");
+                }
+                edge = TopoDS::Edge(children.Value());
+                children.Next();
+            }
+        }
+        const gp_Dir normal = toDir(plane.normal);
+        BRepBuilderAPI_MakeFace face(gp_Pln(toPnt(plane.origin), normal), outline.Wire(), true);
+        BRepPrimAPI_MakePrism prism(face.Face(), gp_Vec(normal).Multiplied(spec.thickness), true);
+        if (!prism.IsDone()) {
+            throw GeometryError("No se pudo extruir la cremallera");
+        }
+        Namer namer(prism.Shape());
+        namer.name(prism.FirstShape(), tag + ":inicio");
+        namer.name(prism.LastShape(), tag + ":fin");
+        for (const auto& [edge, name] : edges) {
+            for (const TopoDS_Shape& side : prism.Generated(edge)) {
+                namer.name(side, tag + ":lado:" + name);
+            }
+        }
+        Shape result = namer.finish(tag);
+        if (!result.isValid()) {
+            throw GeometryError("La cremallera no es un sólido válido");
+        }
+        return result;
+    } catch (const Standard_Failure& e) {
+        throw kernelFailure("crear la cremallera", "revisa el módulo, el ángulo de presión y la base", e);
+    }
+}
+
+} // namespace
+
 Shape gear(std::string_view tagView, const sketch::Plane& plane, const GearSpec& spec)
 {
     const std::string tag(tagView);
+    if (spec.type == GearType::Rack) {
+        return rackGear(tag, plane, spec);
+    }
+    const bool internal = spec.type == GearType::Internal;
     constexpr double kPi = std::numbers::pi;
     constexpr double kDeg = kPi / 180.0;
     if (spec.teeth < 6 || spec.teeth > 300) {
@@ -930,8 +1068,15 @@ Shape gear(std::string_view tagView, const sketch::Plane& plane, const GearSpec&
     const double z = spec.teeth;
     const double rp = spec.module * z / 2.0;
     const double rb = rp * std::cos(spec.pressureAngle);
-    const double ra = rp + spec.module;
-    const double rf = rp - 1.25 * spec.module;
+    // Interno: lo que se dibuja es el hueco (con forma de rueda), así que cabeza y raíz cambian de lado.
+    const double ra = rp + (internal ? 1.25 : 1.0) * spec.module;
+    const double rf = rp - (internal ? 1.0 : 1.25) * spec.module;
+    if (internal && std::abs(spec.helixAngle) > kTiny) {
+        throw GeometryError("El engranaje interno solo se hace con dientes rectos (sin ángulo de hélice)");
+    }
+    if (internal && spec.rim <= kTiny) {
+        throw GeometryError("El grosor del aro del engranaje interno debe ser mayor que cero");
+    }
     if (rf <= kTiny) {
         throw GeometryError("Hay muy pocos dientes para ese módulo");
     }
@@ -950,7 +1095,7 @@ Shape gear(std::string_view tagView, const sketch::Plane& plane, const GearSpec&
     if (pitch - 2.0 * thetaS <= 0.02 * pitch) {
         throw GeometryError("Los dientes se solapan en la raíz");
     }
-    if (spec.bore < 0.0 || spec.bore / 2.0 >= 0.9 * rf) {
+    if (!internal && (spec.bore < 0.0 || spec.bore / 2.0 >= 0.9 * rf)) {
         throw GeometryError("El agujero central es demasiado grande para el engranaje");
     }
 
@@ -1022,9 +1167,18 @@ Shape gear(std::string_view tagView, const sketch::Plane& plane, const GearSpec&
         const gp_Vec along = gp_Vec(normal).Multiplied(spec.thickness);
 
         if (std::abs(twist) < 1e-9) {
-            BRepBuilderAPI_MakeFace face(gp_Pln(origin, normal), outline.Wire(), true);
+            TopoDS_Edge outerEdge;
+            if (internal) {
+                outerEdge = BRepBuilderAPI_MakeEdge(gp_Circ(frame, ra + spec.rim)).Edge();
+            }
+            BRepBuilderAPI_MakeFace face = internal
+                ? BRepBuilderAPI_MakeFace(gp_Pln(origin, normal), BRepBuilderAPI_MakeWire(outerEdge).Wire(), true)
+                : BRepBuilderAPI_MakeFace(gp_Pln(origin, normal), outline.Wire(), true);
+            if (internal) {
+                face.Add(TopoDS::Wire(outline.Wire().Reversed()));
+            }
             TopoDS_Edge boreEdge;
-            if (spec.bore > 0.0) {
+            if (!internal && spec.bore > 0.0) {
                 boreEdge = BRepBuilderAPI_MakeEdge(gp_Circ(frame, spec.bore / 2.0)).Edge();
                 face.Add(TopoDS::Wire(BRepBuilderAPI_MakeWire(boreEdge).Wire().Reversed()));
             }
@@ -1045,6 +1199,11 @@ Shape gear(std::string_view tagView, const sketch::Plane& plane, const GearSpec&
                     namer.name(side, tag + ":lado:agujero");
                 }
             }
+            if (!outerEdge.IsNull()) {
+                for (const TopoDS_Shape& side : prism.Generated(outerEdge)) {
+                    namer.name(side, tag + ":lado:exterior");
+                }
+            }
             Shape result = namer.finish(tag);
             if (!result.isValid()) {
                 throw GeometryError("El engranaje no es un sólido válido");
@@ -1059,6 +1218,7 @@ Shape gear(std::string_view tagView, const sketch::Plane& plane, const GearSpec&
         BRepOffsetAPI_ThruSections loft(false, false, 1e-6);
         TopoDS_Wire lastWire = outline.Wire();
         for (int k = 0; k <= sections; ++k) {
+            throwIfCancelled();
             const double t = double(k) / sections;
             if (k == 0) {
                 loft.AddWire(outline.Wire());
@@ -1072,7 +1232,7 @@ Shape gear(std::string_view tagView, const sketch::Plane& plane, const GearSpec&
             lastWire = TopoDS::Wire(moved.Shape());
             loft.AddWire(lastWire);
         }
-        loft.Build();
+        buildCancellable(loft);
         if (!loft.IsDone()) {
             throw GeometryError("No se pudo generar el engranaje helicoidal");
         }
@@ -1381,6 +1541,7 @@ Shape thread(std::string_view tagView, const sketch::Plane& plane, const ThreadS
         const int chunks = std::max(1, int(std::ceil(turns / 1.5)));
         std::vector<TopoDS_Face> sides;
         for (int c = 0; c < chunks; ++c) {
+            throwIfCancelled();
             const int k0 = int(std::lround(double(c) * sections / chunks));
             const int k1 = int(std::lround(double(c + 1) * sections / chunks));
             const int count = k1 - k0;
@@ -1390,6 +1551,7 @@ Shape thread(std::string_view tagView, const sketch::Plane& plane, const ThreadS
             }
             std::vector<occ::handle<Geom_BSplineCurve>> helices;
             for (int j = 1; j <= nPoles; ++j) {
+                throwIfCancelled();
                 occ::handle<HPntArray> path = new HPntArray(1, count + 1);
                 for (int k = 0; k <= count; ++k) {
                     path->SetValue(k + 1, curve->Pole(j).Transformed(moves[std::size_t(k0 + k)]));
@@ -1531,7 +1693,7 @@ Shape sweep(std::string_view tagView, const SketchRegion& profile, const sketch:
                     pipe.SetMode(gp_Ax2(toPnt(profile.plane.origin), toDir(profile.plane.normal)));
                 }
                 pipe.Add(wire, false, false);
-                pipe.Build();
+                buildCancellable(pipe);
                 if (!pipe.IsDone() || !pipe.MakeSolid()) {
                     throw GeometryError("No se pudo barrer el perfil (¿está en el inicio de la trayectoria y de frente a ella?)");
                 }
@@ -1598,7 +1760,7 @@ Shape loft(std::string_view tagView, const std::vector<SketchRegion>& sections, 
                 firstEdges = faces.front().sources;
             }
         }
-        maker.Build();
+        buildCancellable(maker);
         if (!maker.IsDone()) {
             throw GeometryError("No se pudo hacer el loft (¿los perfiles tienen una forma muy distinta?)");
         }
@@ -1783,8 +1945,10 @@ Shape shell(std::string_view tag, const Shape& body, const std::vector<int>& rem
             removed.Append(faceAt(body, index));
         }
         BRepOffsetAPI_MakeThickSolid maker;
+        occ::handle<ProgressCanceller> canceller = new ProgressCanceller();
         maker.MakeThickSolidByJoin(occtShape(body), removed, outward ? thickness : -thickness, 1e-4, BRepOffset_Skin,
-                                   false, false, GeomAbs_Intersection);
+                                   false, false, GeomAbs_Intersection, false, canceller->Start());
+        throwIfCancelled();
         if (!maker.IsDone() || maker.Shape().IsNull()) {
             throw GeometryError(failure);
         }

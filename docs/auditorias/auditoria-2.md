@@ -2,7 +2,7 @@
 
 Hecha al cerrar las Fases 1 a 10 (6 de noviembre de 2026, sobre el commit `3aeaa88` y los cambios de esta auditoría).
 Alcance: el código nuevo de las fases 5 a 10, lo que más riesgo tiene (hilos, comandos, unidades, generadores), todos los
-«Pendiente de …» de la [hoja de ruta](hoja-de-ruta-cad.md) y lo que se notó al usar la aplicación.
+«Pendiente de …» de la [hoja de ruta](../hoja-de-ruta.md) y lo que se notó al usar la aplicación.
 
 ## Cómo se hizo
 
@@ -33,7 +33,7 @@ Alcance: el código nuevo de las fases 5 a 10, lo que más riesgo tiene (hilos, 
 
 1. **Las pruebas manuales 1–38 y las de las fases 5–10 siguen sin hacerse en la ventana.** Es la mayor deuda: casi todo lo
    de la interfaz se ha comprobado por pruebas automáticas del núcleo y con capturas del arnés, no con el ratón. Seguir la
-   [guía de pruebas](guia-de-pruebas.md) fase por fase.
+   [guía de pruebas](../guia-de-pruebas.md) fase por fase.
 2. ~~No hay prueba automática de la interfaz.~~ **Hecha** después de esta auditoría: `NufioCAD.exe --prueba-interfaz` (ver la
    guía de pruebas). Ya encontró un fallo real (nº 8 abajo). Falta llevarla al CI y que compruebe también cómo se ve.
 3. **El build Release no se puede probar** (Smart App Control bloquea las DLL sin firmar). Todas las medidas de rendimiento

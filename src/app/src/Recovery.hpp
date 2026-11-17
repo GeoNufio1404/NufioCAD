@@ -7,8 +7,10 @@
 #include <QLockFile>
 #include <QString>
 
+#include <atomic>
 #include <filesystem>
 #include <memory>
+#include <thread>
 #include <vector>
 
 namespace nuf::app {
@@ -28,11 +30,17 @@ public:
     };
 
     Recovery();
+    ~Recovery();
+    Recovery(const Recovery&) = delete;
+    Recovery& operator=(const Recovery&) = delete;
 
-    // Guarda la copia (reemplaza la anterior). Devuelve false si falló: no es
-    // grave, se reintenta en la siguiente vuelta.
-    bool write(const document::Document& document, const io::ViewState& view, const QString& original);
-    // Borra la copia (el diseño se guardó o se cerró bien).
+    // Guarda la copia (reemplaza la anterior). Lo rápido (armar el JSON) se hace aquí y lo lento (escribir en
+    // SQLite y en disco, que con OneDrive o un antivirus puede tardar) en un hilo aparte, así que la
+    // interfaz no espera. Si la copia anterior aún se está escribiendo, se salta esta vuelta (se reintenta
+    // en la siguiente). Devuelve false si se saltó.
+    bool writeAsync(const document::Document& document, const io::ViewState& view, const QString& original);
+    // Borra la copia (el diseño se guardó o se cerró bien). Si se está escribiendo una, espera a que termine
+    // para que no reaparezca después.
     void discard();
 
     // Copias de sesiones que ya no existen, la más reciente primero.
@@ -40,8 +48,12 @@ public:
     static void remove(const Orphan& orphan);
 
 private:
+    void finishWriting();
+
     QString id_;
     std::unique_ptr<QLockFile> lock_;
+    std::thread writer_;
+    std::atomic<bool> writing_{false};
 };
 
 } // namespace nuf::app

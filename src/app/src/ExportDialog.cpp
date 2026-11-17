@@ -21,6 +21,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <memory>
 
 namespace nuf::app {
 
@@ -203,15 +204,6 @@ QString ExportDialog::extension(Format format)
     return {};
 }
 
-std::vector<geometry::Shape> ExportDialog::selectedShapes() const
-{
-    std::vector<geometry::Shape> shapes;
-    for (std::size_t index : selected()) {
-        shapes.push_back(bodies_[index].shape);
-    }
-    return shapes;
-}
-
 geometry::PrintSettings ExportDialog::printSettings() const
 {
     geometry::PrintSettings settings;
@@ -240,9 +232,33 @@ void ExportDialog::runReview()
     if (chosen.empty() || format() == Format::Step) {
         return;
     }
-    QApplication::setOverrideCursor(Qt::WaitCursor);
-    const std::vector<geometry::PrintIssue> issues = geometry::checkPrintable(chosen, printSettings());
-    QApplication::restoreOverrideCursor();
+    // La revisión (booleanas entre cuerpos, validez, paredes) corre en un hilo sobre copias de las formas.
+    struct Review {
+        std::vector<geometry::PrintIssue> issues;
+        std::string failure;
+    };
+    auto review = std::make_shared<Review>();
+    const geometry::PrintSettings settings = printSettings();
+    reviewRun_.start(
+        [review, chosen = std::move(chosen), settings] {
+            try {
+                review->issues = geometry::checkPrintable(chosen, settings);
+            } catch (const std::exception& e) {
+                review->failure = e.what();
+            } catch (...) {
+                review->failure = "error desconocido";
+            }
+        },
+        [this, review] { showReview(review->issues, review->failure); });
+}
+
+void ExportDialog::showReview(const std::vector<geometry::PrintIssue>& issues, const std::string& failure)
+{
+    if (!failure.empty()) {
+        review_->setText(QStringLiteral("<span style='color:%1'>No se pudo revisar la pieza: %2</span>")
+                             .arg(toneColor(Tone::Warning), QString::fromStdString(failure).toHtmlEscaped()));
+        return;
+    }
     if (issues.empty()) {
         review_->setText(QStringLiteral("<span style='color:%1'>✓ Todo en orden para imprimir con tu impresora.</span>")
                              .arg(toneColor(Tone::Success)));
@@ -262,6 +278,73 @@ void ExportDialog::runReview()
     review_->setText(lines.join(QStringLiteral("<br>")));
 }
 
+void ExportDialog::refreshTriangleCount()
+{
+    if (countRun_.running()) {
+        countAgain_ = true;  // al terminar se vuelve a mirar con la selección de entonces
+        return;
+    }
+    const int quality = quality_->currentIndex();
+    std::vector<std::pair<std::pair<const void*, int>, geometry::Shape>> missing;
+    for (std::size_t index : selected()) {
+        const geometry::Shape& shape = bodies_[index].shape;
+        const std::pair<const void*, int> key{shape.impl(), quality};
+        if (!triangles_.contains(key) && std::ranges::none_of(missing, [&](const auto& m) { return m.first == key; })) {
+            missing.emplace_back(key, shape);
+        }
+    }
+    if (missing.empty()) {
+        showTriangleCount();
+        return;
+    }
+    summary_->setText(QStringLiteral("Contando los triángulos…"));
+    struct Count {
+        std::vector<std::pair<std::pair<const void*, int>, geometry::Shape>> bodies;
+        std::vector<std::size_t> counts;
+    };
+    auto count = std::make_shared<Count>();
+    count->bodies = std::move(missing);
+    const geometry::MeshQuality meshQuality = this->quality();
+    countRun_.start(
+        [count, meshQuality] {
+            try {
+                for (const auto& body : count->bodies) {
+                    count->counts.push_back(geometry::countTriangles({body.second}, meshQuality));
+                }
+            } catch (...) {
+                // Lo que no se pudo contar se queda sin número (ver abajo).
+            }
+        },
+        [this, count] {
+            for (std::size_t i = 0; i < count->counts.size(); ++i) {
+                triangles_[count->bodies[i].first] = count->counts[i];
+            }
+            if (countAgain_ || count->counts.size() < count->bodies.size()) {
+                countAgain_ = false;
+                if (count->counts.size() < count->bodies.size()) {
+                    summary_->setText(QStringLiteral("No se pudieron contar los triángulos."));
+                    return;
+                }
+                refreshTriangleCount();
+                return;
+            }
+            showTriangleCount();
+        });
+}
+
+void ExportDialog::showTriangleCount()
+{
+    const int quality = quality_->currentIndex();
+    std::size_t total = 0;
+    for (std::size_t index : selected()) {
+        const auto found = triangles_.find({bodies_[index].shape.impl(), quality});
+        if (found != triangles_.end()) {
+            total += found->second;
+        }
+    }
+    summary_->setText(QStringLiteral("Unos %1 triángulos, en milímetros.").arg(QLocale().toString(qlonglong(total))));
+}
+
 void ExportDialog::updateSummary()
 {
     const std::size_t count = selected().size();
@@ -271,6 +354,7 @@ void ExportDialog::updateSummary()
     printer_->setVisible(mesh);
     if (mesh && count > 0) {
         review_->setText(QStringLiteral("Revisando la pieza para imprimir…"));
+        reviewRun_.cancel();  // lo que estuviera revisándose ya no vale
         reviewTimer_->start();
     }
     onePerBody_->setEnabled(count > 1);
@@ -283,10 +367,7 @@ void ExportDialog::updateSummary()
     } else if (!mesh) {
         summary_->setText(QStringLiteral("Sólido exacto en milímetros, sin mallar."));
     } else {
-        QApplication::setOverrideCursor(Qt::WaitCursor);
-        const std::size_t triangles = geometry::countTriangles(selectedShapes(), quality());
-        QApplication::restoreOverrideCursor();
-        summary_->setText(QStringLiteral("Unos %1 triángulos, en milímetros.").arg(QLocale().toString(qlonglong(triangles))));
+        refreshTriangleCount();
     }
 }
 

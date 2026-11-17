@@ -1,7 +1,9 @@
 #include "InterfaceCheck.hpp"
+#include "StallWatch.hpp"
 #include "Theme.hpp"
 
 #include "BodiesDialog.hpp"
+#include "BusySpinner.hpp"
 #include "ExportDialog.hpp"
 #include "FeatureTools.hpp"
 #include "ParametersDialog.hpp"
@@ -9,9 +11,14 @@
 #include "FeatureToolsCommon.hpp"
 #include "MainWindow.hpp"
 #include "SketchSession.hpp"
+#include "StartScreen.hpp"
 #include "Units.hpp"
 
 #include <nuf/commands/FeatureCommands.hpp>
+#include <nuf/geometry/DisplayMesh.hpp>
+#include <nuf/geometry/Exchange.hpp>
+#include <nuf/geometry/Measure.hpp>
+#include <nuf/io/DocumentFile.hpp>
 #include <nuf/render/Viewport.hpp>
 #include <nuf/sketch/Annotations.hpp>
 
@@ -33,6 +40,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QFile>
+#include <QFileInfo>
 #include <QListWidget>
 #include <QMap>
 #include <QPushButton>
@@ -48,34 +56,8 @@
 #include <chrono>
 #include <cstring>
 #include <exception>
+#include <filesystem>
 #include <numbers>
-
-#ifdef _WIN32
-#include <windows.h>
-#include <dbghelp.h>
-#endif
-
-// La copia de la pila de la hebra parada, para recorrerla sin tocarla.
-#ifdef _WIN32
-namespace {
-DWORD64 gSnapshotBase = 0;
-SIZE_T gSnapshotSize = 0;
-unsigned char gSnapshotData[256 * 1024];
-
-BOOL WINAPI readSnapshot(HANDLE process, DWORD64 address, PVOID buffer, DWORD size, PDWORD done)
-{
-    if (address >= gSnapshotBase && address + size <= gSnapshotBase + gSnapshotSize) {
-        std::memcpy(buffer, gSnapshotData + (address - gSnapshotBase), size);
-        *done = size;
-        return TRUE;
-    }
-    SIZE_T count = 0;
-    const BOOL ok = ReadProcessMemory(process, reinterpret_cast<LPCVOID>(address), buffer, size, &count);
-    *done = DWORD(count);
-    return ok;
-}
-} // namespace
-#endif
 
 namespace nuf::app {
 
@@ -102,20 +84,16 @@ qint64 InterfaceCheck::nowMs() const
 
 void InterfaceCheck::startWatchdog()
 {
-#ifdef _WIN32
-    HANDLE self = nullptr;
-    DuplicateHandle(GetCurrentProcess(), GetCurrentThread(), GetCurrentProcess(), &self, 0, FALSE, DUPLICATE_SAME_ACCESS);
-    mainThread_ = self;
-    SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS);
-    SymInitialize(GetCurrentProcess(), nullptr, TRUE);
-#endif
+    mainThread_ = currentThreadHandle();
     heartbeat_ = nowMs();
     watching_ = true;
-    watchdog_ = std::thread([this] {
+    // NUF_PRUEBA_PILA_MS: desde cuántos ms de parada se anota la pila (por defecto 1000).
+    const qint64 stackAfterMs = std::max(100, qEnvironmentVariableIntValue("NUF_PRUEBA_PILA_MS") > 0 ? qEnvironmentVariableIntValue("NUF_PRUEBA_PILA_MS") : 1000);
+    watchdog_ = std::thread([this, stackAfterMs] {
         bool sampled = false;
         while (watching_) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(150));
-            if (nowMs() - heartbeat_ < 1000) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            if (nowMs() - heartbeat_ < stackAfterMs) {
                 sampled = false;
                 continue;
             }
@@ -123,58 +101,10 @@ void InterfaceCheck::startWatchdog()
                 continue;
             }
             sampled = true;
-#ifdef _WIN32
-            // La interfaz lleva más de un segundo sin dar señales. Se la detiene un instante, solo para copiar sus
-            // registros y su pila (sin tocar el montón ni cargar símbolos: la hebra parada podría tenerlos
-            // bloqueados), y se la deja seguir; la pila se descifra después sobre la copia.
-            HANDLE thread = static_cast<HANDLE>(mainThread_);
-            CONTEXT context{};
-            context.ContextFlags = CONTEXT_FULL;
-            DWORD64 stackBase = 0;
-            SIZE_T stackSize = 0;
-            bool captured = false;
-            if (SuspendThread(thread) != DWORD(-1)) {
-                if (GetThreadContext(thread, &context)) {
-                    MEMORY_BASIC_INFORMATION region{};
-                    if (VirtualQuery(reinterpret_cast<void*>(context.Rsp), &region, sizeof region)) {
-                        const DWORD64 end = reinterpret_cast<DWORD64>(region.BaseAddress) + region.RegionSize;
-                        stackSize = std::min<SIZE_T>(sizeof gSnapshotData, SIZE_T(end - context.Rsp));
-                        std::memcpy(gSnapshotData, reinterpret_cast<void*>(context.Rsp), stackSize);
-                        stackBase = context.Rsp;
-                        captured = true;
-                    }
-                }
-                ResumeThread(thread);
-            }
-            QString text;
-            if (captured) {
-                gSnapshotBase = stackBase;
-                gSnapshotSize = stackSize;
-                STACKFRAME64 frame{};
-                frame.AddrPC.Offset = context.Rip;
-                frame.AddrFrame.Offset = context.Rbp;
-                frame.AddrStack.Offset = context.Rsp;
-                frame.AddrPC.Mode = frame.AddrFrame.Mode = frame.AddrStack.Mode = AddrModeFlat;
-                const HANDLE process = GetCurrentProcess();
-                for (int i = 0; i < 60 && text.count(QLatin1Char('\n')) < 12; ++i) {
-                    if (!StackWalk64(IMAGE_FILE_MACHINE_AMD64, process, GetCurrentThread(), &frame, &context, readSnapshot,
-                                     SymFunctionTableAccess64, SymGetModuleBase64, nullptr) ||
-                        frame.AddrPC.Offset == 0) {
-                        break;
-                    }
-                    alignas(SYMBOL_INFO) char buffer[sizeof(SYMBOL_INFO) + 256];
-                    auto* symbol = reinterpret_cast<SYMBOL_INFO*>(buffer);
-                    symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
-                    symbol->MaxNameLen = 255;
-                    DWORD64 displacement = 0;
-                    if (SymFromAddr(process, frame.AddrPC.Offset, &displacement, symbol)) {
-                        text += QStringLiteral("       · ") + QString::fromLatin1(static_cast<const char*>(symbol->Name)).left(120) + QLatin1Char('\n');
-                    }
-                }
-            }
+            // La interfaz lleva más de un segundo sin dar señales: se copia su pila (ver StallWatch.cpp).
+            const QString text = sampleThreadStack(mainThread_);
             std::lock_guard<std::mutex> lock(samplesMutex_);
             samples_.emplace_back(currentStep_.load(), text);
-#endif
         }
     });
 }
@@ -185,12 +115,8 @@ void InterfaceCheck::stopWatchdog()
     if (watchdog_.joinable()) {
         watchdog_.join();
     }
-#ifdef _WIN32
-    if (mainThread_ != nullptr) {
-        CloseHandle(static_cast<HANDLE>(mainThread_));
-        mainThread_ = nullptr;
-    }
-#endif
+    releaseThreadHandle(mainThread_);
+    mainThread_ = nullptr;
 }
 
 void InterfaceCheck::expect(bool condition, const QString& what)
@@ -249,11 +175,17 @@ bool InterfaceCheck::waitFor(const std::function<bool()>& condition, int timeout
 void InterfaceCheck::waitIdle()
 {
     settle(400);  // la vista previa espera 250 ms tras el último cambio
+    // Primero lo que corre aparte: al terminar, importar agrega una operación y eso arranca otro cálculo.
+    expect(waitFor([this] {
+               return !window_.exportRun_.running() && !window_.importRun_.running() && !window_.measureRun_.running();
+           }, 120000),
+           QStringLiteral("una exportación, importación o medición no terminó en segundo plano"));
     expect(waitFor([this] { return !window_.document_.computing(); }, 120000),
            QStringLiteral("el modelo no terminó de calcularse en segundo plano"));
     expect(waitFor([this] { return window_.tool_ == nullptr || !window_.tool_->previewing(); }, 120000),
            QStringLiteral("la vista previa no terminó de calcularse en segundo plano"));
-    expect(waitFor([this] { return !viewBusy_; }, 60000), QStringLiteral("el visor no terminó de preparar el dibujo"));
+    expect(waitFor([this] { return !viewBusy_ && !window_.viewport_->preparingDrawing(); }, 60000),
+           QStringLiteral("el visor no terminó de preparar el dibujo"));
     settle(100);
 }
 
@@ -332,6 +264,11 @@ void InterfaceCheck::undoAll()
 
 void InterfaceCheck::step(const QString& name, const std::function<void()>& body)
 {
+    // NUF_PRUEBA_SOLO=<texto>: solo los pasos cuyo nombre lo contiene (para repetir uno sin esperar a los 44).
+    static const QString only = qEnvironmentVariable("NUF_PRUEBA_SOLO");
+    if (!only.isEmpty() && !name.contains(only, Qt::CaseInsensitive)) {
+        return;
+    }
     results_.push_back({name, true, {}, 0, {}});
     current_ = &results_.back();
     currentStep_ = int(results_.size()) - 1;
@@ -641,13 +578,21 @@ int InterfaceCheck::run()
         settle(300);
         const QImage image = window_.viewport_->grabFramebuffer();
         long bluish = 0;
+        long onEdge = 0;  // azul pegado al borde de la vista: la pieza no cabe (el encuadre se hizo antes de tener los cuerpos)
         for (int y = 0; y < image.height(); ++y) {
             for (int x = 0; x < image.width(); ++x) {
                 const QColor c = image.pixelColor(x, y);
                 if (c.blue() > c.red() + 55 && c.blue() > c.green() + 25 && c.green() < 170) {
                     ++bluish;
+                    if (x < 3 || y < 3 || x >= image.width() - 3 || y >= image.height() - 3) {
+                        ++onEdge;
+                    }
                 }
             }
+        }
+        expect(onEdge == 0, QStringLiteral("la vista previa no cabe en la vista: %1 píxeles azules en el borde").arg(onEdge));
+        if (const QString folder = qEnvironmentVariable("NUF_PRUEBA_CAPTURAS"); !folder.isEmpty()) {
+            image.save(QDir(folder).filePath(QStringLiteral("vista-previa-translucida.png")));  // para mirarla a ojo
         }
         expect(bluish > 500, QStringLiteral("la vista previa no se ve azul translúcida (%1 píxeles azulados)").arg(bluish));
         expect(window_.busyBadge_ != nullptr && !window_.busyBadge_->isVisible(), QStringLiteral("«Calculando…» sigue a la vista al terminar"));
@@ -1228,6 +1173,14 @@ int InterfaceCheck::run()
     // Sección y medición con un cuerpo.
     step(QStringLiteral("Sección y medición con un cuerpo"), [&] {
         expect(openChangeAccept(window_.boxAction_, 3) == 1, QStringLiteral("no se creó la caja"));
+        waitIdle();
+        // La malla que prepara el visor aparte debe llevar el borde de cada cara; sin él las caras del mismo color se funden.
+        expect(!window_.document_.result().bodies.empty() &&
+                   geometry::hasBoundaryPolygons(window_.document_.result().bodies.front().shape),
+               QStringLiteral("el cuerpo se dibuja sin el borde de sus caras"));
+        if (const QString folder = qEnvironmentVariable("NUF_PRUEBA_CAPTURAS"); !folder.isEmpty()) {
+            window_.viewport_->grabFramebuffer().save(QDir(folder).filePath(QStringLiteral("cuerpo-solido.png")));  // para mirar las aristas
+        }
         for (QAction* action : {window_.sectionAction_, window_.measureAction_}) {
             expect(action->isEnabled(), QStringLiteral("«%1» no está disponible con un cuerpo").arg(action->text()));
             blocking(QStringLiteral("activar"), [&] { action->trigger(); });
@@ -1270,10 +1223,261 @@ int InterfaceCheck::run()
                      [&] { window_.commands_.push(std::make_unique<commands::EditFeature>(cylinderId, std::move(edited))); });
             expect(timer.elapsed() < 1000, QStringLiteral("cambiar el diámetro tardó %1 ms: debía volver al instante").arg(timer.elapsed()));
             expect(window_.document_.computing(), QStringLiteral("el recálculo no quedó en segundo plano"));
+            // Mientras algo carga, la barra de estado se pone ámbar y gira un spinner (en la barra y sobre la vista).
+            expect(window_.statusBar()->styleSheet().contains(QStringLiteral("background: #a85a00")),
+                   QStringLiteral("el banner no se puso ámbar mientras calcula"));
+            expect(window_.statusSpinner_ != nullptr && window_.statusSpinner_->isVisible(),
+                   QStringLiteral("no se ve el spinner de la barra de estado mientras calcula"));
+            expect(window_.badgeSpinner_ != nullptr && window_.badgeSpinner_->isVisible(),
+                   QStringLiteral("no se ve el spinner sobre la vista mientras calcula"));
+            if (const QString folder = qEnvironmentVariable("NUF_PRUEBA_CAPTURAS"); !folder.isEmpty()) {
+                settle(300);  // que el spinner haya girado y el banner no esté a medio parpadeo
+                window_.grab().save(QDir(folder).filePath(QStringLiteral("cargando.png")));
+            }
             settle(100);  // la interfaz sigue atendiendo eventos mientras se calcula
         }
         waitIdle();
         expect(window_.document_.status(threadId).health != document::Health::Error, QStringLiteral("la rosca falló al final"));
+        expect(window_.statusBar()->styleSheet().contains(QStringLiteral("background: #0b5cad")),
+               QStringLiteral("el banner no vuelve al azul al terminar de calcular"));
+        expect(window_.statusSpinner_ != nullptr && !window_.statusSpinner_->isVisible(),
+               QStringLiteral("el spinner de la barra de estado sigue girando al terminar"));
+        undoAll();
+    });
+
+    // --- Pasos de la auditoría de fluidez (F1) ----------------------------------------------------------------------
+    // Reproducen lo que hoy se hace en el hilo de la interfaz y puede tardar (ver docs/auditorias/auditoria-3-fluidez.md).
+    // Solo fallan por el umbral general: su fin es MEDIR antes de cambiar nada; las llamadas que pasen de 100 ms se
+    // anotan en el informe con su tiempo.
+    const auto note = [&](const QString& text) {
+        if (current_ != nullptr) {
+            current_->detail += (current_->detail.isEmpty() ? QString() : QStringLiteral("; ")) + text;
+        }
+    };
+    const auto timed = [&](const QString& what, const std::function<void()>& call) {
+        QElapsedTimer timer;
+        timer.start();
+        blocking(what, call);
+        if (timer.elapsed() >= 100) {
+            note(QStringLiteral("%1: %2 ms").arg(what).arg(timer.elapsed()));
+        }
+    };
+    const auto add = [&](std::unique_ptr<document::Feature> feature) {
+        blocking(QStringLiteral("agregar una operación"),
+                 [&] { window_.commands_.push(std::make_unique<commands::AddFeature>(std::move(feature))); });
+    };
+    // Un cilindro con una rosca cortante (el cuerpo «pesado» de las pruebas).
+    const auto addThreadedCylinder = [&] {
+        auto cylinder = std::make_unique<document::CylinderFeature>();
+        cylinder->base.origin = document::OriginPlane::XY;
+        cylinder->diameter = 10.0;
+        cylinder->height = 10.0;
+        auto thread = std::make_unique<document::ThreadFeature>();
+        thread->base.origin = document::OriginPlane::XY;
+        thread->spec.diameter = 8.0;
+        thread->spec.pitch = 1.25;
+        thread->spec.length = 10.0;
+        thread->operation = document::Operation::Cut;
+        add(std::move(cylinder));
+        add(std::move(thread));
+    };
+    const auto addBox = [&](double x) {
+        auto box = std::make_unique<document::BoxFeature>();
+        box->base.origin = document::OriginPlane::XY;
+        box->x = x;
+        add(std::move(box));
+    };
+    const QString scratch = QDir::tempPath() + QStringLiteral("/NufioCAD-prueba");
+    QDir().mkpath(scratch);
+    const auto scratchPath = [&](const QString& name) { return std::filesystem::path(QDir(scratch).filePath(name).toStdU16String()); };
+
+    // Exportar, el diálogo de Exportar e importar un STEP ya van en segundo plano (Oleada 6, F2): estos pasos usan el
+    // mismo camino que la ventana y comprueban que lanzarlos devuelve al instante.
+    step(QStringLiteral("Exportar STL, OBJ y STEP de una pieza con rosca (Archivo › Exportar, en segundo plano)"), [&] {
+        addThreadedCylinder();
+        waitIdle();
+        std::vector<geometry::Shape> shapes;
+        for (const document::Body& body : window_.document_.result().bodies) {
+            shapes.push_back(body.shape);
+        }
+        expect(!shapes.empty(), QStringLiteral("no hay cuerpos que exportar"));
+        const geometry::MeshQuality quality = geometry::MeshQuality::medium();
+        const std::vector<std::pair<QString, ExportDialog::Format>> formats = {
+            {QStringLiteral("exportar.stl"), ExportDialog::Format::Stl},
+            {QStringLiteral("exportar.obj"), ExportDialog::Format::Obj},
+            {QStringLiteral("exportar.step"), ExportDialog::Format::Step}};
+        for (const auto& [name, format] : formats) {
+            const QString file = QDir(scratch).filePath(name);
+            QFile::remove(file);
+            QElapsedTimer total;
+            total.start();
+            timed(QStringLiteral("lanzar la exportación a %1").arg(name), [&] {
+                window_.startExport({MainWindow::ExportJob{file, shapes}}, format, quality);
+            });
+            expect(window_.exportRun_.running(), QStringLiteral("la exportación a %1 no quedó en segundo plano").arg(name));
+            waitIdle();
+            note(QStringLiteral("%1 listo en %2 ms").arg(name).arg(total.elapsed()));
+            expect(QFileInfo(file).size() > 0, QStringLiteral("%1 no se escribió").arg(name));
+            QFile::remove(file);
+        }
+        undoAll();
+    });
+
+    step(QStringLiteral("Diálogo de Exportar con 5 cuerpos: abrir, marcar y cambiar la calidad"), [&] {
+        addThreadedCylinder();
+        for (const double x : {30.0, 60.0, 90.0, 120.0}) {
+            addBox(x);
+        }
+        waitIdle();
+        const std::vector<document::Body> bodies = window_.document_.result().bodies;  // el diálogo guarda una referencia
+        expect(bodies.size() == 5, QStringLiteral("se esperaban 5 cuerpos y hay %1").arg(bodies.size()));
+        std::vector<std::string> keys;
+        for (const document::Body& body : bodies) {
+            keys.push_back(body.key);
+        }
+        std::unique_ptr<ExportDialog> dialog;
+        timed(QStringLiteral("abrir el diálogo"), [&] { dialog = std::make_unique<ExportDialog>(bodies, keys, &window_); });
+        // El conteo de triángulos y la revisión para imprimir corren en segundo plano: se espera a que terminen.
+        const auto working = [&] {
+            for (const QLabel* label : dialog->findChildren<QLabel*>()) {
+                if (label->text().startsWith(QStringLiteral("Contando")) || label->text().startsWith(QStringLiteral("Revisando"))) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        const auto finishWork = [&](const QString& what) {
+            lastAction_ = what;
+            QElapsedTimer total;
+            total.start();
+            settle(300);
+            expect(waitFor([&] { return !working(); }, 180000), QStringLiteral("el diálogo no terminó de contar y revisar"));
+            note(QStringLiteral("%1 listo en %2 ms").arg(what).arg(total.elapsed()));
+        };
+        finishWork(QStringLiteral("el conteo y la revisión iniciales"));
+        if (QListWidget* list = dialog->findChild<QListWidget*>()) {
+            for (int row = 0; row < list->count(); ++row) {
+                timed(QStringLiteral("quitar la marca de un cuerpo"), [&] { list->item(row)->setCheckState(Qt::Unchecked); });
+                timed(QStringLiteral("volver a marcarlo"), [&] { list->item(row)->setCheckState(Qt::Checked); });
+            }
+        } else {
+            expect(false, QStringLiteral("el diálogo no tiene lista de cuerpos"));
+        }
+        finishWork(QStringLiteral("el conteo tras marcar y desmarcar"));
+        for (QComboBox* combo : dialog->findChildren<QComboBox*>()) {
+            if (combo->count() == 3 && combo->itemText(0).startsWith(QStringLiteral("Baja"))) {
+                timed(QStringLiteral("calidad Alta"), [&] { combo->setCurrentIndex(2); });
+                finishWork(QStringLiteral("el conteo en calidad Alta"));
+                timed(QStringLiteral("calidad Baja"), [&] { combo->setCurrentIndex(0); });
+                finishWork(QStringLiteral("el conteo en calidad Baja"));
+            }
+        }
+        dialog.reset();
+        undoAll();
+    });
+
+    step(QStringLiteral("Importar un STEP con un engranaje (Archivo › Importar STEP, en segundo plano)"), [&] {
+        auto gear = std::make_unique<document::GearFeature>();
+        gear->base.origin = document::OriginPlane::XY;
+        gear->spec.teeth = 20;
+        gear->spec.module = 2.0;
+        gear->spec.thickness = 10.0;
+        add(std::move(gear));
+        waitIdle();
+        expect(window_.document_.result().bodies.size() == 1, QStringLiteral("el engranaje no salió"));
+        const std::filesystem::path file = scratchPath(QStringLiteral("importar.step"));
+        if (!window_.document_.result().bodies.empty()) {
+            geometry::writeStep(file, {window_.document_.result().bodies.front().shape});
+        }
+        undoAll();
+        bool started = false;
+        QElapsedTimer total;
+        total.start();
+        timed(QStringLiteral("lanzar la importación"), [&] { started = window_.importStepFile(file); });
+        expect(started, QStringLiteral("no empezó la importación del STEP"));
+        expect(window_.importRun_.running(), QStringLiteral("la importación no quedó en segundo plano"));
+        waitIdle();
+        note(QStringLiteral("importado en %1 ms").arg(total.elapsed()));
+        expect(window_.document_.result().bodies.size() == 1, QStringLiteral("el STEP importado no dio un cuerpo"));
+        QFile::remove(QString::fromStdU16String(file.u16string()));
+        undoAll();
+    });
+
+    step(QStringLiteral("Medir caras de una rosca (lo que se calcula en cada cambio de la selección)"), [&] {
+        addThreadedCylinder();
+        waitIdle();
+        if (window_.document_.result().bodies.empty()) {
+            expect(false, QStringLiteral("no hay cuerpo"));
+        } else {
+            const geometry::Shape shape = window_.document_.result().bodies.front().shape;
+            const int faces = shape.faceCount();
+            expect(faces >= 2, QStringLiteral("el cuerpo tiene %1 caras").arg(faces));
+            const auto measureFaces = [&](const std::vector<int>& indexes) {
+                std::vector<geometry::MeasureElement> elements;
+                for (const int index : indexes) {
+                    elements.push_back({shape, true, index});
+                }
+                timed(QStringLiteral("medir %1 cara(s)").arg(indexes.size()), [&] { geometry::measure(elements); });
+            };
+            if (faces >= 2) {
+                measureFaces({0});
+                measureFaces({faces - 1});
+                measureFaces({0, faces - 1});
+                measureFaces({faces / 2, faces - 1});
+            }
+        }
+        undoAll();
+    });
+
+    step(QStringLiteral("Pantalla de inicio con 10 recientes (leer las miniaturas)"), [&] {
+        addBox(0.0);
+        waitIdle();
+        std::string png;
+        timed(QStringLiteral("tomar la miniatura"), [&] { png = window_.thumbnailPng(); });
+        const std::filesystem::path first = scratchPath(QStringLiteral("reciente-0.nuf"));
+        timed(QStringLiteral("guardar un diseño"), [&] { io::saveDocument(first, window_.document_, window_.currentView(), png); });
+        RecentFiles::clear();
+        QStringList files;
+        for (int i = 0; i < RecentFiles::kMax; ++i) {
+            const QString name = QDir(scratch).filePath(QStringLiteral("reciente-%1.nuf").arg(i));
+            if (i > 0) {
+                QFile::remove(name);
+                QFile::copy(QString::fromStdU16String(first.u16string()), name);
+            }
+            files << name;
+            RecentFiles::add(name);
+        }
+        expect(window_.startScreen_ != nullptr, QStringLiteral("la ventana no tiene pantalla de inicio"));
+        if (window_.startScreen_ != nullptr) {
+            timed(QStringLiteral("recargar la lista de recientes"), [&] { window_.startScreen_->reload(); });
+            lastAction_ = QStringLiteral("las miniaturas de los recientes");
+            settle(1500);  // las miniaturas se leen en segundo plano y llegan de una en una
+        }
+        RecentFiles::clear();
+        for (const QString& name : files) {
+            QFile::remove(name);
+        }
+        undoAll();
+    });
+
+    step(QStringLiteral("Patrón lineal de 50 copias de una caja"), [&] {
+        addBox(0.0);
+        waitIdle();
+        expect(!window_.document_.result().bodies.empty(), QStringLiteral("no hay caja"));
+        if (!window_.document_.result().bodies.empty()) {
+            auto pattern = std::make_unique<document::PatternFeature>();
+            pattern->body = window_.document_.result().bodies.front().key;
+            pattern->count = 50;
+            pattern->spacing = 15.0;
+            pattern->operation = document::Operation::Join;
+            QElapsedTimer total;
+            total.start();
+            add(std::move(pattern));
+            waitIdle();
+            note(QStringLiteral("calculado en segundo plano en %1 ms").arg(total.elapsed()));
+            const document::FeatureStatus status = window_.document_.status(window_.document_.feature(1).id());
+            expect(status.health != document::Health::Error, QStringLiteral("el patrón falló: %1").arg(QString::fromStdString(status.message)));
+        }
         undoAll();
     });
 
@@ -1318,7 +1522,7 @@ int InterfaceCheck::run()
     {
         std::lock_guard<std::mutex> lock(samplesMutex_);
         if (!samples_.empty()) {
-            text += QStringLiteral("\nParadas de más de un segundo (dónde estaba la interfaz):\n");
+            text += QStringLiteral("\nParadas largas (por defecto más de un segundo; dónde estaba la interfaz):\n");
             int shown = 0;
             for (const auto& [index, stack] : samples_) {
                 if (++shown > 12) {

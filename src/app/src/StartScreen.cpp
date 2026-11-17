@@ -21,6 +21,14 @@
 #include <QVBoxLayout>
 
 #include <filesystem>
+#include <memory>
+#include <optional>
+#include <string>
+#include <vector>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 namespace nuf::app {
 
@@ -43,6 +51,22 @@ QString normalized(const QString& path)
 void store(const QStringList& paths)
 {
     QSettings().setValue(QLatin1String(kRecentKey), paths);
+}
+
+// Con los «archivos a petición» de OneDrive, un diseño que solo está en la nube se descarga entero en cuanto se
+// abre para leer su miniatura: ese no se abre (se verá con la miniatura al abrirlo de verdad).
+bool isCloudOnly(const QString& path)
+{
+#ifdef _WIN32
+    const DWORD attributes = GetFileAttributesW(reinterpret_cast<LPCWSTR>(QDir::toNativeSeparators(path).utf16()));
+    constexpr DWORD kOffline = 0x00001000;            // FILE_ATTRIBUTE_OFFLINE
+    constexpr DWORD kRecallOnOpen = 0x00040000;       // FILE_ATTRIBUTE_RECALL_ON_OPEN
+    constexpr DWORD kRecallOnDataAccess = 0x00400000; // FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS
+    return attributes != INVALID_FILE_ATTRIBUTES && (attributes & (kOffline | kRecallOnOpen | kRecallOnDataAccess)) != 0;
+#else
+    Q_UNUSED(path);
+    return false;
+#endif
 }
 
 QPixmap placeholder(const QString& text, const QPalette& palette)
@@ -188,27 +212,26 @@ StartScreen::StartScreen(QWidget* viewport) : QWidget(viewport)
 
 void StartScreen::reload()
 {
+    thumbnailsRun_.cancel();  // lo que se estaba leyendo ya no vale
     list_->clear();
+    std::vector<std::pair<int, QString>> toRead;  // (fila, ruta) de los diseños de los que se leerá la miniatura
     for (const QString& path : RecentFiles::list()) {
         const QFileInfo info(path);
         const bool exists = info.isFile();
+        const bool cloud = exists && isCloudOnly(path);
         auto* item = new QListWidgetItem(list_);
         item->setData(Qt::UserRole, path);
         item->setToolTip(QDir::toNativeSeparators(path));
-        QPixmap thumbnail;
-        if (exists) {
-            const auto png = io::readThumbnail(std::filesystem::path(path.toStdU16String()));
-            if (png && thumbnail.loadFromData(reinterpret_cast<const uchar*>(png->data()), uint(png->size()))) {
-                thumbnail = thumbnail.scaled(kThumbnail, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-            }
+        const QString caption = !exists ? QStringLiteral("No encontrado")
+                                : cloud ? QStringLiteral("Solo en la nube")
+                                        : QStringLiteral("Cargando…");
+        item->setIcon(QIcon(placeholder(caption, palette())));
+        if (exists && !cloud) {
+            toRead.emplace_back(list_->count() - 1, path);
         }
-        if (thumbnail.isNull()) {
-            thumbnail = placeholder(exists ? QStringLiteral("Sin vista previa") : QStringLiteral("No encontrado"),
-                                    palette());
-        }
-        item->setIcon(QIcon(thumbnail));
-        const QString when = exists ? QLocale().toString(info.lastModified(), QLocale::ShortFormat)
-                                    : QStringLiteral("ya no existe");
+        const QString when = !exists ? QStringLiteral("ya no existe")
+                             : cloud ? QStringLiteral("en la nube")
+                                     : QLocale().toString(info.lastModified(), QLocale::ShortFormat);
         item->setText(info.completeBaseName() + QLatin1Char('\n') + when);
         if (!exists) {
             item->setForeground(palette().color(QPalette::PlaceholderText));
@@ -217,6 +240,40 @@ void StartScreen::reload()
     const bool any = list_->count() > 0;
     list_->setVisible(any);
     empty_->setVisible(!any);
+
+    if (toRead.empty()) {
+        return;
+    }
+    // Abrir cada archivo para leer su miniatura es lo lento: en un hilo, y las imágenes llegan de una en una.
+    struct Thumbnails {
+        std::vector<std::pair<int, QString>> files;
+        std::vector<std::optional<std::string>> png;
+    };
+    auto work = std::make_shared<Thumbnails>();
+    work->files = std::move(toRead);
+    thumbnailsRun_.start(
+        [work] {
+            for (const auto& [row, path] : work->files) {
+                work->png.push_back(io::readThumbnail(std::filesystem::path(path.toStdU16String())));
+            }
+        },
+        [this, work] {
+            for (std::size_t i = 0; i < work->files.size() && i < work->png.size(); ++i) {
+                const auto& [row, path] = work->files[i];
+                QListWidgetItem* item = list_->item(row);
+                if (item == nullptr || item->data(Qt::UserRole).toString() != path) {
+                    continue;
+                }
+                QPixmap thumbnail;
+                const auto& png = work->png[i];
+                if (png && thumbnail.loadFromData(reinterpret_cast<const uchar*>(png->data()), uint(png->size()))) {
+                    thumbnail = thumbnail.scaled(kThumbnail, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                } else {
+                    thumbnail = placeholder(QStringLiteral("Sin vista previa"), palette());
+                }
+                item->setIcon(QIcon(thumbnail));
+            }
+        });
 }
 
 void StartScreen::removeSelected()

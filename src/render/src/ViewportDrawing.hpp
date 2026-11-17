@@ -10,7 +10,9 @@
 #include <windows.h>
 #endif
 
+#include <nuf/geometry/Cancel.hpp>
 #include <nuf/geometry/DisplayMesh.hpp>
+#include <nuf/geometry/TaskPool.hpp>
 #include <nuf/geometry/Occt.hpp>
 #include <nuf/sketch/Annotations.hpp>
 #include <nuf/sketch/Profiles.hpp>

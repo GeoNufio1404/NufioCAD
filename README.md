@@ -1,180 +1,86 @@
-# NufioCAD — CAD paramétrico de escritorio
+# NufioCAD
 
-CAD paramétrico **offline**, con archivos locales privados, para **Windows y Linux**.
-Meta de usabilidad: Fusion 360. Kernel: OpenCASCADE. Interfaz: Qt 6.
+CAD paramétrico de escritorio para **Windows y Linux**: **offline**, con **archivos locales privados** y la facilidad de
+uso de **Fusion 360** como meta. Pensado para diseñar piezas e imprimirlas en 3D.
 
-> **NufioCAD** es el nombre de trabajo. En el código se usa el prefijo corto
-> `nuf` (namespaces `nuf::`, targets `nuf::<módulo>`), igual que la extensión
-> de los archivos de diseño (`.nuf`).
+> **NufioCAD** es el nombre de trabajo. En el código se usa el prefijo `nuf` (espacio de nombres `nuf::`, bibliotecas
+> `nuf::<módulo>`), igual que la extensión de los diseños, `.nuf`.
 
-Documentación de diseño en [`docs/`](docs/):
-[hoja de ruta](docs/hoja-de-ruta-cad.md) · [arquitectura](docs/arquitectura-cad.md) ·
-[guía de pruebas](docs/guia-de-pruebas.md) · [registro de cambios](docs/registro-de-cambios.md).
-Los diagramas están en [Mermaid](https://mermaid.js.org): GitHub los dibuja solo.
+## Qué hace
 
----
+```mermaid
+flowchart LR
+    sk["Sketch 2D<br/>con restricciones y cotas"] --> op["Operaciones 3D<br/>extruir, revolución, redondeo,<br/>vaciado, patrón, barrido, loft…"]
+    gen["Generadores<br/>caja con tapa, lightbox,<br/>letrero, engranajes"] --> op
+    imp["Importar STEP"] --> op
+    op --> hist["Historial editable<br/>(timeline + parámetros)"]
+    hist --> out["Exportar STL · OBJ · STEP<br/>o abrir en el slicer"]
+    hist <--> nuf[("Diseño .nuf")]
+```
 
-## Estado
+- **Sketch:** líneas, rectángulos, círculos, arcos, polígonos, ranuras, elipses, splines, cónicas, texto, imagen de
+  referencia y DXF; restricciones automáticas al dibujar con líneas guía al estilo Onshape; cotas sobre el lienzo.
+- **Modelado paramétrico:** cada operación guarda sus parámetros (pueden ser expresiones como `alto*2`) y al cambiar una
+  se recalcula lo que sigue. Las caras se citan por nombre estable, así que editar el pasado no rompe el resto.
+- **Más:** planos y ejes de construcción, mover y girar cuerpos con el ratón, uniones, medir, sección, revisión para
+  imprimir, roscas, engranajes, unidades mm/cm/m/in, temas claro y oscuro, copia de recuperación.
 
-Fase 1 (visor y navegación). El viewport muestra una pieza de muestra con el
-visor de OpenCASCADE:
+**Estado:** versión **0.1.0** (9 nov. 2026). Funciona en Windows y Fedora; el trabajo sigue en la rama `develop`. Lo
+hecho y lo que falta: [hoja de ruta](docs/hoja-de-ruta.md).
 
-| Acción | Ratón / teclado |
+## Con qué está hecho
+
+| Pieza | Tecnología |
 |---|---|
-| Orbitar | arrastre izquierdo (o Shift + botón central, como en Fusion 360) |
-| Desplazar (pan) | arrastre derecho (o botón central) |
-| Zoom hacia el cursor | rueda |
-| Seleccionar cara o arista | clic izquierdo |
-| Agregar/quitar de la selección | Shift + clic izquierdo |
-| Selección por rectángulo | Shift + arrastre izquierdo |
-| Vista inicial / ajustar a la ventana | Inicio / F6 |
+| Lenguaje | C++20 |
+| Kernel geométrico | [OpenCASCADE](https://dev.opencascade.org) |
+| Interfaz y visor 3D | [Qt 6](https://www.qt.io) Widgets + visor AIS de OpenCASCADE |
+| Solver de restricciones 2D | PlaneGCS (de [FreeCAD](https://www.freecad.org)) + Eigen |
+| Archivo `.nuf` | SQLite con parámetros en JSON ([nlohmann/json](https://github.com/nlohmann/json)) |
+| Build, pruebas y CI | CMake + vcpkg, Catch2, GitHub Actions (Windows y Ubuntu) |
 
-Las barras de herramientas usan iconos SVG (`src/app/resources/icons/ui/`, propios más
-algunos de [Lucide](https://lucide.dev), licencia ISC) con el nombre debajo y un
-tooltip con nombre, tecla y ayuda; se pintan con los colores del tema.
+Por qué cada una: [docs/decisiones.md](docs/decisiones.md).
 
-Además: ViewCube (clic en una cara para orientar la vista), tema claro/oscuro
-(Ver › Tema) y, en Linux con Wayland, la app usa XWayland porque el OCCT de
-las distribuciones solo trae GLX.
+## Compilar rápido
 
----
+```bash
+cmake --preset linux-debug          # o windows-debug
+cmake --build --preset linux-debug
+ctest --preset linux-debug
+./build/linux-debug/src/app/NufioCAD
+```
 
-## Estructura
+Requisitos, Windows paso a paso y opciones: [docs/desarrollo.md](docs/desarrollo.md).
+
+## Estructura del repositorio
 
 ```
 NufioCAD/
-├── CMakeLists.txt         proyecto raíz
-├── CMakePresets.json      un preset por sistema (Linux / Windows)
-├── vcpkg.json             dependencias con versión fijada (OCCT, Eigen, SQLite, nlohmann-json, Catch2)
-├── cmake/                 funciones comunes (advertencias, bibliotecas)
-├── src/
-│   ├── geometry/          adaptador de OpenCASCADE (único que lo incluye)
-│   ├── sketch/            sketcher 2D y solver de restricciones (Fase 2)
-│   ├── document/          documento, señales, timeline (Fase 3)
-│   ├── commands/          deshacer/rehacer
-│   ├── io/                archivo .nuf (SQLite) y exportación
-│   ├── render/            viewport (Qt + OCCT, Fase 1)
-│   └── app/               ventana principal y ejecutable
-├── third_party/planegcs/  solver de restricciones 2D (copia de FreeCAD)
-├── tests/                 pruebas del núcleo (Catch2, sin Qt)
-├── docs/                  hoja de ruta y arquitectura
-└── .github/workflows/     CI en Windows y Linux
+├── src/                     código, un módulo por carpeta (ver docs/arquitectura.md)
+│   ├── sketch/              sketch 2D, restricciones y herramientas de dibujo (sin Qt ni OCCT)
+│   ├── geometry/            operaciones sólidas sobre OpenCASCADE, nombres de caras, mallas
+│   ├── document/            historial de operaciones, parámetros, recálculo, generadores
+│   ├── commands/            deshacer y rehacer
+│   ├── io/                  archivo .nuf (SQLite + JSON)
+│   ├── render/              visor 3D (Qt + OpenCASCADE)
+│   └── app/                 ventana, herramientas, diálogos y ejecutable
+├── tests/                   pruebas del núcleo (Catch2, sin Qt) y tests/data/v1.nuf de referencia
+├── third_party/planegcs/    solver PlaneGCS copiado de FreeCAD (LGPL-2.1+, ver su README)
+├── cmake/                   funciones comunes de CMake (advertencias, bibliotecas)
+├── packaging/linux/         lanzador .desktop, tipo MIME e instalación local
+├── docs/                    documentación (índice en docs/README.md)
+├── .github/workflows/       CI en Windows y Linux
+├── CMakeLists.txt · CMakePresets.json · vcpkg.json
+└── .clang-format · .editorconfig · .gitattributes
 ```
 
-Cada módulo expone sus cabeceras en `src/<módulo>/include/nuf/<módulo>/` y se
-usa como `nuf::<módulo>` en CMake. El núcleo (`geometry`, `document`,
-`commands`, `io`, `sketch`) **no depende de Qt**.
+## Documentación
 
----
+Empieza por el [índice de `docs/`](docs/README.md). Los diagramas están en [Mermaid](https://mermaid.js.org) y GitHub
+los dibuja solos.
 
-## Compilar en Linux (Fedora)
+## Licencias de terceros
 
-### 1. Instalar dependencias
-
-```bash
-sudo dnf install gcc-c++ cmake ninja-build git \
-    opencascade-devel qt6-qtbase-devel qt6-qtsvg-devel sqlite-devel json-devel eigen3-devel catch-devel
-```
-
-Si CMake reporta que falta TBB al configurar, instala también `tbb-devel`.
-
-### 2. Configurar, compilar y probar
-
-```bash
-cmake --preset linux-debug
-cmake --build --preset linux-debug
-ctest --preset linux-debug
-```
-
-### 3. Ejecutar
-
-```bash
-./build/linux-debug/src/app/NufioCAD                # abre la app
-./build/linux-debug/src/app/NufioCAD --self-check   # verifica el stack sin ventana
-```
-
-> Para usar las mismas versiones fijadas que Windows, existe el preset
-> `linux-vcpkg-release` (requiere vcpkg y la variable `VCPKG_ROOT`).
-
----
-
-## Compilar en Windows
-
-### 1. Instalar herramientas (una sola vez)
-
-1. **Visual Studio 2022** (Community sirve) con la carga de trabajo
-   *Desarrollo para el escritorio con C++* (incluye CMake y Ninja).
-2. **Git**.
-3. **vcpkg**:
-
-   ```powershell
-   git clone https://github.com/microsoft/vcpkg C:\dev\vcpkg
-   C:\dev\vcpkg\bootstrap-vcpkg.bat
-   setx VCPKG_ROOT C:\dev\vcpkg
-   ```
-
-4. **Qt 6** con el instalador oficial (Qt Online Installer): componente
-   *MSVC 2022 64-bit*. Luego indica dónde quedó:
-
-   ```powershell
-   setx QT_ROOT C:\Qt\6.8.3\msvc2022_64
-   ```
-
-   (ajusta la ruta a la versión que instalaste).
-
-### 2. Configurar, compilar y probar
-
-Desde **x64 Native Tools Command Prompt for VS 2022**:
-
-```powershell
-cmake --preset windows-debug
-cmake --build --preset windows-debug
-ctest --preset windows-debug
-```
-
-La primera configuración tarda: vcpkg compila OpenCASCADE desde el código
-fuente. Las siguientes reutilizan lo compilado.
-
-También puedes abrir la carpeta directamente en Visual Studio: detecta
-`CMakePresets.json` y muestra los presets de Windows.
-
-### 3. Ejecutar
-
-```powershell
-$env:PATH = "$env:QT_ROOT\bin;$env:PATH"
-.\build\windows-debug\src\app\NufioCAD.exe
-```
-
----
-
-## Versiones fijadas de vcpkg
-
-`vcpkg.json` tiene una `builtin-baseline`: el commit del catálogo de vcpkg
-que define qué versión de cada dependencia se usa. Con ella, todos compilan
-con lo mismo (al fijarla: OpenCASCADE 8.0.1, SQLite 3.53.4, Catch2 3.16.0).
-
-Tu clon local de vcpkg debe ser **completo** (no `--depth 1`) y estar al día
-para conocer ese commit: `git -C %VCPKG_ROOT% pull`.
-
-Para actualizar las dependencias en el futuro:
-
-```bash
-vcpkg x-update-baseline
-git commit -am "Actualizar baseline de vcpkg"
-```
-
-> Nota: en Linux con paquetes del sistema la versión de OCCT es la de la
-> distribución (Fedora 43/44: 7.9.3). El código usa solo APIs presentes en
-> OCCT 7.x y 8.x.
-
----
-
-## Reglas de código multiplataforma
-
-Resumen de `docs/arquitectura-cad.md`, sección 9.1:
-
-- Rutas siempre con `std::filesystem::path`; nunca armarlas a mano con `/` o `\`.
-- Texto en UTF-8 en el núcleo; conversión a `QString` solo en la interfaz.
-- Nada de APIs exclusivas de un sistema (`unistd.h`, `windows.h`) en el núcleo.
-- Las advertencias son errores en MSVC y GCC/Clang.
-- Formato del código con `.clang-format`.
+- **PlaneGCS:** LGPL-2.1 o posterior, enlazado estáticamente (`third_party/planegcs/LICENSE`).
+- **Iconos de [Lucide](https://lucide.dev):** ISC.
+- OpenCASCADE, Qt, SQLite, Eigen, nlohmann/json y Catch2 se usan como bibliotecas externas, cada una con su licencia.

@@ -15,7 +15,6 @@ compile_commands.json
 # Sistema
 .DS_Store
 Thumbs.db
-graphify-out/
 
 # Registro de la instalacion de Qt con aqtinstall
 aqtinstall.log

@@ -1,11 +1,15 @@
 #pragma once
 
+#include "BackgroundRun.hpp"
+
 #include <nuf/document/Feature.hpp>
 #include <nuf/geometry/Exchange.hpp>
 #include <nuf/geometry/Printability.hpp>
 
 #include <QDialog>
 
+#include <map>
+#include <utility>
 #include <vector>
 
 class QCheckBox;
@@ -47,10 +51,13 @@ public:
 
 private:
     void updateSummary();
-    // Revisión para imprimir de los cuerpos marcados (solo con mallas).
+    // Cuenta los triángulos de los cuerpos marcados (en segundo plano; lo ya contado no se repite).
+    void refreshTriangleCount();
+    void showTriangleCount();
+    // Revisión para imprimir de los cuerpos marcados (solo con mallas), en segundo plano.
     void runReview();
+    void showReview(const std::vector<geometry::PrintIssue>& issues, const std::string& failure);
     void savePrinterSettings() const;
-    std::vector<geometry::Shape> selectedShapes() const;
 
     const std::vector<document::Body>& bodies_;
     QComboBox* format_ = nullptr;
@@ -68,6 +75,14 @@ private:
     QLineEdit* slicer_ = nullptr;
     Mode mode_ = Mode::Export;
     QPushButton* ok_ = nullptr;
+
+    // Mallar y revisar tarda (más con roscas o engranajes): va en hilos de trabajo para que marcar un cuerpo o
+    // cambiar la calidad no pare la ventana.
+    BackgroundRun reviewRun_;
+    BackgroundRun countRun_;
+    bool countAgain_ = false;  // la selección cambió mientras se contaba
+    // Triángulos ya contados por (forma, calidad): marcar o desmarcar un cuerpo no vuelve a mallar los demás.
+    std::map<std::pair<const void*, int>, std::size_t> triangles_;
 };
 
 } // namespace nuf::app

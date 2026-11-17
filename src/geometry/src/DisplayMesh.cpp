@@ -22,7 +22,9 @@
 #include <Message_ProgressIndicator.hxx>
 #include <Message_ProgressRange.hxx>
 #include <Standard_Failure.hxx>
+#include <Poly_PolygonOnTriangulation.hxx>
 #include <TopExp.hxx>
+#include <TopExp_Explorer.hxx>
 #include <TopLoc_Location.hxx>
 #include <NCollection_IndexedMap.hxx>
 #include <TopTools_ShapeMapHasher.hxx>
@@ -147,12 +149,69 @@ void applyMesh(const Shape& shape, const PreparedMesh& mesh)
     }
     const BRep_Builder builder;
     for (int i = 1; i <= from.Extent(); ++i) {
-        TopLoc_Location location;
-        const occ::handle<Poly_Triangulation> triangulation = BRep_Tool::Triangulation(TopoDS::Face(from(i)), location);
-        if (!triangulation.IsNull()) {
-            builder.UpdateFace(TopoDS::Face(to(i)), triangulation);
+        const TopoDS_Face fromFace = TopoDS::Face(from(i));
+        const TopoDS_Face toFace = TopoDS::Face(to(i));
+        TopLoc_Location fromLocation;
+        const occ::handle<Poly_Triangulation> triangulation = BRep_Tool::Triangulation(fromFace, fromLocation);
+        if (triangulation.IsNull()) {
+            continue;
+        }
+        builder.UpdateFace(toFace, triangulation);
+        // Los polígonos de las aristas sobre esa malla: el visor dibuja con ellos el borde de cada cara. Las dos caras
+        // (la copia y la original) tienen la misma topología, así que sus aristas salen en el mismo orden.
+        TopLoc_Location toLocation;
+        BRep_Tool::Triangulation(toFace, toLocation);
+        TopExp_Explorer fromEdges(fromFace, TopAbs_EDGE);
+        TopExp_Explorer toEdges(toFace, TopAbs_EDGE);
+        for (; fromEdges.More() && toEdges.More(); fromEdges.Next(), toEdges.Next()) {
+            const TopoDS_Edge fromEdge = TopoDS::Edge(fromEdges.Current());
+            const TopoDS_Edge toEdge = TopoDS::Edge(toEdges.Current());
+            if (BRep_Tool::Degenerated(fromEdge)) {
+                continue;
+            }
+            if (BRep_Tool::IsClosed(fromEdge, fromFace)) {
+                // Una costura aparece dos veces en la cara (una por cada lado): se pasan los dos polígonos de una vez.
+                if (fromEdges.Current().Orientation() != TopAbs_FORWARD) {
+                    continue;  // ya se pasó con su pareja
+                }
+                const occ::handle<Poly_PolygonOnTriangulation> forward =
+                    BRep_Tool::PolygonOnTriangulation(TopoDS::Edge(fromEdge.Oriented(TopAbs_FORWARD)), triangulation, fromLocation);
+                const occ::handle<Poly_PolygonOnTriangulation> backward =
+                    BRep_Tool::PolygonOnTriangulation(TopoDS::Edge(fromEdge.Oriented(TopAbs_REVERSED)), triangulation, fromLocation);
+                if (!forward.IsNull() && !backward.IsNull()) {
+                    builder.UpdateEdge(TopoDS::Edge(toEdge.Oriented(TopAbs_FORWARD)), forward, backward, triangulation, toLocation);
+                }
+                continue;
+            }
+            const occ::handle<Poly_PolygonOnTriangulation> polygon =
+                BRep_Tool::PolygonOnTriangulation(fromEdge, triangulation, fromLocation);
+            if (!polygon.IsNull()) {
+                builder.UpdateEdge(toEdge, polygon, triangulation, toLocation);
+            }
         }
     }
+}
+
+bool hasBoundaryPolygons(const Shape& shape)
+{
+    if (shape.isNull() || shape.faceCount() == 0) {
+        return false;
+    }
+    for (int i = 0; i < shape.faceCount(); ++i) {
+        const TopoDS_Face& face = faceAt(shape, i);
+        TopLoc_Location location;
+        const occ::handle<Poly_Triangulation> triangulation = BRep_Tool::Triangulation(face, location);
+        if (triangulation.IsNull()) {
+            return false;
+        }
+        for (TopExp_Explorer edges(face, TopAbs_EDGE); edges.More(); edges.Next()) {
+            const TopoDS_Edge edge = TopoDS::Edge(edges.Current());
+            if (!BRep_Tool::Degenerated(edge) && BRep_Tool::PolygonOnTriangulation(edge, triangulation, location).IsNull()) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 bool hasMesh(const Shape& shape)

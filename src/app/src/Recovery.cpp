@@ -37,23 +37,52 @@ Recovery::Recovery()
     lock_->tryLock(0);
 }
 
-bool Recovery::write(const document::Document& document, const io::ViewState& view, const QString& original)
+Recovery::~Recovery()
 {
+    finishWriting();
+}
+
+void Recovery::finishWriting()
+{
+    if (writer_.joinable()) {
+        writer_.join();
+    }
+}
+
+bool Recovery::writeAsync(const document::Document& document, const io::ViewState& view, const QString& original)
+{
+    if (writing_.load()) {
+        return false;  // la anterior no ha terminado: no se amontonan
+    }
+    finishWriting();  // ya terminó: se recoge el hilo
+    io::SavePlan plan;
     try {
-        io::saveDocument(toPath(nufPath(id_)), document, view);
+        plan = io::prepareSave(document, view);
     } catch (const std::exception&) {
         return false;
     }
-    QFile info(infoPath(id_));
-    if (!info.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        return false;
-    }
-    info.write(original.toUtf8() + '\n' + QString::fromStdString(document.name()).toUtf8());
+    const QString info = original + QLatin1Char('\n') + QString::fromStdString(document.name());
+    const std::filesystem::path file = toPath(nufPath(id_));
+    const QString infoFile = infoPath(id_);
+    writing_ = true;
+    writer_ = std::thread([this, plan = std::move(plan), info, file, infoFile] {
+        try {
+            io::writeSave(file, plan);
+            QFile out(infoFile);
+            if (out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                out.write(info.toUtf8());
+            }
+        } catch (...) {
+            // No es grave: se reintenta en la siguiente vuelta.
+        }
+        writing_ = false;
+    });
     return true;
 }
 
 void Recovery::discard()
 {
+    finishWriting();
     QFile::remove(nufPath(id_));
     QFile::remove(infoPath(id_));
 }

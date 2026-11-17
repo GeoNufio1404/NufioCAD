@@ -15,6 +15,7 @@
 #include <TopoDS.hxx>
 
 #include <algorithm>
+#include <mutex>
 #include <cmath>
 #include <set>
 #include <tuple>
@@ -40,41 +41,51 @@ std::tuple<double, double, double> centerOf(const TopoDS_Shape& shape)
     return {round(c.X()), round(c.Y()), round(c.Z())};
 }
 
-// Índices con ese nombre, ordenados por su centro.
-std::vector<int> sameName(const std::vector<std::string>& names, const ShapeMap& map, const std::string& name)
+// Los índices con cada nombre; los de un nombre repetido, ordenados por su centro (así «la segunda cara llamada X» no
+// depende de errores de redondeo). Se arma una vez por forma (ver Shape::Impl::NameIndex); devuelve una copia, para que
+// otro hilo no la toque mientras se lee.
+std::vector<int> sameName(const std::vector<std::string>& names, const ShapeMap& map, const std::string& name,
+                          std::mutex& mutex, Shape::Impl::NameIndex& index)
 {
-    std::vector<int> found;
-    for (std::size_t i = 0; i < names.size(); ++i) {
-        if (names[i] == name) {
-            found.push_back(int(i));
+    const std::lock_guard<std::mutex> lock(mutex);
+    if (!index.built) {
+        for (std::size_t i = 0; i < names.size(); ++i) {
+            index.byName[names[i]].push_back(int(i));
         }
+        for (auto& entry : index.byName) {
+            std::vector<int>& found = entry.second;
+            if (found.size() > 1) {
+                std::vector<std::pair<std::tuple<double, double, double>, int>> keyed;
+                for (int i : found) {
+                    keyed.emplace_back(centerOf(map(i + 1)), i);
+                }
+                std::ranges::sort(keyed);
+                for (std::size_t k = 0; k < keyed.size(); ++k) {
+                    found[k] = keyed[k].second;
+                }
+            }
+        }
+        index.built = true;
     }
-    if (found.size() > 1) {
-        std::vector<std::pair<std::tuple<double, double, double>, int>> keyed;
-        for (int i : found) {
-            keyed.emplace_back(centerOf(map(i + 1)), i);
-        }
-        std::ranges::sort(keyed);
-        for (std::size_t k = 0; k < keyed.size(); ++k) {
-            found[k] = keyed[k].second;
-        }
-    }
-    return found;
+    const auto it = index.byName.find(name);
+    return it == index.byName.end() ? std::vector<int>{} : it->second;
 }
 
-ElementRef refOf(const std::vector<std::string>& names, const ShapeMap& map, int index)
+ElementRef refOf(const std::vector<std::string>& names, const ShapeMap& map, int index, std::mutex& mutex,
+                 Shape::Impl::NameIndex& cache)
 {
     if (index < 0 || index >= int(names.size())) {
         return {};
     }
-    const std::vector<int> same = sameName(names, map, names[std::size_t(index)]);
+    const std::vector<int> same = sameName(names, map, names[std::size_t(index)], mutex, cache);
     const auto it = std::ranges::find(same, index);
     return {names[std::size_t(index)], int(it - same.begin())};
 }
 
-std::optional<int> find(const std::vector<std::string>& names, const ShapeMap& map, const ElementRef& ref)
+std::optional<int> find(const std::vector<std::string>& names, const ShapeMap& map, const ElementRef& ref,
+                        std::mutex& mutex, Shape::Impl::NameIndex& cache)
 {
-    const std::vector<int> same = sameName(names, map, ref.name);
+    const std::vector<int> same = sameName(names, map, ref.name, mutex, cache);
     if (same.empty()) {
         return std::nullopt;
     }
@@ -135,6 +146,12 @@ Box Shape::bounds() const
     if (isNull()) {
         return box;
     }
+    {
+        const std::lock_guard<std::mutex> lock(impl_->cacheMutex);
+        if (impl_->boundsCache) {
+            return *impl_->boundsCache;
+        }
+    }
     Bnd_Box bnd;
     // Caja rápida (con los puntos de control de las superficies spline, así que en una rosca sale algo
     // mayor que la real: ajustarla con AddOptimal tardaba decenas de segundos en una rosca).
@@ -147,6 +164,8 @@ Box Shape::bounds() const
     box.min = {x0, y0, z0};
     box.max = {x1, y1, z1};
     box.empty = false;
+    const std::lock_guard<std::mutex> lock(impl_->cacheMutex);
+    impl_->boundsCache = box;
     return box;
 }
 
@@ -165,22 +184,22 @@ const std::string& Shape::edgeName(int index) const
 
 ElementRef Shape::faceRef(int index) const
 {
-    return impl_ ? refOf(impl_->faceNames, impl_->faces, index) : ElementRef{};
+    return impl_ ? refOf(impl_->faceNames, impl_->faces, index, impl_->cacheMutex, impl_->faceIndex) : ElementRef{};
 }
 
 ElementRef Shape::edgeRef(int index) const
 {
-    return impl_ ? refOf(impl_->edgeNames, impl_->edges, index) : ElementRef{};
+    return impl_ ? refOf(impl_->edgeNames, impl_->edges, index, impl_->cacheMutex, impl_->edgeIndex) : ElementRef{};
 }
 
 std::optional<int> Shape::findFace(const ElementRef& ref) const
 {
-    return impl_ ? find(impl_->faceNames, impl_->faces, ref) : std::nullopt;
+    return impl_ ? find(impl_->faceNames, impl_->faces, ref, impl_->cacheMutex, impl_->faceIndex) : std::nullopt;
 }
 
 std::optional<int> Shape::findEdge(const ElementRef& ref) const
 {
-    return impl_ ? find(impl_->edgeNames, impl_->edges, ref) : std::nullopt;
+    return impl_ ? find(impl_->edgeNames, impl_->edges, ref, impl_->cacheMutex, impl_->edgeIndex) : std::nullopt;
 }
 
 std::optional<sketch::Plane> Shape::facePlane(int index) const

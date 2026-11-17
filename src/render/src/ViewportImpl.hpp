@@ -4,6 +4,8 @@
 
 #include "ViewportDrawing.hpp"
 
+#include <StdPrs_ToolTriangulatedShape.hxx>
+
 namespace nuf::render {
 
 class Viewport::Impl final : public AIS_ViewController {
@@ -173,10 +175,8 @@ public:
     struct MeshTask {
         std::uint64_t id = 0;
         geometry::Shape shape;
-        std::atomic<bool> cancel{false};
-        std::atomic<bool> finished{false};
         geometry::PreparedMesh mesh;
-        std::thread thread;
+        geometry::TaskPool::TaskPtr task;  // en el grupo de hilos de trabajo
     };
     std::vector<std::unique_ptr<MeshTask>> meshTasks;
     std::vector<std::unique_ptr<MeshTask>> cancelledTasks;  // canceladas que aún no han terminado
@@ -184,6 +184,11 @@ public:
     std::uint64_t nextMeshTaskId = 1;
     std::vector<const void*> unmeshable;                    // su malla en segundo plano falló: se dibujan como siempre
     bool busy = false;
+    bool waitingForMesh = false;      // hay cuerpos esperando su malla (aunque «busy» aún no se haya avisado)
+    bool fitWhenReady = false;        // se pidió encuadrar mientras faltaban cuerpos por mostrar: se hace al tenerlos
+    std::uint64_t busyToken = 0;
+    geometry::Shape pendingTool;      // el sólido de la vista previa de una herramienta, a la espera de su malla
+    bool pendingToolRemoves = false;
 
     void setBusy(bool on)
     {
@@ -191,6 +196,49 @@ public:
             busy = on;
             emit widget_.busyChanged(on);
         }
+    }
+
+    // El aviso de «preparando el dibujo» solo sale si la espera pasa de 150 ms: con piezas sencillas la malla llega
+    // antes y la barra de estado no parpadea en cada paso de una vista previa.
+    void setWaiting(bool waiting)
+    {
+        if (waiting == waitingForMesh) {
+            return;
+        }
+        waitingForMesh = waiting;
+        const std::uint64_t token = ++busyToken;
+        if (!waiting) {
+            setBusy(false);
+            return;
+        }
+        QTimer::singleShot(150, &widget_, [this, token] {
+            if (waitingForMesh && token == busyToken) {
+                setBusy(true);
+            }
+        });
+    }
+
+    // Con qué desviación y ángulo se malla un cuerpo: los mismos que usaría el visor al dibujarlo (relativos al tamaño
+    // de la pieza, 0,001 por defecto) o, si es una rosca, los gruesos de siempre. Así lo que sale se ve igual.
+    struct BodyMeshing {
+        double deviation = 0.0;
+        double angle = 0.0;
+    };
+
+    BodyMeshing meshingFor(const geometry::Shape& shape) const
+    {
+        if (geometry::hasHeavySurface(shape)) {
+            return {geometry::kHeavyDeviation, geometry::kHeavyAngle};
+        }
+        const Handle(Prs3d_Drawer)& drawer = context->DefaultDrawer();
+        return {StdPrs_ToolTriangulatedShape::GetDeflection(geometry::occtShape(shape), drawer), drawer->DeviationAngle()};
+    }
+
+    // ¿Falta mallar esta forma? (si no tiene malla y no falló antes)
+    bool needsMesh(const geometry::Shape& shape) const
+    {
+        return !shape.isNull() && !geometry::hasMesh(shape) &&
+               std::ranges::find(unmeshable, static_cast<const void*>(shape.impl())) == unmeshable.end();
     }
 
     void startMeshTask(const geometry::Shape& shape)
@@ -201,9 +249,12 @@ public:
         MeshTask* raw = task.get();
         const std::uint64_t id = task->id;
         Impl* self = this;
-        task->thread = std::thread([raw, self, id] {
-            raw->mesh = geometry::prepareMesh(raw->shape, geometry::kHeavyDeviation, geometry::kHeavyAngle, raw->cancel);
-            raw->finished = true;
+        const BodyMeshing meshing = meshingFor(shape);  // en el hilo de la interfaz: mira el tamaño de la pieza
+        task->task = geometry::TaskPool::instance().submit([raw, self, id, meshing] {
+            raw->mesh = geometry::prepareMesh(raw->shape, meshing.deviation, meshing.angle, geometry::currentCancelFlag());
+            if (geometry::cancelRequested()) {
+                return;
+            }
             QMetaObject::invokeMethod(&self->widget_, [self, id] { self->meshTaskFinished(id); }, Qt::QueuedConnection);
         });
         meshTasks.push_back(std::move(task));
@@ -216,8 +267,8 @@ public:
         if (it == meshTasks.end()) {
             return;  // cancelada y retirada
         }
-        (*it)->thread.join();
-        if (!(*it)->cancel.load()) {
+        (*it)->task->wait();  // ya terminó (avisó al acabar)
+        if (!(*it)->task->cancelled()) {
             if ((*it)->mesh.valid()) {
                 geometry::applyMesh((*it)->shape, (*it)->mesh);
             } else {
@@ -230,35 +281,30 @@ public:
         meshTasks.erase(it);
         const std::vector<document::Body> again = wantedBodies;
         showBodies(again);
+        showPendingTool();
+        if (fitWhenReady && !waitingForMesh) {
+            fitWhenReady = false;
+            widget_.fitAll();
+        }
         view->Invalidate();
         widget_.update();
     }
 
     void reapCancelled()
     {
-        std::erase_if(cancelledTasks, [](const std::unique_ptr<MeshTask>& t) {
-            if (!t->finished.load()) {
-                return false;
-            }
-            if (t->thread.joinable()) {
-                t->thread.join();
-            }
-            return true;
-        });
+        std::erase_if(cancelledTasks, [](const std::unique_ptr<MeshTask>& t) { return t->task->finished(); });
     }
 
     void cancelMeshTasks()
     {
         for (auto* list : {&meshTasks, &cancelledTasks}) {
             for (auto& t : *list) {
-                t->cancel = true;
+                t->task->cancel();
             }
         }
         for (auto* list : {&meshTasks, &cancelledTasks}) {
             for (auto& t : *list) {
-                if (t->thread.joinable()) {
-                    t->thread.join();
-                }
+                t->task->wait();
             }
             list->clear();
         }
@@ -273,8 +319,7 @@ public:
             const bool shown = std::ranges::any_of(bodies, [&](const ShownBody& b) {
                 return b.key == body.key && b.shape.impl() == body.shape.impl();
             });
-            if (shown || !geometry::hasHeavySurface(body.shape) || geometry::hasMesh(body.shape) ||
-                std::ranges::find(unmeshable, static_cast<const void*>(body.shape.impl())) != unmeshable.end()) {
+            if (shown || !needsMesh(body.shape)) {
                 continue;
             }
             waiting = true;
@@ -286,9 +331,9 @@ public:
         for (auto it = meshTasks.begin(); it != meshTasks.end();) {
             const bool wanted = std::ranges::any_of(list, [&](const document::Body& body) {
                 return body.shape.impl() == (*it)->shape.impl();
-            });
+            }) || (!pendingTool.isNull() && pendingTool.impl() == (*it)->shape.impl());
             if (!wanted) {
-                (*it)->cancel = true;
+                (*it)->task->cancel();
                 cancelledTasks.push_back(std::move(*it));
                 it = meshTasks.erase(it);
             } else {
@@ -296,7 +341,7 @@ public:
             }
         }
         reapCancelled();
-        setBusy(waiting);
+        setWaiting(waiting);
         if (waiting) {
             return;
         }
@@ -320,14 +365,15 @@ public:
                 ais->SetColor(rgb(0x6C, 0xA6, 0xFF));
                 ais->SetTransparency(0.45);
             }
-            if (geometry::hasHeavySurface(body.shape)) {
-                // Una superficie spline con miles de puntos de control (una rosca) con el mallado normal
-                // (relativo, 0,001 del tamaño) daba cientos de miles de triángulos y minutos de espera:
-                // se malla (en segundo plano) con una desviación absoluta de 0,1 mm, que se ve lisa con el
-                // sombreado, y aquí ya no se vuelve a mallar.
+            if (geometry::hasHeavySurface(body.shape) || geometry::hasMesh(body.shape)) {
+                // Mallar es lo que más paraba la ventana (una rosca con el mallado normal daba cientos de miles de
+                // triángulos y minutos de espera; un engranaje, más de un segundo): el cuerpo se malla en segundo plano
+                // (ver startMeshTask) con una desviación absoluta que da lo mismo que daría el visor, y aquí ya no se
+                // vuelve a mallar.
+                const BodyMeshing meshing = meshingFor(body.shape);
                 ais->Attributes()->SetTypeOfDeflection(Aspect_TOD_ABSOLUTE);
-                ais->Attributes()->SetMaximalChordialDeviation(geometry::kHeavyDeviation);
-                ais->SetOwnDeviationAngle(geometry::kHeavyAngle);
+                ais->Attributes()->SetMaximalChordialDeviation(meshing.deviation);
+                ais->SetOwnDeviationAngle(meshing.angle);
                 if (geometry::hasMesh(body.shape)) {
                     ais->Attributes()->SetAutoTriangulation(false);
                 }
@@ -431,16 +477,41 @@ public:
         return all;
     }
 
+    // El sólido que se quita o se agrega se dibuja cuando su malla está lista (se prepara en segundo plano, como la
+    // de los cuerpos): lo que se ve mientras tanto es el cuerpo de la vista previa, sin la sombra roja.
     void showToolPreview(const geometry::Shape& tool, bool removes)
     {
         clearToolPreview();
         if (tool.isNull()) {
             return;
         }
-        toolPreview = new AIS_Shape(geometry::occtShape(tool));
-        toolPreview->SetColor(removes ? rgb(0xE5, 0x48, 0x4D) : rgb(0x6C, 0xA6, 0xFF));
+        pendingTool = tool;
+        pendingToolRemoves = removes;
+        if (needsMesh(tool)) {
+            if (std::ranges::none_of(meshTasks, [&](const auto& t) { return t->shape.impl() == tool.impl(); })) {
+                startMeshTask(tool);
+            }
+            return;
+        }
+        showPendingTool();
+    }
+
+    void showPendingTool()
+    {
+        if (pendingTool.isNull() || !toolPreview.IsNull() || needsMesh(pendingTool)) {
+            return;
+        }
+        toolPreview = new AIS_Shape(geometry::occtShape(pendingTool));
+        toolPreview->SetColor(pendingToolRemoves ? rgb(0xE5, 0x48, 0x4D) : rgb(0x6C, 0xA6, 0xFF));
         toolPreview->SetTransparency(0.55);
         toolPreview->Attributes()->SetFaceBoundaryDraw(false);
+        if (geometry::hasMesh(pendingTool)) {
+            const BodyMeshing meshing = meshingFor(pendingTool);
+            toolPreview->Attributes()->SetTypeOfDeflection(Aspect_TOD_ABSOLUTE);
+            toolPreview->Attributes()->SetMaximalChordialDeviation(meshing.deviation);
+            toolPreview->SetOwnDeviationAngle(meshing.angle);
+            toolPreview->Attributes()->SetAutoTriangulation(false);
+        }
         context->Display(toolPreview, AIS_Shaded, -1, false);
     }
 
@@ -489,6 +560,7 @@ public:
 
     void clearToolPreview()
     {
+        pendingTool = geometry::Shape();
         if (!toolFaces.IsNull()) {
             context->Remove(toolFaces, false);
             toolFaces.Nullify();
@@ -1231,16 +1303,48 @@ public:
         const std::size_t fingerprint = sketch::geometryFingerprint(sketch);
         const bool geometryChanged = fingerprint != profilesFingerprint || !context->IsDisplayed(profiles)
                                      || profilesPlaneDirty;
-        if (geometryChanged) {
-            profilesFingerprint = fingerprint;
-            profilesPlaneDirty = false;
-            profiles->SetShape(profileCompound(sketch, toAx3(sketchPlane)));
-            profiles->SetToUpdate();
-            if (context->IsDisplayed(profiles)) {
-                context->Redisplay(profiles, false);
-            } else {
-                context->Display(profiles, AIS_Shaded, -1, false);
+        if (!geometryChanged) {
+            return;
+        }
+        // Al arrastrar, la geometría cambia en cada movimiento del ratón y hallar los perfiles y construir sus caras es
+        // lo más caro: se rehace como mucho cada 100 ms (y al soltar, con lo último).
+        constexpr int kProfilesEveryMs = 100;
+        if (context->IsDisplayed(profiles) && !profilesPlaneDirty && profilesClock.isValid() &&
+            profilesClock.elapsed() < kProfilesEveryMs) {
+            if (profilesTimer == nullptr) {
+                profilesTimer = new QTimer(&widget_);
+                profilesTimer->setSingleShot(true);
+                QObject::connect(profilesTimer, &QTimer::timeout, &widget_, [this] {
+                    rebuildProfiles();
+                    view->Invalidate();
+                    widget_.update();
+                });
             }
+            profilesTimer->start(int(kProfilesEveryMs - profilesClock.elapsed()));
+            return;
+        }
+        rebuildProfiles();
+    }
+
+    // Las regiones cerradas del sketch mostrado, sombreadas.
+    void rebuildProfiles()
+    {
+        if (!shownSketch) {
+            return;  // el sketch se cerró mientras esperaba el temporizador
+        }
+        const std::size_t fingerprint = sketch::geometryFingerprint(*shownSketch);
+        if (fingerprint == profilesFingerprint && context->IsDisplayed(profiles) && !profilesPlaneDirty) {
+            return;
+        }
+        profilesFingerprint = fingerprint;
+        profilesPlaneDirty = false;
+        profilesClock.start();
+        profiles->SetShape(profileCompound(*shownSketch, toAx3(sketchPlane)));
+        profiles->SetToUpdate();
+        if (context->IsDisplayed(profiles)) {
+            context->Redisplay(profiles, false);
+        } else {
+            context->Display(profiles, AIS_Shaded, -1, false);
         }
     }
 
@@ -1726,6 +1830,8 @@ public:
     bool sketchDragging = false;
     std::optional<sketch::Sketch> shownSketch;
     std::size_t profilesFingerprint = 0;  // geometría con la que se calcularon los perfiles sombreados
+    QElapsedTimer profilesClock;           // cuándo se rehicieron por última vez (para no hacerlo más de 10 veces por segundo)
+    QTimer* profilesTimer = nullptr;       // rehace los perfiles con lo último cuando pasa el tiempo
     bool profilesPlaneDirty = true;        // el plano cambió: hay que rehacerlos aunque la geometría sea la misma
     std::vector<sketch::EntityId> shownUnderconstrained;
     SketchHighlight shownHighlight;

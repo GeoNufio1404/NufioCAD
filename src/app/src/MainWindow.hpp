@@ -3,14 +3,18 @@
 #include <nuf/commands/CommandStack.hpp>
 #include <nuf/document/Document.hpp>
 #include <nuf/document/Features.hpp>
+#include <nuf/geometry/Exchange.hpp>
 #include <nuf/io/DocumentFile.hpp>
 #include <nuf/sketch/Plane.hpp>
 
+#include "BackgroundRun.hpp"
+#include "ExportDialog.hpp"
 #include "SketchSession.hpp"
 
 #include <QByteArray>
 #include <QMainWindow>
 
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <map>
@@ -25,6 +29,8 @@ class QDragEnterEvent;
 class QDropEvent;
 class QEvent;
 class QActionGroup;
+class QColor;
+class QVariantAnimation;
 class QDockWidget;
 class QCheckBox;
 class QComboBox;
@@ -43,7 +49,9 @@ class Generator;
 
 namespace nuf::app {
 
+class BusySpinner;
 class FeatureTool;
+class StatusBanner;
 class InterfaceCheck;
 class Recovery;
 class Ribbon;
@@ -109,6 +117,12 @@ private:
     void updateExportAction();
     void exportBodies();
     void printBodies();
+    // Un archivo por trabajo (ruta y cuerpos). Mallar y escribir va en un hilo aparte: la ventana sigue viva.
+    struct ExportJob {
+        QString path;
+        std::vector<geometry::Shape> shapes;
+    };
+    void startExport(std::vector<ExportJob> jobs, ExportDialog::Format format, geometry::MeshQuality quality);
     void toggleMeasure(bool on);
     void startGenerator(const document::Generator& generator);
     // Vuelve a abrir el formulario de lo que sacó un generador (la operación «id» es una de ellas).
@@ -128,8 +142,14 @@ private:
     void startTool(std::unique_ptr<FeatureTool> tool);
     // El modelo se recalcula en segundo plano: lo que necesita el resultado nuevo espera (avisa y devuelve true).
     bool modelBusy();
-    // «Calculando…» sobre la vista mientras el modelo o la vista previa de una herramienta se calculan.
+    // ¿Hay algo cargando? El modelo, la vista previa de una herramienta, una exportación, una importación, una
+    // medición o la malla que prepara el visor.
+    bool anythingBusy() const;
+    // «Calculando…» con su spinner sobre la vista y la barra de estado en ámbar con otro spinner, mientras haya algo
+    // cargando: así se ve a la vista que el programa sigue trabajando aunque no cambie nada en pantalla.
     void updateBusyBadge();
+    void paintBanner(const QColor& background);
+    void setBannerBusy(bool busy);
     // Ejecuta «what» ya, o en cuanto termine el cálculo en segundo plano.
     void whenComputed(std::function<void()> what);
     void finishTool(bool accepted);
@@ -146,6 +166,11 @@ private:
     document::Document document_;
     commands::CommandStack commands_{document_};
     std::vector<std::function<void()>> afterCompute_;  // pendientes de que termine el cálculo en segundo plano
+    // Trabajos largos de archivo y medición, en hilos de trabajo (la interfaz no espera).
+    BackgroundRun exportRun_;   // exportar o preparar el STL para el slicer
+    BackgroundRun importRun_;   // leer y reparar un STEP
+    BackgroundRun measureRun_;  // medir (la distancia entre superficies complejas tarda)
+    std::uint64_t documentGeneration_ = 0;  // sube al crear o abrir otro diseño: lo que se calculó para el anterior se descarta
 
     render::Viewport* viewport_ = nullptr;
     QDockWidget* navigatorDock_ = nullptr;
@@ -182,6 +207,12 @@ private:
     QDoubleSpinBox* sectionOffset_ = nullptr;
     QCheckBox* sectionFlip_ = nullptr;
     QLabel* busyBadge_ = nullptr;     // «Calculando…», sobre la vista
+    BusySpinner* badgeSpinner_ = nullptr;   // el spinner del distintivo
+    StatusBanner* statusBanner_ = nullptr;  // la barra de estado, con el spinner a la izquierda
+    BusySpinner* statusSpinner_ = nullptr;  // el de la barra de estado (lo tiene el banner)
+    QVariantAnimation* bannerBlink_ = nullptr;  // el parpadeo del banner al cambiar el mensaje
+    bool bannerBusy_ = false;         // el banner está en ámbar (hay algo cargando)
+    bool viewBusy_ = false;           // el visor prepara la malla de algún cuerpo
     bool toolComputing_ = false;      // la vista previa de la herramienta abierta se está calculando
     QLabel* measurePanel_ = nullptr;  // resultado de la medición, sobre la vista
     QAction* exportAction_ = nullptr;

@@ -41,8 +41,13 @@ constexpr double kHeavyAngle = 0.5;      // rad
 PreparedMesh prepareMesh(const Shape& shape, double deviation, double angle, const std::atomic<bool>& cancel);
 
 // Se llama desde el hilo de la interfaz (solo pasa punteros): deja la malla en
-// las caras del cuerpo, de modo que dibujarlo ya no tenga que mallarlo.
+// las caras del cuerpo, de modo que dibujarlo ya no tenga que mallarlo. Pasa también los polígonos de las aristas
+// sobre la malla de cada cara: son los que el visor usa para dibujar el borde de las caras (sin ellos las caras de
+// un mismo color se funden y no se ve dónde termina cada una).
 void applyMesh(const Shape& shape, const PreparedMesh& mesh);
+
+// ¿Tiene cada cara con malla el polígono de cada una de sus aristas (el borde que se dibuja entre caras)?
+bool hasBoundaryPolygons(const Shape& shape);
 
 // ¿Tienen ya todas las caras una malla? (la de applyMesh o la de un dibujo anterior)
 bool hasMesh(const Shape& shape);

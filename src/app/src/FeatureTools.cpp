@@ -365,6 +365,7 @@ void FeatureTool::updatePreview()
     struct Calculation {
         std::shared_ptr<document::Feature> feature;
         document::Preview result;
+        geometry::Shape tool;  // lo que se quita (rojo translúcido), calculado también en el hilo
     };
     auto calculation = std::make_shared<Calculation>();
     calculation->feature = std::move(feature);
@@ -375,39 +376,43 @@ void FeatureTool::updatePreview()
         }
     });
     emit computingChanged(true);
+    const bool removes = removesMaterial();
     previewRun_.start(
-        [calculation, state = before(), lookup = document_.snapshotLookup()] {
+        [calculation, removes, state = before(), lookup = document_.snapshotLookup()] {
             calculation->result = document::preview(state, *calculation->feature, lookup);
+            if (removes && calculation->result.status.health != document::Health::Error) {
+                // El sólido que se quita se construye aquí y no al terminar, en el hilo de la interfaz.
+                try {
+                    const document::Feature& feature = *calculation->feature;
+                    if (const auto* e = dynamic_cast<const document::ExtrudeFeature*>(&feature)) {
+                        calculation->tool = e->tool(state);
+                    } else if (const auto* r = dynamic_cast<const document::RevolveFeature*>(&feature)) {
+                        calculation->tool = r->tool(state);
+                    } else if (const auto* h = dynamic_cast<const document::HoleFeature*>(&feature)) {
+                        calculation->tool = h->tool(state);
+                    }
+                } catch (...) {
+                    // Ya lo informa el estado.
+                }
+            }
         },
         [this, calculation] {
             emit computingChanged(false);
             if (panel_ && !updating_) {
-                showPreview(*calculation->feature, calculation->result);
+                showPreview(*calculation->feature, calculation->result, calculation->tool);
             }
         });
 }
 
-void FeatureTool::showPreview(const document::Feature& feature, const document::Preview& result)
+void FeatureTool::showPreview(const document::Feature& feature, const document::Preview& result, const geometry::Shape& tool)
 {
     viewport_.showBodies(result.state.bodies);
     showPlanes(viewport_, document_, result.state, &feature);
 
-    // Lo que se quita, en rojo translúcido encima del resultado.
+    // Lo que se quita, en rojo translúcido encima del resultado (el sólido ya viene calculado por el hilo de trabajo).
     viewport_.clearToolPreview();
-    if (removesMaterial() && result.status.health != document::Health::Error) {
-        try {
-            geometry::Shape tool;
-            if (const auto* e = dynamic_cast<const document::ExtrudeFeature*>(&feature)) {
-                tool = e->tool(before());
-            } else if (const auto* r = dynamic_cast<const document::RevolveFeature*>(&feature)) {
-                tool = r->tool(before());
-            } else if (const auto* h = dynamic_cast<const document::HoleFeature*>(&feature)) {
-                tool = h->tool(before());
-            }
-            viewport_.showToolPreview(tool, true);
-        } catch (const std::exception&) {
-            // Ya lo informa el estado.
-        }
+    if (!tool.isNull() && result.status.health != document::Health::Error) {
+        viewport_.showToolPreview(tool, true);
     }
 
     const QString text = QString::fromStdString(result.status.message);

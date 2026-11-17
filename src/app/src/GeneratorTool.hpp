@@ -52,6 +52,10 @@ private:
         std::string problem;
     };
     void showResult(const Calculation& calculation, bool first);
+    // La receta de la última vista previa que salió bien, con las respuestas que la hicieron: al aceptar se reutiliza
+    // (armarla otra vez en el hilo de la interfaz repetía, por ejemplo, el contorno de las letras del Letrero).
+    std::string lastKey_;
+    std::shared_ptr<const document::Recipe> lastRecipe_;
     document::GeneratorValues values() const;
     void resetValues();
     void updateVisibility();

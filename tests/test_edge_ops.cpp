@@ -15,6 +15,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <chrono>
 #include <cmath>
@@ -2049,6 +2050,112 @@ TEST_CASE("Una booleana se interrumpe cuando el hilo de trabajo pide cancelar", 
     REQUIRE_FALSE(geometry::boolean(geometry::BooleanOp::Cut, block, rod).isNull());
 }
 
+// Oleada 6, F4: cerrar la ventana o cambiar algo no debe esperar a que termine una rosca, un engranaje helicoidal, un
+// redondeo, un vaciado ni una unión de partes: todas las construcciones largas miran la petición de cancelar.
+TEST_CASE("Las construcciones largas se interrumpen cuando el hilo de trabajo pide cancelar", "[background][thread]")
+{
+    const auto plane = sketch::Plane::fromPointAndNormal({0, 0, 0}, {0, 0, 1});
+    const geometry::Shape block = geometry::box("b", plane, 20.0, 10.0, 5.0, false);
+    const geometry::Shape other = geometry::box("c", plane, 10.0, 10.0, 8.0, false);
+    geometry::ThreadSpec threadSpec;
+    threadSpec.length = 40.0;
+    geometry::GearSpec helical;
+    helical.teeth = 20;
+    helical.helixAngle = 0.4;
+    helical.thickness = 10.0;
+    geometry::GearSpec plain;
+    plain.teeth = 20;
+    plain.thickness = 10.0;
+
+    std::atomic<bool> stop{true};
+    {
+        geometry::CancelScope scope(stop);
+        const auto cancelled = [](const std::function<void()>& call) {
+            REQUIRE_THROWS_WITH(call(), Catch::Matchers::ContainsSubstring("cancelado"));
+        };
+        cancelled([&] { geometry::thread("t", plane, threadSpec); });
+        cancelled([&] { geometry::gear("g", plane, helical); });
+        cancelled([&] { geometry::fillet("f", block, {0, 1}, 0.5); });
+        cancelled([&] { geometry::chamfer("c", block, {0, 1}, 0.5); });
+        cancelled([&] { geometry::shell("s", block, {0}, 1.0, false); });
+        cancelled([&] { geometry::boolean(geometry::BooleanOp::Fuse, block, other); });
+    }
+    REQUIRE_FALSE(geometry::cancelRequested());
+    // Sin petición de cancelar, las mismas operaciones salen bien.
+    REQUIRE_FALSE(geometry::thread("t", plane, threadSpec).isNull());
+    REQUIRE_FALSE(geometry::gear("g", plane, plain).isNull());
+    REQUIRE_FALSE(geometry::fillet("f", block, {0, 1}, 0.5).isNull());
+    REQUIRE_FALSE(geometry::chamfer("c", block, {0, 1}, 0.5).isNull());
+    REQUIRE_FALSE(geometry::shell("s", block, {0}, 1.0, false).isNull());
+}
+
+// Si la malla preparada en segundo plano no lleva los polígonos de las aristas, el visor no dibuja el borde entre
+// caras y las caras del mismo color se funden (se vio al mover el mallado de todos los cuerpos fuera de la interfaz).
+TEST_CASE("La malla preparada en segundo plano lleva también el borde de cada cara", "[background][mesh]")
+{
+    const auto plane = sketch::Plane::fromPointAndNormal({0, 0, 0}, {0, 0, 1});
+    const std::atomic<bool> never{false};
+    for (const geometry::Shape& body : {geometry::box("b", plane, 20.0, 10.0, 5.0, false),
+                                        geometry::cylinder("c", plane, 10.0, 8.0)}) {  // el cilindro tiene costura
+        REQUIRE_FALSE(geometry::hasMesh(body));
+        REQUIRE_FALSE(geometry::hasBoundaryPolygons(body));
+        const geometry::PreparedMesh mesh = geometry::prepareMesh(body, 0.05, 0.5, never);
+        REQUIRE(mesh.valid());
+        geometry::applyMesh(body, mesh);
+        REQUIRE(geometry::hasMesh(body));
+        REQUIRE(geometry::hasBoundaryPolygons(body));
+    }
+}
+
+// Oleada 6, F5: el índice de nombres y la caja se guardan en la forma; los resultados no deben cambiar, ni siquiera
+// con nombres repetidos (una cara partida por un corte) ni al pedirlos desde varios hilos a la vez.
+TEST_CASE("Buscar caras y aristas por nombre da lo mismo con el índice guardado, también desde varios hilos", "[background][names]")
+{
+    const auto plane = sketch::Plane::fromPointAndNormal({0, 0, 0}, {0, 0, 1});
+    geometry::Shape body = geometry::box("b", plane, 40.0, 20.0, 10.0, false);
+    const geometry::Shape slot = geometry::box("s", plane, 10.0, 30.0, 4.0, false);
+    // Un surco que atraviesa la cara de arriba: la parte en dos con el mismo nombre.
+    const geometry::Shape moved = geometry::moveBody("m", slot, sketch::Vec3{15.0, -5.0, 6.0}, geometry::Axis{}, 0.0, false);
+    const geometry::Shape cut = geometry::boolean(geometry::BooleanOp::Cut, body, moved);
+    REQUIRE_FALSE(cut.isNull());
+
+    const auto roundTrip = [](const geometry::Shape& shape) {
+        for (int i = 0; i < shape.faceCount(); ++i) {
+            const auto found = shape.findFace(shape.faceRef(i));
+            REQUIRE(found.has_value());
+            REQUIRE(*found == i);
+        }
+        for (int i = 0; i < shape.edgeCount(); ++i) {
+            const auto found = shape.findEdge(shape.edgeRef(i));
+            REQUIRE(found.has_value());
+            REQUIRE(*found == i);
+        }
+    };
+    roundTrip(cut);
+    // Una consulta repetida y otra desde varios hilos a la vez dan lo mismo.
+    const geometry::Box first = cut.bounds();
+    std::vector<std::thread> threads;
+    std::atomic<int> mismatches{0};
+    for (int k = 0; k < 4; ++k) {
+        threads.emplace_back([&] {
+            for (int i = 0; i < cut.faceCount(); ++i) {
+                const auto found = cut.findFace(cut.faceRef(i));
+                if (!found || *found != i) {
+                    ++mismatches;
+                }
+            }
+            const geometry::Box again = cut.bounds();
+            if (again.min.x != first.min.x || again.max.z != first.max.z) {
+                ++mismatches;
+            }
+        });
+    }
+    for (std::thread& thread : threads) {
+        thread.join();
+    }
+    REQUIRE(mismatches == 0);
+}
+
 TEST_CASE("Una rosca y un engranaje se colocan en una posición X/Y del plano", "[thread][gear]")
 {
     Document doc;
@@ -2686,4 +2793,180 @@ TEST_CASE("Reabrir un generador cambia sus operaciones en su sitio y se puede de
     values["pared"] = 3.0;
     REQUIRE(commands::ReplaceRecipe::problem(doc, newLead, make(values)).empty());
     REQUIRE_FALSE(commands::ReplaceRecipe::problem(doc, 99999, make(values)).empty());
+}
+
+namespace {
+
+double commonVolume(Document& doc, std::size_t a, std::size_t b)
+{
+    return geometry::boolean(geometry::BooleanOp::Common, doc.result().bodies[a].shape, doc.result().bodies[b].shape).volume();
+}
+
+} // namespace
+
+TEST_CASE("Un engranaje interno tiene los dientes hacia dentro y un aro por fuera", "[gear][internal]")
+{
+    Document doc;
+    auto g = std::make_unique<GearFeature>();
+    g->base.origin = OriginPlane::XY;
+    g->spec.type = geometry::GearType::Internal;
+    g->spec.module = 2.0;
+    g->spec.teeth = 36;
+    g->spec.rim = 6.0;
+    g->spec.thickness = 8.0;
+    const FeatureId id = doc.addFeature(std::move(g));
+    REQUIRE(doc.status(id).health == Health::Ok);
+    REQUIRE(doc.result().bodies.size() == 1);
+    const geometry::Shape& ring = doc.result().bodies.front().shape;
+    REQUIRE(ring.isValid());
+    // Ø primitivo 72: el hueco llega a rp + 1,25·m = 38,5 y el aro termina 6 mm más afuera.
+    REQUIRE_THAT(ring.bounds().max.x, Catch::Matchers::WithinAbs(44.5, 1e-3));
+    REQUIRE_THAT(ring.bounds().min.x, Catch::Matchers::WithinAbs(-44.5, 1e-3));
+    REQUIRE_THAT(ring.bounds().max.z, Catch::Matchers::WithinAbs(8.0, 1e-6));
+    // Disco exterior menos un hueco de tamaño parecido al del círculo primitivo.
+    const double outer = kPi * 44.5 * 44.5 * 8.0;
+    const double hollow = kPi * 36.0 * 36.0 * 8.0;
+    REQUIRE(ring.volume() > outer - 1.1 * hollow);
+    REQUIRE(ring.volume() < outer - 0.9 * hollow);
+    bool flank = false, outside = false;
+    for (int i = 0; i < ring.faceCount(); ++i) {
+        flank = flank || ring.faceName(i).find(":lado:d1:flanco_d") != std::string::npos;
+        outside = outside || ring.faceName(i).find(":lado:exterior") != std::string::npos;
+    }
+    REQUIRE(flank);
+    REQUIRE(outside);
+
+    // Con hélice no se puede: error claro.
+    Document bad;
+    auto helical = std::make_unique<GearFeature>();
+    helical->base.origin = OriginPlane::XY;
+    helical->spec.type = geometry::GearType::Internal;
+    helical->spec.teeth = 36;
+    helical->spec.helixAngle = 0.2;
+    REQUIRE(bad.status(bad.addFeature(std::move(helical))).health == Health::Error);
+}
+
+TEST_CASE("El engranaje interno sale a la distancia correcta y el piñón engrana por dentro", "[generator][gear][internal]")
+{
+    const document::Generator* generator = document::findGenerator("engranaje-interno");
+    REQUIRE(generator != nullptr);
+    const document::GeneratorValues values = generator->defaults();
+    REQUIRE(generator->summary(values).find("distancia entre ejes 23.85 mm") != std::string::npos);
+    REQUIRE(generator->summary(values).find("AVISO") == std::string::npos);
+    document::GeneratorValues close = values;
+    close["dientes_pinon"] = 30.0;
+    REQUIRE(generator->summary(close).find("AVISO") != std::string::npos);
+
+    Document doc;
+    document::applyRecipe(doc, generator->make(values, ""));
+    REQUIRE(doc.result().bodies.size() == 2);
+    for (std::size_t i = 0; i < doc.featureCount(); ++i) {
+        INFO(doc.feature(i).name());
+        REQUIRE(doc.status(doc.feature(i).id()).health != Health::Error);
+    }
+    REQUIRE(doc.bodyInfo().at(doc.result().bodies[0].key).name == "Corona");
+    REQUIRE(doc.bodyInfo().at(doc.result().bodies[1].key).name == "Piñón");
+    // Módulo 2, 36 y 12 dientes: 2·(36 − 12)/2 = 24 menos 0,15 de juego.
+    const geometry::Box pinion = doc.result().bodies[1].shape.bounds();
+    REQUIRE_THAT(0.5 * (pinion.min.x + pinion.max.x), Catch::Matchers::WithinAbs(23.85, 0.05));
+    REQUIRE_THAT(0.5 * (pinion.min.y + pinion.max.y), Catch::Matchers::WithinAbs(0.0, 0.05));
+    // El piñón no toca ni se solapa con la corona.
+    REQUIRE(commonVolume(doc, 0, 1) < 0.5);
+    REQUIRE(doc.result().bodies[0].shape.bounds().max.x > pinion.max.x);
+
+    // El piñón gira medio paso: un diente cae sobre un diente de la corona y se solapan.
+    auto bent = std::unique_ptr<Feature>(doc.findFeature(doc.feature(1).id())->clone());
+    bent->expressions["rotation"] = "180/dientes_pinon";
+    doc.replaceFeature(doc.feature(1).id(), std::move(bent));
+    REQUIRE(commonVolume(doc, 0, 1) > 5.0);
+}
+
+TEST_CASE("Una cremallera tiene el largo, la base y los dientes de su perfil", "[gear][rack]")
+{
+    Document doc;
+    auto g = std::make_unique<GearFeature>();
+    g->base.origin = OriginPlane::XY;
+    g->spec.type = geometry::GearType::Rack;
+    g->spec.module = 2.0;
+    g->spec.teeth = 10;
+    g->spec.rim = 5.0;
+    g->spec.thickness = 8.0;
+    const FeatureId id = doc.addFeature(std::move(g));
+    REQUIRE(doc.status(id).health == Health::Ok);
+    const geometry::Shape& rack = doc.result().bodies.front().shape;
+    REQUIRE(rack.isValid());
+    const double p = kPi * 2.0;
+    const geometry::Box box = rack.bounds();
+    REQUIRE_THAT(box.min.x, Catch::Matchers::WithinAbs(0.0, 1e-6));
+    REQUIRE_THAT(box.max.x, Catch::Matchers::WithinAbs(10.0 * p, 1e-6));
+    REQUIRE_THAT(box.max.y, Catch::Matchers::WithinAbs(2.0, 1e-6));           // cabeza: +1 módulo
+    REQUIRE_THAT(box.min.y, Catch::Matchers::WithinAbs(-(2.5 + 5.0), 1e-6));  // raíz −1,25 módulo y la base
+    // Área: la base (5 mm de alto bajo la raíz) más diez trapecios de 2,25·m de alto, de ancho p/2 + 0,25·m·tan(presión)
+    // de media (el ancho en la línea primitiva es p/2 y el punto medio de la altura queda 0,125·m bajo ella).
+    const double tooth = 2.25 * 2.0 * (p / 2.0 + 0.25 * 2.0 * std::tan(20.0 * kPi / 180.0));
+    const double expected = (10.0 * p * 5.0 + 10.0 * tooth) * 8.0;
+    REQUIRE_THAT(rack.volume(), WithinRel(expected, 1e-3));
+
+    // Con más ángulo del que permite el perfil, avisa.
+    Document bad;
+    auto steep = std::make_unique<GearFeature>();
+    steep->base.origin = OriginPlane::XY;
+    steep->spec.type = geometry::GearType::Rack;
+    steep->spec.pressureAngle = 35.0 * kPi / 180.0;
+    REQUIRE(bad.status(bad.addFeature(std::move(steep))).health == Health::Error);
+}
+
+TEST_CASE("La cremallera engrana con su rueda: distancia, hueco bajo el diente y sin solape", "[generator][gear][rack]")
+{
+    const document::Generator* generator = document::findGenerator("cremallera");
+    REQUIRE(generator != nullptr);
+    for (const double z : {20.0, 21.0}) {
+        document::GeneratorValues values = generator->defaults();
+        values["dientes_rueda"] = z;
+        Document doc;
+        document::applyRecipe(doc, generator->make(values, ""));
+        REQUIRE(doc.result().bodies.size() == 2);
+        for (std::size_t i = 0; i < doc.featureCount(); ++i) {
+            INFO(doc.feature(i).name());
+            REQUIRE(doc.status(doc.feature(i).id()).health != Health::Error);
+        }
+        REQUIRE(doc.bodyInfo().at(doc.result().bodies[1].key).name == "Cremallera");
+        // La línea primitiva queda a rp + juego bajo el eje: la cabeza de la barra a m − (rp + juego).
+        const double rp = 2.0 * z / 2.0;
+        const geometry::Box rack = doc.result().bodies[1].shape.bounds();
+        REQUIRE_THAT(rack.max.y, Catch::Matchers::WithinAbs(2.0 - rp - 0.15, 1e-3));
+        REQUIRE(rack.min.x < 0.0);
+        REQUIRE(rack.max.x > 0.0);
+        REQUIRE(commonVolume(doc, 0, 1) < 0.5);
+        // Sin el giro, los dientes de la rueda dan contra los de la barra (con 21 dientes el giro vale 12,86°, no 0).
+        if (z == 21.0) {
+            auto params = doc.parameters();
+            for (document::Parameter& p : params) {
+                if (p.name == "giro_rueda") {
+                    p.expression = "0";
+                }
+            }
+            doc.setParameters(params);
+            REQUIRE(commonVolume(doc, 0, 1) > 2.0);
+        }
+    }
+}
+
+TEST_CASE("El tipo y el aro del engranaje se guardan y la rueda sigue siendo exterior", "[gear][io]")
+{
+    const document::Generator* generator = document::findGenerator("cremallera");
+    Document doc;
+    document::applyRecipe(doc, generator->make(generator->defaults(), ""));
+    const auto path = std::filesystem::temp_directory_path() / "nuf_cremallera.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    const auto* rack = static_cast<const GearFeature*>(reopened.findFeature(doc.feature(1).id()));
+    REQUIRE(rack->spec.type == geometry::GearType::Rack);
+    REQUIRE_THAT(rack->spec.rim, Catch::Matchers::WithinAbs(5.0, 1e-9));
+    REQUIRE(static_cast<const GearFeature*>(reopened.findFeature(doc.feature(0).id()))->spec.type == geometry::GearType::External);
+    REQUIRE_THAT(reopened.result().bodies[1].shape.volume(), WithinRel(doc.result().bodies[1].shape.volume(), 1e-9));
 }

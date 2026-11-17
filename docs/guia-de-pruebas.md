@@ -2,7 +2,7 @@
 
 Para ir probando sección por sección cuando haya tiempo. Cada prueba dice **qué hacer** y **qué debería pasar**; si algo no es así (o no te gusta cómo se siente), anótalo con la plantilla del final y mándamelo.
 
-> Las pruebas automáticas (172 casos) ya cubren la geometría, el archivo y el historial. Lo que esta guía busca es lo que no pueden ver: **si la interfaz es clara, si se siente fluida y si los resultados se ven bien**.
+> Las pruebas automáticas (unos 250 casos del núcleo y ~36 pasos de la prueba de interfaz) ya cubren la geometría, el archivo y el historial. Lo que esta guía busca es lo que no pueden ver: **si la interfaz es clara, si se siente fluida y si los resultados se ven bien**.
 
 ## Antes de empezar
 
@@ -47,6 +47,11 @@ Va en el mismo orden que el programa: **1. General**, **2. Sketch**, **3. Sólid
 | 4.3 Letrero o llavero | `LET` |
 | 4.4 Par de engranajes | `PAR` |
 | 4.5 Todos los generadores: reabrir, recordar y restablecer | `GRE` |
+| 5.4 Vigilante de paradas (`NUF_VIGILANTE`) | `VIG` |
+| 5.5 Llamadas en segundo plano (exportar, importar, medir, recuperar) | `FLU` |
+| 5.6 Dibujo en segundo plano (mallas, vista previa, generadores) | `FLU` |
+| 5.7 Indicador de carga y cierre con trabajo en marcha | `FLU` |
+| 5.8 Calcular menos (patrones, nombres, refresco y arrastre) | `FLU` |
 
 ---
 
@@ -221,7 +226,7 @@ Código: **ARC**. Las pruebas **31–38** están en la hoja de ruta («Pruebas m
 
 Código: **SKD**.
 
-Las pruebas **1–19** ya están escritas con detalle en `docs/hoja-de-ruta-cad.md` (secciones «Pruebas manuales pendientes (2a y 2b)» y «(2c y 2d)»). Resumen de lo que cubren:
+Las pruebas **1–19** ya están escritas con detalle en `docs/hoja-de-ruta.md` (secciones «Pruebas manuales pendientes (2a y 2b)» y «(2c y 2d)»). Resumen de lo que cubren:
 
 - Dibujo: línea, rectángulo, círculo, arco, polígono (con el cuadro de lados), elipse, ranura, spline, cónica, texto, imagen de referencia, importar DXF.
 - Edición: recortar, extender, partir, empalme, chaflán, desfase, simetría, mover/copiar/girar/escalar, patrones.
@@ -710,6 +715,17 @@ Código: **PAR**.
 | PAR.4 | Aceptar y abrir Sólido › Parámetros | `modulo`, `dientes_1`, `dientes_2`… y `giro_rueda_2` (calculado); al cambiar un parámetro, todo se recalcula |
 | PAR.5 | Imprime las dos ruedas con sus ejes | Giran juntas sin atascarse con el juego de 0,15 mm (subirlo a 0,25 si rozan) |
 | PAR.6 | Haz doble clic en «Engranaje: rueda 2» del historial | Se abre su panel con Posición X, Giro inicial y los demás campos ligados |
+| PAR.7 | Herramientas › **Engranaje interno** | Se ve una corona (aro con los dientes hacia dentro, 36 dientes) y un piñón de 12 dientes dentro, tocando por el lado derecho, con los dientes encajados y sin solaparse; el panel dice 12:36 y distancia 23,85 mm |
+| PAR.8 | Pon 30 dientes al piñón | El panel avisa «con menos de 8 dientes de diferencia los dientes se estorban» |
+| PAR.9 | Con el piñón de 12: corta una sección (Inspeccionar) o mira de cerca el engrane | Los dientes del piñón entran en los huecos de la corona sin atravesarla |
+| PAR.10 | Aceptar, abrir Sólido › Parámetros y cambiar `dientes_corona` a 48 | La corona crece y el piñón se recoloca a la nueva distancia; Ctrl+Z deshace todo de una vez |
+| PAR.11 | Doble clic en «Engranaje: corona» del historial | Se abre el panel del Engranaje con Tipo «Interno (corona)» y el campo «Aro»; al cambiar el aro, el grosor exterior cambia |
+| PAR.12 | Imprime la corona y el piñón | El piñón gira dentro de la corona sin atascarse con el juego de 0,15 mm (0,25 si roza) |
+| PAR.13 | Herramientas › **Cremallera** | Se ve una barra dentada (10 dientes) debajo de una rueda de 20 dientes; un diente de la rueda cae en un hueco de la barra, sin tocarse; el panel dice cuánto avanza la barra por vuelta (125,66 mm) |
+| PAR.14 | Cambia los dientes de la rueda a 21 y el módulo a 3 | La barra se recoloca y sigue engranando (un diente de la rueda sobre un hueco de la barra) |
+| PAR.15 | Pon el ángulo de presión en 30° y luego intenta 35° | Con 30° sale la barra con dientes finos; el campo no pasa de 30° |
+| PAR.16 | Aceptar, guardar y reabrir el archivo | La cremallera y la rueda vuelven igual; doble clic en «Engranaje: cremallera» muestra Tipo «Cremallera» y el grosor de la base |
+| PAR.17 | Abre un diseño guardado antes de este cambio (con un par de engranajes) | Las ruedas siguen siendo exteriores y se ven igual |
 
 ### 4.5 Todos los generadores: reabrir, recordar y restablecer
 
@@ -740,10 +756,87 @@ No hace falta tocar nada: abre la ventana real, recorre las herramientas y los g
 NufioCAD.exe --prueba-interfaz [--informe ruta.txt] [--umbral-ms 20000]
 ```
 
+Variables de entorno útiles al depurar la prueba: `NUF_PRUEBA_SOLO=<texto>` (solo los pasos cuyo nombre lo contiene), `NUF_PRUEBA_PILA_MS=<ms>` (desde cuántos ms de parada se anota la pila, por defecto 1000) y `NUF_PRUEBA_CAPTURAS=<carpeta>` (guarda la captura de la vista previa translúcida).
+
 - Abre cada generador (Lightbox, Caja con tapa, Letrero o llavero, Par de engranajes), cambia un valor, acepta y deshace; hace lo mismo con Rosca, Engranaje, Caja y Cilindro; cancela una herramienta; cambia las unidades a cm y vuelve a mm; activa y desactiva Sección y Medir con un cuerpo; cambia el diámetro de un cilindro con una rosca cortante encima (debe volver al instante y calcular en segundo plano); y comprueba que al final no queda nada.
+- **Pasos de medición de fluidez (Oleada 6, F1):** reproducen lo que hoy se hace en el hilo de la interfaz y puede tardar: exportar STL/OBJ/STEP y contar triángulos de una pieza con rosca; abrir el diálogo de Exportar con 5 cuerpos, marcar y desmarcar y cambiar la calidad; importar un STEP con un engranaje; medir caras de una rosca; recargar la pantalla de inicio con 10 recientes; y un patrón lineal de 50 copias. No fallan por tiempo (solo por el umbral): las llamadas de más de 100 ms salen en el informe con su duración y sirven de línea base para comprobar cada rama de la Oleada 6 (ver [`auditoria-3-fluidez.md`](auditorias/auditoria-3-fluidez.md)).
 - Falla si algo no se abre o no se cierra, si deshacer deja restos, o si la interfaz se para más del umbral (por defecto 20 s: en Debug OpenCASCADE es lento).
 - El informe (por defecto `%TEMP%\NufioCAD-prueba-interfaz.txt`) dice la parada más larga de cada paso y qué la provocó, y, si hubo paradas de más de un segundo, **dónde estaba el programa** (la pila de llamadas).
 - Usa ajustes y carpetas propios (no toca tus ajustes, tus recientes ni las copias de recuperación). Devuelve 0 si todo va bien.
+
+### 5.4 Vigilante de paradas (`NUF_VIGILANTE`)
+
+Para encontrar, **usando la aplicación de verdad**, lo que deja la ventana congelada. Un hilo aparte mira si la interfaz sigue dando señales de vida; si se queda parada más de 200 ms anota cuánto duró y, en Windows, dónde estaba (la pila de llamadas).
+
+| ID | Qué hacer | Qué debería pasar |
+|---|---|---|
+| VIG.1 | En PowerShell: `$env:NUF_VIGILANTE = 1; .\NufioCAD.exe` (en Linux: `NUF_VIGILANTE=1 ./NufioCAD`) | La aplicación abre y se usa igual que siempre, sin notar el vigilante |
+| VIG.2 | Trabaja unos minutos con lo más pesado: exportar un STL de una pieza con rosca, abrir **Exportar** con varios cuerpos y marcar y desmarcar, importar un STEP, **Medir** sobre una rosca, abrir un generador con texto. Cierra la aplicación | Cierra con normalidad |
+| VIG.3 | Abre `%APPDATA%\NufioCAD\NufioCAD\cierres\paradas.txt` | Hay una línea `=== Sesión … · umbral 200 ms ===` y, por cada parada, la hora, `parada de N ms` y (Windows) las funciones donde estaba. Las paradas que tú notaste aparecen |
+| VIG.4 | Repite con `$env:NUF_VIGILANTE = 500` | La sesión dice `umbral 500 ms` y solo salen las paradas de medio segundo o más |
+| VIG.5 | Abre la aplicación **sin** la variable | No se escribe nada nuevo en `paradas.txt` |
+
+El informe se acumula entre sesiones; bórralo cuando quieras empezar de cero. Mientras se arrastra o se redimensiona la ventana, Windows puede retrasar un instante los eventos y salir alguna parada falsa y corta.
+
+### 5.5 Llamadas en segundo plano: exportar, importar, medir, recuperar (`FLU`)
+
+Oleada 6, F2. Todas estas acciones ya no deben dejar la ventana sin responder. Usa una pieza con rosca (Sólido › Rosca sobre un cilindro) o un engranaje de muchos dientes para que tarden.
+
+| ID | Qué hacer | Qué debería pasar |
+|---|---|---|
+| FLU.1 | Archivo › Exportar, STL, calidad Alta; mientras escribe, gira la vista y mueve el ratón | La ventana responde; la barra dice «Exportando a …» y al terminar «Exportado a …». El archivo abre bien en el slicer |
+| FLU.2 | Lanza una exportación y, sin esperar, otra | La segunda dice «Ya se está exportando; espera a que termine» |
+| FLU.3 | Abre Exportar con varios cuerpos; marca y desmarca cuerpos y cambia la calidad (Baja, Media, Alta) | Aparece «Contando los triángulos…» y luego «Unos N triángulos». Marcar y desmarcar no congela el diálogo; repetir una combinación ya contada es instantáneo |
+| FLU.4 | En ese diálogo, cambia la boquilla o la cama | «Revisando la pieza para imprimir…» y después el resultado, sin congelar |
+| FLU.5 | Archivo › Imprimir con un slicer configurado | «Preparando el STL para el slicer…» y luego se abre el slicer con el archivo |
+| FLU.6 | Importa un STEP grande (de otro programa); mientras importa, mueve la vista | La ventana responde y dice «Importando …»; al terminar aparece la ficha «Importación» y el cuerpo, igual que antes |
+| FLU.7 | Importa un STEP y, antes de que termine, abre otro diseño (Archivo › Nuevo o Abrir) | Al terminar avisa «Se descartó la importación…» y no añade nada al diseño nuevo. Otra prueba: con un sketch abierto al terminar, avisa que lo cierres y vuelvas a importar |
+| FLU.8 | Sólido › Medir; elige una cara de una rosca y luego otra, rápido | El panel dice «midiendo…» y luego el resultado de la **última** selección; no se cuelga |
+| FLU.9 | `NUF_RECOVERY_SECONDS=5`, abre un diseño con un STEP importado grande, edita algo y espera varios ciclos | No hay tirón cada 5 s. Mata el proceso: al abrir ofrece restaurar. Con un cierre normal no queda ninguna copia en `recuperacion` |
+| FLU.10 | Guarda 10 diseños distintos y reinicia con la pantalla de inicio | La lista sale al instante (con «Cargando…») y las miniaturas aparecen de una en una |
+| FLU.11 | Con OneDrive «archivos a petición», que un reciente esté solo en la nube | Sale como «Solo en la nube» y no se descarga para dibujar la lista |
+
+### 5.6 Dibujo en segundo plano: mallas, vista previa y generadores (`FLU`, continuación)
+
+Oleada 6, F3. Los cuerpos nuevos ya no se dibujan hasta tener su malla (se prepara aparte): mientras tanto se sigue viendo lo anterior, y la ventana responde. Usa un par de engranajes, una rosca o un patrón de muchas copias.
+
+| ID | Qué hacer | Qué debería pasar |
+|---|---|---|
+| FLU.12 | Herramientas › Par de engranajes (o Engranaje interno); cambia el módulo o el número de dientes varias veces seguidas | La ventana responde (se puede girar la vista); la vista previa azul se actualiza al terminar de calcular, sin parpadear ni mostrar piezas a medias |
+| FLU.13 | Abre un generador con la vista vacía | La vista previa **queda encuadrada** (se ve entera, sin salirse por los bordes), igual que antes |
+| FLU.14 | Abre un diseño guardado con varias piezas; con el diseño ya abierto, Archivo › Abrir otro | Tras abrirlo, la vista queda **encuadrada** sobre todas las piezas |
+| FLU.15 | Extruir (o Agujero) en modo «Cortar» sobre una pieza; cambia la distancia | El volumen que se quita aparece en **rojo translúcido** poco después del cuerpo, sin congelar la ventana; al aceptar sale lo mismo que se veía |
+| FLU.16 | Letrero o llavero: cambia el texto y la fuente; acepta | El diseño aceptado es idéntico a la vista previa; aceptar no tarda más que antes (la receta de la vista previa se reutiliza) |
+| FLU.17 | Con piezas ya hechas (una caja, un cilindro, un engranaje), compara el aspecto con la versión anterior (`develop`) | Mismo sombreado, **misma línea de borde entre cada par de caras** (también en los cilindros) y misma suavidad de curvas; las roscas igual de lisas |
+
+Si la vista previa de una herramienta tarda más de 150 ms en dibujarse, en la barra de estado debe aparecer «Preparando el dibujo de la pieza…» y desaparecer al terminar; con piezas sencillas no debe parpadear.
+
+### 5.7 Indicador de carga y cierre con trabajo en marcha (`FLU`, continuación)
+
+Oleada 6, F4. Mientras algo carga, la barra de estado se pone **ámbar** y gira un **spinner**; al terminar, vuelve al azul.
+
+| ID | Qué hacer | Qué debería pasar |
+|---|---|---|
+| FLU.18 | Crea un cilindro y una rosca cortante encima; cambia el diámetro del cilindro | La barra de abajo se pone **ámbar** con un spinner girando en su parte derecha, y sobre la vista sale «Calculando…» con otro spinner. Al terminar todo vuelve al **azul** y los spinners desaparecen |
+| FLU.19 | Exporta una pieza con rosca (Archivo › Exportar) | Mientras escribe, banner ámbar y spinner; al terminar, azul y el mensaje «Exportado a …» |
+| FLU.20 | Importa un STEP grande | Lo mismo mientras importa |
+| FLU.21 | Con un patrón de 50 copias recién agregado (tarda), cambia algo antes de que termine | El cálculo anterior se abandona; el banner sigue ámbar hasta que termina el último; nunca queda ámbar con todo parado |
+| FLU.22 | Con una rosca larga calculándose (cilindro y rosca de largo 80), cierra la ventana | La ventana **desaparece al instante**; el proceso se va en un par de segundos como mucho (antes esperaba a que terminara la rosca) |
+| FLU.23 | Edita varias veces seguidas el diámetro de un cilindro con una rosca encima | Solo vale el último; nunca se ve un resultado viejo después de uno nuevo |
+
+Los colores: azul `#0B5CAD` en reposo y ámbar `#A85A00` mientras carga; el parpadeo al cambiar el mensaje se aclara con el color de cada estado. Si el spinner te molesta, es un indicador pequeño (16 px) y solo gira mientras se ve.
+
+### 5.8 Calcular menos: patrones, nombres, refresco y arrastre del sketch (`FLU`, continuación)
+
+Oleada 6, F5. Estas pruebas buscan que lo de siempre siga igual (mismos resultados) y que ahora sea más rápido.
+
+| ID | Qué hacer | Qué debería pasar |
+|---|---|---|
+| FLU.24 | Crea una caja y un **patrón lineal de 50 copias** (Sólido › Patrón), con una distancia mayor que la caja (separadas) y luego menor (solapadas) | Sale la misma pieza de siempre en ambos casos (las solapadas, unidas en una sola); tarda mucho menos que antes. Guárdalo, ábrelo y comprueba que un sketch sobre una cara de una copia sigue funcionando |
+| FLU.25 | Une un cuerpo con varios que toca (extruir en «Unir» sobre dos cuerpos) | Quedan unidos como antes, con los nombres de las caras estables: un sketch sobre una de sus caras sigue enganchado tras editar una operación anterior |
+| FLU.26 | Abre la aplicación y, **sin esperar**, abre el primer generador (Lightbox) | No hay parón al abrirlo (la búsqueda de fuentes se hace sola al abrir la ventana; la propia ventana puede tardar hasta un segundo más en quedar fluida nada más arrancar) |
+| FLU.27 | Agrega un sketch, extruye, deshaz y rehaz varias veces | El navegador y el timeline se actualizan bien en cada paso y no queda nada a medias; con el cálculo en segundo plano, al terminar aparece el resultado y el navegador está al día |
+| FLU.28 | En un sketch con muchas figuras (50 o más líneas cerradas formando regiones), arrastra un punto | El sombreado de las regiones se actualiza unas diez veces por segundo mientras arrastras y queda **exacto** al soltar; el arrastre no se siente más lento |
 
 ### 5.2 Letrero con fuentes decorativas
 
@@ -970,6 +1063,7 @@ Los IDs antiguos se repetían entre secciones (por ejemplo había tres `R.1`); l
 | `E.4` | Par de engranajes | `PAR.4` |
 | `E.5` | Par de engranajes | `PAR.5` |
 | `E.6` | Par de engranajes | `PAR.6` |
+| `E.7` | Engranaje interno y cremallera | `PAR.7` a `PAR.17` |
 | `B.1` | Cálculo en segundo plano | `CAL.1` |
 | `B.2` | Cálculo en segundo plano | `CAL.2` |
 | `B.3` | Cálculo en segundo plano | `CAL.3` |

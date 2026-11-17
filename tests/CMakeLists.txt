@@ -1,6 +1,7 @@
 # Pruebas del núcleo: no dependen de Qt ni abren ventanas.
 add_executable(nuf_tests
     test_signal.cpp
+    test_task_pool.cpp
     test_command_stack.cpp
     test_geometry.cpp
     test_exchange.cpp

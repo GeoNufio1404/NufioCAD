@@ -583,7 +583,11 @@ FeatureRow rowOf(const Feature& f)
         params = {{"base", toJson(g.base)}, {"x", g.x}, {"y", g.y}, {"rotation", g.rotation}, {"module", g.spec.module},
                   {"teeth", g.spec.teeth},
                   {"pressureAngle", g.spec.pressureAngle}, {"thickness", g.spec.thickness}, {"bore", g.spec.bore},
-                  {"helixAngle", g.spec.helixAngle}, {"operation", nameOf(kOperations, g.operation)}};
+                  {"helixAngle", g.spec.helixAngle}, {"operation", nameOf(kOperations, g.operation)},
+                  {"gearType", g.spec.type == geometry::GearType::Internal ? "internal"
+                               : g.spec.type == geometry::GearType::Rack   ? "rack"
+                                                                           : "external"},
+                  {"rim", g.spec.rim}};
         break;
     }
     case FeatureKind::ConstructionAxis: {
@@ -790,6 +794,14 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         g->spec.thickness = number(p, "thickness");
         g->spec.bore = number(p, "bore");
         g->spec.helixAngle = number(p, "helixAngle");
+        {
+            // Los archivos anteriores no traen tipo ni aro: rueda exterior.
+            const std::string type = p.value("gearType", std::string("external"));
+            g->spec.type = type == "internal" ? geometry::GearType::Internal
+                           : type == "rack"   ? geometry::GearType::Rack
+                                              : geometry::GearType::External;
+            g->spec.rim = p.value("rim", 5.0);
+        }
         g->operation = parseEnum(kOperations, text(p, "operation"), "operación");
         feature = std::move(g);
     } else if (row.type == "axis") {
@@ -915,9 +927,56 @@ void replaceFile(const std::filesystem::path& from, const std::filesystem::path&
 
 } // namespace
 
-void saveDocument(const std::filesystem::path& path, const Document& document, const ViewState& view,
-                  const std::string& thumbnailPng)
+struct SavePlan::Impl {
+    std::string name;
+    std::string marker;
+    std::string nextId;
+    std::string view;
+    std::optional<std::string> bodies;
+    std::vector<FeatureRow> rows;
+    std::vector<std::pair<std::string, std::string>> parameters;
+    std::vector<std::pair<std::string, std::shared_ptr<const std::string>>> imports;  // clave del blob y su BREP
+    std::string thumbnail;
+};
+
+SavePlan prepareSave(const Document& document, const ViewState& view, const std::string& thumbnailPng)
 {
+    auto plan = std::make_shared<SavePlan::Impl>();
+    plan->name = document.name();
+    plan->marker = std::to_string(document.marker());
+    plan->nextId = std::to_string(document.nextId());
+    plan->view = toJson(view).dump();
+    for (std::size_t i = 0; i < document.featureCount(); ++i) {
+        plan->rows.push_back(rowOf(document.feature(i)));
+    }
+    for (const Parameter& p : document.parameters()) {
+        plan->parameters.emplace_back(p.name, p.expression);
+    }
+    if (!document.bodyInfo().empty()) {
+        Json bodies = Json::object();
+        for (const auto& [key, info] : document.bodyInfo()) {
+            bodies[key] = {{"name", info.name}, {"component", info.component}};
+        }
+        plan->bodies = bodies.dump();
+    }
+    for (std::size_t i = 0; i < document.featureCount(); ++i) {
+        if (document.feature(i).kind() == FeatureKind::Import) {
+            const auto& imported = static_cast<const ImportFeature&>(document.feature(i));
+            if (imported.brep) {
+                plan->imports.emplace_back(blobKey(imported.id()), imported.brep);
+            }
+        }
+    }
+    plan->thumbnail = thumbnailPng;
+    return SavePlan{std::move(plan)};
+}
+
+void writeSave(const std::filesystem::path& path, const SavePlan& savePlan)
+{
+    if (!savePlan.impl) {
+        throw NufError("No hay nada que guardar");
+    }
+    const SavePlan::Impl& plan = *savePlan.impl;
     std::filesystem::path temp = path;
     temp += ".guardando";
     std::error_code ignored;
@@ -928,38 +987,21 @@ void saveDocument(const std::filesystem::path& path, const Document& document, c
             NufFile file = NufFile::create(temp);
             file.begin();
             try {
-                file.setMeta("nombre", document.name());
+                file.setMeta("nombre", plan.name);
                 file.setMeta("unidades", kUnits);
-                file.setMeta("marcador", std::to_string(document.marker()));
-                file.setMeta("siguiente_id", std::to_string(document.nextId()));
-                file.setMeta("vista", toJson(view).dump());
-                std::vector<FeatureRow> rows;
-                for (std::size_t i = 0; i < document.featureCount(); ++i) {
-                    rows.push_back(rowOf(document.feature(i)));
+                file.setMeta("marcador", plan.marker);
+                file.setMeta("siguiente_id", plan.nextId);
+                file.setMeta("vista", plan.view);
+                file.writeFeatures(plan.rows);
+                file.writeParameters(plan.parameters);
+                if (plan.bodies) {
+                    file.setMeta("cuerpos", *plan.bodies);
                 }
-                file.writeFeatures(rows);
-                std::vector<std::pair<std::string, std::string>> parameters;
-                for (const Parameter& p : document.parameters()) {
-                    parameters.emplace_back(p.name, p.expression);
+                for (const auto& [key, brep] : plan.imports) {
+                    file.writeBlob(key, "import", *brep);
                 }
-                file.writeParameters(parameters);
-                if (!document.bodyInfo().empty()) {
-                    Json bodies = Json::object();
-                    for (const auto& [key, info] : document.bodyInfo()) {
-                        bodies[key] = {{"name", info.name}, {"component", info.component}};
-                    }
-                    file.setMeta("cuerpos", bodies.dump());
-                }
-                for (std::size_t i = 0; i < document.featureCount(); ++i) {
-                    if (document.feature(i).kind() == FeatureKind::Import) {
-                        const auto& imported = static_cast<const ImportFeature&>(document.feature(i));
-                        if (imported.brep) {
-                            file.writeBlob(blobKey(imported.id()), "import", *imported.brep);
-                        }
-                    }
-                }
-                if (!thumbnailPng.empty()) {
-                    file.writeBlob("thumbnail", "thumbnail", thumbnailPng);
+                if (!plan.thumbnail.empty()) {
+                    file.writeBlob("thumbnail", "thumbnail", plan.thumbnail);
                 }
                 file.commit();
             } catch (...) {
@@ -972,6 +1014,12 @@ void saveDocument(const std::filesystem::path& path, const Document& document, c
         std::filesystem::remove(temp, ignored);
         throw;
     }
+}
+
+void saveDocument(const std::filesystem::path& path, const Document& document, const ViewState& view,
+                  const std::string& thumbnailPng)
+{
+    writeSave(path, prepareSave(document, view, thumbnailPng));
 }
 
 std::optional<std::string> readThumbnail(const std::filesystem::path& path) noexcept

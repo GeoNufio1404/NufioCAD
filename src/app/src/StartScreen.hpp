@@ -1,5 +1,7 @@
 #pragma once
 
+#include "BackgroundRun.hpp"
+
 #include <QStringList>
 #include <QWidget>
 
@@ -50,6 +52,8 @@ private:
 
     QListWidget* list_ = nullptr;
     QLabel* empty_ = nullptr;
+    // Las miniaturas se leen de cada archivo (SQLite) en un hilo aparte: la lista sale al instante.
+    BackgroundRun thumbnailsRun_;
 };
 
 } // namespace nuf::app

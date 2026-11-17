@@ -9,6 +9,7 @@
 
 #include <filesystem>
 #include <map>
+#include <memory>
 #include <optional>
 #include <set>
 #include <string>
@@ -25,7 +26,20 @@ struct ViewState {
     friend bool operator==(const ViewState&, const ViewState&) = default;
 };
 
-// Escribe el diseño. Nunca deja un archivo a medias: se escribe en uno
+// Todo lo que se escribe en un archivo, ya armado (JSON de cada operación, parámetros y los BREP importados, que se
+// comparten sin copiar). Se arma en el hilo que tiene el documento (es rápido) y se escribe en cualquier otro: así
+// guardar no obliga a la interfaz a esperar a SQLite, al disco ni a OneDrive. Es independiente del documento: puede
+// seguir cambiando mientras se escribe.
+struct SavePlan {
+    struct Impl;
+    std::shared_ptr<const Impl> impl;
+};
+
+SavePlan prepareSave(const document::Document& document, const ViewState& view, const std::string& thumbnailPng = {});
+// Escribe un plan con las mismas garantías que saveDocument. Lanza NufError.
+void writeSave(const std::filesystem::path& path, const SavePlan& plan);
+
+// Escribe el diseño (prepareSave y writeSave seguidos). Nunca deja un archivo a medias: se escribe en uno
 // temporal junto al destino y luego lo reemplaza; si algo falla, el destino
 // queda como estaba. `thumbnailPng` (opcional) es la miniatura que verá la
 // lista de recientes. Lanza NufError.

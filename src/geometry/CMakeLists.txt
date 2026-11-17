@@ -9,7 +9,8 @@ nuf_add_library(geometry SOURCES
     src/Modeling.cpp
     src/Printability.cpp
     src/Shape.cpp
-    src/SketchFaces.cpp)
+    src/SketchFaces.cpp
+    src/TaskPool.cpp)
 
 target_include_directories(nuf_geometry SYSTEM PRIVATE ${OpenCASCADE_INCLUDE_DIR})
 target_link_libraries(nuf_geometry
