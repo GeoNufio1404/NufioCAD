@@ -8,6 +8,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
+#include <string>
+#include <variant>
+#include <vector>
 
 using namespace nuf::sketch;
 using Catch::Matchers::WithinAbs;
@@ -212,4 +216,92 @@ TEST_CASE("Figuras abiertas: rectángulo por 3 puntos y ranura", "[sketch][open]
         REQUIRE_THAT(tool->currentValues().at(0), WithinAbs(10.0, 1e-9));
         REQUIRE_FALSE(tool->applyValues(s, {std::nullopt}));
     }
+}
+
+TEST_CASE("Figuras abiertas: la elipse sigue editable y se rehace con otros semiejes", "[sketch][open]")
+{
+    Sketch s;
+    auto tool = makeEllipseTool();
+    clickAt(*tool, s, {0, 0});
+    clickAt(*tool, s, {10, 0});
+    clickAt(*tool, s, {0, 4});
+    REQUIRE(tool->valueFields() == std::vector<std::string>{"Semieje mayor", "Semieje menor"});
+    REQUIRE_THAT(tool->currentValues().at(0), WithinAbs(10.0, 1e-9));
+    REQUIRE_THAT(tool->currentValues().at(1), WithinAbs(4.0, 1e-9));
+
+    // Solo se cambia el menor: el mayor se queda; sigue habiendo una sola elipse.
+    REQUIRE(tool->applyValues(s, {std::nullopt, 6.0}));
+    REQUIRE(tool->amendedLast());
+    REQUIRE(makePlaneGcsSolver()->solve(s).status == SolveStatus::Solved);
+    std::size_t ellipses = 0;
+    for (const Entity& e : s.entities()) {
+        if (const auto* el = std::get_if<Ellipse>(&e.geometry); el && !e.reference) {
+            ++ellipses;
+            REQUIRE_THAT(el->majorRadius, WithinAbs(10.0, 1e-6));
+            REQUIRE_THAT(el->minorRadius, WithinAbs(6.0, 1e-6));
+        }
+    }
+    REQUIRE(ellipses == 1);
+
+    // Enter sin valores la deja como está y cierra la edición.
+    REQUIRE_FALSE(tool->applyValues(s, {std::nullopt, std::nullopt}));
+    REQUIRE(tool->valueFields().empty());
+}
+
+TEST_CASE("Línea con un círculo o arco lejano: tangente y perpendicular", "[sketch][inference]")
+{
+    const auto run = [](Vec2 start, Vec2 cursor, bool commit) {
+        struct Result {
+            std::string badge;
+            std::vector<ConstraintType> made;
+            Vec2 end{};
+        } result;
+        Sketch s;
+        const EntityId circle = s.addCircle({0.0, 0.0}, 5.0);
+        auto tool = makeLineTool();
+        tool->setAwakeLines({AwakeLine{circle, {}, Circle{{0.0, 0.0}, 5.0}}});
+        SnapOptions options;
+        options.enabled = false;
+        const Snap first = snap(s, start, options);
+        tool->move(first);
+        tool->click(s, first);
+        Snap second = snap(s, cursor, options);
+        second.free = false;  // como el cursor normal: sin Ctrl
+        tool->move(second);
+        const Preview preview = tool->preview();
+        result.badge = preview.badge;
+        if (!preview.geometry.empty()) {
+            if (const auto* line = std::get_if<Line>(&preview.geometry.front())) {
+                result.end = line->end;
+            }
+        }
+        if (commit) {
+            tool->click(s, second);
+            for (const Constraint& c : s.constraints()) {
+                result.made.push_back(c.type);
+            }
+        }
+        return result;
+    };
+
+    // Hacia el centro, a 1° de la recta: perpendicular al círculo (la recta pasa por el centro).
+    // (Desde (20, 10) la dirección al centro no es horizontal ni vertical, así que no la endereza otra regla.)
+    const double toward = std::atan2(-10.0, -20.0) + 1.0 * std::numbers::pi / 180.0;
+    const auto radial = run({20.0, 10.0}, {20.0 + 10.0 * std::cos(toward), 10.0 + 10.0 * std::sin(toward)}, true);
+    REQUIRE(radial.badge == "⊥");
+    // El tramo queda exactamente sobre la recta que pasa por el centro (y = x / 2).
+    REQUIRE_THAT(radial.end.y, WithinAbs(radial.end.x / 2.0, 1e-9));
+    REQUIRE(std::ranges::find(radial.made, ConstraintType::PointOnObject) != radial.made.end());
+
+    // Por la tangente (el ángulo de la tangente desde (20, 0) a un círculo de radio 5 es asin(5/20)).
+    const double half = std::asin(5.0 / 20.0);
+    const double dx = -std::cos(half);
+    const double dy = std::sin(half);
+    const auto tangent = run({20.0, 0.0}, {20.0 + 10.0 * dx, 10.0 * dy + 0.2}, true);
+    REQUIRE(tangent.badge == "T");
+    REQUIRE(std::ranges::find(tangent.made, ConstraintType::Tangent) != tangent.made.end());
+
+    // Lejos de ambas direcciones no infiere nada.
+    const auto none = run({20.0, 0.0}, {10.0, 6.0}, false);
+    REQUIRE(none.badge.empty());
 }

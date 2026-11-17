@@ -318,6 +318,15 @@ sketch::Snap SketchSession::snapAt(sketch::Vec2 point) const
                 options.alignPoints.push_back({*position, ref});
             }
         }
+        // El punto medio de una línea despierta también alinea (con Ref::of(línea): solo alinea, no restringe).
+        for (const sketch::EntityId id : awakeLines_) {
+            if (const sketch::Entity* e = sketch_.entity(id)) {
+                if (const auto* line = std::get_if<sketch::Line>(&e->geometry)) {
+                    options.alignPoints.push_back({{(line->start.x + line->end.x) / 2, (line->start.y + line->end.y) / 2},
+                                                   sketch::Ref::of(id)});
+                }
+            }
+        }
     }
     return sketch::snap(sketch_, point, options);
 }
@@ -335,6 +344,10 @@ void SketchSession::cursorMoved(bool hasPoint, double x, double y)
                 if (const sketch::Entity* e = sketch_.entity(id)) {
                     if (const auto* line = std::get_if<sketch::Line>(&e->geometry)) {
                         lines.push_back({id, *line});
+                    } else if (const auto* circle = std::get_if<sketch::Circle>(&e->geometry)) {
+                        lines.push_back({id, {}, *circle});
+                    } else if (const auto* arc = std::get_if<sketch::Arc>(&e->geometry)) {
+                        lines.push_back({id, {}, sketch::Circle{arc->center, arc->radius}});
                     }
                 }
             }
@@ -345,7 +358,9 @@ void SketchSession::cursorMoved(bool hasPoint, double x, double y)
             sketch::EntityId overLine = 0;
             if ((cursor_->kind == sketch::SnapKind::OnCurve || cursor_->kind == sketch::SnapKind::Midpoint)
                 && cursor_->ref.entity != sketch::Sketch::kAxisX && cursor_->ref.entity != sketch::Sketch::kAxisY) {
-                if (const sketch::Entity* e = sketch_.entity(cursor_->ref.entity); e && std::holds_alternative<sketch::Line>(e->geometry)
+                if (const sketch::Entity* e = sketch_.entity(cursor_->ref.entity);
+                    e && (std::holds_alternative<sketch::Line>(e->geometry) || std::holds_alternative<sketch::Circle>(e->geometry)
+                          || std::holds_alternative<sketch::Arc>(e->geometry))
                     && std::ranges::find(awakeLines_, e->id) == awakeLines_.end()) {
                     overLine = e->id;
                 }
@@ -1280,12 +1295,16 @@ void SketchSession::showPreview()
             }
         }
     }
-    // Las líneas despiertas llevan el mismo anillo en su punto medio.
+    // Las líneas despiertas llevan el mismo anillo en su punto medio; los arcos y círculos, en su centro.
     if (tool_) {
         for (const sketch::EntityId id : awakeLines_) {
             if (const sketch::Entity* e = sketch_.entity(id)) {
                 if (const auto* line = std::get_if<sketch::Line>(&e->geometry)) {
                     awake.push_back({(line->start.x + line->end.x) / 2, (line->start.y + line->end.y) / 2});
+                } else if (const auto* circle = std::get_if<sketch::Circle>(&e->geometry)) {
+                    awake.push_back(circle->center);
+                } else if (const auto* arc = std::get_if<sketch::Arc>(&e->geometry)) {
+                    awake.push_back(arc->center);
                 }
             }
         }

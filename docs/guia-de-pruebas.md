@@ -260,7 +260,11 @@ Código: **SKF**. Estado: en prueba.
 | SKF.6 | Con una figura abierta pulsa **Esc**; luego otra vez **Esc** | El primero cierra la edición (la figura se queda); el segundo sale de la herramienta |
 | SKF.7 | Crea una figura, cámbiala y pulsa **Deshacer** | Vuelve al paso anterior; si sigues escribiendo no pasa nada raro |
 | SKF.8 | **Círculo por 2 y 3 puntos**, **rectángulo por 3 puntos** y **ranura**: termina la figura y escribe un valor (diámetro, longitud/alto, ancho) | Cambia la misma figura; con Deshacer vuelve a antes de crearla (un solo paso) |
-| SKF.9 | **Anota** qué te falta o molesta | Son los pendientes |
+| SKF.9 | **Elipse** (no el arco): dibuja una y, sin hacer clic, escribe los semiejes mayor y menor | Cambia la misma elipse (también si solo escribes uno); con Deshacer vuelve a antes de crearla |
+| SKF.10 | **Línea y un círculo o arco lejano:** dibuja un círculo, déjate sobre él un instante (sale un anillo en su centro) y empieza una línea lejos | Al apuntar hacia el centro sale ⊥ y la línea se endereza a esa recta; al apuntar a una tangente sale T. Al hacer clic se crea la restricción (pasa por el centro / tangente) |
+| SKF.11 | **Punto medio despierto:** déjate sobre una línea un instante y dibuja otra línea hacia la altura de su punto medio | Se pega a la horizontal o vertical del punto medio con la guía naranja (solo alinea: no crea restricción) |
+| SKF.12 | **Cotas juntas:** pon tres cotas lineales en segmentos paralelos muy juntos | Ningún texto cae sobre la línea de cota de otra; si hace falta, el texto se corre a lo largo de su línea |
+| SKF.13 | **Anota** qué te falta o molesta | Son los pendientes |
 
 ### 2.3 Inferencias y guías
 
@@ -1160,6 +1164,7 @@ Los IDs antiguos se repetían entre secciones (por ejemplo había tres `R.1`); l
 | `M.7` | Figuras abiertas | `SKF.7` |
 | `M.8` | Figuras abiertas | `SKF.8` |
 | `M.9` | Figuras abiertas | `SKF.9` |
+| `M.10` | Figuras abiertas | `SKF.13` |
 | `L.1` | Tangente e histéresis | `SKI.25` |
 | `L.2` | Tangente e histéresis | `SKI.26` |
 | `L.3` | Tangente e histéresis | `SKI.15` |

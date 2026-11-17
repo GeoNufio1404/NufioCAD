@@ -150,6 +150,7 @@ private:
     struct Reference {
         EntityId id;
         Line line;
+        std::optional<Circle> round{};  // referencia lejana que es un arco o un círculo
     };
 
     // Relación inferida del tramo con la tangente del arco del que se parte
@@ -180,9 +181,10 @@ private:
             if (reference_ && awake.id == reference_->id) {
                 continue;
             }
-            const Relation relation = relate(start_->point, awake.line, end);
+            const Relation relation = awake.round ? relateRound(start_->point, *awake.round, end)
+                                                  : relate(start_->point, awake.line, end);
             if (relation != Relation::None) {
-                matched_ = Reference{awake.id, awake.line};
+                matched_ = Reference{awake.id, awake.line, awake.round};
                 return relation;
             }
         }
@@ -212,8 +214,12 @@ private:
                 sketch.addConstraint(c);
             }
         } else if (relation != Relation::None && matched_) {
-            const Constraint c = relation == Relation::Parallel ? Constraint::parallel(line, matched_->id)
-                                                                : Constraint::perpendicular(line, matched_->id);
+            // Con un arco o un círculo: tangente a él, o recta que pasa por su centro (perpendicular a la curva).
+            const Constraint c = matched_->round
+                ? (relation == Relation::Tangent ? Constraint::tangent(line, matched_->id)
+                                                 : Constraint::pointOnObject(Ref::center(matched_->id), line))
+                : (relation == Relation::Parallel ? Constraint::parallel(line, matched_->id)
+                                                  : Constraint::perpendicular(line, matched_->id));
             if (sketch.canAdd(c)) {
                 sketch.addConstraint(c);
             }
@@ -276,6 +282,14 @@ public:
         result.geometry = {Line{start_->point, end.point}};
         if (tangent) {
             result.badge = "T";
+            result.badgeAt = {(start_->point.x + end.point.x) / 2, (start_->point.y + end.point.y) / 2};
+        } else if (relation != Relation::None && matched_ && matched_->round) {
+            // Referencia redonda: con ⊥ la guía va del tramo al centro; con T solo se muestra la «T».
+            const Vec2 center = matched_->round->center;
+            if (relation == Relation::Perpendicular) {
+                result.guides.push_back({start_->point, center});
+            }
+            result.badge = relation == Relation::Tangent ? "T" : "⊥";
             result.badgeAt = {(start_->point.x + end.point.x) / 2, (start_->point.y + end.point.y) / 2};
         } else if (relation != Relation::None) {
             result.guides.push_back({matched_->line.start, matched_->line.end});

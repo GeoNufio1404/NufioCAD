@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <variant>
 
 using namespace nuf::sketch;
 
@@ -267,4 +268,34 @@ TEST_CASE("Cotas: sin hueco libre el texto sale de su línea con una línea de l
         }
     }
     REQUIRE(callouts >= 1);
+}
+
+TEST_CASE("Cotas: el texto de una cota no cae sobre la línea de cota de otra", "[sketch][annotations]")
+{
+    // Tres segmentos paralelos y muy juntos: sus líneas de cota (la tercera línea de cada anotación) quedan
+    // cerca de los textos de las demás si no se tienen en cuenta.
+    Sketch s;
+    for (int i = 0; i < 3; ++i) {
+        const EntityId line = s.addLine({0, 0.8 * i}, {30, 0.8 * i});
+        s.addConstraint(Constraint::length(line, 30.0));
+    }
+    for (const double px : {0.05, 0.2, 0.6}) {
+        const auto notes = layoutAnnotations(s, px);
+        REQUIRE(notes.size() == 3);
+        for (std::size_t i = 0; i < notes.size(); ++i) {
+            for (std::size_t j = 0; j < notes.size(); ++j) {
+                if (i == j || notes[j].lines.size() < 3) {
+                    continue;
+                }
+                const auto* base = std::get_if<Line>(&notes[j].lines[2]);
+                REQUIRE(base != nullptr);
+                const Box box = boxOf(notes[i], px);
+                // La línea de cota es horizontal aquí: no puede cruzar la caja del texto de otra cota.
+                const double y = base->start.y;
+                const bool within = y > box.y0 + 1e-9 && y < box.y1 - 1e-9;
+                const bool overX = std::max(base->start.x, base->end.x) > box.x0 && std::min(base->start.x, base->end.x) < box.x1;
+                REQUIRE_FALSE((within && overX));
+            }
+        }
+    }
 }

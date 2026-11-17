@@ -28,9 +28,12 @@ struct Preview {
 
 // Una línea «despierta» (el cursor se detuvo sobre ella): las herramientas de línea la usan como referencia
 // lejana para inferir perpendicular o paralela, aunque el nuevo tramo no salga de ella.
+// Si es un arco o un círculo, «round» lleva su círculo y «line» no se usa: las herramientas de línea infieren con él
+// la tangente (T) o la perpendicular (⊥: el tramo apunta al centro).
 struct AwakeLine {
     EntityId id = 0;
     Line line;
+    std::optional<Circle> round{};
 };
 
 class SketchTool {

@@ -507,12 +507,15 @@ private:
 // Cajas pequeñas a lo largo de las líneas de una cota (la de radio o diámetro
 // cruza el dibujo y no debe pasar por encima de otros textos ni de otras cotas
 // radiales).
-std::vector<Box> lineBoxes(const Annotation& note, double px)
+std::vector<Box> lineBoxes(const Annotation& note, double px, std::size_t onlyIndex = std::size_t(-1))
 {
     std::vector<Box> boxes;
     const double half = 0.5 * kLineSamplePx * px;
-    for (const Geometry& g : note.lines) {
-        const auto* line = std::get_if<Line>(&g);
+    for (std::size_t index = 0; index < note.lines.size(); ++index) {
+        if (onlyIndex != std::size_t(-1) && index != onlyIndex) {
+            continue;
+        }
+        const auto* line = std::get_if<Line>(&note.lines[index]);
         if (line == nullptr) {
             continue;
         }
@@ -581,13 +584,50 @@ std::optional<Annotation> placeAnnotation(Placed& placed, const Placed& geometry
         if (!note) {
             return std::nullopt;
         }
-        const Box text = textBox(*note, px);
-        double overlap = placed.overlap(text) + kGeometryWeight * geometry.overlap(text);
+        double overlap = placed.overlap(textBox(*note, px)) + kGeometryWeight * geometry.overlap(textBox(*note, px));
+        // Las cotas radiales ocupan todas sus líneas; las lineales y angulares, su línea de cota (la tercera): así
+        // el texto de otra cota no se pone encima de ella ni dos líneas de cota quedan una sobre otra.
         std::vector<Box> lines;
         if (radial) {
             lines = lineBoxes(*note, px);
-            for (const Box& box : lines) {
-                overlap += placed.overlap(box);
+        } else if (note->lines.size() >= 3) {
+            lines = lineBoxes(*note, px, 2);
+        }
+        for (const Box& box : lines) {
+            overlap += placed.overlap(box);
+        }
+        // Si el texto pisa algo, se prueba a correrlo a lo largo de su línea de cota (sin salirse de ella) antes de
+        // pasar al renglón siguiente.
+        if (!radial && overlap > 0.0 && note->lines.size() >= 3) {
+            if (const auto* base = std::get_if<Line>(&note->lines[2])) {
+                const double length = std::hypot(base->end.x - base->start.x, base->end.y - base->start.y);
+                const Vec2 along = unit(base->end - base->start);
+                const double width = textBox(*note, px).x1 - textBox(*note, px).x0;
+                const double room = 0.5 * length - 0.5 * width;  // lo que se puede correr a cada lado del centro
+                const Vec2 center = midpoint(base->start, base->end);
+                const Vec2 normal{-along.y, along.x};
+                const double lift = (note->anchor.x - center.x) * normal.x + (note->anchor.y - center.y) * normal.y;
+                for (int k = 1; k <= 4 && room > 0.0; ++k) {
+                    for (const double sign : {1.0, -1.0}) {
+                        const double shift = sign * std::min(room, 0.6 * width * k);
+                        Annotation moved = *note;
+                        moved.anchor = center + shift * along + lift * normal;
+                        const Box box = textBox(moved, px);
+                        const double now = placed.overlap(box) + kGeometryWeight * geometry.overlap(box);
+                        double lineHits = 0.0;
+                        for (const Box& lineBox : lines) {
+                            lineHits += placed.overlap(lineBox);
+                        }
+                        if (now + lineHits <= 0.0) {
+                            note = std::move(moved);
+                            overlap = 0.0;
+                            break;
+                        }
+                    }
+                    if (overlap <= 0.0) {
+                        break;
+                    }
+                }
             }
         }
         if (!best || overlap < bestOverlap) {

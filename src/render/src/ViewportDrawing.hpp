@@ -370,6 +370,7 @@ public:
     void clear()
     {
         curves_.clear();
+        overCurves_.clear();
         points_.clear();
         texts_.clear();
     }
@@ -390,6 +391,16 @@ public:
         addPolyline(sketch::polyline(geometry), stroke);
     }
 
+    // Trazo que se dibuja después de los textos y sus recuadros (los iconos de las restricciones: así el fondo
+    // opaco del recuadro tapa las líneas de debajo pero no al propio icono).
+    void addGeometryOver(const sketch::Geometry& geometry, const SketchStroke& stroke)
+    {
+        std::vector<sketch::Vec2> points = sketch::polyline(geometry);
+        if (points.size() >= 2) {
+            overCurves_.push_back({std::move(points), stroke});
+        }
+    }
+
     void addPolyline(std::vector<sketch::Vec2> points, const SketchStroke& stroke)
     {
         if (points.size() >= 2) {
@@ -408,9 +419,46 @@ public:
         if (mode != 0) {
             return;
         }
-        // Una matriz de polilíneas por estilo.
+        addCurves(prs, curves_);
+        for (const Label& label : texts_) {
+            Handle(Graphic3d_Group) group = prs->NewGroup();
+            Handle(Graphic3d_AspectText3d) aspect = new Graphic3d_AspectText3d(
+                label.color, font.ToCString(), 1.0, 0.0, Aspect_TOST_NORMAL,
+                label.boxed ? Aspect_TODT_SUBTITLE : Aspect_TODT_NORMAL);
+            aspect->SetColorSubTitle(label.box);
+            group->SetGroupPrimitivesAspect(aspect);
+            Handle(Graphic3d_Text) text = new Graphic3d_Text(static_cast<float>(label.size));
+            text->SetText(label.text.c_str());
+            text->SetPosition(at(label.position));
+            text->SetHorizontalAlignment(Graphic3d_HTA_CENTER);
+            text->SetVerticalAlignment(Graphic3d_VTA_CENTER);
+            group->AddText(text);
+        }
+        addCurves(prs, overCurves_);
+        for (const Marker& marker : points_) {
+            Handle(Graphic3d_ArrayOfPoints) array = new Graphic3d_ArrayOfPoints(1);
+            array->AddVertex(at(marker.position));
+            Handle(Graphic3d_Group) group = prs->NewGroup();
+            group->SetGroupPrimitivesAspect(new Graphic3d_AspectMarker3d(Aspect_TOM_BALL, marker.color, marker.scale));
+            group->AddPrimitiveArray(array);
+        }
+    }
+
+    void ComputeSelection(const Handle(SelectMgr_Selection)& /*selection*/,
+                          const int /*mode*/) override
+    {}
+
+private:
+    struct Curve {
+        std::vector<sketch::Vec2> points;
+        SketchStroke stroke;
+    };
+
+    // Una matriz de polilíneas por estilo.
+    void addCurves(const Handle(Prs3d_Presentation)& prs, const std::vector<Curve>& all) const
+    {
         std::map<decltype(SketchStroke{}.key()), std::vector<const Curve*>> groups;
-        for (const Curve& curve : curves_) {
+        for (const Curve& curve : all) {
             groups[curve.stroke.key()].push_back(&curve);
         }
         for (const auto& [key, curves] : groups) {
@@ -430,38 +478,8 @@ public:
             group->SetGroupPrimitivesAspect(new Graphic3d_AspectLine3d(stroke.color, stroke.type, stroke.width));
             group->AddPrimitiveArray(array);
         }
-        for (const Label& label : texts_) {
-            Handle(Graphic3d_Group) group = prs->NewGroup();
-            Handle(Graphic3d_AspectText3d) aspect = new Graphic3d_AspectText3d(
-                label.color, font.ToCString(), 1.0, 0.0, Aspect_TOST_NORMAL,
-                label.boxed ? Aspect_TODT_SUBTITLE : Aspect_TODT_NORMAL);
-            aspect->SetColorSubTitle(label.box);
-            group->SetGroupPrimitivesAspect(aspect);
-            Handle(Graphic3d_Text) text = new Graphic3d_Text(static_cast<float>(label.size));
-            text->SetText(label.text.c_str());
-            text->SetPosition(at(label.position));
-            text->SetHorizontalAlignment(Graphic3d_HTA_CENTER);
-            text->SetVerticalAlignment(Graphic3d_VTA_CENTER);
-            group->AddText(text);
-        }
-        for (const Marker& marker : points_) {
-            Handle(Graphic3d_ArrayOfPoints) array = new Graphic3d_ArrayOfPoints(1);
-            array->AddVertex(at(marker.position));
-            Handle(Graphic3d_Group) group = prs->NewGroup();
-            group->SetGroupPrimitivesAspect(new Graphic3d_AspectMarker3d(Aspect_TOM_BALL, marker.color, marker.scale));
-            group->AddPrimitiveArray(array);
-        }
     }
 
-    void ComputeSelection(const Handle(SelectMgr_Selection)& /*selection*/,
-                          const int /*mode*/) override
-    {}
-
-private:
-    struct Curve {
-        std::vector<sketch::Vec2> points;
-        SketchStroke stroke;
-    };
     struct Marker {
         sketch::Vec2 position;
         Quantity_Color color;
@@ -482,6 +500,7 @@ private:
     }
 
     std::vector<Curve> curves_;
+    std::vector<Curve> overCurves_;
     std::vector<Marker> points_;
     std::vector<Label> texts_;
 };

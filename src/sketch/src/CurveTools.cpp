@@ -34,6 +34,7 @@ public:
 
     bool click(Sketch& sketch, const Snap& cursor) override
     {
+        open_.reset();  // un clic nuevo da por buena la elipse abierta
         if (!center_) {
             center_ = cursor;
             return false;
@@ -72,6 +73,9 @@ public:
 
     std::vector<std::string> valueFields() const override
     {
+        if (open_) {
+            return {"Semieje mayor", "Semieje menor"};
+        }
         if (!center_ || ellipse_) {
             return {};
         }
@@ -80,6 +84,9 @@ public:
 
     std::vector<double> currentValues() const override
     {
+        if (open_) {
+            return {openEllipse_.majorRadius, openEllipse_.minorRadius};
+        }
         if (!center_ || ellipse_) {
             return {};
         }
@@ -92,6 +99,36 @@ public:
 
     bool applyValues(Sketch& sketch, const std::vector<std::optional<double>>& values) override
     {
+        amended_ = false;
+        if (open_) {
+            // Elipse abierta: se rehace con los semiejes escritos (el que no se escribe se queda como está).
+            const bool typedAny = (!values.empty() && values[0]) || (values.size() > 1 && values[1]);
+            if (!typedAny) {
+                open_.reset();
+                return false;
+            }
+            const double a = values.size() > 0 && values[0] ? *values[0] : openEllipse_.majorRadius;
+            const double b = values.size() > 1 && values[1] ? *values[1] : openEllipse_.minorRadius;
+            if (!(a > kMinLength) || !(b > kMinLength)) {
+                return false;
+            }
+            const OpenFigure old = *open_;
+            open_.reset();  // para que create() limpie el estado y la vuelva a abrir
+            if (!discardEntities(sketch, old.ids)) {
+                return false;
+            }
+            center_ = old.first;
+            majorTyped_ = values.size() > 0 && values[0] ? values[0] : old.typed[0];
+            minorTyped_ = values.size() > 1 && values[1] ? values[1] : old.typed[1];
+            Ellipse e = openEllipse_;
+            if (b > a) {
+                e = Ellipse{e.center, b, a, e.rotation + kPi / 2.0};
+            } else {
+                e = Ellipse{e.center, a, b, e.rotation};
+            }
+            amended_ = create(sketch, e);
+            return amended_;
+        }
         if (!center_ || ellipse_ || values.empty() || !values[0] || !(*values[0] > kMinLength)) {
             return false;
         }
@@ -117,8 +154,14 @@ public:
         return false;
     }
 
+    bool amendedLast() const override { return amended_; }
+
     bool cancel() override
     {
+        if (open_) {
+            open_.reset();
+            return true;
+        }
         const bool active = center_.has_value();
         center_.reset();
         major_.reset();
@@ -153,6 +196,9 @@ public:
 
     std::string hint() const override
     {
+        if (open_) {
+            return "Elipse creada: escribe los semiejes y Enter para cambiarlos · clic o Esc para terminar";
+        }
         if (!center_) {
             return arc_ ? "Clic para el centro de la elipse del arco" : "Clic para el centro de la elipse";
         }
@@ -199,6 +245,7 @@ private:
 
     bool create(Sketch& sketch, const Ellipse& e)
     {
+        const std::size_t mark = sketch.entities().size();
         const EntityId id = sketch.addEllipse(e);
         attach(sketch, Ref::center(id), *center_);
         if (majorTyped_) {
@@ -207,7 +254,15 @@ private:
         if (minorTyped_) {
             sketch.addConstraint(Constraint::minorRadius(id, std::min(*minorTyped_, majorTyped_.value_or(*minorTyped_))));
         }
+        // Se queda abierta para corregir los semiejes escribiendo (como las demás figuras).
+        OpenFigure figure;
+        figure.ids = entitiesSince(sketch, mark);
+        figure.first = *center_;
+        figure.typed = {majorTyped_, minorTyped_};
+        const Ellipse made = e;
         cancel();
+        open_ = std::move(figure);
+        openEllipse_ = made;
         return true;
     }
 
@@ -219,6 +274,9 @@ private:
     std::optional<double> startParam_;
     std::optional<double> majorTyped_;
     std::optional<double> minorTyped_;
+    std::optional<OpenFigure> open_;  // la elipse recién creada, aún editable
+    Ellipse openEllipse_;
+    bool amended_ = false;
 };
 
 // --- Splines -------------------------------------------------------------------------
