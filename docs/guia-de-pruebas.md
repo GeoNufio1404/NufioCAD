@@ -47,6 +47,7 @@ Va en el mismo orden que el programa: **1. General**, **2. Sketch**, **3. Sólid
 | 4.3 Letrero o llavero | `LET` |
 | 4.4 Par de engranajes | `PAR` |
 | 4.5 Todos los generadores: reabrir, recordar y restablecer | `GRE` |
+| 4.6 Familias de herramientas y largo de la cremallera | `CRE` |
 | 5.4 Vigilante de paradas (`NUF_VIGILANTE`) | `VIG` |
 | 5.5 Llamadas en segundo plano (exportar, importar, medir, recuperar) | `FLU` |
 | 5.6 Dibujo en segundo plano (mallas, vista previa, generadores) | `FLU` |
@@ -746,6 +747,19 @@ Código: **GRE**.
 | GRE.10 | Cancela, y abre el generador otra vez | Parte de los valores de fábrica (se olvidó lo recordado) |
 
 ---
+
+### 4.6 Familias de herramientas y largo de la cremallera (`CRE`)
+
+| ID | Qué hacer | Qué debería pasar |
+|---|---|---|
+| CRE.1 | Abre la pestaña **HERRAMIENTAS** y el menú **Herramientas** | Las herramientas salen en **tres grupos**: **CAJAS** (Lightbox, Caja con tapa), **LETREROS** (Letrero o llavero) y **ENGRANAJES** (Par de engranajes, Engranaje interno, Cremallera); el menú tiene un título por familia |
+| CRE.2 | Herramientas › Cremallera: mira las preguntas | Hay «**Largo de la barra**» (Por número de dientes / Largo exacto / Largo con dientes completos); con «Por número de dientes» se ven los dientes, como antes |
+| CRE.3 | Elige «**Largo exacto**»; escribe 100 y acepta | Aparece «Largo exacto de la barra» (y se ocultan los dientes); la barra mide **justo 100 mm** (compruébalo con Medir) y el último diente sale cortado; el resumen dice los dientes y que el último va cortado |
+| CRE.4 | Repite con 77,7 y con 40 | Siempre mide lo pedido; la barra y la rueda siguen engranando bien (el hueco bajo la rueda) |
+| CRE.5 | Elige «**Largo con dientes completos**» con 100 mm | La barra se ajusta al entero de dientes más cercano (16 dientes, 100,5 mm con módulo 2) y el último diente sale entero |
+| CRE.6 | Con el diseño hecho, en Sólido › Parámetros cambia `largo` | La barra se rehace con el largo nuevo (los dientes se recalculan solos) |
+| CRE.7 | Guarda, cierra, abre; clic derecho en la cremallera › Reabrir | El largo y el modo siguen puestos; un diseño de cremallera **hecho antes de este cambio** se reabre por dientes, igual que estaba |
+| CRE.8 | Pon un largo mayor que el que cabe (módulo 20 y largo 2000: más de 300 dientes) | El panel avisa con un mensaje claro, sin cerrar nada |
 
 ## 5. Pruebas automáticas y transversales
 

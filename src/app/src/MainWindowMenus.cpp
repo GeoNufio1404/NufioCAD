@@ -363,7 +363,15 @@ void MainWindow::createMenus()
 
     // Herramientas generadoras: hacen unas preguntas y crean un diseño normal en el historial.
     QMenu* toolsMenu = menuBar()->addMenu(QStringLiteral("&Herramientas"));
+    QString currentGroup;
     for (const document::Generator* generator : document::generators()) {
+        // Las herramientas van agrupadas por familia (Cajas, Letreros, Engranajes), con su título en el menú.
+        const QString group = QString::fromStdString(generator->category());
+        if (group != currentGroup) {
+            toolsMenu->addSection(group);
+            currentGroup = group;
+        }
+        generatorGroups_.push_back(group);
         QAction* action = toolsMenu->addAction(QString::fromStdString(generator->title()), this,
                                                [this, generator] { startGenerator(*generator); });
         decorate(action, QString::fromStdString(generator->icon()), QString::fromStdString(generator->description()),
@@ -550,9 +558,14 @@ void MainWindow::createMenus()
     ribbon_->addAction(solidTab_, measureAction_);
     ribbon_->addAction(solidTab_, sectionAction_);
     toolsTab_ = ribbon_->addTab(QStringLiteral("HERRAMIENTAS"));
-    ribbon_->addGroup(toolsTab_, QStringLiteral("GENERADORES"));
-    for (QAction* action : generatorActions_) {
-        ribbon_->addAction(toolsTab_, action);
+    // Un grupo por familia: las cajas y lightbox juntas, los letreros aparte y los engranajes en el suyo.
+    QString shownGroup;
+    for (std::size_t i = 0; i < generatorActions_.size(); ++i) {
+        if (generatorGroups_[i] != shownGroup) {
+            shownGroup = generatorGroups_[i];
+            ribbon_->addGroup(toolsTab_, shownGroup.toUpper());
+        }
+        ribbon_->addAction(toolsTab_, generatorActions_[i]);
     }
 
     auto family = [this, &families](const QString& name) {

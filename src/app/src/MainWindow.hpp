@@ -200,6 +200,7 @@ private:
     QAction* boxAction_ = nullptr;
     QAction* cylinderAction_ = nullptr;
     std::vector<QAction*> generatorActions_;
+    std::vector<QString> generatorGroups_;  // la familia de cada uno (Cajas, Letreros, Engranajes), en el mismo orden
     int toolsTab_ = -1;
     QAction* sectionAction_ = nullptr;
     QFrame* sectionPanel_ = nullptr;

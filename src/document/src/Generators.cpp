@@ -35,6 +35,7 @@ std::string number(double value)
 
 class Lightbox final : public Generator {
 public:
+    std::string category() const override { return "Cajas"; }
     std::string id() const override { return "lightbox"; }
     std::string title() const override { return "Lightbox"; }
     std::string description() const override
@@ -230,6 +231,7 @@ public:
 
 class BoxWithLid final : public Generator {
 public:
+    std::string category() const override { return "Cajas"; }
     std::string id() const override { return "caja-con-tapa"; }
     std::string title() const override { return "Caja con tapa"; }
     std::string icon() const override { return "box-solid"; }
@@ -413,6 +415,7 @@ public:
 
 class Sign final : public Generator {
 public:
+    std::string category() const override { return "Letreros"; }
     std::string id() const override { return "letrero"; }
     std::string title() const override { return "Letrero o llavero"; }
     std::string icon() const override { return "sign-solid"; }
@@ -641,6 +644,7 @@ public:
 
 class GearPair final : public Generator {
 public:
+    std::string category() const override { return "Engranajes"; }
     std::string id() const override { return "par-engranajes"; }
     std::string title() const override { return "Par de engranajes"; }
     std::string icon() const override { return "gear-solid"; }
@@ -785,6 +789,7 @@ Generator::ArrowSpec centeredArrow(int body, std::function<double(const Generato
 
 class InternalGear final : public Generator {
 public:
+    std::string category() const override { return "Engranajes"; }
     std::string id() const override { return "engranaje-interno"; }
     std::string title() const override { return "Engranaje interno"; }
     std::string icon() const override { return "gear-solid"; }
@@ -880,22 +885,45 @@ public:
 
 class RackAndPinion final : public Generator {
 public:
+    std::string category() const override { return "Engranajes"; }
     std::string id() const override { return "cremallera"; }
     std::string title() const override { return "Cremallera"; }
     std::string icon() const override { return "gear-solid"; }
     std::string description() const override
     {
         return "Una barra dentada (cremallera) y la rueda que engrana con ella: mismo módulo y ángulo de presión, a la "
-               "distancia correcta y con un diente de la rueda sobre un hueco de la barra.";
+               "distancia correcta y con un diente de la rueda sobre un hueco de la barra. El largo de la barra se da "
+               "por número de dientes o en milímetros.";
     }
 
     std::vector<GeneratorField> fields() const override
     {
         using K = GeneratorField::Kind;
+        GeneratorField mode;
+        mode.kind = K::Choice;
+        mode.key = "largo_modo";
+        mode.label = "Largo de la barra";
+        mode.choices = {"Por número de dientes", "Largo exacto (el último diente queda cortado)",
+                        "Largo con dientes completos"};
+        mode.hint = "Elige cómo darlo: contando dientes, o en milímetros (exacto, o ajustado a dientes enteros)";
+        GeneratorField exact = gearField(K::Length, "largo_exacto", "Largo de la barra", 60.0, 8.0, 2000.0,
+                                         "La barra mide justo esto; el último diente se corta si no cabe entero");
+        exact.showKey = "largo_modo";
+        exact.showIndex = 1;
+        GeneratorField rounded = gearField(K::Length, "largo_aprox", "Largo aproximado", 60.0, 8.0, 2000.0,
+                                           "Se ajusta al número entero de dientes más cercano (largo = dientes · π · módulo)");
+        rounded.showKey = "largo_modo";
+        rounded.showIndex = 2;
+        GeneratorField teeth = gearField(K::Count, "dientes_cremallera", "Dientes de la cremallera", 10.0, 2.0, 300.0,
+                                         "Largo de la barra = dientes · π · módulo");
+        teeth.showKey = "largo_modo";
+        teeth.showIndex = 0;
         return {gearField(K::Length, "modulo", "Módulo", 2.0, 0.3, 20.0, "El tamaño del diente: igual en la rueda y la barra"),
                 gearField(K::Count, "dientes_rueda", "Dientes de la rueda", 20.0, 6.0, 300.0),
-                gearField(K::Count, "dientes_cremallera", "Dientes de la cremallera", 10.0, 2.0, 300.0,
-                          "Largo de la barra = dientes · π · módulo"),
+                mode,
+                teeth,
+                exact,
+                rounded,
                 gearField(K::Angle, "presion", "Ángulo de presión", 20.0, 5.0, 30.0, "Igual en los dos (20° es lo normal)"),
                 gearField(K::Length, "ancho_rueda", "Ancho", 8.0, 1.0, 200.0, "A lo largo del eje"),
                 gearField(K::Length, "base", "Grosor de la base de la barra", 5.0, 1.0, 100.0, "Bajo la raíz de los dientes"),
@@ -904,15 +932,44 @@ public:
                           "Aire para que engranen sin atascarse al imprimir (aleja la barra de la rueda)")};
     }
 
+    // Lo que sale del modo de largo: cuántos dientes y cuánto mide la barra (los diseños hechos antes de que existiera
+    // el modo no lo traen: cuentan como «por número de dientes»).
+    struct RackSize {
+        int mode = 0;
+        int teeth = 10;
+        double length = 0.0;
+    };
+    static RackSize rackSize(const GeneratorValues& values)
+    {
+        constexpr double kPi = 3.14159265358979323846;
+        const auto get = [&](const char* key, double fallback) { return values.count(key) != 0 ? values.at(key) : fallback; };
+        RackSize size;
+        size.mode = int(get("largo_modo", 0.0));
+        const double pitch = kPi * get("modulo", 2.0);
+        if (size.mode == 1) {
+            size.length = get("largo_exacto", 60.0);
+            size.teeth = std::max(2, int(std::ceil(size.length / pitch - 1e-9)));
+        } else if (size.mode == 2) {
+            size.teeth = std::max(2, int(std::lround(get("largo_aprox", 60.0) / pitch)));
+            size.length = size.teeth * pitch;
+        } else {
+            size.teeth = int(get("dientes_cremallera", 10.0));
+            size.length = size.teeth * pitch;
+        }
+        return size;
+    }
+
     std::string summary(const GeneratorValues& values) const override
     {
-        const double m = values.at("modulo"), z = values.at("dientes_rueda"), n = values.at("dientes_cremallera");
+        const double m = values.at("modulo"), z = values.at("dientes_rueda");
+        const RackSize rack = rackSize(values);
         constexpr double kPi = 3.14159265358979323846;
-        char text[256];
+        char text[320];
         std::snprintf(text, sizeof text,
-                      "La barra avanza %.2f mm por vuelta de la rueda · largo de la barra %.1f mm (%.2f vueltas de la "
-                      "rueda) · Ø primitivo de la rueda %.2f mm",
-                      kPi * m * z, n * kPi * m, n / z, m * z);
+                      "La barra avanza %.2f mm por vuelta de la rueda · largo de la barra %.1f mm, %d dientes%s (%.2f "
+                      "vueltas de la rueda) · Ø primitivo de la rueda %.2f mm",
+                      kPi * m * z, rack.length, rack.teeth, rack.mode == 1 ? " (el último cortado)" : "",
+                      rack.length / (kPi * m * z), m * z);
         return text;
     }
 
@@ -928,7 +985,8 @@ public:
         const auto p = [&](const char* name) { return std::string(name) + suffix; };
         const std::string modulo = p("modulo"), z = p("dientes_rueda"), n = p("dientes_cremallera"), presion = p("presion"),
                           ancho = p("ancho_rueda"), base = p("base"), bore = p("agujero_rueda"), juego = p("juego"),
-                          giro = p("giro_rueda");
+                          giro = p("giro_rueda"), largo = p("largo");
+        const RackSize rack = rackSize(values);
 
         Recipe recipe;
         recipe.component = "Cremallera";
@@ -938,7 +996,17 @@ public:
         };
         param(modulo, number(values.at("modulo")));
         param(z, number(values.at("dientes_rueda")));
-        param(n, number(values.at("dientes_cremallera")));
+        // El largo de la barra: contando dientes, o en milímetros (y entonces los dientes salen de ahí, ligados al
+        // parámetro: al cambiar el largo o el módulo, se rehacen).
+        if (rack.mode == 1) {
+            param(largo, number(values.at("largo_exacto")));
+            param(n, "ceil(" + largo + "/(pi*" + modulo + "))");
+        } else if (rack.mode == 2) {
+            param(largo, number(values.at("largo_aprox")));
+            param(n, "max(2; round(" + largo + "/(pi*" + modulo + ")))");
+        } else {
+            param(n, number(values.at("dientes_cremallera")));
+        }
         param(presion, number(values.at("presion")));
         param(ancho, number(values.at("ancho_rueda")));
         param(base, number(values.at("base")));
@@ -955,16 +1023,19 @@ public:
                               {"bore", bore}, {"rotation", giro}};
         recipe.features.push_back(std::move(wheel));
 
-        auto rack = std::make_unique<GearFeature>();
-        rack->setName("Engranaje: cremallera");
-        rack->base.origin = OriginPlane::XY;
-        rack->spec.type = geometry::GearType::Rack;
+        auto bar = std::make_unique<GearFeature>();
+        bar->setName("Engranaje: cremallera");
+        bar->base.origin = OriginPlane::XY;
+        bar->spec.type = geometry::GearType::Rack;
         // El origen de la barra es un hueco; se corre un número entero de pasos para que quede uno bajo la rueda.
-        rack->expressions = {{"module", modulo}, {"teeth", n}, {"pressureAngle", presion}, {"thickness", ancho},
-                             {"rim", base},
-                             {"x", "-floor(" + n + "/2)*" + modulo + "*pi"},
-                             {"y", "-(" + modulo + "*" + z + "/2) - " + juego}};
-        recipe.features.push_back(std::move(rack));
+        bar->expressions = {{"module", modulo}, {"teeth", n}, {"pressureAngle", presion}, {"thickness", ancho},
+                            {"rim", base},
+                            {"x", "-floor(" + n + "/2)*" + modulo + "*pi"},
+                            {"y", "-(" + modulo + "*" + z + "/2) - " + juego}};
+        if (rack.mode == 1) {
+            bar->expressions["length"] = largo;  // la barra se corta a esa medida
+        }
+        recipe.features.push_back(std::move(bar));
         return recipe;
     }
 };

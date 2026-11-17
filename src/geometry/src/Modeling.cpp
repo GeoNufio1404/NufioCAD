@@ -977,26 +977,66 @@ Shape rackGear(const std::string& tag, const sketch::Plane& plane, const GearSpe
         throw GeometryError("Los dientes se solapan en la raíz: prueba con menos ángulo de presión");
     }
     try {
-        const double length = spec.teeth * p;
+        const double fullLength = spec.teeth * p;
+        // Con «length» la barra se corta a esa medida (el último diente queda cortado).
+        const double length = spec.length > kTiny ? spec.length : fullLength;
+        if (length > fullLength + 1e-9) {
+            throw GeometryError("El largo de la cremallera no puede pasar de dientes · π · módulo (" + std::to_string(fullLength) + " mm)");
+        }
+        if (length <= p) {
+            throw GeometryError("El largo de la cremallera debe ser mayor que un paso (π · módulo = " + std::to_string(p) + " mm)");
+        }
         const double bottom = -(1.25 * m + spec.rim);
         const auto at = [&](double x, double y) { return toPnt(plane.toWorld({x, y})); };
         std::vector<std::pair<TopoDS_Edge, std::string>> edges;
         const auto line = [&](double x1, double y1, double x2, double y2, const std::string& name) {
             edges.emplace_back(BRepBuilderAPI_MakeEdge(at(x1, y1), at(x2, y2)).Edge(), name);
         };
-        line(0.0, bottom, length, bottom, "base");
-        line(length, bottom, length, -1.25 * m, "extremo_d");
-        double x = length;  // se recorre de derecha a izquierda por arriba
-        for (int i = spec.teeth - 1; i >= 0; --i) {
-            const double c = p / 2.0 + i * p;
-            const std::string name = "d" + std::to_string(i + 1) + ":";
-            line(x, -1.25 * m, c + rootHalf, -1.25 * m, name + "raiz_d");
-            line(c + rootHalf, -1.25 * m, c + tipHalf, m, name + "flanco_d");
-            line(c + tipHalf, m, c - tipHalf, m, name + "cabeza");
-            line(c - tipHalf, m, c - rootHalf, -1.25 * m, name + "flanco_i");
-            x = c - rootHalf;
+        // Los segmentos de arriba, de derecha a izquierda, empezando por el extremo de la barra entera.
+        struct Top {
+            double x1, y1, x2, y2;
+            std::string name;
+        };
+        std::vector<Top> top;
+        {
+            double x = fullLength;
+            for (int i = spec.teeth - 1; i >= 0; --i) {
+                const double c = p / 2.0 + i * p;
+                const std::string name = "d" + std::to_string(i + 1) + ":";
+                top.push_back({x, -1.25 * m, c + rootHalf, -1.25 * m, name + "raiz_d"});
+                top.push_back({c + rootHalf, -1.25 * m, c + tipHalf, m, name + "flanco_d"});
+                top.push_back({c + tipHalf, m, c - tipHalf, m, name + "cabeza"});
+                top.push_back({c - tipHalf, m, c - rootHalf, -1.25 * m, name + "flanco_i"});
+                x = c - rootHalf;
+            }
+            top.push_back({x, -1.25 * m, 0.0, -1.25 * m, "raiz_i"});
         }
-        line(x, -1.25 * m, 0.0, -1.25 * m, "raiz_i");
+        // Lo que pasa del largo pedido se quita: los segmentos que quedan enteros más allá se descartan y el que lo cruza
+        // se corta justo en x = length (conserva su nombre).
+        std::vector<Top> kept;
+        for (const Top& s : top) {
+            if (s.x2 >= length - kTiny) {
+                continue;
+            }
+            Top clipped = s;
+            if (s.x1 > length + kTiny) {
+                const double along = (length - s.x1) / (s.x2 - s.x1);
+                clipped.x1 = length;
+                clipped.y1 = s.y1 + along * (s.y2 - s.y1);
+            }
+            if (std::hypot(clipped.x2 - clipped.x1, clipped.y2 - clipped.y1) < 1e-6) {
+                continue;  // el corte cae justo en un vértice: sin tramos de largo cero
+            }
+            kept.push_back(clipped);
+        }
+        if (kept.empty()) {
+            throw GeometryError("El largo de la cremallera no deja ningún diente");
+        }
+        line(0.0, bottom, length, bottom, "base");
+        line(length, bottom, length, kept.front().y1, "extremo_d");
+        for (const Top& s : kept) {
+            line(s.x1, s.y1, s.x2, s.y2, s.name);
+        }
         line(0.0, -1.25 * m, 0.0, bottom, "extremo_i");
         BRepBuilderAPI_MakeWire outline;
         for (const auto& [edge, name] : edges) {
