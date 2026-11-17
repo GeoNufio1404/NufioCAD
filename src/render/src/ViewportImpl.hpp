@@ -1561,8 +1561,11 @@ public:
             }
             // Las cotas, con su recuadro y tamaño normal; las restricciones, más pequeñas.
             if (!note.icon.empty()) {
+                // Fondo opaco (un recuadro del color del lienzo, con la letra del mismo color para que no se vea)
+                // para que el icono se lea aunque cruce una línea; el icono se dibuja encima del recuadro.
+                drawing->addText(note.anchor, "M", box, box, 11.0);
                 for (const sketch::Geometry& part : note.icon) {
-                    drawing->addGeometry(part, {color, 1.6});
+                    drawing->addGeometryOver(part, {color, 1.6});
                 }
             } else {
                 drawing->addText(note.anchor, note.text, color, box, note.dimension ? 13.0 : 11.0);
