@@ -57,6 +57,16 @@ La primera configuración en Windows tarda (vcpkg compila OpenCASCADE); las sigu
 Opciones de CMake: `NUF_BUILD_APP` (la interfaz; `OFF` compila solo el núcleo y las pruebas), `NUF_BUILD_TESTS` y
 `NUF_WARNINGS_AS_ERRORS` (por defecto `ON`).
 
+### Release en Windows
+
+```powershell
+$env:VCPKG_ROOT = "C:\devcpkg"; $env:QT_ROOT = "C:\Qt.8.3\msvc2022_64"; $env:VSLANG = "1033"
+cmake --preset windows-release
+cmake --build --preset windows-release
+```
+
+vcpkg compila OpenCASCADE solo para Release (triplete `x64-windows-release`) la primera vez, y tarda. **Con Smart App Control activo en Windows 11, el `.exe` no se puede ejecutar** (los binarios sin firmar no cumplen el nivel de firma): hay que probar en otra máquina o en una máquina virtual, o apagarlo (es irreversible en esa instalación de Windows). Ver la Oleada 7 de la [hoja de ruta](hoja-de-ruta.md) y [`decisiones.md`](decisiones.md#distribución-y-firma-de-código-windows).
+
 ## Pruebas
 
 | Qué | Cómo | Cubre |
