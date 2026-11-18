@@ -729,6 +729,15 @@ void MainWindow::createMenus()
         QSettings().setValue(QStringLiteral("view/sketchMeasures"), on);
         viewport_->setSketchMeasuresVisible(on);
     });
+    auto* points = view->addAction(QStringLiteral("Mostrar &puntos del sketch"));
+    points->setCheckable(true);
+    points->setChecked(QSettings().value(QStringLiteral("view/sketchPoints"), true).toBool());
+    viewport_->setSketchPointsVisible(points->isChecked());
+    connect(points, &QAction::toggled, this, [this](bool on) {
+        QSettings().setValue(QStringLiteral("view/sketchPoints"), on);
+        viewport_->setSketchPointsVisible(on);
+    });
+    sketchPointsAction_ = points;
     // Medidas y restricciones: por defecto solo en lo que se mira (cursor o selección).
     auto* allMeasures = view->addAction(QStringLiteral("Medidas de &todo el sketch a la vez"));
     auto* allConstraints = view->addAction(QStringLiteral("Restricciones de t&odo el sketch a la vez"));
@@ -807,6 +816,7 @@ void MainWindow::createSketchPalette()
     column->addWidget(title);
     // Cada casilla es la misma acción del menú Ver: se mantienen al día en los dos sentidos.
     const std::vector<std::pair<QString, QAction*>> rows = {
+        {QStringLiteral("Puntos"), sketchPointsAction_},
         {QStringLiteral("Medidas"), sketchMeasuresAction_},
         {QStringLiteral("Medidas de todo"), allMeasuresAction_},
         {QStringLiteral("Restricciones de todo"), allConstraintsAction_}};

@@ -168,6 +168,14 @@ void Viewport::setSketchShowAll(bool measures, bool constraints)
     update();
 }
 
+void Viewport::setSketchPointsVisible(bool visible)
+{
+    impl_->pointsVisible = visible;
+    impl_->rebuildSketch();
+    impl_->view->Invalidate();
+    update();
+}
+
 void Viewport::setSketchMeasuresVisible(bool visible)
 {
     impl_->measuresVisible = visible;

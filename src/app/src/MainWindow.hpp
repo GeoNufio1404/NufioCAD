@@ -238,6 +238,7 @@ private:
     void createSketchPalette();
     void updateSketchPalette();
     QAction* sketchMeasuresAction_ = nullptr;
+    QAction* sketchPointsAction_ = nullptr;
     QAction* allMeasuresAction_ = nullptr;
     QAction* allConstraintsAction_ = nullptr;
     QFrame* sketchPalette_ = nullptr;
