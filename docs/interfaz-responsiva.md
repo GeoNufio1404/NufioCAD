@@ -71,6 +71,20 @@ La ventana sin nada abierto pide 566×544 y la pantalla disponible es 960×516: 
 
 **7. Escala y DPI (a revisar en R5).** El modo solo emula la escala con `QT_SCALE_FACTOR`; falta probar una pantalla real con 125 % o 150 % y el paso de una ventana entre dos monitores con escalas distintas.
 
+## Estado tras R2 (18 nov. 2026)
+
+El contenido de cada panel de herramienta va en un área con desplazamiento y los botones Aceptar y Cancelar quedan fijos abajo. Con el mismo inventario:
+
+| Pantalla lógica | Escenas que no caben | Paneles cortados a lo ancho |
+|---|---|---|
+| 1920×1080 | 0 | 0 |
+| 1366×768 | 0 | 0 |
+| 1536×864 (125 %) | **0** (antes 5) | 0 (antes 3) |
+| 1280×720 (150 %) | **0** (antes 10) | 0 (antes 3) |
+| 960×540 (200 %) | 17 (sin cambio) | 0 (antes 3) |
+
+Los puntos 1, 2 y 3 de arriba quedan resueltos. Con una herramienta abierta, la ventana pide 872×544 en vez de hasta 927×927. Lo que queda a 960×540 es el mínimo de la ventana vacía (544 de alto): puntos 4 y 5, que son de R3 y R4.
+
 ## Qué falta medir
 
 - El visor con el sketch a escalas altas (iconos y cotas con tamaño en píxeles fijos).

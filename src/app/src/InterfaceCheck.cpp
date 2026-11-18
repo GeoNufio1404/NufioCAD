@@ -408,8 +408,16 @@ QStringList auditWidgets(QWidget* root, const QRect& limit)
                 continue;
             }
         }
+        // Lo que va dentro de un área con desplazamiento queda fuera de la vista a propósito: se llega a ello desplazando.
+        bool scrollable = false;
+        for (const QWidget* up = w->parentWidget(); up != nullptr && up != root; up = up->parentWidget()) {
+            if (qobject_cast<const QScrollArea*>(up) != nullptr) {
+                scrollable = true;
+                break;
+            }
+        }
         const QRect onScreen = QRect(w->mapToGlobal(QPoint(0, 0)), w->size());
-        if (!limit.contains(onScreen.topLeft()) || !limit.contains(onScreen.bottomRight())) {
+        if (!scrollable && (!limit.contains(onScreen.topLeft()) || !limit.contains(onScreen.bottomRight()))) {
             findings << QStringLiteral("fuera de la pantalla: %1").arg(describe(w));
             continue;
         }

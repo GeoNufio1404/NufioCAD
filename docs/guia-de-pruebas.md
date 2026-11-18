@@ -222,6 +222,20 @@ Código: **ARC**. Las pruebas **31–38** están en la hoja de ruta («Pruebas m
 
 ---
 
+### 1.8 Paneles de herramienta con desplazamiento (`RSP`, Fase 20, R2)
+
+Código: **RSP**. Conviene probarlo en tu pantalla pequeña y también en la de diario.
+
+| ID | Haz esto | Debe pasar |
+|---|---|---|
+| RSP.1 | Sólido › **Engranaje** (o cualquier herramienta) | El panel de Propiedades se abre con todos sus campos; si no caben en alto, aparece una barra de desplazamiento a la derecha del panel y **Cancelar y Aceptar quedan siempre visibles abajo** |
+| RSP.2 | Con el panel abierto, desplaza con la rueda del ratón sobre el panel | Los campos suben y bajan; los botones de abajo no se mueven |
+| RSP.3 | Herramientas › **Par de engranajes** (también «Engranaje interno» y «Cremallera») | El panel se abre más ancho que los demás si hay sitio; ya no se cortan los campos por los lados (si la ventana es muy estrecha, sale una barra horizontal) |
+| RSP.4 | Cambia el tamaño de la ventana a lo más pequeño que puedas con una herramienta abierta | La ventana ya no crece sola ni se sale de la pantalla por culpa del panel |
+| RSP.5 | Escribe en un campo y pulsa Tab hasta pasar el último | El panel se desplaza solo hasta mostrar el campo con el foco |
+| RSP.6 | Acepta y cancela varias herramientas seguidas | No hay parpadeos ni paneles vacíos; Enter acepta y Esc cancela como antes |
+| RSP.7 | Cambia la escala de pantalla de Windows (Configuración › Pantalla › Escala) a 125 % o 150 % y abre el programa | Con cualquier herramienta abierta, la ventana cabe en la pantalla y se puede aceptar o cancelar |
+
 ## 2. Sketch
 
 ### 2.1 Dibujo y edición

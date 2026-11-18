@@ -594,6 +594,14 @@ void MainWindow::startTool(std::unique_ptr<FeatureTool> tool)
     tool_->start();
     propertiesDock_->setWidget(tool_->panel());
     propertiesDock_->show();
+    // Si hay sitio, el panel se abre del ancho que pide su contenido (hasta el 40 % de la ventana); si no, se desplaza.
+    {
+        const int wanted = tool_->panel()->sizeHint().width() + 24;
+        const int width = std::clamp(wanted, 300, std::max(300, int(this->width() * 0.4)));
+        if (propertiesDock_->width() < width) {
+            resizeDocks({propertiesDock_}, {width}, Qt::Horizontal);
+        }
+    }
     timeline_->setEditing(tool_->editing());
     statusBar()->showMessage(QStringLiteral("Elige las entradas en la vista · Enter acepta · Esc cancela"));
     updateSketchActions();

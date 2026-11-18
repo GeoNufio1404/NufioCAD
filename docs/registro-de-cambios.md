@@ -10,6 +10,15 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+
+## Fase 20, R2: paneles de herramienta con desplazamiento — 18 nov. 2026
+
+- **Qué cambia:** `FeatureTool::start` (`FeatureTools.cpp`) pone el contenido del panel en un `QScrollArea` y deja Aceptar y Cancelar fijos abajo; `MainWindow::startTool` abre el panel del ancho que pide su contenido (hasta el 40 % de la ventana). El inventario deja de contar lo que está dentro de un área con desplazamiento como «fuera de la pantalla».
+- **Efecto:** con una herramienta abierta, el mínimo de la ventana baja de hasta 927×927 a 872×544; a 125 % y 150 % de escala ya cabe todo.
+- **Guía:** sección 1.8 (`RSP.1` a `RSP.7`).
+- **Cómo volver atrás:** no fusionar `feature/interfaz-responsiva-r2`, o `git revert -m 1` de su fusión.
+
+---
 ## Fase 20, R1: inventario de la interfaz a distintas pantallas — 18 nov. 2026
 
 - **Qué cambia:** modo nuevo `--inventario <carpeta> [--tamano AnchoxAlto] [--escala N]` (`InterfaceCheck::captureInventory`, opciones en `main.cpp`): abre la ventana con ese tamaño y escala, recorre cinta, herramientas, generadores, diálogos y sketch, guarda capturas y escribe `inventario.txt`. No cambia el comportamiento normal del programa.
