@@ -462,6 +462,7 @@ private:
     QDoubleSpinBox* bore_ = nullptr;
     QDoubleSpinBox* helix_ = nullptr;
     QDoubleSpinBox* rim_ = nullptr;
+    QCheckBox* herringbone_ = nullptr;
     QDoubleSpinBox* backlash_ = nullptr;
     QDoubleSpinBox* baseChamfer_ = nullptr;
     QComboBox* type_ = nullptr;

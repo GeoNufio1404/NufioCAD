@@ -139,6 +139,8 @@ struct GearSpec {
                                          // se corta a esa medida (el último diente queda cortado); no puede ser mayor
     double backlash = 0.0;               // mm: cuánto se adelgaza cada diente medido sobre la circunferencia primitiva (0 = sin juego);
                                          // en el interno se ensancha el hueco. Deja holgura sin mover los ejes
+    bool herringbone = false;            // espina de pescado: dos mitades con la hélice contraria (necesita helixAngle ≠ 0; solo exterior).
+                                         // Las caras de la segunda mitad llevan «:m2» al final de su nombre
     double baseChamfer = 0.0;            // mm: chaflán en las aristas de la cara inicial («pata de elefante» de la primera capa); 0 = sin chaflán;
                                          // solo dientes rectos; el kernel falla de forma irregular con algunas medidas según los dientes (ver chamferStart)
 };

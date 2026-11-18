@@ -236,3 +236,65 @@ TEST_CASE("Los generadores de engranajes dan juego del diente y chaflán de la b
         REQUIRE(totalVolume(chamfered) < base);
     }
 }
+
+TEST_CASE("La espina de pescado tiene el mismo volumen que el engranaje helicoidal y dos mitades con la hélice contraria", "[gear][herringbone]")
+{
+    geometry::GearSpec helical = spur();
+    helical.helixAngle = 0.35;
+    const geometry::Shape single = geometry::gear("h", xy(), helical);
+    geometry::GearSpec fish = helical;
+    fish.herringbone = true;
+    const geometry::Shape both = geometry::gear("h", xy(), fish);
+    REQUIRE(both.isValid());
+    REQUIRE(both.solidCount() == 1);
+    // Mismo volumen (la hélice no cambia cuánto material hay) y mismo tamaño.
+    REQUIRE_THAT(both.volume(), Catch::Matchers::WithinRel(single.volume(), 0.01));
+    REQUIRE_THAT(both.bounds().max.z, Catch::Matchers::WithinAbs(10.0, 1e-3));
+    REQUIRE_THAT(both.bounds().min.z, Catch::Matchers::WithinAbs(0.0, 1e-3));
+    REQUIRE_THAT(both.bounds().max.x, Catch::Matchers::WithinAbs(single.bounds().max.x, 0.05));
+    // Dos mitades de caras laterales: las de la segunda llevan «:m2».
+    REQUIRE(countNamed(both, ":m2") > 0);
+    REQUIRE(countNamed(both, ":m2") * 2 + 3 >= both.faceCount() - 3);
+    // Las dos tapas y el agujero siguen con su nombre.
+    REQUIRE(countNamed(both, "h:inicio") == 1);
+    REQUIRE(countNamed(both, "h:fin") == 1);
+    REQUIRE(countNamed(both, "h:lado:agujero") == 1);
+}
+
+TEST_CASE("La espina de pescado pide hélice y solo se hace en ruedas exteriores", "[gear][herringbone]")
+{
+    geometry::GearSpec spec = spur();
+    spec.herringbone = true;  // sin ángulo de hélice
+    REQUIRE_THROWS_AS(geometry::gear("h", xy(), spec), geometry::GeometryError);
+    spec.helixAngle = 0.3;
+    spec.type = geometry::GearType::Internal;
+    REQUIRE_THROWS_AS(geometry::gear("h", xy(), spec), geometry::GeometryError);
+}
+
+TEST_CASE("El par de engranajes en espina de pescado sale válido y la opción se guarda", "[generator][gear][herringbone][io]")
+{
+    using namespace nuf::document;
+    const Generator* generator = findGenerator("par-engranajes");
+    REQUIRE(generator != nullptr);
+    GeneratorValues values = generator->defaults();
+    REQUIRE(values.count("espina") == 1);
+    values["helice"] = 15.0;
+    values["espina"] = 1.0;
+    Document doc;
+    applyRecipe(doc, generator->make(values, ""));
+    REQUIRE(doc.result().bodies.size() == 2);
+    for (std::size_t i = 0; i < doc.featureCount(); ++i) {
+        INFO(doc.feature(i).name());
+        REQUIRE(doc.status(doc.feature(i).id()).health != Health::Error);
+        REQUIRE(static_cast<const GearFeature&>(doc.feature(i)).spec.herringbone);
+    }
+    // Se guarda y se vuelve a leer.
+    const auto path = std::filesystem::temp_directory_path() / "nuf_espina.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    REQUIRE(static_cast<const GearFeature&>(reopened.feature(0)).spec.herringbone);
+}

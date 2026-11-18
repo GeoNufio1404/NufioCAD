@@ -77,6 +77,15 @@ Dos campos nuevos del engranaje, ambos en 0 por defecto (los diseños anteriores
 
 ---
 
+
+## Fase 16, E1: engranaje de espina de pescado — 18 nov. 2026
+
+- `GearSpec::herringbone` (`Modeling.cpp`, `gearSolid`): dos lofts (`Half`) con la hélice contraria que se cosen en el contorno de la mitad; volumen igual al del helicoidal; caras de la segunda mitad con «:m2». Se guarda como `herringbone` en el archivo.
+- Panel del Engranaje (casilla) y pregunta «Dientes helicoidales» en el Par de engranajes (`espina`).
+- Pruebas en `tests/test_gear_tuning.cpp` (`[herringbone]`). Guía: PAR.23 a PAR.25.
+- **Volver atrás:** no fusionar `feature/engranajes-e1-espina`, o `git revert -m 1` de su fusión.
+
+---
 ## Hoja de ruta ordenada por fases — 16 nov. 2026
 
 - **Rama:** `feature/hoja-de-ruta-por-fases` (solo documentación y comentarios; no cambia el comportamiento).
