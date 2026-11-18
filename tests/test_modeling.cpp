@@ -443,7 +443,7 @@ TEST_CASE("Extruir hasta una cara curva que no se alcanza o no se admite da un m
     // Alejándose de la esfera nunca llega a ella.
     REQUIRE_THROWS_WITH(squareToFace(ref, -30.0, -1.0, sphere), Catch::Matchers::ContainsSubstring("no llega"));
 
-    // Un cono no está entre las superficies admitidas.
+    // Un cono ya se admite (antes daba un mensaje): alejándose de él, tampoco llega.
     sketch::Sketch triangle;
     triangle.addLine({0, 0}, {10, 0});
     triangle.addLine({10, 0}, {0, 10});
@@ -451,7 +451,7 @@ TEST_CASE("Extruir hasta una cara curva que no se alcanza o no se admite da un m
     const Shape cone = revolveAroundZ(triangle);
     const auto coneWall = curvedFace(cone);
     REQUIRE(coneWall);
-    REQUIRE_THROWS_WITH(squareToFace(cone.faceRef(*coneWall), -30.0, 1.0, cone), Catch::Matchers::ContainsSubstring("cono"));
+    REQUIRE_THROWS_WITH(squareToFace(cone.faceRef(*coneWall), -30.0, -1.0, cone), Catch::Matchers::ContainsSubstring("no llega"));
 
     // Paralela al eje de un cilindro: tampoco llega a su pared.
     sketch::Sketch disc;
@@ -464,6 +464,53 @@ TEST_CASE("Extruir hasta una cara curva que no se alcanza o no se admite da un m
     spec.side1.face = cylinder.faceRef(*faceStarting(cylinder, "f1:lado:"));
     REQUIRE_THROWS_WITH(extrude("f2", allProfiles(small, sketch::Plane::fromPointAndNormal({0, 0, 50}, {0, 0, 1})), spec, {cylinder}),
                         Catch::Matchers::ContainsSubstring("no llega"));
+}
+
+TEST_CASE("Extruir hasta un cono", "[geometry][modeling][cone]")
+{
+    // Cono de revolución: base de radio 10 en z = -10 y vértice en z = 10 (radio 5 - z/2 a la altura z).
+    sketch::Sketch triangle;
+    triangle.addLine({0, -10}, {10, -10});
+    triangle.addLine({10, -10}, {0, 10});
+    triangle.addLine({0, 10}, {0, -10});
+    const Shape cone = revolveAroundZ(triangle);
+    const auto wall = curvedFace(cone);
+    REQUIRE(wall);
+    REQUIRE(cone.faceName(*wall).size() > 0);
+    const ElementRef ref = cone.faceRef(*wall);
+
+    // Desde y = -30 hacia el cono: llega a su pared y se queda antes de ella.
+    const Shape outside = squareToFace(ref, -30.0, 1.0, cone);
+    REQUIRE(outside.solidCount() == 1);
+    REQUIRE_THAT(outside.volume(), WithinRel(integrate(2.0, [](double x, double z) {
+                                                 const double r = 5.0 - z / 2.0;
+                                                 return 30.0 - std::sqrt(r * r - x * x);
+                                             }),
+                                             2e-3));
+    // El extremo es una cara de la pared del cono.
+    REQUIRE(countNamed(outside, "f2:fin:") >= 1);
+}
+
+TEST_CASE("Extruir hasta una superficie libre (un loft suave entre dos círculos)", "[geometry][modeling][freeface]")
+{
+    // Dos círculos: radio 12 en z = -10 y radio 2 en z = 10; la pared es una superficie B-spline (radio 7 - z/2).
+    sketch::Sketch bottom;
+    bottom.addCircle({0, 0}, 12.0);
+    sketch::Sketch top;
+    top.addCircle({0, 0}, 2.0);
+    const SketchRegion low{&bottom, sketch::Plane::fromPointAndNormal({0, 0, -10}, {0, 0, 1}), sketch::findProfiles(bottom)};
+    const SketchRegion high{&top, sketch::Plane::fromPointAndNormal({0, 0, 10}, {0, 0, 1}), sketch::findProfiles(top)};
+    const Shape body = loft("l1", {low, high}, false);
+    REQUIRE(body.solidCount() == 1);
+    const auto wall = curvedFace(body);
+    REQUIRE(wall);
+    const Shape reached = squareToFace(body.faceRef(*wall), -30.0, 1.0, body);
+    REQUIRE(reached.solidCount() == 1);
+    REQUIRE_THAT(reached.volume(), WithinRel(integrate(2.0, [](double x, double z) {
+                                                  const double r = 7.0 - z / 2.0;
+                                                  return 30.0 - std::sqrt(r * r - x * x);
+                                              }),
+                                              1e-2));
 }
 
 TEST_CASE("Errores de modelado con mensaje", "[geometry][modeling]")
