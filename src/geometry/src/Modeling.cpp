@@ -1251,6 +1251,9 @@ Shape gearSolid(std::string_view tagView, const sketch::Plane& plane, const Gear
     // Interno: lo que se dibuja es el hueco (con forma de rueda), así que cabeza y raíz cambian de lado.
     const double ra = rp + (internal ? 1.25 : 1.0) * spec.module;
     const double rf = rp - (internal ? 1.0 : 1.25) * spec.module;
+    if (spec.herringbone && (internal || std::abs(spec.helixAngle) < kTiny)) {
+        throw GeometryError("La espina de pescado necesita un ángulo de hélice (y solo se hace en ruedas exteriores)");
+    }
     if (internal && std::abs(spec.helixAngle) > kTiny) {
         throw GeometryError("El engranaje interno solo se hace con dientes rectos (sin ángulo de hélice)");
     }
@@ -1400,27 +1403,55 @@ Shape gearSolid(std::string_view tagView, const sketch::Plane& plane, const Gear
         // Helicoidal: secciones giradas a lo largo del ancho, unidas en una superficie lateral. Las tapas
         // (con el agujero) y la pared del agujero se hacen aparte y se cosen: así no hace falta ninguna
         // booleana contra la superficie lateral (que era casi la mitad del tiempo).
-        const int sections = std::clamp(int(std::ceil(std::abs(twist) / (15.0 * kDeg))) + 1, 3, 24);
-        BRepOffsetAPI_ThruSections loft(false, false, 1e-6);
-        TopoDS_Wire lastWire = outline.Wire();
-        for (int k = 0; k <= sections; ++k) {
-            throwIfCancelled();
-            const double t = double(k) / sections;
-            if (k == 0) {
-                loft.AddWire(outline.Wire());
-                continue;
-            }
+        // Espina de pescado (E1): dos mitades con la hélice contraria (la primera gira hasta la mitad del ancho y la
+        // segunda deshace el giro); se hacen como dos lofts que comparten el contorno de la mitad y se cosen juntos.
+        const bool herringbone = spec.herringbone;
+        const int sections = std::clamp(int(std::ceil(std::abs(herringbone ? twist / 2.0 : twist) / (15.0 * kDeg))) + 1, 3, 24);
+        const auto sectionWire = [&](double height, double angle) {
             gp_Trsf turn;
-            turn.SetRotation(gp_Ax1(origin, normal), twist * t);
+            turn.SetRotation(gp_Ax1(origin, normal), angle);
             gp_Trsf slide;
-            slide.SetTranslation(gp_Vec(normal).Multiplied(spec.thickness * t));
+            slide.SetTranslation(gp_Vec(normal).Multiplied(height));
             BRepBuilderAPI_Transform moved(outline.Wire(), slide * turn, true);
-            lastWire = TopoDS::Wire(moved.Shape());
-            loft.AddWire(lastWire);
-        }
-        buildCancellable(loft);
-        if (!loft.IsDone()) {
-            throw GeometryError("No se pudo generar el engranaje helicoidal");
+            return TopoDS::Wire(moved.Shape());
+        };
+        // Cada loft guarda las aristas de su primera sección, en el mismo orden que «edges», para nombrar sus caras.
+        struct Half {
+            std::unique_ptr<BRepOffsetAPI_ThruSections> loft;
+            std::vector<TopoDS_Edge> firstEdges;
+        };
+        std::vector<Half> halves;
+        const auto makeLoft = [&](double z0, double z1, double a0, double a1, bool original) {
+            Half piece;
+            piece.loft = std::make_unique<BRepOffsetAPI_ThruSections>(false, false, 1e-6);
+            TopoDS_Wire first;
+            for (int k = 0; k <= sections; ++k) {
+                throwIfCancelled();
+                const double f = double(k) / sections;
+                if (k == 0) {
+                    first = original ? outline.Wire() : sectionWire(z0, a0);
+                    piece.loft->AddWire(first);
+                    continue;
+                }
+                piece.loft->AddWire(sectionWire(z0 + (z1 - z0) * f, a0 + (a1 - a0) * f));
+            }
+            for (TopoDS_Iterator children(first); children.More(); children.Next()) {
+                piece.firstEdges.push_back(TopoDS::Edge(children.Value()));
+            }
+            buildCancellable(*piece.loft);
+            if (!piece.loft->IsDone()) {
+                throw GeometryError("No se pudo generar el engranaje helicoidal");
+            }
+            halves.push_back(std::move(piece));
+        };
+        TopoDS_Wire lastWire;
+        if (herringbone) {
+            makeLoft(0.0, spec.thickness / 2.0, 0.0, twist / 2.0, true);
+            makeLoft(spec.thickness / 2.0, spec.thickness, twist / 2.0, 0.0, false);
+            lastWire = sectionWire(spec.thickness, 0.0);
+        } else {
+            makeLoft(0.0, spec.thickness, 0.0, twist, true);
+            lastWire = sectionWire(spec.thickness, twist);
         }
         const double sign = spec.thickness > 0 ? 1.0 : -1.0;
         const gp_Pnt endPoint(origin.XYZ() + normal.XYZ() * spec.thickness);
@@ -1451,8 +1482,10 @@ Shape gearSolid(std::string_view tagView, const sketch::Plane& plane, const Gear
             }
         }
         BRepBuilderAPI_Sewing sewing(1e-6);
-        for (TopExp_Explorer ex(loft.Shape(), TopAbs_FACE); ex.More(); ex.Next()) {
-            sewing.Add(ex.Current());
+        for (const Half& each : halves) {
+            for (TopExp_Explorer ex(each.loft->Shape(), TopAbs_FACE); ex.More(); ex.Next()) {
+                sewing.Add(ex.Current());
+            }
         }
         sewing.Add(startCap);
         sewing.Add(endCap);
@@ -1471,9 +1504,10 @@ Shape gearSolid(std::string_view tagView, const sketch::Plane& plane, const Gear
         // La costura deja las caras coherentes entre sí pero no siempre hacia fuera. Se mira una cara
         // de la cabeza de un diente (su normal debe apuntar lejos del eje): mucho más barato que clasificar
         // puntos o integrar el volumen contra las superficies.
-        for (const auto& [edge, name] : edges) {
+        for (std::size_t index = 0; index < edges.size(); ++index) {
+            const std::string& name = edges[index].second;
             if (name.ends_with(":cabeza")) {
-                for (const TopoDS_Shape& side : loft.Generated(edge)) {
+                for (const TopoDS_Shape& side : halves.front().loft->Generated(halves.front().firstEdges[index])) {
                     const TopoDS_Shape modified = sewing.Modified(side);
                     const TopoDS_Face face = TopoDS::Face(modified.IsNull() ? side : modified);
                     const BRepAdaptor_Surface probe(face);
@@ -1504,9 +1538,12 @@ Shape gearSolid(std::string_view tagView, const sketch::Plane& plane, const Gear
         if (!boreWall.IsNull()) {
             namer.name(sewnShape(boreWall), tag + ":lado:agujero");
         }
-        for (const auto& [edge, name] : edges) {
-            for (const TopoDS_Shape& side : loft.Generated(edge)) {
-                namer.name(sewnShape(side), tag + ":lado:" + name);
+        for (std::size_t h = 0; h < halves.size(); ++h) {
+            for (std::size_t index = 0; index < edges.size(); ++index) {
+                for (const TopoDS_Shape& side : halves[h].loft->Generated(halves[h].firstEdges[index])) {
+                    // La segunda mitad de una espina de pescado lleva «:m2» al final del nombre.
+                    namer.name(sewnShape(side), tag + ":lado:" + edges[index].second + (h == 0 ? "" : ":m2"));
+                }
             }
         }
         Shape result = namer.finish(tag);

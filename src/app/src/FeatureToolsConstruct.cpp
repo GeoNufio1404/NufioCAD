@@ -425,6 +425,8 @@ void GearTool::createFields(QFormLayout* form)
     field("helixAngle", helix_);
     rim_ = lengthBox(5.0);
     field("rim", rim_);
+    herringbone_ = new QCheckBox(QStringLiteral("Espina de pescado (doble hélice)"));
+    herringbone_->setToolTip(QStringLiteral("Dos mitades con la hélice contraria: cancelan el empuje lateral. Necesita un ángulo de hélice"));
     backlash_ = lengthBox(0.0);
     backlash_->setMinimum(0.0);
     field("backlash", backlash_);
@@ -439,6 +441,7 @@ void GearTool::createFields(QFormLayout* form)
                                                                                    : 0);
         rim_->setValue(original->spec.rim);
         backlash_->setValue(original->spec.backlash);
+        herringbone_->setChecked(original->spec.herringbone);
         baseChamfer_->setValue(original->spec.baseChamfer);
         module_->setValue(original->spec.module);
         teeth_->setValue(original->spec.teeth);
@@ -458,6 +461,8 @@ void GearTool::createFields(QFormLayout* form)
     form->addRow(QStringLiteral("Ancho (±)"), thickness_);
     form->addRow(QStringLiteral("Agujero central"), bore_);
     form->addRow(QStringLiteral("Ángulo de hélice"), helix_);
+    form->addRow(QString(), herringbone_);
+    connect(herringbone_, &QCheckBox::toggled, this, [this] { updatePreview(); });
     form->addRow(QStringLiteral("Aro (interno) o base (cremallera)"), rim_);
     form->addRow(QStringLiteral("Juego del diente"), backlash_);
     form->addRow(QStringLiteral("Chaflán de la base"), baseChamfer_);
@@ -508,6 +513,7 @@ std::unique_ptr<document::Feature> GearTool::build() const
     f->spec.helixAngle = helix_->value() * kDegree;
     f->spec.rim = rim_->value();
     f->spec.backlash = backlash_->value();
+    f->spec.herringbone = herringbone_->isChecked();
     f->spec.baseChamfer = baseChamfer_->value();
     f->spec.type = type_->currentIndex() == 1   ? geometry::GearType::Internal
                    : type_->currentIndex() == 2 ? geometry::GearType::Rack

@@ -807,6 +807,9 @@ Código: **PAR**.
 | PAR.20 | Aceptar, guardar y reabrir; luego un diseño anterior | Los dos campos vuelven con su valor; un diseño viejo abre con juego 0 y chaflán 0 |
 | PAR.21 | Herramientas › **Par de engranajes**: pon «Adelgazar el diente» en 0,2; luego prueba «Engranaje interno» y «Cremallera» | Los dientes de las ruedas (y de la barra o la corona) quedan más delgados y los ejes no se mueven; el parámetro `adelgazar` aparece en Sólido › Parámetros |
 | PAR.22 | En los mismos tres generadores pon «Chaflán de la base» en 0,2 (con hélice 0) | Se achaflana la cara de abajo de cada pieza. Si sale el aviso «prueba con otra cercana», prueba 0,18 o 0,25 y anota los dientes y la medida |
+| PAR.23 | Sólido › Engranaje: pon un ángulo de hélice de 20° y marca «Espina de pescado (doble hélice)» | La rueda sale con la hélice en V: la mitad de abajo gira hacia un lado y la de arriba hacia el otro, y las dos tapas quedan alineadas. Sin ángulo de hélice sale un aviso en español |
+| PAR.24 | Herramientas › Par de engranajes: hélice de 15° y «Dientes helicoidales» = Espina de pescado | Las dos ruedas salen en espina de pescado y engranan; guarda, reabre y la opción sigue marcada |
+| PAR.25 | Imprime una rueda en espina de pescado y haz girar el par a mano | Giran juntas sin empuje lateral (la rueda no se corre hacia un lado) |
 
 ### 4.5 Todos los generadores: reabrir, recordar y restablecer
 

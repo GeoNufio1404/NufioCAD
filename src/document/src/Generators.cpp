@@ -648,6 +648,18 @@ double tuningValue(const GeneratorValues& values, const char* key)
     return values.count(key) != 0 ? values.at(key) : 0.0;
 }
 
+GeneratorField herringboneField()
+{
+    GeneratorField f;
+    f.kind = GeneratorField::Kind::Choice;
+    f.key = "espina";
+    f.label = "Dientes helicoidales";
+    f.value = 0.0;
+    f.choices = {"Una hélice (la rueda 2 en sentido contrario)", "Espina de pescado (doble hélice)"};
+    f.hint = "La espina de pescado lleva dos mitades con la hélice contraria: cancela el empuje lateral. Necesita un ángulo de hélice";
+    return f;
+}
+
 std::vector<GeneratorField> tuningFields()
 {
     GeneratorField thin;
@@ -729,6 +741,7 @@ public:
                 make(K::Length, "ancho_rueda", "Ancho de las ruedas", 8.0, 1.0, 200.0, "A lo largo del eje"),
                 make(K::Angle, "helice", "Ángulo de hélice", 0.0, 0.0, 45.0,
                      "0 = dientes rectos; si no, la rueda 2 lleva el sentido contrario"),
+                herringboneField(),
                 make(K::Length, "agujero_1", "Agujero de la rueda 1", 5.0, 0.0, 100.0, "0 = macizo"),
                 make(K::Length, "agujero_2", "Agujero de la rueda 2", 5.0, 0.0, 100.0, "0 = macizo"),
                 make(K::Length, "juego", "Juego entre dientes", 0.15, 0.0, 2.0,
@@ -802,6 +815,7 @@ public:
             f->expressions = {{"module", modulo}, {"teeth", teeth}, {"pressureAngle", presion}, {"thickness", ancho},
                               {"bore", bore}, {"helixAngle", sign + helice}};
             applyTuning(*f, suffix);
+            f->spec.herringbone = tuningValue(values, "espina") > 0.5;  // los diseños anteriores no la traen: una hélice
             return f;
         };
         recipe.features.push_back(wheel("Engranaje: rueda 1", z1, bore1, ""));
