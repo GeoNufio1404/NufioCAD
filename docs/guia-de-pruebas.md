@@ -732,9 +732,11 @@ Código: **PAR**.
 | PAR.15 | Pon el ángulo de presión en 30° y luego intenta 35° | Con 30° sale la barra con dientes finos; el campo no pasa de 30° |
 | PAR.16 | Aceptar, guardar y reabrir el archivo | La cremallera y la rueda vuelven igual; doble clic en «Engranaje: cremallera» muestra Tipo «Cremallera» y el grosor de la base |
 | PAR.17 | Abre un diseño guardado antes de este cambio (con un par de engranajes) | Las ruedas siguen siendo exteriores y se ven igual |
-| PAR.18 | Sólido › **Engranaje** (20 dientes, módulo 2): pon «Chaflán de la base» en 0,2 | La vista previa se rehace sin error y, de cerca, el borde de la cara de abajo (la que queda sobre la cama) tiene un chaflán pequeño en el contorno de los dientes y **no** en el agujero central. Con 0,5 sale un aviso en español (no cabe); con hélice distinta de 0 también avisa |
+| PAR.18 | Sólido › **Engranaje** (20 dientes, módulo 2): pon «Chaflán de la base» en 0,2 | La vista previa se rehace sin error y, de cerca, el borde de la cara de abajo (la que queda sobre la cama) tiene un chaflán pequeño en el contorno de los dientes y **no** en el agujero central. Con una medida grande (0,5 o más) o en algunas medidas sueltas sale un aviso en español («prueba con otra cercana»); con hélice distinta de 0 también avisa |
 | PAR.19 | Pon «Juego del diente» en 0,2 y compara con 0 (Inspeccionar › Medir el grueso de un diente, o a ojo) | Los dientes quedan más delgados; el diámetro exterior no cambia. Con la corona y la cremallera pasa igual. Imprime dos ruedas con juego 0,2 en cada una: engranan sin atascarse sin separar los ejes |
 | PAR.20 | Aceptar, guardar y reabrir; luego un diseño anterior | Los dos campos vuelven con su valor; un diseño viejo abre con juego 0 y chaflán 0 |
+| PAR.21 | Herramientas › **Par de engranajes**: pon «Adelgazar el diente» en 0,2; luego prueba «Engranaje interno» y «Cremallera» | Los dientes de las ruedas (y de la barra o la corona) quedan más delgados y los ejes no se mueven; el parámetro `adelgazar` aparece en Sólido › Parámetros |
+| PAR.22 | En los mismos tres generadores pon «Chaflán de la base» en 0,2 (con hélice 0) | Se achaflana la cara de abajo de cada pieza. Si sale el aviso «prueba con otra cercana», prueba 0,18 o 0,25 y anota los dientes y la medida |
 
 ### 4.5 Todos los generadores: reabrir, recordar y restablecer
 

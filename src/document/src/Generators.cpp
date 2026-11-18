@@ -638,6 +638,48 @@ public:
     }
 };
 
+// --- Ajustes de impresión comunes a los generadores de engranajes -------------------------------
+// «Adelgazar el diente» (juego como grueso del diente, sin mover los ejes) y «chaflán de la base» (pata de elefante).
+// Los diseños hechos antes de que existieran no traen estas claves: cuentan como 0.
+
+double tuningValue(const GeneratorValues& values, const char* key)
+{
+    return values.count(key) != 0 ? values.at(key) : 0.0;
+}
+
+std::vector<GeneratorField> tuningFields()
+{
+    GeneratorField thin;
+    thin.kind = GeneratorField::Kind::Length;
+    thin.key = "adelgazar";
+    thin.label = "Adelgazar el diente";
+    thin.value = 0.0;
+    thin.min = 0.0;
+    thin.max = 1.0;
+    thin.hint = "Quita este grueso a cada diente (mm sobre la circunferencia primitiva) sin mover los ejes: otra forma de dar juego";
+    GeneratorField chamfer;
+    chamfer.kind = GeneratorField::Kind::Length;
+    chamfer.key = "chaflan_base";
+    chamfer.label = "Chaflán de la base";
+    chamfer.value = 0.0;
+    chamfer.min = 0.0;
+    chamfer.max = 1.0;
+    chamfer.hint = "Chaflán en el borde de la cara de abajo contra la cama (pata de elefante); solo con dientes rectos; con algunas medidas y dientes falla: prueba otra cercana";
+    return {thin, chamfer};
+}
+
+void addTuningParameters(Recipe& recipe, const GeneratorValues& values, const std::string& suffix)
+{
+    recipe.parameters.push_back({"adelgazar" + suffix, number(tuningValue(values, "adelgazar"))});
+    recipe.parameters.push_back({"chaflan_base" + suffix, number(tuningValue(values, "chaflan_base"))});
+}
+
+void applyTuning(GearFeature& gear, const std::string& suffix)
+{
+    gear.expressions["backlash"] = "adelgazar" + suffix;
+    gear.expressions["baseChamfer"] = "chaflan_base" + suffix;
+}
+
 // --- Par de engranajes ---------------------------------------------------------------------
 // Dos ruedas que engranan: mismo módulo y ángulo de presión; hélice de sentido contrario; a la distancia entre
 // ejes módulo·(z1 + z2)/2 (más el juego) y con la segunda girada para que un diente caiga en el hueco de la primera.
@@ -679,7 +721,8 @@ public:
                 make(K::Length, "agujero_1", "Agujero de la rueda 1", 5.0, 0.0, 100.0, "0 = macizo"),
                 make(K::Length, "agujero_2", "Agujero de la rueda 2", 5.0, 0.0, 100.0, "0 = macizo"),
                 make(K::Length, "juego", "Juego entre dientes", 0.15, 0.0, 2.0,
-                     "Aire para que giren sin atascarse al imprimir (se suma a la distancia entre ejes)")};
+                     "Aire para que giren sin atascarse al imprimir (se suma a la distancia entre ejes)"),
+                tuningFields()[0], tuningFields()[1]};
     }
 
     std::string summary(const GeneratorValues& values) const override
@@ -732,6 +775,7 @@ public:
         param(bore1, number(values.at("agujero_1")));
         param(bore2, number(values.at("agujero_2")));
         param(juego, number(values.at("juego")));
+        addTuningParameters(recipe, values, suffix);
         // El giro de la rueda 2 (en grados): con un diente de la rueda 1 apuntando a la 2, la 2 debe tener un hueco
         // apuntando a la 1, es decir, 180° − medio paso angular, reducido a un paso (360°/dientes).
         const std::string halfStep = "180/" + z2;
@@ -745,6 +789,7 @@ public:
             f->base.origin = OriginPlane::XY;
             f->expressions = {{"module", modulo}, {"teeth", teeth}, {"pressureAngle", presion}, {"thickness", ancho},
                               {"bore", bore}, {"helixAngle", sign + helice}};
+            applyTuning(*f, suffix);
             return f;
         };
         recipe.features.push_back(wheel("Engranaje: rueda 1", z1, bore1, ""));
@@ -812,7 +857,8 @@ public:
                           "Material por fuera de los huecos de los dientes"),
                 gearField(K::Length, "agujero_pinon", "Agujero del piñón", 5.0, 0.0, 100.0, "0 = macizo"),
                 gearField(K::Length, "juego", "Juego entre dientes", 0.15, 0.0, 2.0,
-                          "Aire para que giren sin atascarse al imprimir (acerca los ejes)")};
+                          "Aire para que giren sin atascarse al imprimir (acerca los ejes)"),
+                tuningFields()[0], tuningFields()[1]};
     }
 
     std::string summary(const GeneratorValues& values) const override
@@ -858,6 +904,7 @@ public:
         param(aro, "aro");
         param(bore, "agujero_pinon");
         param(juego, "juego");
+        addTuningParameters(recipe, values, suffix);
 
         auto ring = std::make_unique<GearFeature>();
         ring->setName("Engranaje: corona");
@@ -865,6 +912,7 @@ public:
         ring->spec.type = geometry::GearType::Internal;
         ring->expressions = {{"module", modulo}, {"teeth", zc}, {"pressureAngle", presion}, {"thickness", ancho},
                              {"rim", aro}};
+        applyTuning(*ring, suffix);
         recipe.features.push_back(std::move(ring));
 
         auto pinion = std::make_unique<GearFeature>();
@@ -873,6 +921,7 @@ public:
         pinion->expressions = {{"module", modulo}, {"teeth", zp}, {"pressureAngle", presion}, {"thickness", ancho},
                                {"bore", bore},
                                {"x", modulo + "*(" + zc + " - " + zp + ")/2 - " + juego}};
+        applyTuning(*pinion, suffix);
         recipe.features.push_back(std::move(pinion));
         return recipe;
     }
@@ -929,7 +978,8 @@ public:
                 gearField(K::Length, "base", "Grosor de la base de la barra", 5.0, 1.0, 100.0, "Bajo la raíz de los dientes"),
                 gearField(K::Length, "agujero_rueda", "Agujero de la rueda", 5.0, 0.0, 100.0, "0 = macizo"),
                 gearField(K::Length, "juego", "Juego entre dientes", 0.15, 0.0, 2.0,
-                          "Aire para que engranen sin atascarse al imprimir (aleja la barra de la rueda)")};
+                          "Aire para que engranen sin atascarse al imprimir (aleja la barra de la rueda)"),
+                tuningFields()[0], tuningFields()[1]};
     }
 
     // Lo que sale del modo de largo: cuántos dientes y cuánto mide la barra (los diseños hechos antes de que existiera
@@ -1012,6 +1062,7 @@ public:
         param(base, number(values.at("base")));
         param(bore, number(values.at("agujero_rueda")));
         param(juego, number(values.at("juego")));
+        addTuningParameters(recipe, values, suffix);
         // Un diente de la rueda apunta hacia abajo (270°): el giro inicial se reduce a un paso angular (360°/dientes).
         const std::string step = "360/" + z;
         param(giro, "270 - floor(270/(" + step + "))*(" + step + ")");
@@ -1021,6 +1072,7 @@ public:
         wheel->base.origin = OriginPlane::XY;
         wheel->expressions = {{"module", modulo}, {"teeth", z}, {"pressureAngle", presion}, {"thickness", ancho},
                               {"bore", bore}, {"rotation", giro}};
+        applyTuning(*wheel, suffix);
         recipe.features.push_back(std::move(wheel));
 
         auto bar = std::make_unique<GearFeature>();
@@ -1035,6 +1087,7 @@ public:
         if (rack.mode == 1) {
             bar->expressions["length"] = largo;  // la barra se corta a esa medida
         }
+        applyTuning(*bar, suffix);
         recipe.features.push_back(std::move(bar));
         return recipe;
     }

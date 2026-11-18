@@ -14,9 +14,10 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 Dos campos nuevos del engranaje, ambos en 0 por defecto (los diseños anteriores no cambian).
 - **Juego del diente** (`GearSpec::backlash`, `Modeling.cpp`): adelgaza el diente medio juego por lado sobre la primitiva; en la corona ensancha el hueco y en la cremallera adelgaza el diente. Rechaza juegos negativos o que dejan el diente sin cuerpo.
-- **Chaflán de la base** (`GearSpec::baseChamfer`, función `chamferStart`): achaflana el contorno de la cara `inicio`, sin el agujero; con hélice se rechaza. Máximo práctico ~0,25 mm con módulo 2.
+- **Chaflán de la base** (`GearSpec::baseChamfer`, función `chamferStart`): achaflana el contorno de la cara `inicio`, sin el agujero; con hélice se rechaza. El kernel falla de forma irregular con algunas medidas según los dientes (ver «Pendiente de E2» en la hoja de ruta); se reintenta con ±6 %.
 - Se guardan en el archivo (`backlash`, `baseChamfer`), salen en `GearFeature::numericFields` (ligables a parámetros) y en el panel de Sólido › Engranaje.
-- Pruebas: `tests/test_gear_tuning.cpp` (8 casos). Guía: PAR.18 a PAR.20.
+- Pruebas: `tests/test_gear_tuning.cpp`. Guía: PAR.18 a PAR.20.
+- **Generadores:** el Par, la Corona y la Cremallera traen «Adelgazar el diente» y «Chaflán de la base» (claves `adelgazar` y `chaflan_base`; los diseños anteriores, sin ellas, cuentan como 0).
 - **Volver atrás:** no fusionar `feature/engranajes-e2-e3`, o `git revert -m 1` de su fusión.
 
 ---
