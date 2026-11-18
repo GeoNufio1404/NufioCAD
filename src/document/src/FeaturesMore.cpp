@@ -198,6 +198,8 @@ std::vector<Feature::NumericField> GearFeature::numericFields()
             field("helixAngle", "Ángulo de hélice", spec.helixAngle, kRadiansPerDegree),
             field("backlash", "Juego del diente", spec.backlash),
             field("baseChamfer", "Chaflán de la base", spec.baseChamfer),
+            {"profileShift", "Corrección de perfil (módulos)", 1.0, [this] { return spec.profileShift; },
+             [this](double v) { spec.profileShift = v; }},
             {"teeth", "Dientes", 1.0, [this] { return double(spec.teeth); },
              [this](double v) { spec.teeth = int(std::lround(v)); }}};
 }

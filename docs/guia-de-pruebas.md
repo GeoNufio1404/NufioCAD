@@ -810,6 +810,7 @@ Código: **PAR**.
 | PAR.23 | Sólido › Engranaje: pon un ángulo de hélice de 20° y marca «Espina de pescado (doble hélice)» | La rueda sale con la hélice en V: la mitad de abajo gira hacia un lado y la de arriba hacia el otro, y las dos tapas quedan alineadas. Sin ángulo de hélice sale un aviso en español |
 | PAR.24 | Herramientas › Par de engranajes: hélice de 15° y «Dientes helicoidales» = Espina de pescado | Las dos ruedas salen en espina de pescado y engranan; guarda, reabre y la opción sigue marcada |
 | PAR.25 | Imprime una rueda en espina de pescado y haz girar el par a mano | Giran juntas sin empuje lateral (la rueda no se corre hacia un lado) |
+| PAR.26 | Herramienta Engranaje con 8 dientes: pulsa «Poner la recomendada para estos dientes» | La corrección sube (≈0,4) y el diente se ve más grueso y menos puntiagudo que con 0; guarda y reabre: conserva la corrección |
 
 ### 4.5 Todos los generadores: reabrir, recordar y restablecer
 

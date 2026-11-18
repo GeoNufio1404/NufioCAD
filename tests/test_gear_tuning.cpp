@@ -298,3 +298,33 @@ TEST_CASE("El par de engranajes en espina de pescado sale válido y la opción s
     std::filesystem::remove(path);
     REQUIRE(static_cast<const GearFeature&>(reopened.feature(0)).spec.herringbone);
 }
+
+TEST_CASE("Con pocos dientes la corrección de perfil evita el diente puntiagudo", "[gear][shift]")
+{
+    CHECK(geometry::recommendedProfileShift(20, 20.0 * std::numbers::pi / 180.0) == 0.0);
+    CHECK(geometry::recommendedProfileShift(10, 20.0 * std::numbers::pi / 180.0) > 0.2);
+    for (int z = 6; z <= 16; ++z) {
+        INFO("dientes " << z);
+        geometry::GearSpec spec = spur();
+        spec.teeth = z;
+        spec.bore = 0.0;
+        const double x = geometry::recommendedProfileShift(z, spec.pressureAngle);
+        spec.profileShift = x;
+        const auto shifted = geometry::gear("g", xy(), spec);
+        REQUIRE(shifted.isValid());
+        // El diente corregido es más grueso: hay más material que sin corrección
+        spec.profileShift = 0.0;
+        double plainVolume = 0.0;
+        try {
+            plainVolume = geometry::gear("g", xy(), spec).volume();
+        } catch (const geometry::GeometryError&) {
+        }
+        CHECK(shifted.volume() > plainVolume);
+    }
+    geometry::GearSpec bad = spur();
+    bad.profileShift = 1.5;
+    CHECK_THROWS_AS(geometry::gear("g", xy(), bad), geometry::GeometryError);
+    bad.profileShift = 0.3;
+    bad.type = geometry::GearType::Internal;
+    CHECK_THROWS_AS(geometry::gear("g", xy(), bad), geometry::GeometryError);
+}
