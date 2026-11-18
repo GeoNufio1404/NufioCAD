@@ -128,6 +128,8 @@ public:
     // cursor encima o está seleccionado (así el sketch no se satura); estas
     // opciones las muestran todas a la vez.
     void setSketchShowAll(bool measures, bool constraints);
+    // Los puntos de extremos y centros de las curvas (la paleta del sketch); lo resaltado siempre se ve.
+    void setSketchPointsVisible(bool visible);
     // Rejilla del suelo (plano XY) fuera del sketch.
     void setGroundVisible(bool visible);
 

@@ -154,7 +154,7 @@ void Viewport::Impl::rebuildSketch()
         const auto mark = [&](sketch::Part which) {
             if (const auto p = sketch.point({e.id, which})) {
                 const auto own = highlightOf({e.id, which});
-                if (own || !e.locked) {
+                if (own || (!e.locked && pointsVisible)) {
                     drawing->addPoint(*p, own ? *own : stroke.color, own ? 2.2 : 1.6);
                 }
             }

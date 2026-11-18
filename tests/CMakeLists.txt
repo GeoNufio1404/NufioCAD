@@ -27,7 +27,9 @@ add_executable(nuf_tests
     test_sketch_open_figures.cpp
     bench_sketch.cpp
     test_annotations_overlap.cpp
-    test_gear_tuning.cpp)
+    test_gear_tuning.cpp
+    test_display_units.cpp
+    test_sketch_text_info.cpp)
 
 nuf_set_warnings(nuf_tests)
 target_compile_definitions(nuf_tests PRIVATE NUF_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")

@@ -8,6 +8,7 @@ add_executable(nuf_app
     src/BackgroundRun.cpp
     src/BackgroundRun.hpp
     src/MainWindow.cpp
+    src/RadialMenu.cpp
     src/MainWindowMenus.cpp
     src/MainWindowView.cpp
     src/MainWindowCommon.hpp

@@ -5,6 +5,8 @@
 #include "BusySpinner.hpp"
 #include "StatusBanner.hpp"
 #include "ExpressionSpinBox.hpp"
+#include "RadialMenu.hpp"
+#include "ValueInput.hpp"
 #include "GeneratorTool.hpp"
 #include "SettingsDialog.hpp"
 #include "Units.hpp"
@@ -22,6 +24,7 @@
 #include <nuf/commands/RenameDocument.hpp>
 #include <nuf/commands/SetBodyInfo.hpp>
 #include <nuf/commands/SetParameters.hpp>
+#include <nuf/geometry/DisplayUnits.hpp>
 #include <nuf/geometry/Exchange.hpp>
 #include <nuf/geometry/Kernel.hpp>
 #include <nuf/commands/AddRecipe.hpp>
@@ -39,6 +42,9 @@
 #include <QApplication>
 #include <QActionGroup>
 #include <QCloseEvent>
+#include <QCursor>
+#include <QKeyEvent>
+#include <QMouseEvent>
 #include <QGuiApplication>
 #include <QScreen>
 #include <QResizeEvent>
@@ -63,6 +69,9 @@
 #include <QScrollArea>
 #include <QSettings>
 #include <QTimer>
+#include <QHBoxLayout>
+#include <QVBoxLayout>
+#include <QToolButton>
 #include <QStatusBar>
 #include <QVariantAnimation>
 #include <QToolBar>
@@ -95,6 +104,33 @@ MainWindow::MainWindow(QWidget* parent)
     badgeSpinner_ = new BusySpinner(busyBadge_, 16);
     badgeSpinner_->setColor(QColor(0xE6, 0xEA, 0xF0));
     badgeSpinner_->move(12, (busyBadge_->height() - badgeSpinner_->height()) / 2);
+    // Botón «Cancelar» (U8): deja de esperar un cálculo largo volviendo al estado anterior (cierra la herramienta que
+    // se está calculando o deshace el último cambio). Va dentro del recuadro, a la derecha del texto.
+    {
+        const int base = busyBadge_->sizeHint().width();
+        auto* cancelButton = new QToolButton(busyBadge_);
+        cancelButton->setObjectName(QStringLiteral("busyCancel"));
+        cancelButton->setText(QStringLiteral("Cancelar"));
+        cancelButton->setCursor(Qt::PointingHandCursor);
+        cancelButton->setToolTip(QStringLiteral("Deja de calcular y vuelve al estado anterior (equivale a deshacer el último cambio)"));
+        cancelButton->setStyleSheet(QStringLiteral(
+            "QToolButton { background: rgba(240, 178, 90, 50); color: #F0B25A; border: 1px solid #F0B25A; border-radius: 9px;"
+            " padding: 1px 8px; } QToolButton:hover { background: rgba(240, 178, 90, 110); }"));
+        cancelButton->adjustSize();
+        busyBadge_->setStyleSheet(busyBadge_->styleSheet().replace(QStringLiteral("padding: 5px 14px 5px 36px;"),
+                                                                    QStringLiteral("padding: 5px %1px 5px 36px;").arg(cancelButton->width() + 22)));
+        busyBadge_->adjustSize();
+        cancelButton->move(base + 6 > 0 ? busyBadge_->width() - cancelButton->width() - 10 : 0,
+                           (busyBadge_->height() - cancelButton->height()) / 2);
+        connect(cancelButton, &QToolButton::clicked, this, [this] {
+            if (tool_) {
+                finishTool(false);
+            } else if (commands_.canUndo()) {
+                commands_.undo();
+            }
+            statusBar()->showMessage(QStringLiteral("Cálculo cancelado: se volvió al estado anterior"), 5000);
+        });
+    }
     busyBadge_->hide();
     viewport_->installEventFilter(this);
     createDocks();
@@ -111,6 +147,24 @@ MainWindow::MainWindow(QWidget* parent)
     cursorLabel_ = new QLabel(this);
     cursorLabel_->setMinimumWidth(190);
     statusBar()->addPermanentWidget(cursorLabel_);
+    // Selector de unidad de longitud (U1): el mismo ajuste que Configuración, a un clic. El modelo sigue en mm.
+    unitBox_ = new QComboBox(this);
+    unitBox_->setObjectName(QStringLiteral("unitBox"));
+    unitBox_->setToolTip(QStringLiteral("Unidad con la que se muestran y se escriben las medidas (el modelo sigue en milímetros)"));
+    for (const LengthUnit unit : {LengthUnit::Mm, LengthUnit::Cm, LengthUnit::M, LengthUnit::In}) {
+        unitBox_->addItem(Units::label(unit), int(unit));
+        unitBox_->setItemData(unitBox_->count() - 1, Units::name(unit), Qt::ToolTipRole);
+    }
+    unitBox_->setCurrentIndex(unitBox_->findData(int(Units::instance().length())));
+    unitBox_->setFocusPolicy(Qt::NoFocus);
+    connect(unitBox_, &QComboBox::activated, this, [this](int index) {
+        Units::instance().setLength(LengthUnit(unitBox_->itemData(index).toInt()));
+    });
+    connect(&Units::instance(), &Units::changed, this, [this] {
+        const QSignalBlocker block(unitBox_);
+        unitBox_->setCurrentIndex(unitBox_->findData(int(Units::instance().length())));
+    });
+    statusBar()->addPermanentWidget(unitBox_);
     statusBar()->addPermanentWidget(versions);
     // La indicación de lo que se está haciendo (el mensaje de la barra) va en un banner de color: es donde está
     // lo importante y se olvida con facilidad. El banner está **siempre** (no aparece ni desaparece: con la barra
@@ -172,6 +226,7 @@ MainWindow::MainWindow(QWidget* parent)
     // Las cotas del sketch se escriben en la unidad elegida.
     const auto applyUnits = [this] {
         sketch::setDimensionLengthScale(Units::instance().factor(), 3 + Units::instance().extraDecimals());
+        geometry::display::setUnit(geometry::display::Unit(int(Units::instance().length())));  // Medir, avisos, resúmenes
         if (sketch_) {
             sketch_->refreshView();
         }
@@ -305,7 +360,82 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
     if (watched == viewport_ && busyBadge_ != nullptr && event->type() == QEvent::Resize) {
         busyBadge_->move(16, viewport_->height() - busyBadge_->height() - 16);
     }
+    if (watched == viewport_ && event->type() == QEvent::Resize) {
+        placeRecoveryBar();
+    }
+    // Clic derecho sobre la vista (sin arrastrar) abre el menú radial; fuera de un comando, o dentro de un sketch.
+    if (watched == viewport_ && (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonRelease)) {
+        const auto* mouse = static_cast<QMouseEvent*>(event);
+        if (mouse->button() == Qt::RightButton) {
+            if (event->type() == QEvent::MouseButtonPress) {
+                radialPending_ = !tool_ && findChild<RadialMenu*>() == nullptr;
+                radialPress_ = mouse->position().toPoint();
+            } else if (radialPending_) {
+                radialPending_ = false;
+                if ((mouse->position().toPoint() - radialPress_).manhattanLength() < 6) {
+                    openRadialMenu(mouse->position().toPoint());
+                }
+            }
+        }
+    }
+    // Con una herramienta abierta, escribir un número en la vista abre el cuadro del valor principal junto al cursor.
+    if (watched == viewport_ && event->type() == QEvent::KeyPress && tool_ && !sketch_) {
+        const auto* key = static_cast<QKeyEvent*>(event);
+        const QString text = key->text();
+        const bool numeric = text.size() == 1 && (text.front().isDigit() || text == QLatin1String(".") ||
+                                                  text == QLatin1String(",") || text == QLatin1String("-"));
+        if (numeric && !(key->modifiers() & (Qt::ControlModifier | Qt::AltModifier))) {
+            startToolTyping(text);
+            return true;
+        }
+    }
     return QMainWindow::eventFilter(watched, event);
+}
+
+void MainWindow::startToolTyping(const QString& text)
+{
+    if (!tool_) {
+        return;
+    }
+    const FeatureTool::PrimaryField primary = tool_->primaryField();
+    if (primary.box == nullptr) {
+        return;
+    }
+    if (toolValueInput_ == nullptr) {
+        toolValueInput_ = new ValueInput(viewport_);
+        connect(toolValueInput_, &ValueInput::accepted, this, &MainWindow::applyToolValue);
+    }
+    const auto* expression = qobject_cast<ExpressionSpinBox*>(primary.box);
+    const double shown = expression != nullptr && expression->isLength() ? Units::instance().toDisplay(primary.box->value())
+                                                                          : primary.box->value();
+    toolValueInput_->setFields({primary.label}, {shown});
+    toolValueInput_->adjustSize();
+    QPoint at = viewport_->mapFromGlobal(QCursor::pos()) + QPoint(16, 16);
+    at.setX(std::clamp(at.x(), 0, std::max(0, viewport_->width() - toolValueInput_->width())));
+    at.setY(std::clamp(at.y(), 0, std::max(0, viewport_->height() - toolValueInput_->height())));
+    toolValueInput_->move(at);
+    toolValueInput_->show();
+    toolValueInput_->raise();
+    toolValueInput_->startTyping(text);
+}
+
+void MainWindow::applyToolValue()
+{
+    if (!tool_ || toolValueInput_ == nullptr) {
+        return;
+    }
+    const FeatureTool::PrimaryField primary = tool_->primaryField();
+    const std::vector<std::optional<double>> typed = toolValueInput_->values();
+    toolValueInput_->clear();
+    toolValueInput_->hide();
+    viewport_->setFocus();
+    if (primary.box == nullptr || typed.empty() || !typed.front()) {
+        return;
+    }
+    // Un número a secas se entiende en la unidad elegida (las longitudes) o tal cual (ángulos y cantidades).
+    const auto* expression = qobject_cast<ExpressionSpinBox*>(primary.box);
+    const double value = expression != nullptr && expression->isLength() ? Units::instance().fromDisplay(*typed.front()) : *typed.front();
+    primary.box->setValue(value);
 }
 
 bool MainWindow::anythingBusy() const
@@ -403,6 +533,10 @@ void MainWindow::adaptToSize()
         timelineAutoHidden_ = false;
     }
     ribbon_->setCompact(low);
+    // En una ventana baja la barra de acceso rápido se esconde (deshacer y guardar siguen en el menú y con sus teclas).
+    if (auto* quick = findChild<QToolBar*>(QStringLiteral("quickToolbar"))) {
+        quick->setVisible(!low);
+    }
 }
 
 void MainWindow::closeEvent(QCloseEvent* event)
@@ -458,7 +592,70 @@ void MainWindow::createDocks()
     // La línea de tiempo puede encoger (hasta una franja) si la ventana es baja; no crece más de lo que necesita.
     scroll->setMaximumHeight(timeline_->sizeHint().height() + 16);
     scroll->setMinimumHeight(56);
-    timelineDock_->setWidget(scroll);
+    // Controles de reproducción (U5): inicio, anterior, reproducir, siguiente y final; mueven el marcador del historial.
+    auto* timelineBox = new QWidget();
+    auto* timelineColumn = new QVBoxLayout(timelineBox);
+    timelineColumn->setContentsMargins(0, 0, 0, 0);
+    timelineColumn->setSpacing(0);
+    auto* controls = new QHBoxLayout();
+    controls->setContentsMargins(6, 2, 6, 0);
+    controls->setSpacing(2);
+    const auto control = [&](const QString& text, const QString& tip, const char* name) {
+        auto* button = new QToolButton(timelineBox);
+        button->setObjectName(QString::fromLatin1(name));
+        button->setText(text);
+        button->setToolTip(tip);
+        button->setAutoRaise(true);
+        button->setFocusPolicy(Qt::NoFocus);
+        controls->addWidget(button);
+        return button;
+    };
+    auto* toStart = control(QStringLiteral("⏮"), QStringLiteral("Marcador al principio del historial"), "timelineStart");
+    auto* previous = control(QStringLiteral("◀"), QStringLiteral("Marcador un paso hacia atrás"), "timelinePrevious");
+    timelinePlay_ = control(QStringLiteral("▶"), QStringLiteral("Reproducir el historial paso a paso desde el marcador"), "timelinePlay");
+    auto* next = control(QStringLiteral("▶|"), QStringLiteral("Marcador un paso hacia delante"), "timelineNext");
+    auto* toEnd = control(QStringLiteral("⏭"), QStringLiteral("Marcador al final del historial"), "timelineEnd");
+    controls->addStretch();
+    timelineColumn->addLayout(controls);
+    timelineColumn->addWidget(scroll, 1);
+    const auto moveMarker = [this](long target) {
+        if (sketch_ || tool_) {
+            return;
+        }
+        const long end = long(document_.featureCount());
+        const long clamped = std::clamp(target, 0L, end);
+        if (std::size_t(clamped) != document_.marker()) {
+            commands_.push(std::make_unique<commands::SetMarker>(std::size_t(clamped)));
+        }
+    };
+    connect(toStart, &QToolButton::clicked, this, [moveMarker] { moveMarker(0); });
+    connect(previous, &QToolButton::clicked, this, [this, moveMarker] { moveMarker(long(document_.marker()) - 1); });
+    connect(next, &QToolButton::clicked, this, [this, moveMarker] { moveMarker(long(document_.marker()) + 1); });
+    connect(toEnd, &QToolButton::clicked, this, [this, moveMarker] { moveMarker(long(document_.featureCount())); });
+    timelinePlayer_ = new QTimer(this);
+    timelinePlayer_->setInterval(700);
+    connect(timelinePlayer_, &QTimer::timeout, this, [this, moveMarker] {
+        if (sketch_ || tool_ || document_.marker() >= document_.featureCount()) {
+            timelinePlayer_->stop();
+            timelinePlay_->setText(QStringLiteral("▶"));
+            return;
+        }
+        moveMarker(long(document_.marker()) + 1);
+    });
+    connect(timelinePlay_, &QToolButton::clicked, this, [this, moveMarker] {
+        if (timelinePlayer_->isActive()) {
+            timelinePlayer_->stop();
+            timelinePlay_->setText(QStringLiteral("▶"));
+            return;
+        }
+        // Si el marcador ya está al final, se vuelve al principio para ver todo el historial.
+        if (document_.marker() >= document_.featureCount()) {
+            moveMarker(0);
+        }
+        timelinePlayer_->start();
+        timelinePlay_->setText(QStringLiteral("⏸"));
+    });
+    timelineDock_->setWidget(timelineBox);
     timelineDock_->setFeatures(QDockWidget::NoDockWidgetFeatures);
     addDockWidget(Qt::BottomDockWidgetArea, timelineDock_);
 }
@@ -495,6 +692,9 @@ void MainWindow::updateTitle()
                                        : QString::fromStdU16String(path_.stem().u16string());
     setWindowTitle(name + QStringLiteral("[*]"));
     setWindowModified(hasUnsavedWork());
+    if (docTitle_ != nullptr) {
+        docTitle_->setText(name.isEmpty() ? QStringLiteral("Sin título") : name + (hasUnsavedWork() ? QStringLiteral(" •") : QString()));
+    }
     updateStartScreen();
 }
 
@@ -643,6 +843,14 @@ void MainWindow::startTool(std::unique_ptr<FeatureTool> tool)
     tool_->start();
     propertiesDock_->setWidget(tool_->panel());
     propertiesDock_->show();
+    // Opción «Comandos flotantes» (U5): el panel flota sobre el lienzo, arriba a la derecha, en vez de ir acoplado.
+    if (QSettings().value(QStringLiteral("view/floatingCommands"), false).toBool()) {
+        propertiesDock_->setFloating(true);
+        const int width = std::min(std::max(propertiesDock_->width(), 340), std::max(300, viewport_->width() / 2));
+        const int height = std::min(std::max(propertiesDock_->sizeHint().height(), 320), std::max(240, viewport_->height() - 40));
+        propertiesDock_->resize(width, height);
+        propertiesDock_->move(viewport_->mapToGlobal(QPoint(std::max(0, viewport_->width() - width - 16), 16)));
+    }
     // Si hay sitio, el panel se abre del ancho que pide su contenido (hasta el 40 % de la ventana); si no, se desplaza.
     {
         const int wanted = tool_->panel()->sizeHint().width() + 24;
@@ -688,6 +896,10 @@ void MainWindow::reopenGenerator(document::FeatureId id)
 
 void MainWindow::finishTool(bool accepted)
 {
+    if (toolValueInput_ != nullptr) {
+        toolValueInput_->clear();
+        toolValueInput_->hide();
+    }
     if (!tool_) {
         return;
     }
@@ -718,6 +930,7 @@ void MainWindow::finishTool(bool accepted)
     updateBusyBadge();
     // Se destruye después: esta llamada viene de una señal de la herramienta.
     propertiesDock_->setWidget(propertiesPlaceholder_);
+    propertiesDock_->setFloating(false);
     propertiesDock_->hide();  // como los diálogos de Fusion: solo mientras hay un comando
     tool_.release()->deleteLater();
     timeline_->setEditing(std::nullopt);

@@ -257,6 +257,41 @@ Código: **RSP**. Conviene probarlo en tu pantalla pequeña **y** en la de diari
 
 Para repetirlo sin tocar Windows: `NufioCAD --inventario <carpeta> --tamano 1280x680 --escala 1.5` y mirar `inventario.txt` y las capturas.
 
+### 1.9 Usabilidad (`USA`, Fase 15)
+
+Código: **USA**. Rama `feature/fase-15-usabilidad`.
+
+| ID | Haz esto | Debe pasar |
+|---|---|---|
+| USA.1 | Mira la barra de estado (abajo a la derecha) y cambia el selector «mm» a «cm» y luego a «in» | Las cotas del sketch, los cuadros de las herramientas y Medir pasan a esa unidad; el mismo ajuste cambia en Archivo › Configuración |
+| USA.2 | Con «in» elegido: Medir una cara y una distancia; Herramientas › Par de engranajes y mira el resumen | Medir y el resumen dicen pulgadas (in, in²), no mm |
+| USA.3 | Guarda un diseño con «cm», ponle «mm», ábrelo | Al abrirlo, la unidad vuelve a «cm»; cambiar la unidad por sí solo no pregunta «¿guardar cambios?» al cerrar |
+| USA.4 | Pulsa **B**, **Mayús+C**, **G**, **Mayús+T** (con la vista enfocada) | Se abren Caja, Cilindro, Engranaje y Rosca |
+| USA.5 | **Alt+1**, **Alt+2**… | Abren las herramientas generadoras en el orden del menú Herramientas |
+| USA.6 | Crea un sketch (**S**) | La pestaña HERRAMIENTAS desaparece de la cinta mientras dibujas y vuelve al terminar |
+| USA.7 | Cierra el programa sin guardar (con trabajo hecho), vuélvelo a abrir | No sale un diálogo: sale una franja arriba del lienzo con «Restaurar», «Descartar» y «×». Restaurar abre el diseño; «×» la quita y la copia se conserva |
+| USA.8 | En un sketch, mira arriba a la izquierda del lienzo | Hay una paleta «Mostrar» con Medidas, Medidas de todo, Restricciones de todo y Rejilla; las casillas se reflejan con el menú Ver y al revés |
+| USA.9 | Mira arriba de la cinta | Guardar, Deshacer, Rehacer y el nombre del diseño (con « •» si hay cambios sin guardar); Deshacer y Rehacer se apagan cuando no hay nada |
+| USA.10 | Mira el Navegador | La raíz es el nombre del diseño, con Origen, Rejilla, Cuerpos y Sketches dentro; renombrar el diseño cambia la raíz |
+| USA.11 | Con varias operaciones: pulsa ⏮, ◀, ▶|, ⏭ de la línea de tiempo y luego ▶ (reproducir) | El marcador salta al principio, un paso atrás, un paso adelante y al final; reproducir avanza un paso cada ~0,7 s y se detiene al final o al pulsar ⏸ |
+| USA.12 | Ver › **Comandos flotantes sobre el lienzo** activado; abre Extruir | El panel de la herramienta flota arriba a la derecha del lienzo; al aceptar o cancelar vuelve a quedar guardado como siempre |
+| USA.13 | **Clic derecho** (sin arrastrar) sobre la vista | Sale el anillo del menú radial con 8 herramientas; elige una con un clic, cierra con el centro (×) o con Esc. Con clic derecho **arrastrando** sigue desplazando la vista |
+| USA.14 | Haz el mismo clic derecho dentro de un sketch | El anillo trae las herramientas de dibujo (Línea, Rectángulo, Círculo, Arco, Recortar, Desfase, Cota, Terminar sketch) |
+| USA.15 | Prueba **S**, **V**, **I** y con Mayús: **R**, **W**, **Y**, **F**, **M**, **A**, **N**, **X**, **G**, **U**, **J**, **S**; **Ctrl+Mayús+P** | Cada tecla abre su herramienta (Crear sketch, Vaciado, Medir, Revolución, Barrido, Loft, Chaflán, Espejo, Patrón, Plano, Eje, Mover cuerpo, Combinar, Unión, Sección, Parámetros) |
+| USA.16 | Abre Extruir y, con la vista enfocada, escribe `25` y Enter | Aparece un cuadro «Distancia» junto al cursor; al dar Enter la distancia del panel pasa a 25 |
+| USA.17 | Lo mismo con Revolución (ángulo), Caja (ancho) y Cilindro (diámetro) | Cada una pide su valor principal |
+| USA.18 | Pide un cálculo largo (por ejemplo una rosca de mucha longitud) | El recuadro «Calculando…» trae un botón **Cancelar**; al pulsarlo se cierra la herramienta o se deshace el último cambio y el cálculo se abandona |
+| USA.19 | Abre Herramientas › Par de engranajes | Las preguntas salen en dos secciones plegables («Medidas del engranaje» y «Ajustes de impresión»); pulsar el encabezado las pliega y las despliega |
+| USA.20 | Sólido › Mover cuerpo: arrastra una flecha, y otra vez con **Ctrl** pulsado | Sin Ctrl el valor sale con dos decimales; con Ctrl se pega a una unidad entera (1 mm, 1 cm o 1 in según la unidad) y el estado lo dice |
+| USA.21 | En un sketch, dibuja un texto (herramienta Texto), pulsa Esc, elige una de sus letras con un clic y usa **Sketch › Editar texto…** (o el botón «Editar texto» de la cinta) | Se abre el cuadro del texto con lo que escribiste, la fuente y la altura; al aceptar, las letras se sustituyen por las nuevas en el mismo sitio |
+| USA.22 | Guarda el diseño, ábrelo, elige las letras y «Editar texto…» | Sigue abriendo con el texto original (viaja en el archivo). Sin letras elegidas, la barra dice «Elige primero las letras…» |
+| USA.23 | Dibuja una elipse y una línea que la cruce; Recortar y clic en un tramo de la elipse | La elipse se convierte en un arco de elipse sin ese tramo; los extremos nuevos quedan sobre la línea (arrastra la línea y siguen pegados) |
+| USA.24 | Recorta también un arco de elipse con dos líneas que lo crucen | Si el clic cae entre los dos cortes, el tramo se quita y quedan dos arcos; sin ningún corte, el arco se borra entero |
+| USA.25 | Con un cuerpo con una cara cónica (por ejemplo, una revolución de un triángulo) y un sketch delante de ella: Extruir › «Hasta una cara» y elige la cara cónica | La extrusión llega a la pared del cono y se queda en ella (ya no sale el mensaje «cono o superficie libre») |
+| USA.26 | Lo mismo con la pared de un loft suave entre dos círculos | La extrusión llega a la pared libre y se queda en ella |
+| USA.27 | Cambia el tema a claro y abre una herramienta (por ejemplo Caja) | La vista previa translúcida se ve en un azul más profundo que en el tema oscuro; al cambiar de tema con la herramienta abierta, cambia de color |
+| USA.28 | Provoca un error del kernel (por ejemplo, un redondeo con un radio enorme) | El mensaje del historial dice qué se intentaba, «Causa probable: …» en español y, al final, el detalle técnico |
+
 ## 2. Sketch
 
 ### 2.1 Dibujo y edición

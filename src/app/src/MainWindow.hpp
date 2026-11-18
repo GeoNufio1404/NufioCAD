@@ -31,7 +31,11 @@ class QEvent;
 class QActionGroup;
 class QColor;
 class QVariantAnimation;
+class QComboBox;
+class QFrame;
 class QDockWidget;
+class QToolButton;
+class QTimer;
 class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
@@ -56,6 +60,8 @@ class InterfaceCheck;
 class Recovery;
 class Ribbon;
 class StartScreen;
+class RadialMenu;
+class ValueInput;
 class NavigatorWidget;
 class TimelineWidget;
 
@@ -74,6 +80,9 @@ public:
     void openFromCommandLine(const QString& file);
     // Si quedó una copia de una sesión que se cerró mal, ofrece restaurarla.
     void offerRecovery();
+    // Pliega solo el navegador y la línea de tiempo, y compacta la cinta, según el tamaño de la ventana (Fase 20, R4).
+    // Es pública para poder llamarla antes del primer show(): así la ventana no crece por lo que se va a plegar.
+    void adaptToSize();
 
 protected:
     void closeEvent(QCloseEvent* event) override;
@@ -87,7 +96,6 @@ private:
     void createDocks();
     // Fase 20, R4: en ventanas angostas o bajas el navegador y la línea de tiempo se pliegan solos y la cinta se compacta;
     // al agrandar la ventana vuelven (solo los que se plegaron solos, no los que el usuario cerró).
-    void adaptToSize();
     void updateUndoActions();
     void updateTitle();
 
@@ -183,6 +191,10 @@ private:
     QDockWidget* propertiesDock_ = nullptr;
     QDockWidget* timelineDock_ = nullptr;
     QByteArray defaultLayout_; // distribución original, para "Restablecer paneles"
+    QAction* saveAction_ = nullptr;
+    QLabel* docTitle_ = nullptr;
+    QToolButton* timelinePlay_ = nullptr;
+    QTimer* timelinePlayer_ = nullptr;
     QAction* undoAction_ = nullptr;
     QAction* redoAction_ = nullptr;
     QAction* filletAction_ = nullptr;
@@ -214,6 +226,24 @@ private:
     QDoubleSpinBox* sectionOffset_ = nullptr;
     QCheckBox* sectionFlip_ = nullptr;
     QLabel* busyBadge_ = nullptr;     // «Calculando…», sobre la vista
+    // Menú radial con clic derecho sobre la vista (U6) y atajos de una tecla para todo.
+    void openRadialMenu(const QPoint& at);
+    void assignShortcuts();
+    QPoint radialPress_;
+    bool radialPending_ = false;
+    ValueInput* toolValueInput_ = nullptr;  // valor del campo principal de la herramienta, junto al cursor (U7)
+    void startToolTyping(const QString& text);
+    void applyToolValue();
+    // Paleta flotante del sketch (U4): casillas para lo que se ve sobre el lienzo; refleja las acciones del menú Ver.
+    void createSketchPalette();
+    void updateSketchPalette();
+    QAction* sketchMeasuresAction_ = nullptr;
+    QAction* sketchPointsAction_ = nullptr;
+    QAction* allMeasuresAction_ = nullptr;
+    QAction* allConstraintsAction_ = nullptr;
+    QFrame* sketchPalette_ = nullptr;
+    QFrame* recoveryBar_ = nullptr;   // aviso de la copia de recuperación (U2), sobre la vista, arriba y al centro
+    void placeRecoveryBar();
     BusySpinner* badgeSpinner_ = nullptr;   // el spinner del distintivo
     StatusBanner* statusBanner_ = nullptr;  // la barra de estado, con el spinner a la izquierda
     BusySpinner* statusSpinner_ = nullptr;  // el de la barra de estado (lo tiene el banner)
@@ -278,8 +308,10 @@ private:
     QAction* dimensionAction_ = nullptr;
     QAction* intersectAction_ = nullptr;
     QAction* importDxfAction_ = nullptr;
+    QAction* editTextAction_ = nullptr;
     std::vector<QAction*> constraintActions_;
     QLabel* cursorLabel_ = nullptr;
+    QComboBox* unitBox_ = nullptr;
     QLabel* modelStatusLabel_ = nullptr;  // primera operación con error o aviso
 };
 

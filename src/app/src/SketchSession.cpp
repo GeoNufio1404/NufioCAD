@@ -510,7 +510,22 @@ void SketchSession::importDxf(const QString& path)
     emit message(text);
 }
 
-void SketchSession::placeText(sketch::Vec2 at)
+bool SketchSession::editSelectedText()
+{
+    for (const sketch::EntityId id : selectedEntities()) {
+        const sketch::Entity* e = sketch_.entity(id);
+        if (e != nullptr && e->textOwner != 0) {
+            const sketch::Entity* owner = sketch_.entity(e->textOwner);
+            if (owner != nullptr && owner->text) {
+                placeText(owner->text->at, owner->id);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void SketchSession::placeText(sketch::Vec2 at, sketch::EntityId editing)
 {
     // Un solo diálogo con el texto, la fuente y la altura; las letras se ven
     // en el sketch mientras se escribe, para saber cómo quedarán.
@@ -528,6 +543,15 @@ void SketchSession::placeText(sketch::Vec2 at)
     heightBox->setDecimals(2);
     heightBox->setLength(true);
     heightBox->setValue(textHeight_);
+    // Al editar, el cuadro parte de lo que dice el texto, su fuente y su altura.
+    if (editing != 0) {
+        if (const sketch::Entity* owner = sketch_.entity(editing); owner != nullptr && owner->text) {
+            textEdit->setText(QString::fromStdString(owner->text->text));
+            fontBox->setCurrentFont(QFont(QString::fromStdString(owner->text->family)));
+            heightBox->setValue(owner->text->height);
+            dialog.setWindowTitle(QStringLiteral("Editar texto"));
+        }
+    }
     auto* size = new QLabel(&dialog);
     form->addRow(QStringLiteral("Texto"), textEdit);
     form->addRow(QStringLiteral("Fuente"), fontBox);
@@ -582,8 +606,27 @@ void SketchSession::placeText(sketch::Vec2 at)
     // Las letras quedan como curvas unidas y fijas (se mueven juntas con la
     // herramienta Mover; se pueden extruir o grabar).
     remember(sketch_);
-    for (sketch::EntityId id : sketch::importDrawing(sketch_, {outline, {}}, at)) {
+    // Al editar, las letras de antes se quitan (con lo que estuviera ligado a ellas) y las nuevas ocupan su sitio.
+    if (editing != 0) {
+        std::vector<sketch::EntityId> old;
+        for (const sketch::Entity& e : sketch_.entities()) {
+            if (e.textOwner == editing) {
+                old.push_back(e.id);
+            }
+        }
+        for (const sketch::EntityId id : old) {
+            sketch_.removeEntity(id);
+        }
+        selection_.clear();
+    }
+    const std::vector<sketch::EntityId> created = sketch::importDrawing(sketch_, {outline, {}}, at);
+    for (const sketch::EntityId id : created) {
         sketch_.entity(id)->locked = true;
+        sketch_.entity(id)->textOwner = created.front();
+    }
+    if (!created.empty()) {
+        sketch_.entity(created.front())->text = sketch::TextInfo{textEdit->text().toStdString(), textFamily_.toStdString(),
+                                                                 heightBox->value(), at};
     }
     solveAndShow();
 }

@@ -10,9 +10,23 @@ void Viewport::Impl::pullTowardCamera(const Handle(AIS_Shape)& shape)
     shape->Attributes()->ShadingAspect()->Aspect()->SetPolygonOffsets(Aspect_POM_Fill, -2.0f, -4.0f);
 }
 
+// Color de la vista previa translúcida de una herramienta: azul claro sobre el tema oscuro y más profundo sobre el claro
+// (para que se lea contra un fondo casi blanco), rojo si va a quitar material (U8).
+Quantity_Color Viewport::Impl::toolPreviewColor() const
+{
+    if (pendingToolRemoves) {
+        return darkTheme ? rgb(0xE5, 0x48, 0x4D) : rgb(0xC6, 0x28, 0x2D);
+    }
+    return darkTheme ? rgb(0x6C, 0xA6, 0xFF) : rgb(0x2F, 0x6F, 0xD6);
+}
+
 void Viewport::Impl::applyTheme(bool dark)
 {
     darkTheme = dark;
+    if (!toolPreview.IsNull()) {
+        toolPreview->SetColor(toolPreviewColor());
+        context->Redisplay(toolPreview, false);
+    }
     grid->minorColor = dark ? rgb(0x41, 0x46, 0x4E) : rgb(0xCC, 0xD1, 0xD8);
     grid->majorColor = dark ? rgb(0x63, 0x6B, 0x76) : rgb(0x95, 0x9E, 0xAA);
     if (context->IsDisplayed(grid)) {
@@ -385,7 +399,7 @@ void Viewport::Impl::showPendingTool()
         return;
     }
     toolPreview = new AIS_Shape(geometry::occtShape(pendingTool));
-    toolPreview->SetColor(pendingToolRemoves ? rgb(0xE5, 0x48, 0x4D) : rgb(0x6C, 0xA6, 0xFF));
+    toolPreview->SetColor(toolPreviewColor());
     toolPreview->SetTransparency(0.55);
     toolPreview->Attributes()->SetFaceBoundaryDraw(false);
     if (geometry::hasMesh(pendingTool)) {

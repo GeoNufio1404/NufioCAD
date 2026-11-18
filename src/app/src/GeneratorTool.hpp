@@ -1,5 +1,8 @@
 #pragma once
 
+#include <set>
+#include <string>
+
 // Panel de una herramienta generadora (Lightbox…): las preguntas del generador, la vista previa en vivo del diseño
 // que saldría y, al aceptar, la receta lista para aplicarla de una vez.
 
@@ -72,6 +75,7 @@ private:
     bool hasInitial_ = false;
     std::string suffix_;
     QFormLayout* form_ = nullptr;
+    std::set<std::string> collapsedGroups_;  // secciones plegadas (U8)
     std::vector<Row> rows_;
     QTimer* timer_ = nullptr;
     bool previewed_ = false;

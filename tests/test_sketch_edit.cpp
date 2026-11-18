@@ -272,3 +272,50 @@ TEST_CASE("Patrones y transformaciones", "[sketch][edit]")
         solve(t);
     }
 }
+
+TEST_CASE("Recortar una elipse contra una recta deja un arco de elipse", "[sketch][edit][ellipse]")
+{
+    // Elipse de semiejes 10 y 5 en el origen; la recta x = 0 la corta en (0, ±5).
+    Sketch s;
+    const EntityId ellipse = s.addEllipse({{0, 0}, 10.0, 5.0, 0.0});
+    s.addLine({0, -10}, {0, 10});
+    // Clic a la derecha (parámetro 0): se quita la mitad derecha y queda la izquierda.
+    REQUIRE(trim(s, ellipse, {10.0, 0.0}));
+    const auto* arc = std::get_if<EllipseArc>(&s.entity(ellipse)->geometry);
+    REQUIRE(arc != nullptr);
+    const double pi = std::numbers::pi;
+    REQUIRE_THAT(arc->startParam, Catch::Matchers::WithinAbs(pi / 2.0, 1e-3));
+    REQUIRE_THAT(arc->endParam, Catch::Matchers::WithinAbs(3.0 * pi / 2.0, 1e-3));
+    // Los extremos nuevos quedan sobre la recta.
+    REQUIRE(std::abs(arc->startPoint().x) < 1e-3);
+    REQUIRE(std::abs(arc->endPoint().x) < 1e-3);
+    // Y se unieron a la recta con «punto sobre objeto».
+    int onObject = 0;
+    for (const Constraint& c : s.constraints()) {
+        onObject += c.type == ConstraintType::PointOnObject ? 1 : 0;
+    }
+    REQUIRE(onObject == 2);
+}
+
+TEST_CASE("Recortar un arco de elipse por dos cortes parte el arco en dos y sin cortes lo borra", "[sketch][edit][ellipse]")
+{
+    const double pi = std::numbers::pi;
+    Sketch s;
+    // Arco de elipse de 0 a 270° y dos rectas verticales que lo cortan (x = 6 y x = -6).
+    const EntityId arc = s.addEllipseArc({{{0, 0}, 10.0, 5.0, 0.0}, 0.0, 1.5 * pi});
+    s.addLine({6, -10}, {6, 10});
+    s.addLine({-6, -10}, {-6, 10});
+    // Clic en la parte alta del arco (x ≈ 0, y ≈ 5): se quita ese tramo entre x = 6 y x = -6.
+    REQUIRE(trim(s, arc, {0.0, 5.0}));
+    int arcs = 0;
+    for (const Entity& e : s.entities()) {
+        arcs += std::holds_alternative<EllipseArc>(e.geometry) ? 1 : 0;
+    }
+    REQUIRE(arcs == 2);
+
+    // Un arco sin ningún corte se borra entero.
+    Sketch lone;
+    const EntityId only = lone.addEllipseArc({{{0, 0}, 10.0, 5.0, 0.0}, 0.0, pi});
+    REQUIRE(trim(lone, only, {0.0, 5.0}));
+    REQUIRE(lone.entity(only) == nullptr);
+}

@@ -707,8 +707,11 @@ void MainWindow::updateSketchActions()
     if (ribbon_ && (sketch_ != nullptr) != ribbonSketching_) {
         ribbonSketching_ = sketch_ != nullptr;
         ribbon_->setTabVisible(sketchTab_, ribbonSketching_);
+        // Dentro de un sketch no hacen falta las herramientas generadoras: la pestaña se oculta (U2).
+        ribbon_->setTabVisible(toolsTab_, !ribbonSketching_);
         ribbon_->setCurrentTab(ribbonSketching_ ? sketchTab_ : solidTab_);
     }
+    updateSketchPalette();
     lookAtSketchAction_->setEnabled(sketch_ != nullptr);
     for (const auto& [tool, action] : toolActions_) {
         action->setEnabled(sketch_ != nullptr);
@@ -722,6 +725,7 @@ void MainWindow::updateSketchActions()
     dimensionAction_->setEnabled(sketch_ != nullptr);
     intersectAction_->setEnabled(sketch_ != nullptr);
     importDxfAction_->setEnabled(sketch_ != nullptr);
+    editTextAction_->setEnabled(sketch_ != nullptr);
     for (QAction* action : constraintActions_) {
         action->setEnabled(sketch_ != nullptr);
     }

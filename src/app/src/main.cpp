@@ -126,6 +126,7 @@ int main(int argc, char* argv[])
     nuf::app::MainWindow window;
     if (requestedSize.isValid() && !requestedSize.isEmpty()) {
         window.resize(requestedSize);
+        window.adaptToSize();
     }
     window.show();
     if (interfaceCheck) {

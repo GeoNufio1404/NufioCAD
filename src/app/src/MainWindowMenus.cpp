@@ -42,6 +42,7 @@
 #include <QKeySequence>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QVBoxLayout>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QFrame>
@@ -67,6 +68,7 @@
 #include <utility>
 
 #include "MainWindowCommon.hpp"
+#include "RadialMenu.hpp"
 
 namespace nuf::app {
 
@@ -175,7 +177,7 @@ void MainWindow::createMenus()
     recentMenu_ = file->addMenu(QStringLiteral("Abrir &reciente"));
     connect(recentMenu_, &QMenu::aboutToShow, this, &MainWindow::rebuildRecentMenu);
     file->addSeparator();
-    addFile(QStringLiteral("&Guardar"), QKeySequence(QKeySequence::Save), QStringLiteral("file-save"),
+    saveAction_ = addFile(QStringLiteral("&Guardar"), QKeySequence(QKeySequence::Save), QStringLiteral("file-save"),
             [this] { saveDocument(); });
     addFile(QStringLiteral("Guardar &como…"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_S),
             QStringLiteral("file-save"), [this] { saveDocumentAs(); });
@@ -308,22 +310,22 @@ void MainWindow::createMenus()
     });
     decorate(parametersAction_, QStringLiteral("parameters-solid"),
              QStringLiteral("Nombrar valores (grosor = 3) y usarlos en las operaciones"), QStringLiteral("Parámetros"));
-    boxAction_ = solidMenu->addAction(QStringLiteral("&Caja"), this, [this] {
+    boxAction_ = solidMenu->addAction(QStringLiteral("&Caja"), QKeySequence(Qt::Key_B), this, [this] {
         startTool(std::make_unique<BoxTool>(document_, *viewport_, std::nullopt));
     });
     decorate(boxAction_, QStringLiteral("box-solid"), QStringLiteral("Una caja con medidas y posición, ligable a parámetros"),
              QStringLiteral("Caja"));
-    cylinderAction_ = solidMenu->addAction(QStringLiteral("Cili&ndro"), this, [this] {
+    cylinderAction_ = solidMenu->addAction(QStringLiteral("Cili&ndro"), QKeySequence(Qt::SHIFT | Qt::Key_C), this, [this] {
         startTool(std::make_unique<CylinderTool>(document_, *viewport_, std::nullopt));
     });
     decorate(cylinderAction_, QStringLiteral("cylinder-solid"),
              QStringLiteral("Un cilindro con diámetro y posición, ligable a parámetros"), QStringLiteral("Cilindro"));
-    gearAction_ = solidMenu->addAction(QStringLiteral("&Engranaje"), this, [this] {
+    gearAction_ = solidMenu->addAction(QStringLiteral("&Engranaje"), QKeySequence(Qt::Key_G), this, [this] {
         startTool(std::make_unique<GearTool>(document_, *viewport_, std::nullopt));
     });
     decorate(gearAction_, QStringLiteral("gear-solid"),
              QStringLiteral("Generar un engranaje recto o helicoidal (perfil de involuta)"), QStringLiteral("Engranaje"));
-    threadAction_ = solidMenu->addAction(QStringLiteral("&Rosca"), this, [this] {
+    threadAction_ = solidMenu->addAction(QStringLiteral("&Rosca"), QKeySequence(Qt::SHIFT | Qt::Key_T), this, [this] {
         startTool(std::make_unique<ThreadTool>(document_, *viewport_, std::nullopt));
     });
     decorate(threadAction_, QStringLiteral("thread-solid"),
@@ -376,6 +378,10 @@ void MainWindow::createMenus()
                                                [this, generator] { startGenerator(*generator); });
         decorate(action, QString::fromStdString(generator->icon()), QString::fromStdString(generator->description()),
                  QString::fromStdString(generator->title()));
+        // Alt+1, Alt+2… abren las herramientas generadoras en el orden del menú (las seis primeras).
+        if (generatorActions_.size() < 9) {
+            action->setShortcut(QKeySequence(QStringLiteral("Alt+%1").arg(generatorActions_.size() + 1)));
+        }
         generatorActions_.push_back(action);
     }
 
@@ -472,6 +478,16 @@ void MainWindow::createMenus()
     }
 
     sketchMenu->addSeparator();
+    editTextAction_ = sketchMenu->addAction(QStringLiteral("Editar te&xto…"), this, [this] {
+        if (sketch_ == nullptr) {
+            return;
+        }
+        if (!sketch_->editSelectedText()) {
+            statusBar()->showMessage(QStringLiteral("Elige primero las letras de un texto del sketch (clic en una letra)"), 6000);
+        }
+    });
+    decorate(editTextAction_, QStringLiteral("text"),
+             QStringLiteral("Vuelve a abrir el texto elegido para cambiar lo que dice, la fuente o la altura"), QStringLiteral("Editar texto"));
     deleteAction_ = sketchMenu->addAction(QStringLiteral("&Borrar"), QKeySequence(QKeySequence::Delete), this,
                                           [this] { sketch_->deleteSelection(); });
     decorate(deleteAction_, QStringLiteral("delete"));
@@ -594,11 +610,34 @@ void MainWindow::createMenus()
     ribbon_->addGroup(sketchTab_, QStringLiteral("INSERTAR"));
     family(QStringLiteral("Texto"));
     ribbon_->addAction(sketchTab_, importDxfAction_);
+    ribbon_->addAction(sketchTab_, editTextAction_);
     ribbon_->addGroup(sketchTab_, QStringLiteral("OPCIONES"));
     ribbon_->addAction(sketchTab_, constructionAction_);
     ribbon_->addAction(sketchTab_, lockAction_);
     ribbon_->addTrailing(sketchTab_, finishSketchAction_);
     ribbon_->setTabVisible(sketchTab_, false);
+
+    // Barra de acceso rápido arriba de la cinta (U5): guardar, deshacer, rehacer y el nombre del diseño, como la barra de
+    // aplicación de Fusion 360.
+    QToolBar* quickBar = addToolBar(QStringLiteral("Acceso rápido"));
+    quickBar->setObjectName(QStringLiteral("quickToolbar"));
+    quickBar->setMovable(false);
+    quickBar->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    quickBar->setIconSize(QSize(20, 20));
+    for (QAction* action : {saveAction_, undoAction_, redoAction_}) {
+        if (action != nullptr) {
+            quickBar->addAction(action);
+        }
+    }
+    quickBar->addSeparator();
+    docTitle_ = new QLabel(this);
+    docTitle_->setObjectName(QStringLiteral("docTitle"));
+    docTitle_->setContentsMargins(8, 0, 8, 0);
+    QFont titleFont = docTitle_->font();
+    titleFont.setBold(true);
+    docTitle_->setFont(titleFont);
+    quickBar->addWidget(docTitle_);
+    addToolBarBreak();
 
     QToolBar* ribbonBar = addToolBar(QStringLiteral("Cinta"));
     ribbonBar->setObjectName(QStringLiteral("ribbonToolbar"));
@@ -690,12 +729,24 @@ void MainWindow::createMenus()
         QSettings().setValue(QStringLiteral("view/sketchMeasures"), on);
         viewport_->setSketchMeasuresVisible(on);
     });
+    auto* points = view->addAction(QStringLiteral("Mostrar &puntos del sketch"));
+    points->setCheckable(true);
+    points->setChecked(QSettings().value(QStringLiteral("view/sketchPoints"), true).toBool());
+    viewport_->setSketchPointsVisible(points->isChecked());
+    connect(points, &QAction::toggled, this, [this](bool on) {
+        QSettings().setValue(QStringLiteral("view/sketchPoints"), on);
+        viewport_->setSketchPointsVisible(on);
+    });
+    sketchPointsAction_ = points;
     // Medidas y restricciones: por defecto solo en lo que se mira (cursor o selección).
     auto* allMeasures = view->addAction(QStringLiteral("Medidas de &todo el sketch a la vez"));
     auto* allConstraints = view->addAction(QStringLiteral("Restricciones de t&odo el sketch a la vez"));
     for (QAction* action : {allMeasures, allConstraints}) {
         action->setCheckable(true);
     }
+    sketchMeasuresAction_ = measures;
+    allMeasuresAction_ = allMeasures;
+    allConstraintsAction_ = allConstraints;
     allMeasures->setChecked(QSettings().value(QStringLiteral("view/sketchAllMeasures"), false).toBool());
     allConstraints->setChecked(QSettings().value(QStringLiteral("view/sketchAllConstraints"), false).toBool());
     const auto applyAll = [this, allMeasures, allConstraints] {
@@ -707,6 +758,12 @@ void MainWindow::createMenus()
     connect(allConstraints, &QAction::toggled, this, applyAll);
     applyAll();
     view->addSeparator();
+    auto* floating = view->addAction(QStringLiteral("Comandos &flotantes sobre el lienzo"));
+    floating->setCheckable(true);
+    floating->setChecked(QSettings().value(QStringLiteral("view/floatingCommands"), false).toBool());
+    floating->setToolTip(QStringLiteral("El panel de cada herramienta flota sobre el lienzo (arriba a la derecha) en vez de ir acoplado"));
+    connect(floating, &QAction::toggled, this,
+            [](bool on) { QSettings().setValue(QStringLiteral("view/floatingCommands"), on); });
     QMenu* panels = view->addMenu(QStringLiteral("&Paneles"));
     panels->addAction(navigatorDock_->toggleViewAction());
     panels->addAction(propertiesDock_->toggleViewAction());
@@ -741,6 +798,127 @@ void MainWindow::createMenus()
     for (QMenu* menu : findChildren<QMenu*>()) {
         menu->setToolTipsVisible(true);
     }
+    assignShortcuts();
+    createSketchPalette();
+}
+
+void MainWindow::createSketchPalette()
+{
+    sketchPalette_ = new QFrame(viewport_);
+    sketchPalette_->setObjectName(QStringLiteral("sketchPalette"));
+    sketchPalette_->setStyleSheet(QStringLiteral(
+        "#sketchPalette { background: rgba(32, 38, 48, 225); border: 1px solid #3A4352; border-radius: 6px; }"
+        "#sketchPalette QCheckBox, #sketchPalette QLabel { color: #E6EAF0; }"));
+    auto* column = new QVBoxLayout(sketchPalette_);
+    column->setContentsMargins(10, 6, 10, 8);
+    column->setSpacing(2);
+    auto* title = new QLabel(QStringLiteral("<b>Mostrar</b>"), sketchPalette_);
+    column->addWidget(title);
+    // Cada casilla es la misma acción del menú Ver: se mantienen al día en los dos sentidos.
+    const std::vector<std::pair<QString, QAction*>> rows = {
+        {QStringLiteral("Puntos"), sketchPointsAction_},
+        {QStringLiteral("Medidas"), sketchMeasuresAction_},
+        {QStringLiteral("Medidas de todo"), allMeasuresAction_},
+        {QStringLiteral("Restricciones de todo"), allConstraintsAction_}};
+    for (const auto& [text, action] : rows) {
+        if (action == nullptr) {
+            continue;
+        }
+        auto* box = new QCheckBox(text, sketchPalette_);
+        box->setChecked(action->isChecked());
+        box->setFocusPolicy(Qt::NoFocus);
+        box->setToolTip(action->toolTip());
+        column->addWidget(box);
+        connect(box, &QCheckBox::toggled, action, &QAction::setChecked);
+        connect(action, &QAction::toggled, box, [box](bool on) {
+            const QSignalBlocker block(box);
+            box->setChecked(on);
+        });
+    }
+    auto* ground = new QCheckBox(QStringLiteral("Rejilla"), sketchPalette_);
+    ground->setObjectName(QStringLiteral("paletteGrid"));
+    ground->setChecked(groundVisible_);
+    ground->setFocusPolicy(Qt::NoFocus);
+    ground->setToolTip(QStringLiteral("La rejilla del suelo (la misma casilla del Navegador)"));
+    column->addWidget(ground);
+    connect(ground, &QCheckBox::toggled, this, [this](bool on) {
+        groundVisible_ = on;
+        setViewDirty(true);
+        viewport_->setGroundVisible(on);
+    });
+    sketchPalette_->adjustSize();
+    sketchPalette_->move(12, 12);
+    sketchPalette_->hide();
+}
+
+void MainWindow::updateSketchPalette()
+{
+    if (sketchPalette_ == nullptr) {
+        return;
+    }
+    const bool show = sketch_ != nullptr;
+    if (show) {
+        if (auto* ground = sketchPalette_->findChild<QCheckBox*>(QStringLiteral("paletteGrid"))) {
+            const QSignalBlocker block(ground);
+            ground->setChecked(groundVisible_);
+        }
+        sketchPalette_->adjustSize();
+        sketchPalette_->move(12, 12);
+        sketchPalette_->raise();
+    }
+    sketchPalette_->setVisible(show);
+}
+
+// Atajos de una tecla (o Mayús + tecla) para las herramientas del sólido, sin pisar los del sketch (L R C A P T O M X K D,
+// que solo valen con un sketch abierto) ni los de archivo. Los de las acciones que ya tenían el suyo (E F H B G…) se
+// dejan como estaban. La tabla está también en la guía de pruebas (sección ATJ).
+void MainWindow::assignShortcuts()
+{
+    const auto key = [](QAction* action, const QKeySequence& sequence) {
+        if (action != nullptr && action->shortcut().isEmpty()) {
+            action->setShortcut(sequence);
+        }
+    };
+    key(createSketchAction_, QKeySequence(Qt::Key_S));
+    key(revolveAction_, QKeySequence(Qt::SHIFT | Qt::Key_R));
+    key(sweepAction_, QKeySequence(Qt::SHIFT | Qt::Key_W));
+    key(loftAction_, QKeySequence(Qt::SHIFT | Qt::Key_Y));
+    key(chamferAction_, QKeySequence(Qt::SHIFT | Qt::Key_F));
+    key(shellAction_, QKeySequence(Qt::Key_V));
+    key(mirrorAction_, QKeySequence(Qt::SHIFT | Qt::Key_M));
+    key(patternAction_, QKeySequence(Qt::SHIFT | Qt::Key_A));
+    key(planeAction_, QKeySequence(Qt::SHIFT | Qt::Key_N));
+    key(axisAction_, QKeySequence(Qt::SHIFT | Qt::Key_X));
+    key(parametersAction_, QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_P));
+    key(moveAction_, QKeySequence(Qt::SHIFT | Qt::Key_G));
+    key(combineAction_, QKeySequence(Qt::SHIFT | Qt::Key_U));
+    key(jointAction_, QKeySequence(Qt::SHIFT | Qt::Key_J));
+    key(measureAction_, QKeySequence(Qt::Key_I));
+    key(sectionAction_, QKeySequence(Qt::SHIFT | Qt::Key_S));
+}
+
+void MainWindow::openRadialMenu(const QPoint& at)
+{
+    std::vector<QAction*> items;
+    if (sketch_ != nullptr) {
+        for (const auto tool : {SketchSession::Tool::Line, SketchSession::Tool::Rectangle, SketchSession::Tool::Circle,
+                                SketchSession::Tool::Arc, SketchSession::Tool::Trim, SketchSession::Tool::Offset}) {
+            if (const auto it = toolActions_.find(tool); it != toolActions_.end()) {
+                items.push_back(it->second);
+            }
+        }
+        items.push_back(dimensionAction_);
+        items.push_back(finishSketchAction_);
+    } else {
+        items = {createSketchAction_, extrudeAction_, revolveAction_, boxAction_, filletAction_,
+                 chamferAction_,      holeAction_,    moveAction_};
+    }
+    items.erase(std::remove(items.begin(), items.end(), nullptr), items.end());
+    if (items.empty()) {
+        return;
+    }
+    auto* menu = new RadialMenu(items, viewport_);
+    menu->openAt(at);
 }
 
 } // namespace nuf::app

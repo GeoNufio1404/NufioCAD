@@ -76,6 +76,7 @@ public:
     enum class Mode { Model, PickPlane, Sketch };
 
     void applyTheme(bool dark);
+    Quantity_Color toolPreviewColor() const;
 
     void describeSelection();
 
@@ -368,6 +369,7 @@ public:
     double annotationScale = 0.0;
     sketch::LayoutMemory layoutMemory;  // nivel elegido por cota entre repintados
     bool measuresVisible = true;
+    bool pointsVisible = true;  // los extremos y centros de las curvas del sketch (U4)
     bool measuresAll = false;      // todas las medidas, no solo las de lo que se mira
     bool constraintsAll = false;   // todas las restricciones, no solo las de lo que se mira
     bool leftPressed = false;

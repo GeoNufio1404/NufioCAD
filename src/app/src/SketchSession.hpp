@@ -136,7 +136,13 @@ private:
     void addFromModel(const std::vector<sketch::Geometry>& geometry, const geometry::ElementRef& source);
     void boxSelected(double x0, double y0, double x1, double y1);
     // Texto e imagen: piden datos con diálogos al hacer clic.
-    void placeText(sketch::Vec2 at);
+    // Pone un texto nuevo en «at»; con «editing» (el id de la primera curva de un texto) vuelve a abrir ese texto con su
+    // contenido, fuente y altura, y lo sustituye (U9).
+    void placeText(sketch::Vec2 at, sketch::EntityId editing = 0);
+public:
+    // Edita el texto del que forma parte lo seleccionado; false si no hay un texto elegido.
+    bool editSelectedText();
+private:
     void placeImage(sketch::Vec2 at);
     void updateValueInput();
     // Pide un valor nuevo para la cota en un campo sobre el lienzo, junto al cursor; false si se canceló.

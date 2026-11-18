@@ -1,4 +1,5 @@
 #include <nuf/geometry/Measure.hpp>
+#include <nuf/geometry/DisplayUnits.hpp>
 
 #include <nuf/geometry/Occt.hpp>
 
@@ -42,7 +43,7 @@ std::string number(double value, int decimals = 2)
 
 std::string point(const gp_Pnt& p)
 {
-    return "(" + number(p.X()) + "; " + number(p.Y()) + "; " + number(p.Z()) + ")";
+    return "(" + display::number(p.X()) + "; " + display::number(p.Y()) + "; " + display::number(p.Z()) + ")";
 }
 
 Info inspect(const MeasureElement& element)
@@ -149,13 +150,13 @@ void describeOne(const Info& info, Measurement& out)
 {
     out.title = kindName(info.kind);
     if (isFace(info.kind)) {
-        out.lines.push_back("Área: " + number(info.size) + " mm²");
+        out.lines.push_back("Área: " + display::area(info.size));
     } else {
-        out.lines.push_back("Longitud: " + number(info.size) + " mm");
+        out.lines.push_back("Longitud: " + display::length(info.size));
     }
     if (info.kind == Kind::Cylinder || info.kind == Kind::Sphere || info.kind == Kind::Circle || info.kind == Kind::Arc) {
-        out.lines.push_back("Radio: " + number(info.radius) + " mm");
-        out.lines.push_back("Diámetro: " + number(2.0 * info.radius) + " mm");
+        out.lines.push_back("Radio: " + display::length(info.radius));
+        out.lines.push_back("Diámetro: " + display::length(2.0 * info.radius));
     }
     if (info.hasPoint && info.kind != Kind::Plane && info.kind != Kind::Line && info.kind != Kind::Cylinder) {
         out.lines.push_back("Centro: " + point(info.point));
@@ -171,12 +172,12 @@ constexpr double kParallel = 1e-6;
 void describePair(const Info& a, const Info& b, const gp_Pnt& pa, const gp_Pnt& pb, double distance, Measurement& out)
 {
     out.title = std::string(kindName(a.kind)) + " → " + kindName(b.kind);
-    out.lines.push_back("Distancia mínima: " + number(distance) + " mm");
+    out.lines.push_back("Distancia mínima: " + display::length(distance));
     if (distance < 1e-9) {
         out.lines.back() += " (se tocan)";
     }
-    out.lines.push_back("Diferencia: dX " + number(std::abs(pb.X() - pa.X())) + ", dY " + number(std::abs(pb.Y() - pa.Y()))
-                        + ", dZ " + number(std::abs(pb.Z() - pa.Z())) + " mm");
+    out.lines.push_back("Diferencia: dX " + display::number(std::abs(pb.X() - pa.X())) + ", dY " + display::number(std::abs(pb.Y() - pa.Y()))
+                        + ", dZ " + display::length(std::abs(pb.Z() - pa.Z())));
 
     // Centros de círculos y ejes de cilindros: lo que se suele querer medir entre agujeros.
     const auto isRound = [](Kind kind) { return kind == Kind::Cylinder || kind == Kind::Circle || kind == Kind::Arc; };
@@ -187,7 +188,7 @@ void describePair(const Info& a, const Info& b, const gp_Pnt& pa, const gp_Pnt& 
         if (perpendicular.Magnitude() < kParallel) {
             // Ejes paralelos: distancia entre ellos (perpendicular al eje).
             const gp_Vec across = between - axis * between.Dot(axis);
-            out.lines.push_back("Distancia entre ejes/centros: " + number(across.Magnitude()) + " mm");
+            out.lines.push_back("Distancia entre ejes/centros: " + display::length(across.Magnitude()));
         }
     }
 
@@ -203,7 +204,7 @@ void describePair(const Info& a, const Info& b, const gp_Pnt& pa, const gp_Pnt& 
                                 + "° (agudo " + number(angle) + "°)");
             if (1.0 - cosine < kParallel) {
                 const double gap = std::abs(gp_Vec(a.point, b.point).Dot(gp_Vec(a.direction)));
-                out.lines.push_back("Paralelas, separadas " + number(gap) + " mm");
+                out.lines.push_back("Paralelas, separadas " + display::length(gap));
             }
         } else if (planeA != planeB) {
             // Recta (o eje) contra plano: el ángulo con el plano es 90° menos el de la normal.

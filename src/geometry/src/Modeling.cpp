@@ -17,6 +17,13 @@
 #include <NCollection_Array1.hxx>
 #include <NCollection_Array2.hxx>
 #include <TopoDS_Shell.hxx>
+#include <GeomLib.hxx>
+#include <Geom_BoundedSurface.hxx>
+#include <Geom_RectangularTrimmedSurface.hxx>
+#include <Geom_Surface.hxx>
+#include <Geom_SurfaceOfLinearExtrusion.hxx>
+#include <Precision.hxx>
+#include <gp_Cone.hxx>
 #include <BRep_Tool.hxx>
 #include <Bnd_Box.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
@@ -46,6 +53,8 @@
 #include <BRepLib.hxx>
 #include <BRepPrimAPI_MakeBox.hxx>
 #include <BRepPrimAPI_MakeCone.hxx>
+#include <BRepBuilderAPI_MakeVertex.hxx>
+#include <TopoDS_Vertex.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
 #include <BRepPrimAPI_MakeHalfSpace.hxx>
 #include <BRepPrimAPI_MakeSphere.hxx>
@@ -96,10 +105,44 @@ std::string kernelMessage(const Standard_Failure& e)
 }
 
 // Un fallo del kernel en lenguaje claro: qué se intentaba, qué probar y, al final, el detalle técnico.
+// Qué quiere decir en español el error del kernel (U8): el nombre de la excepción de OpenCASCADE y su causa más probable.
+std::string explainKernelError(const std::string& detail)
+{
+    struct Cause {
+        const char* marker;
+        const char* text;
+    };
+    static const Cause causes[] = {
+        {"ConstructionError", "se intentó construir una forma con medidas imposibles (un radio, un ancho o una distancia que no caben)"},
+        {"DomainError", "un valor está fuera de lo que admite la operación (un ángulo, una distancia o una cantidad)"},
+        {"OutOfRange", "se pidió un elemento que no existe (una cara o una arista que ya no está)"},
+        {"NullObject", "falta una forma de entrada (un cuerpo vacío o una cara que desapareció)"},
+        {"NoSuchObject", "no se encontró una de las caras o aristas elegidas"},
+        {"TypeMismatch", "una de las entradas no es del tipo que pide la operación (por ejemplo, una cara curva donde hace falta una plana)"},
+        {"NotDone", "el kernel no pudo terminar el cálculo (la geometría es muy ajustada, tangente o se solapa consigo misma)"},
+        {"command not done", "el kernel no pudo terminar el cálculo (la geometría es muy ajustada, tangente o se solapa consigo misma)"},
+        {"Overflow", "una medida es tan grande que el cálculo se desborda"},
+        {"DimensionError", "las formas que se combinan no son compatibles (por ejemplo, un perfil abierto)"}};
+    for (const Cause& cause : causes) {
+        if (detail.find(cause.marker) != std::string::npos) {
+            return cause.text;
+        }
+    }
+    return {};
+}
+
 GeometryError kernelFailure(const std::string& action, const std::string& hint, const Standard_Failure& e)
 {
     const std::string detail = kernelMessage(e);
-    return GeometryError("No se pudo " + action + ": " + hint + (detail.empty() ? std::string() : " (detalle técnico: " + detail + ")"));
+    const std::string cause = explainKernelError(detail);
+    std::string message = "No se pudo " + action + ": " + hint;
+    if (!cause.empty()) {
+        message += ". Causa probable: " + cause;
+    }
+    if (!detail.empty()) {
+        message += " (detalle técnico: " + detail + ")";
+    }
+    return GeometryError(message);
 }
 
 // Deja que el kernel se detenga a media operación cuando el hilo de trabajo pide cancelar (cerrar la ventana, un
@@ -305,6 +348,10 @@ bool onSurface(const TopoDS_Face& face, const BRepAdaptor_Surface& target)
         return std::abs(surface.Torus().MajorRadius() - target.Torus().MajorRadius()) < tol
                && std::abs(surface.Torus().MinorRadius() - target.Torus().MinorRadius()) < tol
                && surface.Torus().Axis().IsCoaxial(target.Torus().Axis(), tol, tol);
+    case GeomAbs_Cone:
+        return std::abs(surface.Cone().SemiAngle() - target.Cone().SemiAngle()) < tol
+               && surface.Cone().Apex().Distance(target.Cone().Apex()) < 1e-5
+               && surface.Cone().Axis().IsCoaxial(target.Cone().Axis(), tol, tol);
     default:
         return false;
     }
@@ -350,7 +397,62 @@ Shape trimToPlane(const std::string& tag, const std::string& endName, const Shap
     return trimmed.finish(tag);
 }
 
-// Hasta una cara cilíndrica, esférica o toroidal. El prisma largo «part» se parte con la superficie
+// Lámina que prolonga la superficie libre de «face» (B-spline, de extrusión, de revolución…) más allá de sus bordes, para
+// partir un prisma con ella. Las B-spline se alargan con GeomLib; las demás se recortan a los parámetros de la cara,
+// ensanchados en su dirección ilimitada. Nula si no se pudo.
+TopoDS_Shape extendedSurface(const TopoDS_Face& face, double reach)
+{
+    try {
+        Handle(Geom_Surface) surface = BRep_Tool::Surface(face);
+        if (surface.IsNull()) {
+            return {};
+        }
+        if (Handle(Geom_RectangularTrimmedSurface) trimmed = Handle(Geom_RectangularTrimmedSurface)::DownCast(surface)) {
+            surface = trimmed->BasisSurface();
+        }
+        double u1 = 0.0, u2 = 0.0, v1 = 0.0, v2 = 0.0;
+        BRepTools::UVBounds(face, u1, u2, v1, v2);
+        if (Handle(Geom_BoundedSurface) bounded = Handle(Geom_BoundedSurface)::DownCast(surface)) {
+            Handle(Geom_BoundedSurface) copy = Handle(Geom_BoundedSurface)::DownCast(bounded->Copy());
+            for (const bool inU : {true, false}) {
+                for (const bool after : {false, true}) {
+                    GeomLib::ExtendSurfByLength(copy, reach, 1, inU, after);
+                }
+            }
+            return BRepBuilderAPI_MakeFace(copy, Precision::Confusion()).Shape();
+        }
+        // Extrusión y revolución: una de las dos direcciones no tiene límite; se ensancha esa.
+        const double wide = reach * 2.0;
+        if (!surface->IsUPeriodic() && Handle(Geom_SurfaceOfLinearExtrusion)::DownCast(surface).IsNull() == false) {
+            return BRepBuilderAPI_MakeFace(surface, u1, u2, v1 - wide, v2 + wide, Precision::Confusion()).Shape();
+        }
+        return BRepBuilderAPI_MakeFace(surface, u1, u2, v1, v2, Precision::Confusion()).Shape();
+    } catch (const Standard_Failure&) {
+        return {};
+    }
+}
+
+// Superficie libre: el extremo del tramo es una cara no plana cuyo centro está sobre la cara de destino real.
+bool freeSurfaceCap(const TopoDS_Face& cap, const TopoDS_Face& target)
+{
+    if (BRepAdaptor_Surface(cap).GetType() == GeomAbs_Plane) {
+        return false;
+    }
+    try {
+        GProp_GProps props;
+        BRepGProp::SurfaceProperties(cap, props);
+        if (props.Mass() < 1e-9) {
+            return false;
+        }
+        const TopoDS_Vertex center = BRepBuilderAPI_MakeVertex(props.CentreOfMass()).Vertex();
+        BRepExtrema_DistShapeShape distance(center, target);
+        return distance.IsDone() && distance.Value() < 1e-3;
+    } catch (const Standard_Failure&) {
+        return false;
+    }
+}
+
+// Hasta una cara curva: cilíndrica, esférica, toroidal, cónica o libre. El prisma largo «part» se parte con la superficie
 // completa en tramos (entra y sale de ella); la extrusión llega hasta el primer cruce que cae en el
 // trozo REAL de la cara (los cruces con la superficie fuera de ese trozo se atraviesan), y ahí
 // termina sobre la superficie.
@@ -387,9 +489,36 @@ Shape trimToCurvedFace(const std::string& tag, const std::string& endName, const
                                       t.MajorRadius(), t.MinorRadius()).Shape();
         break;
     }
+    case GeomAbs_Cone: {
+        // El cono completo (la hoja donde está la cara), del tamaño de la pieza: la hoja se corta en el vértice.
+        const gp_Cone cone = surface.Cone();
+        const gp_Dir axis = cone.Axis().Direction();
+        const double slope = std::tan(cone.SemiAngle());
+        const double t0 = gp_Vec(cone.Location(), center).Dot(gp_Vec(axis));
+        const auto radiusAt = [&](double along) { return cone.RefRadius() + along * slope; };
+        // La cara marca la hoja: la de los radios positivos en un punto suyo.
+        double low = t0 - reach;
+        double high = t0 + reach;
+        const double apex = -cone.RefRadius() / slope;  // donde el radio vale 0
+        if (slope > 0.0) {
+            low = std::max(low, apex);
+            high = std::max(high, low + 1.0);
+        } else {
+            high = std::min(high, apex);
+            low = std::min(low, high - 1.0);
+        }
+        const gp_Ax2 ax(cone.Location().Translated(gp_Vec(axis) * low), axis, cone.Position().XDirection());
+        limit = BRepPrimAPI_MakeCone(ax, std::max(0.0, radiusAt(low)), std::max(0.0, radiusAt(high)), high - low).Shape();
+        break;
+    }
     default:
-        throw GeometryError("«Hasta una cara» admite caras planas, cilíndricas, esféricas y toroidales; "
-                            "esta es de otro tipo (cono o superficie libre). Elige otra cara o usa una distancia");
+        // Superficie libre (B-spline, de revolución…): se prolonga la superficie más allá de la cara y se usa como
+        // lámina de corte (como el cuerpo auxiliar de las demás, pero abierto).
+        limit = extendedSurface(target, reach);
+        if (limit.IsNull()) {
+            throw GeometryError("«Hasta una cara» no pudo prolongar esta superficie libre: elige otra cara o usa una distancia");
+        }
+        break;
     }
 
     NCollection_List<TopoDS_Shape> objects;
@@ -428,7 +557,9 @@ Shape trimToCurvedFace(const std::string& tag, const std::string& endName, const
     for (std::size_t i = 0; i < pieces.size() && !last; ++i) {
         for (TopExp_Explorer ex(pieces[i].raw, TopAbs_FACE); ex.More(); ex.Next()) {
             const TopoDS_Face cap = TopoDS::Face(ex.Current());
-            if (onSurface(cap, surface) && overlapsFace(cap, target)) {
+            const bool analytic = surface.GetType() == GeomAbs_Cylinder || surface.GetType() == GeomAbs_Sphere ||
+                                  surface.GetType() == GeomAbs_Torus || surface.GetType() == GeomAbs_Cone;
+            if (analytic ? (onSurface(cap, surface) && overlapsFace(cap, target)) : freeSurfaceCap(cap, target)) {
                 last = i;
                 break;
             }

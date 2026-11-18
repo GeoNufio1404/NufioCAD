@@ -3,6 +3,7 @@
 #include "MainWindow.hpp"
 #include "ModelPanels.hpp"
 #include "Recovery.hpp"
+#include "Units.hpp"
 #include "StartScreen.hpp"
 
 #include <nuf/commands/FeatureCommands.hpp>
@@ -22,6 +23,8 @@
 #include <QDropEvent>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFrame>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QMessageBox>
 #include <QMimeData>
@@ -101,11 +104,18 @@ io::ViewState MainWindow::currentView() const
     view.sketchVisibility = sketchVisibility_;
     view.originVisible = originVisible_;
     view.groundVisible = groundVisible_;
+    view.displayUnit = Units::label(Units::instance().length()).toStdString();
     return view;
 }
 
 void MainWindow::applyView(const io::ViewState& view)
 {
+    // La unidad con que se guardó el diseño (U3); los anteriores no la traen y se queda la que hay.
+    for (const LengthUnit unit : {LengthUnit::Mm, LengthUnit::Cm, LengthUnit::M, LengthUnit::In}) {
+        if (!view.displayUnit.empty() && Units::label(unit).toStdString() == view.displayUnit) {
+            Units::instance().setLength(unit);
+        }
+    }
     hiddenBodies_ = view.hiddenBodies;
     sketchVisibility_ = view.sketchVisibility;
     originVisible_ = view.originVisible;
@@ -474,25 +484,59 @@ void MainWindow::offerRecovery()
     if (orphans.empty() || hasUnsavedWork() || !path_.empty()) {
         return;
     }
-    const Recovery::Orphan& newest = orphans.front();
+    // Un aviso discreto sobre el lienzo (U2): no tapa la ventana ni exige contestar para seguir trabajando.
+    const Recovery::Orphan newest = orphans.front();
     const QString name = newest.name.isEmpty() ? QStringLiteral("Sin título") : newest.name;
-    QMessageBox box(QMessageBox::Question, QStringLiteral("NufioCAD"),
-                    QStringLiteral("La sesión anterior se cerró sin guardar «%1».").arg(name), QMessageBox::NoButton, this);
-    box.setInformativeText(QStringLiteral("Hay una copia de recuperación del %1. ¿Quieres restaurarla?")
-                               .arg(QLocale().toString(newest.when, QLocale::ShortFormat)));
-    QPushButton* restore = box.addButton(QStringLiteral("Restaurar"), QMessageBox::AcceptRole);
-    QPushButton* discard = box.addButton(QStringLiteral("Descartar"), QMessageBox::DestructiveRole);
-    box.addButton(QStringLiteral("Decidir después"), QMessageBox::RejectRole);
-    box.setDefaultButton(restore);
-    box.exec();
-    if (box.clickedButton() == static_cast<QAbstractButton*>(restore)) {
+    delete recoveryBar_;
+    recoveryBar_ = new QFrame(viewport_);
+    recoveryBar_->setObjectName(QStringLiteral("recoveryBar"));
+    recoveryBar_->setStyleSheet(QStringLiteral(
+        "#recoveryBar { background: rgba(32, 38, 48, 235); border: 1px solid #F2A34B; border-radius: 6px; }"
+        "#recoveryBar QLabel { color: #E6EAF0; }"
+        "#recoveryBar QPushButton { padding: 3px 12px; }"));
+    auto* row = new QHBoxLayout(recoveryBar_);
+    row->setContentsMargins(12, 6, 8, 6);
+    row->addWidget(new QLabel(QStringLiteral("La sesión anterior se cerró sin guardar «%1» (copia del %2).")
+                                  .arg(name, QLocale().toString(newest.when, QLocale::ShortFormat))));
+    auto* restore = new QPushButton(QStringLiteral("Restaurar"));
+    auto* discard = new QPushButton(QStringLiteral("Descartar"));
+    auto* later = new QPushButton(QStringLiteral("×"));
+    later->setToolTip(QStringLiteral("Decidir después: la copia se conserva y se avisará la próxima vez"));
+    later->setFixedWidth(28);
+    row->addWidget(restore);
+    row->addWidget(discard);
+    row->addWidget(later);
+    const auto close = [this] {
+        recoveryBar_->deleteLater();
+        recoveryBar_ = nullptr;
+    };
+    connect(restore, &QPushButton::clicked, this, [this, newest, close] {
+        close();
         if (openPath(newest.file, true, newest.original.isEmpty() ? std::filesystem::path{} : toPath(newest.original))) {
             Recovery::remove(newest);
             statusBar()->showMessage(QStringLiteral("Diseño restaurado: guárdalo para no perderlo otra vez"), 15000);
         }
-    } else if (box.clickedButton() == static_cast<QAbstractButton*>(discard)) {
+    });
+    connect(discard, &QPushButton::clicked, this, [newest, close] {
         Recovery::remove(newest);
+        close();
+    });
+    connect(later, &QPushButton::clicked, this, close);
+    recoveryBar_->adjustSize();
+    placeRecoveryBar();
+    recoveryBar_->show();
+    recoveryBar_->raise();
+}
+
+void MainWindow::placeRecoveryBar()
+{
+    if (recoveryBar_ == nullptr) {
+        return;
     }
+    recoveryBar_->adjustSize();
+    const int width = std::min(recoveryBar_->sizeHint().width(), std::max(200, viewport_->width() - 24));
+    recoveryBar_->setFixedWidth(width);
+    recoveryBar_->move((viewport_->width() - width) / 2, 12);
 }
 
 void MainWindow::openFromCommandLine(const QString& file)

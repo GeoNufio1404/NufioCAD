@@ -1,6 +1,7 @@
 #include <nuf/document/Generators.hpp>
 
 #include <nuf/document/Features.hpp>
+#include <nuf/geometry/DisplayUnits.hpp>
 #include <nuf/sketch/Dxf.hpp>
 #include <nuf/sketch/Profiles.hpp>
 
@@ -668,6 +669,16 @@ std::vector<GeneratorField> tuningFields()
     return {thin, chamfer};
 }
 
+// Reparte las preguntas de un engranaje en dos secciones plegables (Fase 15, U8): las medidas y los ajustes de impresión.
+std::vector<GeneratorField> withGroups(std::vector<GeneratorField> fields)
+{
+    for (GeneratorField& f : fields) {
+        const bool printing = f.key == "juego" || f.key == "adelgazar" || f.key == "chaflan_base";
+        f.group = printing ? "Ajustes de impresión" : "Medidas del engranaje";
+    }
+    return fields;
+}
+
 void addTuningParameters(Recipe& recipe, const GeneratorValues& values, const std::string& suffix)
 {
     recipe.parameters.push_back({"adelgazar" + suffix, number(tuningValue(values, "adelgazar"))});
@@ -711,7 +722,7 @@ public:
             f.hint = std::move(hint);
             return f;
         };
-        return {make(K::Length, "modulo", "Módulo", 2.0, 0.3, 20.0, "El tamaño del diente: igual en las dos ruedas"),
+        return withGroups({make(K::Length, "modulo", "Módulo", 2.0, 0.3, 20.0, "El tamaño del diente: igual en las dos ruedas"),
                 make(K::Count, "dientes_1", "Dientes de la rueda 1", 12.0, 6.0, 300.0),
                 make(K::Count, "dientes_2", "Dientes de la rueda 2", 24.0, 6.0, 300.0),
                 make(K::Angle, "presion", "Ángulo de presión", 20.0, 5.0, 35.0, "Igual en las dos ruedas (20° es lo normal)"),
@@ -722,7 +733,7 @@ public:
                 make(K::Length, "agujero_2", "Agujero de la rueda 2", 5.0, 0.0, 100.0, "0 = macizo"),
                 make(K::Length, "juego", "Juego entre dientes", 0.15, 0.0, 2.0,
                      "Aire para que giren sin atascarse al imprimir (se suma a la distancia entre ejes)"),
-                tuningFields()[0], tuningFields()[1]};
+                tuningFields()[0], tuningFields()[1]});
     }
 
     std::string summary(const GeneratorValues& values) const override
@@ -730,9 +741,10 @@ public:
         const double m = values.at("modulo"), z1 = values.at("dientes_1"), z2 = values.at("dientes_2");
         char text[256];
         std::snprintf(text, sizeof text,
-                      "Relación %g:%g (la rueda 2 gira %.3f veces por vuelta de la 1) · distancia entre ejes %.2f mm · "
-                      "Ø primitivos %.2f y %.2f mm",
-                      z1, z2, z1 / z2, m * (z1 + z2) / 2.0 + values.at("juego"), m * z1, m * z2);
+                      "Relación %g:%g (la rueda 2 gira %.3f veces por vuelta de la 1) · distancia entre ejes %s · "
+                      "Ø primitivos %s y %s",
+                      z1, z2, z1 / z2, geometry::display::length(m * (z1 + z2) / 2.0 + values.at("juego")).c_str(),
+                      geometry::display::length(m * z1).c_str(), geometry::display::length(m * z2).c_str());
         return text;
     }
 
@@ -847,7 +859,7 @@ public:
     std::vector<GeneratorField> fields() const override
     {
         using K = GeneratorField::Kind;
-        return {gearField(K::Length, "modulo", "Módulo", 2.0, 0.3, 20.0, "El tamaño del diente: igual en la corona y el piñón"),
+        return withGroups({gearField(K::Length, "modulo", "Módulo", 2.0, 0.3, 20.0, "El tamaño del diente: igual en la corona y el piñón"),
                 gearField(K::Count, "dientes_corona", "Dientes de la corona", 36.0, 20.0, 300.0,
                           "Mejor al menos 8 más que el piñón (si no, los dientes se estorban)"),
                 gearField(K::Count, "dientes_pinon", "Dientes del piñón", 12.0, 6.0, 300.0),
@@ -858,7 +870,7 @@ public:
                 gearField(K::Length, "agujero_pinon", "Agujero del piñón", 5.0, 0.0, 100.0, "0 = macizo"),
                 gearField(K::Length, "juego", "Juego entre dientes", 0.15, 0.0, 2.0,
                           "Aire para que giren sin atascarse al imprimir (acerca los ejes)"),
-                tuningFields()[0], tuningFields()[1]};
+                tuningFields()[0], tuningFields()[1]});
     }
 
     std::string summary(const GeneratorValues& values) const override
@@ -867,8 +879,9 @@ public:
         char text[320];
         std::snprintf(text, sizeof text,
                       "Relación %g:%g (el piñón da %.3f vueltas por una de la corona, en el mismo sentido) · distancia "
-                      "entre ejes %.2f mm · Ø primitivos %.2f y %.2f mm%s",
-                      zp, zc, zc / zp, m * (zc - zp) / 2.0 - values.at("juego"), m * zc, m * zp,
+                      "entre ejes %s · Ø primitivos %s y %s%s",
+                      zp, zc, zc / zp, geometry::display::length(m * (zc - zp) / 2.0 - values.at("juego")).c_str(),
+                      geometry::display::length(m * zc).c_str(), geometry::display::length(m * zp).c_str(),
                       zc - zp < 8.0 ? " · AVISO: con menos de 8 dientes de diferencia los dientes se estorban" : "");
         return text;
     }
@@ -967,7 +980,7 @@ public:
                                          "Largo de la barra = dientes · π · módulo");
         teeth.showKey = "largo_modo";
         teeth.showIndex = 0;
-        return {gearField(K::Length, "modulo", "Módulo", 2.0, 0.3, 20.0, "El tamaño del diente: igual en la rueda y la barra"),
+        return withGroups({gearField(K::Length, "modulo", "Módulo", 2.0, 0.3, 20.0, "El tamaño del diente: igual en la rueda y la barra"),
                 gearField(K::Count, "dientes_rueda", "Dientes de la rueda", 20.0, 6.0, 300.0),
                 mode,
                 teeth,
@@ -979,7 +992,7 @@ public:
                 gearField(K::Length, "agujero_rueda", "Agujero de la rueda", 5.0, 0.0, 100.0, "0 = macizo"),
                 gearField(K::Length, "juego", "Juego entre dientes", 0.15, 0.0, 2.0,
                           "Aire para que engranen sin atascarse al imprimir (aleja la barra de la rueda)"),
-                tuningFields()[0], tuningFields()[1]};
+                tuningFields()[0], tuningFields()[1]});
     }
 
     // Lo que sale del modo de largo: cuántos dientes y cuánto mide la barra (los diseños hechos antes de que existiera
@@ -1016,10 +1029,11 @@ public:
         constexpr double kPi = 3.14159265358979323846;
         char text[320];
         std::snprintf(text, sizeof text,
-                      "La barra avanza %.2f mm por vuelta de la rueda · largo de la barra %.1f mm, %d dientes%s (%.2f "
-                      "vueltas de la rueda) · Ø primitivo de la rueda %.2f mm",
-                      kPi * m * z, rack.length, rack.teeth, rack.mode == 1 ? " (el último cortado)" : "",
-                      rack.length / (kPi * m * z), m * z);
+                      "La barra avanza %s por vuelta de la rueda · largo de la barra %s, %d dientes%s (%.2f "
+                      "vueltas de la rueda) · Ø primitivo de la rueda %s",
+                      geometry::display::length(kPi * m * z).c_str(), geometry::display::length(rack.length, 1).c_str(), rack.teeth,
+                      rack.mode == 1 ? " (el último cortado)" : "", rack.length / (kPi * m * z),
+                      geometry::display::length(m * z).c_str());
         return text;
     }
 

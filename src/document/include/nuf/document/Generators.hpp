@@ -25,6 +25,7 @@ struct GeneratorField {
     std::string key;
     std::string label;
     std::string hint;                  // ayuda breve bajo el campo
+    std::string group;                 // sección plegable de la interfaz en que va (vacía: sin sección)
     Kind kind = Kind::Length;
     double value = 0.0;                // valor por defecto, o la opción elegida (Choice)
     double min = 0.0;                  // mm (Length), cantidad (Count) o grados (Angle)

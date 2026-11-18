@@ -322,9 +322,213 @@ void cutEnd(Sketch& sketch, EntityId id, Part which, double t)
 
 // --- Recortar, partir y extender ---------------------------------------------------
 
+namespace {
+
+// --- Recorte de elipses y arcos de elipse (U9) -------------------------------------------------
+// Las intersecciones exactas solo existen entre rectas y circunferencias; con una elipse se cortan las polilíneas de las
+// dos curvas (muy finas) y el parámetro del cruce se afina buscando el punto de la elipse más cercano a la otra curva. El
+// extremo nuevo queda sobre la curva que lo cortó (una restricción «punto sobre objeto», que el solver acaba de ajustar).
+
+const Ellipse* ellipseOf(const Entity& e)
+{
+    if (const auto* el = std::get_if<Ellipse>(&e.geometry)) {
+        return el;
+    }
+    if (const auto* ea = std::get_if<EllipseArc>(&e.geometry)) {
+        return &ea->ellipse;
+    }
+    return nullptr;
+}
+
+// Ángulo paramétrico de un punto cercano a la elipse, en [0, 2π).
+double ellipseParamOf(const Ellipse& m, Vec2 p)
+{
+    const double dx = p.x - m.center.x;
+    const double dy = p.y - m.center.y;
+    const double cr = std::cos(m.rotation);
+    const double sr = std::sin(m.rotation);
+    const double x = cr * dx + sr * dy;
+    const double y = -sr * dx + cr * dy;
+    return ccw(0.0, std::atan2(y / m.minorRadius, x / m.majorRadius));
+}
+
+// Distancia de un punto a una polilínea.
+double distanceToPolyline(const std::vector<Vec2>& line, Vec2 p)
+{
+    double best = 1e300;
+    for (std::size_t i = 0; i + 1 < line.size(); ++i) {
+        const Vec2 d = sub(line[i + 1], line[i]);
+        const double len2 = dot(d, d);
+        const double u = len2 > 0.0 ? std::clamp(dot(sub(p, line[i]), d) / len2, 0.0, 1.0) : 0.0;
+        best = std::min(best, dist(p, add(line[i], mul(u, d))));
+    }
+    return best;
+}
+
+// Cruce de dos segmentos: el parámetro (0..1) sobre el primero, o nullopt.
+std::optional<double> segmentCross(Vec2 a, Vec2 b, Vec2 c, Vec2 d)
+{
+    const Vec2 r = sub(b, a);
+    const Vec2 q = sub(d, c);
+    const double denominator = cross(r, q);
+    if (std::abs(denominator) < 1e-14) {
+        return std::nullopt;
+    }
+    const double u = cross(sub(c, a), q) / denominator;
+    const double v = cross(sub(c, a), r) / denominator;
+    if (u < 0.0 || u > 1.0 || v < 0.0 || v > 1.0) {
+        return std::nullopt;
+    }
+    return u;
+}
+
+// Cortes de una elipse (o arco): parámetros en el rango [0, 2π) de la elipse entera.
+std::vector<Cut> ellipseCuts(const Sketch& sketch, const Entity& e)
+{
+    const Ellipse& m = *ellipseOf(e);
+    constexpr int kSamples = 1440;
+    std::vector<Vec2> ring;
+    for (int i = 0; i <= kSamples; ++i) {
+        ring.push_back(m.pointAt(kTwoPi * double(i) / kSamples));
+    }
+    std::vector<Cut> cuts;
+    for (const Entity& o : sketch.entities()) {
+        if (o.id == e.id || o.reference) {
+            continue;
+        }
+        // Puntos de otras entidades apoyados en la curva.
+        for (Part part : {Part::Whole, Part::Start, Part::End, Part::Center}) {
+            const auto p = sketch.point({o.id, part});
+            if (p && distanceToCurve(e, *p) < kOnCurve) {
+                cuts.push_back({ellipseParamOf(m, *p), 0, {o.id, part}});
+            }
+        }
+        if (std::holds_alternative<Point>(o.geometry)) {
+            continue;
+        }
+        const std::vector<Vec2> other = polyline(o.geometry);
+        if (other.size() < 2) {
+            continue;
+        }
+        for (int i = 0; i < kSamples; ++i) {
+            for (std::size_t j = 0; j + 1 < other.size(); ++j) {
+                const auto u = segmentCross(ring[std::size_t(i)], ring[std::size_t(i) + 1], other[j], other[j + 1]);
+                if (!u) {
+                    continue;
+                }
+                // Afinar: el punto de la elipse, entre los dos de la polilínea, más cercano a la otra curva.
+                double lo = kTwoPi * (double(i) + std::max(0.0, *u - 0.5)) / kSamples;
+                double hi = kTwoPi * (double(i) + std::min(1.0, *u + 0.5)) / kSamples;
+                for (int k = 0; k < 40; ++k) {
+                    const double m1 = lo + (hi - lo) / 3.0;
+                    const double m2 = hi - (hi - lo) / 3.0;
+                    if (distanceToPolyline(other, m.pointAt(m1)) < distanceToPolyline(other, m.pointAt(m2))) {
+                        hi = m2;
+                    } else {
+                        lo = m1;
+                    }
+                }
+                cuts.push_back({ccw(0.0, 0.5 * (lo + hi)), o.id, {}});
+            }
+        }
+    }
+    std::ranges::sort(cuts, [](const Cut& a, const Cut& b) {
+        return a.param < b.param || (std::abs(a.param - b.param) <= 1e-6 && !a.point.empty() && b.point.empty());
+    });
+    std::vector<Cut> unique;
+    for (const Cut& c : cuts) {
+        if (unique.empty() || c.param - unique.back().param > 1e-6) {
+            unique.push_back(c);
+        }
+    }
+    return unique;
+}
+
+bool trimEllipse(Sketch& sketch, EntityId id, Vec2 click)
+{
+    const Entity* e = sketch.entity(id);
+    if (e == nullptr || e->reference || ellipseOf(*e) == nullptr) {
+        return false;
+    }
+    const Ellipse m = *ellipseOf(*e);
+    const std::vector<Cut> all = ellipseCuts(sketch, *e);
+    const double tc = ellipseParamOf(m, click);
+    const auto* arc = std::get_if<EllipseArc>(&e->geometry);
+    const double begin = arc != nullptr ? ccw(0.0, arc->startParam) : 0.0;
+    const double sweep = arc != nullptr ? ccw(arc->startParam, arc->endParam) : kTwoPi;
+    // Solo cuentan los cortes dentro del arco (y no en sus extremos).
+    std::vector<Cut> cuts;
+    for (const Cut& c : all) {
+        const double along = ccw(begin, c.param);
+        if (arc == nullptr || (along > 1e-6 && along < sweep - 1e-6)) {
+            cuts.push_back(c);
+        }
+    }
+    const auto newArc = [&](double from, double to) { return EllipseArc{m, from, to}; };
+
+    if (arc == nullptr) {
+        // Elipse entera: se queda el tramo que no contiene el clic, de un corte al siguiente.
+        if (cuts.size() < 2) {
+            sketch.removeEntity(id);
+            return true;
+        }
+        const auto after = std::ranges::find_if(cuts, [&](const Cut& c) { return c.param > tc; });
+        const Cut b = after == cuts.end() ? cuts.front() : *after;
+        const Cut a = after == cuts.begin() || after == cuts.end() ? cuts.back() : *(after - 1);
+        sketch.entity(id)->geometry = newArc(b.param, b.param + ccw(b.param, a.param));
+        attachCut(sketch, Ref::start(id), b);
+        attachCut(sketch, Ref::end(id), a);
+        return true;
+    }
+
+    // Arco de elipse: los cortes a cada lado del clic (medidos desde el inicio del arco).
+    const double clickAlong = ccw(begin, tc);
+    const Cut* before = nullptr;
+    const Cut* next = nullptr;
+    for (const Cut& c : cuts) {
+        if (ccw(begin, c.param) < clickAlong) {
+            before = &c;
+        } else if (next == nullptr) {
+            next = &c;
+        }
+    }
+    if (before == nullptr && next == nullptr) {
+        sketch.removeEntity(id);
+        return true;
+    }
+    const double startParam = arc->startParam;
+    const double endParam = arc->endParam;
+    if (before != nullptr && next != nullptr) {
+        const Cut a = *before;
+        const Cut b = *next;
+        const bool construction = e->construction;
+        // Se quita el tramo del medio: quedan los dos de los lados.
+        sketch.removeEntity(id);
+        const EntityId first = sketch.addEllipseArc(newArc(startParam, a.param + (ccw(startParam, a.param) < 1e-9 ? kTwoPi : 0.0)), construction);
+        const EntityId second = sketch.addEllipseArc(newArc(b.param, endParam), construction);
+        attachCut(sketch, Ref::end(first), a);
+        attachCut(sketch, Ref::start(second), b);
+        return true;
+    }
+    if (next != nullptr) {
+        // Se quita el tramo del inicio.
+        sketch.entity(id)->geometry = newArc(next->param, endParam);
+        attachCut(sketch, Ref::start(id), *next);
+        return true;
+    }
+    sketch.entity(id)->geometry = newArc(startParam, before->param);
+    attachCut(sketch, Ref::end(id), *before);
+    return true;
+}
+
+} // namespace
+
 bool trim(Sketch& sketch, EntityId id, Vec2 click)
 {
     const Entity* e = sketch.entity(id);
+    if (e != nullptr && ellipseOf(*e) != nullptr) {
+        return trimEllipse(sketch, id, click);
+    }
     if (!e || !isSplittable(*e)) {
         return false;
     }
