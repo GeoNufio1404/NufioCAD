@@ -339,6 +339,11 @@ MainWindow::MainWindow(QWidget* parent)
     // Si cambian las barras o los paneles, kLayoutVersion sube y la
     // distribución guardada (que ya no encaja) se descarta.
     restoreState(settings.value(QStringLiteral("ui/layout")).toByteArray(), kLayoutVersion);
+    // La cinta siempre va en su propia fila, debajo de la barra de acceso rápido (con la ventana maximizada, una
+    // disposición guardada las dejaba una al lado de la otra y la cinta se encogía).
+    if (auto* ribbonBar = findChild<QToolBar*>(QStringLiteral("ribbonToolbar")); ribbonBar != nullptr && !toolBarBreak(ribbonBar)) {
+        insertToolBarBreak(ribbonBar);
+    }
     propertiesDock_->hide();  // aparece al usar una herramienta
     // La primera vez que se dibuja un símbolo (⛔ ⚠ ℹ ✓ …) Qt busca la fuente de respaldo entre todas las del sistema
     // (de 0,5 a 1,5 s en esta PC): se hace aquí, nada más abrir la ventana, y no al abrir el primer panel o generador
