@@ -72,6 +72,7 @@ flowchart LR
     F16 --> F17["17 · Generadores<br/>y salida"]
     F17 --> F18["18 · Ampliaciones<br/>de modelado"]
     F18 --> F19["19 · Distribución<br/>y firma"]
+    F19 --> F20["20 · Interfaz<br/>responsiva"]
 ```
 
 **Por qué este orden:** primero se asegura lo hecho (14) y se publica; luego lo que más se nota al usar la app cada día (15); después los engranajes que se pidieron (16), que son independientes y empiezan por puntos pequeños; luego los generadores y los formatos de salida (17); la ampliación del modelado (18) es la más grande y cada punto es independiente, así que uno suelto se puede adelantar si una pieza real lo pide; y la distribución (19) cuando haya una versión que compartir. Si alguien más va a probar NufioCAD antes, el instalador (D1) puede adelantarse sin depender de lo demás.
@@ -144,6 +145,18 @@ Para que otra persona pueda instalar NufioCAD en Windows sin que SmartScreen, De
 - [ ] **D5 — Falsos positivos:** compilar en el CI público, sin empaquetadores ni ofuscadores, y, si Defender marca un archivo, enviarlo a Microsoft (portal de envío de muestras de Defender; es gratis y es la única revisión a la que se puede recurrir). Dejar el procedimiento escrito.
 - [ ] **D6 — Opcional:** winget (revisa el manifiesto y escanea el instalador) y Microsoft Store (MSIX, con certificación y firma de Microsoft, pago único pequeño).
 - [ ] **D7 — Licencias en el instalador:** incluir los avisos de PlaneGCS (LGPL-2.1+, enlazado estáticamente: ofrecer el código y permitir reenlazar), Qt (LGPL-3), OpenCASCADE y los demás.
+
+### Fase 20 — Interfaz responsiva: cualquier pantalla y resolución en PC (pedido del usuario, 18 nov. 2026)
+
+**Por qué:** probando en una pantalla de resolución mucho más pequeña que la de uso diario, la interfaz se veía mal y varias partes eran inutilizables (botones o campos fuera de la ventana, paneles que no caben, textos cortados o encimados). La meta es que NufioCAD se pueda usar bien en cualquier pantalla de **PC** (Windows y Linux, con ratón y teclado; no es móvil ni táctil), desde un portátil pequeño hasta un monitor 4K, con escala de pantalla de 100 % a 200 %. **Candidata a subir de prioridad** (podría ir justo después de la Fase 14): si prefieres que vaya antes que la Fase 15, se cambia el orden.
+- [ ] **R1 — Inventario:** capturar la ventana principal, el sketch y cada diálogo y panel en 1024×768, 1280×720, 1366×768, 1920×1080, 2560×1440 y 3840×2160, con escala de 100, 125, 150 y 200 %, y anotar lo que se corta, se encima o queda fuera de la pantalla. Es la lista de trabajo del resto de la fase; se guarda en `docs/interfaz-responsiva.md`. Hace falta que `--captura-temas` acepte un tamaño de ventana y un factor de escala.
+- [ ] **R2 — Diálogos y paneles que se desplazan:** tamaño mínimo razonable de la ventana principal; los paneles de herramienta (Engranaje, Extruir, generadores…), el navegador y los diálogos largos (Exportar, Parámetros, Configuración, Cuerpos, Importar) dentro de un área con barra de desplazamiento; ningún diálogo más grande que la pantalla disponible (se recorta a `availableGeometry` y recuerda su tamaño y posición).
+- [ ] **R3 — Cinta que se adapta:** cuando no caben todas las herramientas, los grupos se recogen en botones con menú (como en Office o Fusion) en vez de una barra con desplazamiento horizontal; los textos bajo los iconos se ocultan antes que los iconos; los atajos y la búsqueda de comandos siguen llegando a todo.
+- [ ] **R4 — Paneles acoplados:** navegador, línea de tiempo y panel de herramienta con ancho proporcional a la ventana y plegables; en pantallas pequeñas arrancan plegados o flotantes sobre el lienzo para dejar espacio al dibujo. Recordar la disposición por tamaño de pantalla.
+- [ ] **R5 — Escala y DPI:** política de redondeo de escala de Qt, tamaños en unidades lógicas y no en píxeles, tamaño de los iconos y de las fuentes según la escala, las anotaciones y los iconos del sketch con tamaño legible a cualquier DPI, y que arrastrar la ventana entre monitores con escalas distintas no la deforme.
+- [ ] **R6 — Prueba automática de tamaños:** que `--prueba-interfaz` repita sus pasos en varios tamaños de ventana y compruebe que ningún botón, campo o diálogo queda fuera de la pantalla ni con el texto cortado; el CI (Xvfb) corre además a 1280×720 y 1024×768.
+- [ ] **R7 — Guía de pruebas:** sección con la matriz resolución × escala para que el usuario la pruebe en su pantalla pequeña y en la de diario.
+- **Orden propuesto:** R1 (sin eso no se sabe qué arreglar) → R2 (lo que hoy deja la interfaz inutilizable) → R5 → R3 → R4 → R6 → R7.
 
 ## Fases hechas
 
