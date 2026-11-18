@@ -10,6 +10,17 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Fase 16, E2 y E3: chaflán en la base y juego del diente — 17 nov. 2026
+
+Dos campos nuevos del engranaje, ambos en 0 por defecto (los diseños anteriores no cambian).
+- **Juego del diente** (`GearSpec::backlash`, `Modeling.cpp`): adelgaza el diente medio juego por lado sobre la primitiva; en la corona ensancha el hueco y en la cremallera adelgaza el diente. Rechaza juegos negativos o que dejan el diente sin cuerpo.
+- **Chaflán de la base** (`GearSpec::baseChamfer`, función `chamferStart`): achaflana el contorno de la cara `inicio`, sin el agujero; con hélice se rechaza. Máximo práctico ~0,25 mm con módulo 2.
+- Se guardan en el archivo (`backlash`, `baseChamfer`), salen en `GearFeature::numericFields` (ligables a parámetros) y en el panel de Sólido › Engranaje.
+- Pruebas: `tests/test_gear_tuning.cpp` (8 casos). Guía: PAR.18 a PAR.20.
+- **Volver atrás:** no fusionar `feature/engranajes-e2-e3`, o `git revert -m 1` de su fusión.
+
+---
+
 ## Fase 14, P3: partir el visor y prueba de interfaz en el CI — 17 nov. 2026
 
 - **Rama:** `feature/partir-viewportimpl` (sale de `develop`). Sin cambios de comportamiento: lo único visible es la compilación.

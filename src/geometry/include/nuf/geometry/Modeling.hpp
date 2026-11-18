@@ -137,6 +137,10 @@ struct GearSpec {
     double helixAngle = 0.0;             // rad; 0 = recto, el signo es el sentido de la hélice
     double length = 0.0;                 // cremallera: largo de la barra en mm; 0 = «teeth»·π·módulo. Si es menor, la barra
                                          // se corta a esa medida (el último diente queda cortado); no puede ser mayor
+    double backlash = 0.0;               // mm: cuánto se adelgaza cada diente medido sobre la circunferencia primitiva (0 = sin juego);
+                                         // en el interno se ensancha el hueco. Deja holgura sin mover los ejes
+    double baseChamfer = 0.0;            // mm: chaflán en las aristas de la cara inicial («pata de elefante» de la primera capa); 0 = sin chaflán;
+                                         // solo dientes rectos, y el kernel admite hasta ~0,25 mm con módulo 2 (más estrecho el diente, menos)
 };
 
 // Interno: «teeth» dientes de la corona, cuyo hueco con forma de diente de rueda lleva cabeza −1 módulo y raíz

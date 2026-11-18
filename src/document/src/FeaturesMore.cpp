@@ -196,6 +196,8 @@ std::vector<Feature::NumericField> GearFeature::numericFields()
             field("length", "Largo de la barra", spec.length),
             field("pressureAngle", "Ángulo de presión", spec.pressureAngle, kRadiansPerDegree),
             field("helixAngle", "Ángulo de hélice", spec.helixAngle, kRadiansPerDegree),
+            field("backlash", "Juego del diente", spec.backlash),
+            field("baseChamfer", "Chaflán de la base", spec.baseChamfer),
             {"teeth", "Dientes", 1.0, [this] { return double(spec.teeth); },
              [this](double v) { spec.teeth = int(std::lround(v)); }}};
 }
