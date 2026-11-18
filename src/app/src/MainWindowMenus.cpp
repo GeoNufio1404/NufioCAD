@@ -67,6 +67,7 @@
 #include <utility>
 
 #include "MainWindowCommon.hpp"
+#include "RadialMenu.hpp"
 
 namespace nuf::app {
 
@@ -745,6 +746,59 @@ void MainWindow::createMenus()
     for (QMenu* menu : findChildren<QMenu*>()) {
         menu->setToolTipsVisible(true);
     }
+    assignShortcuts();
+}
+
+// Atajos de una tecla (o Mayús + tecla) para las herramientas del sólido, sin pisar los del sketch (L R C A P T O M X K D,
+// que solo valen con un sketch abierto) ni los de archivo. Los de las acciones que ya tenían el suyo (E F H B G…) se
+// dejan como estaban. La tabla está también en la guía de pruebas (sección ATJ).
+void MainWindow::assignShortcuts()
+{
+    const auto key = [](QAction* action, const QKeySequence& sequence) {
+        if (action != nullptr && action->shortcut().isEmpty()) {
+            action->setShortcut(sequence);
+        }
+    };
+    key(createSketchAction_, QKeySequence(Qt::Key_S));
+    key(revolveAction_, QKeySequence(Qt::SHIFT | Qt::Key_R));
+    key(sweepAction_, QKeySequence(Qt::SHIFT | Qt::Key_W));
+    key(loftAction_, QKeySequence(Qt::SHIFT | Qt::Key_Y));
+    key(chamferAction_, QKeySequence(Qt::SHIFT | Qt::Key_F));
+    key(shellAction_, QKeySequence(Qt::Key_V));
+    key(mirrorAction_, QKeySequence(Qt::SHIFT | Qt::Key_M));
+    key(patternAction_, QKeySequence(Qt::SHIFT | Qt::Key_A));
+    key(planeAction_, QKeySequence(Qt::SHIFT | Qt::Key_N));
+    key(axisAction_, QKeySequence(Qt::SHIFT | Qt::Key_X));
+    key(parametersAction_, QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_P));
+    key(moveAction_, QKeySequence(Qt::SHIFT | Qt::Key_G));
+    key(combineAction_, QKeySequence(Qt::SHIFT | Qt::Key_U));
+    key(jointAction_, QKeySequence(Qt::SHIFT | Qt::Key_J));
+    key(measureAction_, QKeySequence(Qt::Key_I));
+    key(sectionAction_, QKeySequence(Qt::SHIFT | Qt::Key_S));
+}
+
+void MainWindow::openRadialMenu(const QPoint& at)
+{
+    std::vector<QAction*> items;
+    if (sketch_ != nullptr) {
+        for (const auto tool : {SketchSession::Tool::Line, SketchSession::Tool::Rectangle, SketchSession::Tool::Circle,
+                                SketchSession::Tool::Arc, SketchSession::Tool::Trim, SketchSession::Tool::Offset}) {
+            if (const auto it = toolActions_.find(tool); it != toolActions_.end()) {
+                items.push_back(it->second);
+            }
+        }
+        items.push_back(dimensionAction_);
+        items.push_back(finishSketchAction_);
+    } else {
+        items = {createSketchAction_, extrudeAction_, revolveAction_, boxAction_, filletAction_,
+                 chamferAction_,      holeAction_,    moveAction_};
+    }
+    items.erase(std::remove(items.begin(), items.end(), nullptr), items.end());
+    if (items.empty()) {
+        return;
+    }
+    auto* menu = new RadialMenu(items, viewport_);
+    menu->openAt(at);
 }
 
 } // namespace nuf::app

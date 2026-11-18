@@ -50,6 +50,13 @@ public:
 
     QWidget* panel() const { return panel_; }
     std::optional<document::FeatureId> editing() const { return editing_; }
+    // El campo numérico principal de la herramienta (la distancia de Extruir, el ángulo de Revolución…): el primero
+    // que no es una posición ni un giro. Sirve para escribir su valor junto al cursor (U7). «box» nulo: no hay.
+    struct PrimaryField {
+        QString label;
+        QDoubleSpinBox* box = nullptr;
+    };
+    PrimaryField primaryField() const;
     // Id de la operación (la que se edita o la reservada para la nueva).
     document::FeatureId featureId() const { return id_; }
     // Posición en el historial donde se calcula.

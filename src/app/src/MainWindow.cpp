@@ -5,6 +5,8 @@
 #include "BusySpinner.hpp"
 #include "StatusBanner.hpp"
 #include "ExpressionSpinBox.hpp"
+#include "RadialMenu.hpp"
+#include "ValueInput.hpp"
 #include "GeneratorTool.hpp"
 #include "SettingsDialog.hpp"
 #include "Units.hpp"
@@ -40,6 +42,9 @@
 #include <QApplication>
 #include <QActionGroup>
 #include <QCloseEvent>
+#include <QCursor>
+#include <QKeyEvent>
+#include <QMouseEvent>
 #include <QGuiApplication>
 #include <QScreen>
 #include <QResizeEvent>
@@ -328,7 +333,79 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
     if (watched == viewport_ && event->type() == QEvent::Resize) {
         placeRecoveryBar();
     }
+    // Clic derecho sobre la vista (sin arrastrar) abre el menú radial; fuera de un comando, o dentro de un sketch.
+    if (watched == viewport_ && (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonRelease)) {
+        const auto* mouse = static_cast<QMouseEvent*>(event);
+        if (mouse->button() == Qt::RightButton) {
+            if (event->type() == QEvent::MouseButtonPress) {
+                radialPending_ = !tool_ && findChild<RadialMenu*>() == nullptr;
+                radialPress_ = mouse->position().toPoint();
+            } else if (radialPending_) {
+                radialPending_ = false;
+                if ((mouse->position().toPoint() - radialPress_).manhattanLength() < 6) {
+                    openRadialMenu(mouse->position().toPoint());
+                }
+            }
+        }
+    }
+    // Con una herramienta abierta, escribir un número en la vista abre el cuadro del valor principal junto al cursor.
+    if (watched == viewport_ && event->type() == QEvent::KeyPress && tool_ && !sketch_) {
+        const auto* key = static_cast<QKeyEvent*>(event);
+        const QString text = key->text();
+        const bool numeric = text.size() == 1 && (text.front().isDigit() || text == QLatin1String(".") ||
+                                                  text == QLatin1String(",") || text == QLatin1String("-"));
+        if (numeric && !(key->modifiers() & (Qt::ControlModifier | Qt::AltModifier))) {
+            startToolTyping(text);
+            return true;
+        }
+    }
     return QMainWindow::eventFilter(watched, event);
+}
+
+void MainWindow::startToolTyping(const QString& text)
+{
+    if (!tool_) {
+        return;
+    }
+    const FeatureTool::PrimaryField primary = tool_->primaryField();
+    if (primary.box == nullptr) {
+        return;
+    }
+    if (toolValueInput_ == nullptr) {
+        toolValueInput_ = new ValueInput(viewport_);
+        connect(toolValueInput_, &ValueInput::accepted, this, &MainWindow::applyToolValue);
+    }
+    const auto* expression = qobject_cast<ExpressionSpinBox*>(primary.box);
+    const double shown = expression != nullptr && expression->isLength() ? Units::instance().toDisplay(primary.box->value())
+                                                                          : primary.box->value();
+    toolValueInput_->setFields({primary.label}, {shown});
+    toolValueInput_->adjustSize();
+    QPoint at = viewport_->mapFromGlobal(QCursor::pos()) + QPoint(16, 16);
+    at.setX(std::clamp(at.x(), 0, std::max(0, viewport_->width() - toolValueInput_->width())));
+    at.setY(std::clamp(at.y(), 0, std::max(0, viewport_->height() - toolValueInput_->height())));
+    toolValueInput_->move(at);
+    toolValueInput_->show();
+    toolValueInput_->raise();
+    toolValueInput_->startTyping(text);
+}
+
+void MainWindow::applyToolValue()
+{
+    if (!tool_ || toolValueInput_ == nullptr) {
+        return;
+    }
+    const FeatureTool::PrimaryField primary = tool_->primaryField();
+    const std::vector<std::optional<double>> typed = toolValueInput_->values();
+    toolValueInput_->clear();
+    toolValueInput_->hide();
+    viewport_->setFocus();
+    if (primary.box == nullptr || typed.empty() || !typed.front()) {
+        return;
+    }
+    // Un número a secas se entiende en la unidad elegida (las longitudes) o tal cual (ángulos y cantidades).
+    const auto* expression = qobject_cast<ExpressionSpinBox*>(primary.box);
+    const double value = expression != nullptr && expression->isLength() ? Units::instance().fromDisplay(*typed.front()) : *typed.front();
+    primary.box->setValue(value);
 }
 
 bool MainWindow::anythingBusy() const
@@ -711,6 +788,10 @@ void MainWindow::reopenGenerator(document::FeatureId id)
 
 void MainWindow::finishTool(bool accepted)
 {
+    if (toolValueInput_ != nullptr) {
+        toolValueInput_->clear();
+        toolValueInput_->hide();
+    }
     if (!tool_) {
         return;
     }

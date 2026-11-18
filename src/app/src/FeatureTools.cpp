@@ -65,6 +65,28 @@ FeatureTool::~FeatureTool()
     }
 }
 
+FeatureTool::PrimaryField FeatureTool::primaryField() const
+{
+    static const std::vector<std::pair<std::string, QString>> labels = {
+        {"distance", QStringLiteral("Distancia")}, {"angle", QStringLiteral("Ángulo")}, {"diameter", QStringLiteral("Diámetro")},
+        {"size", QStringLiteral("Tamaño")}, {"thickness", QStringLiteral("Espesor")}, {"depth", QStringLiteral("Profundidad")},
+        {"width", QStringLiteral("Ancho")}, {"height", QStringLiteral("Alto")}, {"module", QStringLiteral("Módulo")},
+        {"radius", QStringLiteral("Radio")}, {"length", QStringLiteral("Largo")}, {"pitch", QStringLiteral("Paso")}};
+    for (const auto& [key, box] : fields_) {
+        if (key == "x" || key == "y" || key == "z" || key == "rotation" || box == nullptr) {
+            continue;
+        }
+        QString label = QString::fromStdString(key);
+        for (const auto& [known, text] : labels) {
+            if (known == key) {
+                label = text;
+            }
+        }
+        return {label, box};
+    }
+    return {};
+}
+
 void FeatureTool::start()
 {
     // El contenido va en un área con desplazamiento (así no empuja el tamaño mínimo de la ventana y, si no cabe, se

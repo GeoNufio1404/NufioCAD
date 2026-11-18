@@ -12,6 +12,8 @@
 #include "MainWindow.hpp"
 #include "SketchSession.hpp"
 #include "Ribbon.hpp"
+#include "RadialMenu.hpp"
+#include "ValueInput.hpp"
 #include "StartScreen.hpp"
 #include "Units.hpp"
 
@@ -46,6 +48,7 @@
 #include <QMap>
 #include <QPushButton>
 #include <QKeyEvent>
+#include <QMouseEvent>
 #include <QStatusBar>
 #include <QTimer>
 #include <QSettings>
@@ -609,6 +612,48 @@ int InterfaceCheck::run()
     step(QStringLiteral("La ventana empieza vacía"), [&] {
         expect(window_.document_.featureCount() == 0, QStringLiteral("el diseño no está vacío"));
         expect(window_.tool_ == nullptr, QStringLiteral("hay una herramienta abierta"));
+    });
+
+    // Fase 15: menú radial con clic derecho (U6) y valor principal junto al cursor (U7).
+    step(QStringLiteral("Menú radial con clic derecho en la vista"), [&] {
+        const QPointF at(300.0, 300.0);
+        QMouseEvent press(QEvent::MouseButtonPress, at, at, Qt::RightButton, Qt::RightButton, Qt::NoModifier);
+        QMouseEvent release(QEvent::MouseButtonRelease, at, at, Qt::RightButton, Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(window_.viewport_, &press);
+        QApplication::sendEvent(window_.viewport_, &release);
+        settle(100);
+        auto* menu = window_.viewport_->findChild<RadialMenu*>();
+        expect(menu != nullptr && menu->isVisible(), QStringLiteral("no se abrió el menú radial"));
+        if (menu != nullptr) {
+            expect(menu->count() == 8, QStringLiteral("el menú radial debería tener 8 sectores"));
+            // El sector de la Caja (el cuarto): se elige y abre la herramienta.
+            const int boxSector = 3;
+            expect(menu->choose(boxSector), QStringLiteral("elegir un sector no lanzó la acción"));
+            settle(100);
+            expect(window_.tool_ != nullptr, QStringLiteral("el sector no abrió la herramienta"));
+            // Escribir un número en la vista abre el valor principal junto al cursor (U7).
+            QKeyEvent key(QEvent::KeyPress, Qt::Key_3, Qt::NoModifier, QStringLiteral("3"));
+            QApplication::sendEvent(window_.viewport_, &key);
+            expect(window_.toolValueInput_ != nullptr && window_.toolValueInput_->isVisible(),
+                   QStringLiteral("escribir en la vista no abrió el cuadro del valor"));
+            if (window_.toolValueInput_ != nullptr && window_.tool_ != nullptr) {
+                const FeatureTool::PrimaryField primary = window_.tool_->primaryField();
+                expect(primary.box != nullptr, QStringLiteral("la herramienta no tiene campo principal"));
+                window_.toolValueInput_->startTyping(QStringLiteral("37"));
+                emit window_.toolValueInput_->accepted();
+                if (primary.box != nullptr) {
+                    expect(std::abs(primary.box->value() - 37.0) < 1e-6,
+                           QStringLiteral("el valor escrito no llegó al campo (%1)").arg(primary.box->value()));
+                }
+            }
+            window_.finishTool(false);
+            waitIdle();
+        }
+        settle(100);  // deleteLater
+        {
+            const auto* left = window_.viewport_->findChild<RadialMenu*>();
+            expect(left == nullptr || !left->isVisible(), QStringLiteral("el menú radial no se cerró"));
+        }
     });
 
     // Cada generador: abrir, cambiar un valor, aceptar (queda todo), deshacer (no queda nada).

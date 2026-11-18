@@ -58,6 +58,8 @@ class InterfaceCheck;
 class Recovery;
 class Ribbon;
 class StartScreen;
+class RadialMenu;
+class ValueInput;
 class NavigatorWidget;
 class TimelineWidget;
 
@@ -216,6 +218,14 @@ private:
     QDoubleSpinBox* sectionOffset_ = nullptr;
     QCheckBox* sectionFlip_ = nullptr;
     QLabel* busyBadge_ = nullptr;     // «Calculando…», sobre la vista
+    // Menú radial con clic derecho sobre la vista (U6) y atajos de una tecla para todo.
+    void openRadialMenu(const QPoint& at);
+    void assignShortcuts();
+    QPoint radialPress_;
+    bool radialPending_ = false;
+    ValueInput* toolValueInput_ = nullptr;  // valor del campo principal de la herramienta, junto al cursor (U7)
+    void startToolTyping(const QString& text);
+    void applyToolValue();
     QFrame* recoveryBar_ = nullptr;   // aviso de la copia de recuperación (U2), sobre la vista, arriba y al centro
     void placeRecoveryBar();
     BusySpinner* badgeSpinner_ = nullptr;   // el spinner del distintivo
