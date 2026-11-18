@@ -176,3 +176,63 @@ TEST_CASE("El juego y el chaflán de la base se guardan y se ligan a parámetros
     reopened.setParameters({{"juego", "0.4"}});
     REQUIRE(reopened.result().bodies.front().shape.volume() < volume);
 }
+
+#include <nuf/commands/AddRecipe.hpp>
+#include <nuf/document/Generators.hpp>
+
+namespace {
+
+double totalVolume(nuf::document::Document& doc)
+{
+    double sum = 0.0;
+    for (const auto& body : doc.result().bodies) {
+        sum += body.shape.volume();
+    }
+    return sum;
+}
+
+} // namespace
+
+TEST_CASE("Los generadores de engranajes dan juego del diente y chaflán de la base, y los diseños viejos siguen igual", "[generator][gear][tuning]")
+{
+    using namespace nuf::document;
+    for (const char* id : {"par-engranajes", "engranaje-interno", "cremallera"}) {
+        INFO(id);
+        const Generator* generator = findGenerator(id);
+        REQUIRE(generator != nullptr);
+        GeneratorValues values = generator->defaults();
+        REQUIRE(values.count("adelgazar") == 1);
+        REQUIRE(values.count("chaflan_base") == 1);
+
+        Document plain;
+        applyRecipe(plain, generator->make(values, ""));
+        const double base = totalVolume(plain);
+
+        // Un diseño guardado antes de estos campos no trae las claves: sale igual que con 0.
+        GeneratorValues old = values;
+        old.erase("adelgazar");
+        old.erase("chaflan_base");
+        Document legacy;
+        applyRecipe(legacy, generator->make(old, ""));
+        REQUIRE_THAT(totalVolume(legacy), Catch::Matchers::WithinRel(base, 1e-9));
+
+        values["adelgazar"] = 0.2;
+        Document thin;
+        applyRecipe(thin, generator->make(values, ""));
+        for (std::size_t i = 0; i < thin.featureCount(); ++i) {
+            INFO(thin.feature(i).name());
+            REQUIRE(thin.status(thin.feature(i).id()).health != Health::Error);
+        }
+        REQUIRE(totalVolume(thin) < base);
+
+        values["adelgazar"] = 0.0;
+        values["chaflan_base"] = 0.2;  // con los dientes por defecto de los tres generadores el kernel lo admite
+        Document chamfered;
+        applyRecipe(chamfered, generator->make(values, ""));
+        for (std::size_t i = 0; i < chamfered.featureCount(); ++i) {
+            INFO(chamfered.feature(i).name());
+            REQUIRE(chamfered.status(chamfered.feature(i).id()).health != Health::Error);
+        }
+        REQUIRE(totalVolume(chamfered) < base);
+    }
+}

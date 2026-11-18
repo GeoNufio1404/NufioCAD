@@ -140,7 +140,7 @@ struct GearSpec {
     double backlash = 0.0;               // mm: cuánto se adelgaza cada diente medido sobre la circunferencia primitiva (0 = sin juego);
                                          // en el interno se ensancha el hueco. Deja holgura sin mover los ejes
     double baseChamfer = 0.0;            // mm: chaflán en las aristas de la cara inicial («pata de elefante» de la primera capa); 0 = sin chaflán;
-                                         // solo dientes rectos, y el kernel admite hasta ~0,25 mm con módulo 2 (más estrecho el diente, menos)
+                                         // solo dientes rectos; el kernel falla de forma irregular con algunas medidas según los dientes (ver chamferStart)
 };
 
 // Interno: «teeth» dientes de la corona, cuyo hueco con forma de diente de rueda lleva cabeza −1 módulo y raíz

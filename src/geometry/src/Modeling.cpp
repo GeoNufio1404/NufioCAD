@@ -1421,11 +1421,18 @@ Shape chamferStart(const std::string& tag, const Shape& body, double distance)
             edges.push_back(index - 1);
         }
     }
-    try {
-        return chamfer(tag, body, edges, distance);
-    } catch (const GeometryError&) {
-        throw GeometryError("No se pudo achaflanar la base del engranaje: prueba con una distancia menor");
+    // El kernel falla de forma irregular con algunas medidas: con 24 dientes y módulo 2 admite hasta 0,20 y falla de 0,21
+    // a 0,30; con 30 dientes falla de 0,13 a 0,23 pero admite 0,25; con 40 falla de 0,07 a 0,11. No es un tope de tamaño
+    // sino de la geometría de la raíz. Se reintenta con medidas apenas distintas (hasta un 6 % menos o más) y, si ninguna
+    // sirve, se avisa de que otra medida cercana puede funcionar.
+    for (const double factor : {1.0, 0.98, 1.02, 0.96, 1.04, 0.94, 1.06}) {
+        try {
+            return chamfer(tag, body, edges, distance * factor);
+        } catch (const GeometryError&) {
+            // siguiente medida
+        }
     }
+    throw GeometryError("No se pudo achaflanar la base del engranaje con esa medida: prueba con otra cercana (a veces una algo mayor o menor sí funciona)");
 }
 
 } // namespace
