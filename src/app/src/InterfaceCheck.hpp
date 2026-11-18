@@ -35,6 +35,10 @@ public:
     int run();
     // --captura-temas: guarda capturas de la ventana y de los menús con el tema claro y el oscuro, para mirarlas.
     int captureThemes(const QString& folder);
+    // --inventario: recorre la ventana, las herramientas y los diálogos con el tamaño y la escala de pantalla con que se
+    // abrió el programa (--tamano, --escala), guarda una captura de cada uno y escribe «inventario.txt» con lo que se
+    // sale de la pantalla, queda recortado por su contenedor o tiene el texto cortado (Fase 20, R1).
+    int captureInventory(const QString& folder);
 
 private:
     struct Result {

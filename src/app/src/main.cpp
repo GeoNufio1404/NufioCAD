@@ -68,6 +68,8 @@ int main(int argc, char* argv[])
     // que no hay fallos ni paradas largas. Usa carpetas y ajustes propios: no toca los del usuario.
     bool interfaceCheck = false;
     QString captureFolder;  // --captura-temas carpeta: capturas del tema claro y oscuro
+    QString inventoryFolder;  // --inventario carpeta [--tamano WxH] [--escala F]: Fase 20, R1
+    QSize requestedSize;
     QString reportPath;
     int thresholdMs = 20000;  // en Debug, OpenCASCADE es lento: sirve para detectar paradas de decenas de segundos
     for (int i = 1; i < argc; ++i) {
@@ -77,6 +79,16 @@ int main(int argc, char* argv[])
         } else if (argument == "--captura-temas" && i + 1 < argc) {
             interfaceCheck = true;
             captureFolder = QString::fromLocal8Bit(argv[i + 1]);
+        } else if (argument == "--inventario" && i + 1 < argc) {
+            interfaceCheck = true;
+            inventoryFolder = QString::fromLocal8Bit(argv[i + 1]);
+        } else if (argument == "--tamano" && i + 1 < argc) {
+            const QStringList parts = QString::fromLocal8Bit(argv[i + 1]).split(QLatin1Char('x'));
+            if (parts.size() == 2) {
+                requestedSize = QSize(parts[0].toInt(), parts[1].toInt());
+            }
+        } else if (argument == "--escala" && i + 1 < argc) {
+            qputenv("QT_SCALE_FACTOR", QByteArray(argv[i + 1]));  // antes de crear la aplicación
         } else if (argument == "--informe" && i + 1 < argc) {
             reportPath = QString::fromLocal8Bit(argv[i + 1]);
         } else if (argument == "--umbral-ms" && i + 1 < argc) {
@@ -112,11 +124,15 @@ int main(int argc, char* argv[])
     nuf::app::initTheme(app);
 
     nuf::app::MainWindow window;
+    if (requestedSize.isValid() && !requestedSize.isEmpty()) {
+        window.resize(requestedSize);
+    }
     window.show();
     if (interfaceCheck) {
-        QTimer::singleShot(800, &window, [&window, reportPath, thresholdMs, captureFolder] {
+        QTimer::singleShot(800, &window, [&window, reportPath, thresholdMs, captureFolder, inventoryFolder] {
             nuf::app::InterfaceCheck check(window, reportPath, thresholdMs);
-            const int code = captureFolder.isEmpty() ? check.run() : check.captureThemes(captureFolder);
+            const int code = !inventoryFolder.isEmpty() ? check.captureInventory(inventoryFolder)
+                             : captureFolder.isEmpty() ? check.run() : check.captureThemes(captureFolder);
             window.close();
             QApplication::exit(code);
         });

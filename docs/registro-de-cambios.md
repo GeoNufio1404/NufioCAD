@@ -10,6 +10,14 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Fase 20, R1: inventario de la interfaz a distintas pantallas — 18 nov. 2026
+
+- **Qué cambia:** modo nuevo `--inventario <carpeta> [--tamano AnchoxAlto] [--escala N]` (`InterfaceCheck::captureInventory`, opciones en `main.cpp`): abre la ventana con ese tamaño y escala, recorre cinta, herramientas, generadores, diálogos y sketch, guarda capturas y escribe `inventario.txt`. No cambia el comportamiento normal del programa.
+- **Documento:** `docs/interfaz-responsiva.md` (resultados de 9 pantallas y orden de trabajo de R2 a R6). La Fase 20 pasa a ir justo después de la 14.
+- **Cómo volver atrás:** no fusionar `feature/interfaz-responsiva-r1`, o `git revert -m 1` de su fusión.
+
+---
+
 ## Fase 16, E2 y E3: chaflán en la base y juego del diente — 17 nov. 2026
 
 Dos campos nuevos del engranaje, ambos en 0 por defecto (los diseños anteriores no cambian).
