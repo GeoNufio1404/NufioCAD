@@ -73,7 +73,8 @@ namespace nuf::app {
 
 
 // Versión de la distribución de barras y paneles (ver restoreState).
-inline constexpr int kLayoutVersion = 5;
+// 6: la barra de acceso rápido (Fase 15) es una barra nueva sobre la cinta; la disposición guardada antes la dejaba al lado.
+inline constexpr int kLayoutVersion = 6;
 
 // Ícono y descripción de una acción. El tooltip lleva el nombre completo, la
 // tecla y, si se da, una línea de ayuda; el botón de la barra muestra el nombre
