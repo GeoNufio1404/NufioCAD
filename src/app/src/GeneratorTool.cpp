@@ -12,6 +12,7 @@
 #include <QLineEdit>
 #include <QLabel>
 #include <QPushButton>
+#include <QToolButton>
 #include <QSettings>
 #include <QVBoxLayout>
 #include <QTimer>
@@ -44,6 +45,7 @@ GeneratorTool::GeneratorTool(document::Document& document, render::Viewport& vie
 void GeneratorTool::createFields(QFormLayout* form)
 {
     form_ = form;
+    std::string currentGroup;
     for (document::GeneratorField f : generator_.fields()) {
         // Un formulario nuevo parte de las últimas respuestas que se aceptaron con este generador.
         if (!hasInitial_) {
@@ -124,6 +126,31 @@ void GeneratorTool::createFields(QFormLayout* form)
         if (!f.hint.empty()) {
             widget->setToolTip(QString::fromStdString(f.hint));
         }
+        // Sección plegable (U8): un encabezado cuando cambia el grupo; plegarlo oculta sus preguntas.
+        if (!f.group.empty() && f.group != currentGroup) {
+            currentGroup = f.group;
+            auto* header = new QToolButton();
+            header->setObjectName(QStringLiteral("groupHeader"));
+            header->setText(QString::fromStdString(f.group));
+            header->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+            header->setArrowType(Qt::DownArrow);
+            header->setAutoRaise(true);
+            header->setCheckable(true);
+            header->setChecked(true);
+            header->setStyleSheet(QStringLiteral("QToolButton { font-weight: 600; text-align: left; padding: 2px 0; }"));
+            header->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+            const std::string name = f.group;
+            connect(header, &QToolButton::toggled, this, [this, header, name](bool open) {
+                header->setArrowType(open ? Qt::DownArrow : Qt::RightArrow);
+                if (open) {
+                    collapsedGroups_.erase(name);
+                } else {
+                    collapsedGroups_.insert(name);
+                }
+                updateVisibility();
+            });
+            form->addRow(header);
+        }
         form->addRow(QString::fromStdString(f.label), container);
         rows_.push_back({f, widget, container});
         // Las preguntas que son una medida sobre una pieza señalan esa medida en la vista mientras se editan.
@@ -178,7 +205,7 @@ void GeneratorTool::updateVisibility()
                 }
             }
         }
-        form_->setRowVisible(row.container, visible);
+        form_->setRowVisible(row.container, visible && !collapsedGroups_.contains(row.field.group));
     }
 }
 

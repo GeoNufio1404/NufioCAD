@@ -52,6 +52,20 @@ Dos campos nuevos del engranaje, ambos en 0 por defecto (los diseños anteriores
 
 ---
 
+
+## Fase 15: usabilidad e interfaz estilo Fusion 360 (U1 a U8) — 18 nov. 2026
+
+- **U1:** selector de unidad en la barra de estado (`unitBox_`), atajos B, Mayús+C, G, Mayús+T y Alt+1… (`MainWindowMenus.cpp`).
+- **U2:** pestaña HERRAMIENTAS oculta en el sketch (`MainWindowView.cpp`); `offerRecovery` pasa a una franja sobre el lienzo (`MainWindowFiles.cpp`).
+- **U3:** `nuf/geometry/DisplayUnits.hpp` (unidad de visualización del núcleo) usada en `Measure.cpp`, `Printability.cpp` y los resúmenes de `Generators.cpp`; `ViewState::displayUnit` (unidad por documento, guardada en el archivo y fuera de `operator==`); prueba `tests/test_display_units.cpp`.
+- **U4/U5:** paleta del sketch, barra de acceso rápido, raíz del Navegador (`ModelPanels.cpp`), controles de reproducción del historial y comandos flotantes (`MainWindow.cpp`, `MainWindowMenus.cpp`).
+- **U6:** `RadialMenu` (nuevo, `RadialMenu.cpp/.hpp`), clic derecho en `MainWindow::eventFilter`, y `MainWindow::assignShortcuts` con las teclas de una letra.
+- **U7:** `FeatureTool::primaryField` y `MainWindow::startToolTyping`/`applyToolValue`.
+- **U8:** botón Cancelar en el recuadro «Calculando…», `GeneratorField::group` y secciones plegables en `GeneratorTool`, mover con Ctrl a la rejilla (`FeatureToolsMore.cpp`).
+- **Pruebas:** un paso nuevo en la prueba de interfaz (menú radial y valor junto al cursor) y `test_display_units.cpp`; el inventario de pantallas sigue en 0 problemas en las 9 pantallas.
+- **Cómo volver atrás:** no fusionar `feature/fase-15-usabilidad`, o `git revert -m 1` de su fusión; cada punto va en commits separados (U1–U3, U4–U5, U6–U7, U8).
+
+---
 ## Fase 14, P3: partir el visor y prueba de interfaz en el CI — 17 nov. 2026
 
 - **Rama:** `feature/partir-viewportimpl` (sale de `develop`). Sin cambios de comportamiento: lo único visible es la compilación.

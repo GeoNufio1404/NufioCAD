@@ -669,6 +669,16 @@ std::vector<GeneratorField> tuningFields()
     return {thin, chamfer};
 }
 
+// Reparte las preguntas de un engranaje en dos secciones plegables (Fase 15, U8): las medidas y los ajustes de impresión.
+std::vector<GeneratorField> withGroups(std::vector<GeneratorField> fields)
+{
+    for (GeneratorField& f : fields) {
+        const bool printing = f.key == "juego" || f.key == "adelgazar" || f.key == "chaflan_base";
+        f.group = printing ? "Ajustes de impresión" : "Medidas del engranaje";
+    }
+    return fields;
+}
+
 void addTuningParameters(Recipe& recipe, const GeneratorValues& values, const std::string& suffix)
 {
     recipe.parameters.push_back({"adelgazar" + suffix, number(tuningValue(values, "adelgazar"))});
@@ -712,7 +722,7 @@ public:
             f.hint = std::move(hint);
             return f;
         };
-        return {make(K::Length, "modulo", "Módulo", 2.0, 0.3, 20.0, "El tamaño del diente: igual en las dos ruedas"),
+        return withGroups({make(K::Length, "modulo", "Módulo", 2.0, 0.3, 20.0, "El tamaño del diente: igual en las dos ruedas"),
                 make(K::Count, "dientes_1", "Dientes de la rueda 1", 12.0, 6.0, 300.0),
                 make(K::Count, "dientes_2", "Dientes de la rueda 2", 24.0, 6.0, 300.0),
                 make(K::Angle, "presion", "Ángulo de presión", 20.0, 5.0, 35.0, "Igual en las dos ruedas (20° es lo normal)"),
@@ -723,7 +733,7 @@ public:
                 make(K::Length, "agujero_2", "Agujero de la rueda 2", 5.0, 0.0, 100.0, "0 = macizo"),
                 make(K::Length, "juego", "Juego entre dientes", 0.15, 0.0, 2.0,
                      "Aire para que giren sin atascarse al imprimir (se suma a la distancia entre ejes)"),
-                tuningFields()[0], tuningFields()[1]};
+                tuningFields()[0], tuningFields()[1]});
     }
 
     std::string summary(const GeneratorValues& values) const override
@@ -849,7 +859,7 @@ public:
     std::vector<GeneratorField> fields() const override
     {
         using K = GeneratorField::Kind;
-        return {gearField(K::Length, "modulo", "Módulo", 2.0, 0.3, 20.0, "El tamaño del diente: igual en la corona y el piñón"),
+        return withGroups({gearField(K::Length, "modulo", "Módulo", 2.0, 0.3, 20.0, "El tamaño del diente: igual en la corona y el piñón"),
                 gearField(K::Count, "dientes_corona", "Dientes de la corona", 36.0, 20.0, 300.0,
                           "Mejor al menos 8 más que el piñón (si no, los dientes se estorban)"),
                 gearField(K::Count, "dientes_pinon", "Dientes del piñón", 12.0, 6.0, 300.0),
@@ -860,7 +870,7 @@ public:
                 gearField(K::Length, "agujero_pinon", "Agujero del piñón", 5.0, 0.0, 100.0, "0 = macizo"),
                 gearField(K::Length, "juego", "Juego entre dientes", 0.15, 0.0, 2.0,
                           "Aire para que giren sin atascarse al imprimir (acerca los ejes)"),
-                tuningFields()[0], tuningFields()[1]};
+                tuningFields()[0], tuningFields()[1]});
     }
 
     std::string summary(const GeneratorValues& values) const override
@@ -970,7 +980,7 @@ public:
                                          "Largo de la barra = dientes · π · módulo");
         teeth.showKey = "largo_modo";
         teeth.showIndex = 0;
-        return {gearField(K::Length, "modulo", "Módulo", 2.0, 0.3, 20.0, "El tamaño del diente: igual en la rueda y la barra"),
+        return withGroups({gearField(K::Length, "modulo", "Módulo", 2.0, 0.3, 20.0, "El tamaño del diente: igual en la rueda y la barra"),
                 gearField(K::Count, "dientes_rueda", "Dientes de la rueda", 20.0, 6.0, 300.0),
                 mode,
                 teeth,
@@ -982,7 +992,7 @@ public:
                 gearField(K::Length, "agujero_rueda", "Agujero de la rueda", 5.0, 0.0, 100.0, "0 = macizo"),
                 gearField(K::Length, "juego", "Juego entre dientes", 0.15, 0.0, 2.0,
                           "Aire para que engranen sin atascarse al imprimir (aleja la barra de la rueda)"),
-                tuningFields()[0], tuningFields()[1]};
+                tuningFields()[0], tuningFields()[1]});
     }
 
     // Lo que sale del modo de largo: cuántos dientes y cuánto mide la barra (los diseños hechos antes de que existiera

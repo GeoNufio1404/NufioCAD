@@ -8,6 +8,7 @@
 #include <nuf/render/Viewport.hpp>
 
 #include <QButtonGroup>
+#include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
@@ -484,9 +485,14 @@ void MoveTool::gizmoDragged(int axis, double amount)
     bool snapped = false;  // pegado a una marca de un anillo
     double turnsAngle = 0.0;  // el ángulo de ese giro (grados)
     if (moveMode_->isChecked()) {
-        position[std::size_t(axis)] = std::round((dragPosition_[std::size_t(axis)] + amount) * 100.0) / 100.0;
-        text = QStringLiteral("Mover en %1: %2").arg(QLatin1Char("XYZ"[axis]))
-                   .arg(Units::instance().formatWithUnit(position[std::size_t(axis)]));
+        // Con Ctrl el movimiento se pega a una rejilla de una unidad entera (1 mm, 1 cm, 1 in…): U8.
+        const bool grid = QApplication::keyboardModifiers().testFlag(Qt::ControlModifier);
+        const double raw = dragPosition_[std::size_t(axis)] + amount;
+        const double step = Units::instance().factor();
+        position[std::size_t(axis)] = grid ? std::round(raw / step) * step : std::round(raw * 100.0) / 100.0;
+        text = QStringLiteral("Mover en %1: %2%3").arg(QLatin1Char("XYZ"[axis]))
+                   .arg(Units::instance().formatWithUnit(position[std::size_t(axis)]),
+                        grid ? QStringLiteral("  (rejilla; suelta Ctrl para mover libre)") : QStringLiteral("  (Ctrl: pegar a la rejilla)"));
     } else {
         // Lo que se gira en este arrastre, sobre el eje del mundo que dibuja el anillo: el ángulo del cursor sobre el
         // anillo desde su marca 0 (como Orca Slicer), que se pega a las marcas (0, 45, 90, 180, 270…) si se pasa

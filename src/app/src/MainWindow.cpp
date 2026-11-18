@@ -104,6 +104,33 @@ MainWindow::MainWindow(QWidget* parent)
     badgeSpinner_ = new BusySpinner(busyBadge_, 16);
     badgeSpinner_->setColor(QColor(0xE6, 0xEA, 0xF0));
     badgeSpinner_->move(12, (busyBadge_->height() - badgeSpinner_->height()) / 2);
+    // Botón «Cancelar» (U8): deja de esperar un cálculo largo volviendo al estado anterior (cierra la herramienta que
+    // se está calculando o deshace el último cambio). Va dentro del recuadro, a la derecha del texto.
+    {
+        const int base = busyBadge_->sizeHint().width();
+        auto* cancelButton = new QToolButton(busyBadge_);
+        cancelButton->setObjectName(QStringLiteral("busyCancel"));
+        cancelButton->setText(QStringLiteral("Cancelar"));
+        cancelButton->setCursor(Qt::PointingHandCursor);
+        cancelButton->setToolTip(QStringLiteral("Deja de calcular y vuelve al estado anterior (equivale a deshacer el último cambio)"));
+        cancelButton->setStyleSheet(QStringLiteral(
+            "QToolButton { background: rgba(240, 178, 90, 50); color: #F0B25A; border: 1px solid #F0B25A; border-radius: 9px;"
+            " padding: 1px 8px; } QToolButton:hover { background: rgba(240, 178, 90, 110); }"));
+        cancelButton->adjustSize();
+        busyBadge_->setStyleSheet(busyBadge_->styleSheet().replace(QStringLiteral("padding: 5px 14px 5px 36px;"),
+                                                                    QStringLiteral("padding: 5px %1px 5px 36px;").arg(cancelButton->width() + 22)));
+        busyBadge_->adjustSize();
+        cancelButton->move(base + 6 > 0 ? busyBadge_->width() - cancelButton->width() - 10 : 0,
+                           (busyBadge_->height() - cancelButton->height()) / 2);
+        connect(cancelButton, &QToolButton::clicked, this, [this] {
+            if (tool_) {
+                finishTool(false);
+            } else if (commands_.canUndo()) {
+                commands_.undo();
+            }
+            statusBar()->showMessage(QStringLiteral("Cálculo cancelado: se volvió al estado anterior"), 5000);
+        });
+    }
     busyBadge_->hide();
     viewport_->installEventFilter(this);
     createDocks();
