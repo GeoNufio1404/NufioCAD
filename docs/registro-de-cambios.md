@@ -27,6 +27,19 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+
+## Fase 20, R3 a R7: interfaz responsiva completa — 18 nov. 2026
+
+- **R3 (cinta):** `Ribbon::adapt` — nombres fuera, luego grupos al botón «Más »»; `Ribbon.cpp/.hpp`.
+- **R4 (paneles):** `MainWindow::adaptToSize` pliega el Navegador (< 1100 px de ancho) y la línea de tiempo (< 640 de alto) y compacta la cinta; al cerrar se guardan visibles; la línea de tiempo puede encoger.
+- **R5 (escala):** `Viewport::paintGL` pone la resolución de OpenCASCADE a 72 × escala y reescala el cubo de vistas; la ventana inicial nunca excede la pantalla.
+- **R2 (diálogos):** `DialogSize.hpp` (`fitDialogToScreen`) en Exportar, Parámetros y Cuerpos: máximo 90 % de la pantalla y tamaño recordado.
+- **R6 (pruebas):** `--inventario` sale con 3 si algo no cabe; `--tamano` y `--escala` valen para todos los modos; paso «Prueba de tamaños de pantalla (Xvfb)» en el CI de Linux (con `continue-on-error`).
+- **R7 (guía):** sección 1.8 con `RSP.1` a `RSP.14` y la matriz resolución × escala.
+- **Resultado:** inventario con 0 problemas en 9 pantallas (960×540 a 3840×2160).
+- **Cómo volver atrás:** `git revert -m 1` de la fusión de `feature/interfaz-responsiva-r2`; o solo la cinta (`Ribbon.*`), solo el plegado (`adaptToSize`) o solo la escala (bloque de `Resolution` en `paintGL`).
+
+---
 ## Fase 16, E2 y E3: chaflán en la base y juego del diente — 17 nov. 2026
 
 Dos campos nuevos del engranaje, ambos en 0 por defecto (los diseños anteriores no cambian).

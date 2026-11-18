@@ -222,19 +222,40 @@ Código: **ARC**. Las pruebas **31–38** están en la hoja de ruta («Pruebas m
 
 ---
 
-### 1.8 Paneles de herramienta con desplazamiento (`RSP`, Fase 20, R2)
+### 1.8 Interfaz en cualquier pantalla (`RSP`, Fase 20)
 
-Código: **RSP**. Conviene probarlo en tu pantalla pequeña y también en la de diario.
+Código: **RSP**. Conviene probarlo en tu pantalla pequeña **y** en la de diario. Para emular una pantalla más chica en la de diario: Configuración › Pantalla › Escala de Windows (125 %, 150 %, 200 %).
 
 | ID | Haz esto | Debe pasar |
 |---|---|---|
-| RSP.1 | Sólido › **Engranaje** (o cualquier herramienta) | El panel de Propiedades se abre con todos sus campos; si no caben en alto, aparece una barra de desplazamiento a la derecha del panel y **Cancelar y Aceptar quedan siempre visibles abajo** |
+| RSP.1 | Sólido › **Engranaje** (o cualquier herramienta) | El panel de Propiedades se abre con todos sus campos; si no caben en alto, aparece una barra de desplazamiento y **Cancelar y Aceptar quedan siempre visibles abajo** |
 | RSP.2 | Con el panel abierto, desplaza con la rueda del ratón sobre el panel | Los campos suben y bajan; los botones de abajo no se mueven |
 | RSP.3 | Herramientas › **Par de engranajes** (también «Engranaje interno» y «Cremallera») | El panel se abre más ancho que los demás si hay sitio; ya no se cortan los campos por los lados (si la ventana es muy estrecha, sale una barra horizontal) |
-| RSP.4 | Cambia el tamaño de la ventana a lo más pequeño que puedas con una herramienta abierta | La ventana ya no crece sola ni se sale de la pantalla por culpa del panel |
+| RSP.4 | Reduce la ventana al mínimo con una herramienta abierta | La ventana ya no crece sola ni se sale de la pantalla por culpa del panel |
 | RSP.5 | Escribe en un campo y pulsa Tab hasta pasar el último | El panel se desplaza solo hasta mostrar el campo con el foco |
-| RSP.6 | Acepta y cancela varias herramientas seguidas | No hay parpadeos ni paneles vacíos; Enter acepta y Esc cancela como antes |
-| RSP.7 | Cambia la escala de pantalla de Windows (Configuración › Pantalla › Escala) a 125 % o 150 % y abre el programa | Con cualquier herramienta abierta, la ventana cabe en la pantalla y se puede aceptar o cancelar |
+| RSP.6 | Acepta y cancela varias herramientas seguidas | Sin parpadeos ni paneles vacíos; Enter acepta y Esc cancela como antes |
+| RSP.7 | Estrecha la ventana poco a poco (de 1500 px hacia 900 px de ancho) | Primero los botones de la cinta pierden su nombre y quedan solo los iconos; si aún no caben, los últimos grupos pasan al botón **«Más »»** (arriba a la derecha, junto a las pestañas) |
+| RSP.8 | Abre «Más »» y elige una herramienta (por ejemplo Rosca o Medir) | Aparecen los grupos escondidos, con su nombre, y la herramienta se abre como si hubieras pulsado su botón; las familias (por ejemplo, Redondeo/Chaflán) salen como submenús |
+| RSP.9 | Agranda la ventana otra vez | Los nombres y los grupos vuelven a verse en la cinta y desaparece «Más »» |
+| RSP.10 | Con la ventana de menos de 1100 px de ancho | El Navegador se pliega solo; con Ver › Paneles vuelve a abrirse; al agrandar la ventana, vuelve solo si se había plegado solo |
+| RSP.11 | Con la ventana de menos de 640 px de alto | La línea de tiempo se pliega sola y la cinta pierde los nombres de los grupos; al agrandar vuelve todo. Cierra el Navegador a mano, estrecha y agranda la ventana: **no** se vuelve a abrir solo |
+| RSP.12 | Con escala de pantalla de 150 % o 200 %: abre un sketch con cotas y mira el cubo de vistas | El cubo, sus letras y los textos de las cotas tienen un tamaño proporcionado al resto de la interfaz (ni diminutos ni desbordados) |
+| RSP.13 | Abre Archivo › Exportar, Sólido › Parámetros y el diálogo de Cuerpos; cambia el tamaño de uno, ciérralo y ábrelo otra vez | Ninguno es más grande que la pantalla; Exportar, Parámetros y Cuerpos se reabren con el tamaño en que los dejaste |
+| RSP.14 | Cierra el programa con el Navegador plegado solo (ventana angosta) y ábrelo con la ventana grande | El Navegador aparece (no se guardó como cerrado) |
+
+**Matriz resolución × escala** (marca lo que probaste: «ventana principal», «una herramienta», «un generador ancho (Par de engranajes)», «sketch con cotas»):
+
+| Pantalla lógica | Escala de Windows | Ventana | Herramienta | Generador | Sketch |
+|---|---|---|---|---|---|
+| 1920×1080 | 100 % | [ ] | [ ] | [ ] | [ ] |
+| 1536×864 | 125 % | [ ] | [ ] | [ ] | [ ] |
+| 1280×720 | 150 % | [ ] | [ ] | [ ] | [ ] |
+| 960×540 | 200 % | [ ] | [ ] | [ ] | [ ] |
+| 1366×768 | 100 % | [ ] | [ ] | [ ] | [ ] |
+| 1024×768 | 100 % | [ ] | [ ] | [ ] | [ ] |
+| Otra (la tuya pequeña) | | [ ] | [ ] | [ ] | [ ] |
+
+Para repetirlo sin tocar Windows: `NufioCAD --inventario <carpeta> --tamano 1280x680 --escala 1.5` y mirar `inventario.txt` y las capturas.
 
 ## 2. Sketch
 

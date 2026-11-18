@@ -1,4 +1,5 @@
 #include "ParametersDialog.hpp"
+#include "DialogSize.hpp"
 #include "Theme.hpp"
 
 #include <nuf/document/Expression.hpp>
@@ -97,6 +98,7 @@ ParametersDialog::ParametersDialog(const std::vector<document::Parameter>& param
     });
     connect(ok_, &QPushButton::clicked, this, &QDialog::accept);
     connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
+    fitDialogToScreen(this, QStringLiteral("parameters"));
 }
 
 void ParametersDialog::addRow(const QString& name, const QString& expression, bool existing)

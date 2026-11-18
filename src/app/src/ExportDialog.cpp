@@ -1,4 +1,5 @@
 #include "ExportDialog.hpp"
+#include "DialogSize.hpp"
 #include "Theme.hpp"
 #include "ExpressionSpinBox.hpp"
 
@@ -156,6 +157,7 @@ ExportDialog::ExportDialog(const std::vector<document::Body>& bodies, const std:
     connect(quality_, &QComboBox::currentIndexChanged, this, &ExportDialog::updateSummary);
     connect(list_, &QListWidget::itemChanged, this, &ExportDialog::updateSummary);
     updateSummary();
+    fitDialogToScreen(this, QStringLiteral("export"));
 }
 
 ExportDialog::Format ExportDialog::format() const
