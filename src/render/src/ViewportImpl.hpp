@@ -76,6 +76,7 @@ public:
     enum class Mode { Model, PickPlane, Sketch };
 
     void applyTheme(bool dark);
+    Quantity_Color toolPreviewColor() const;
 
     void describeSelection();
 

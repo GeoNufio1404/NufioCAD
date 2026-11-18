@@ -105,10 +105,44 @@ std::string kernelMessage(const Standard_Failure& e)
 }
 
 // Un fallo del kernel en lenguaje claro: qué se intentaba, qué probar y, al final, el detalle técnico.
+// Qué quiere decir en español el error del kernel (U8): el nombre de la excepción de OpenCASCADE y su causa más probable.
+std::string explainKernelError(const std::string& detail)
+{
+    struct Cause {
+        const char* marker;
+        const char* text;
+    };
+    static const Cause causes[] = {
+        {"ConstructionError", "se intentó construir una forma con medidas imposibles (un radio, un ancho o una distancia que no caben)"},
+        {"DomainError", "un valor está fuera de lo que admite la operación (un ángulo, una distancia o una cantidad)"},
+        {"OutOfRange", "se pidió un elemento que no existe (una cara o una arista que ya no está)"},
+        {"NullObject", "falta una forma de entrada (un cuerpo vacío o una cara que desapareció)"},
+        {"NoSuchObject", "no se encontró una de las caras o aristas elegidas"},
+        {"TypeMismatch", "una de las entradas no es del tipo que pide la operación (por ejemplo, una cara curva donde hace falta una plana)"},
+        {"NotDone", "el kernel no pudo terminar el cálculo (la geometría es muy ajustada, tangente o se solapa consigo misma)"},
+        {"command not done", "el kernel no pudo terminar el cálculo (la geometría es muy ajustada, tangente o se solapa consigo misma)"},
+        {"Overflow", "una medida es tan grande que el cálculo se desborda"},
+        {"DimensionError", "las formas que se combinan no son compatibles (por ejemplo, un perfil abierto)"}};
+    for (const Cause& cause : causes) {
+        if (detail.find(cause.marker) != std::string::npos) {
+            return cause.text;
+        }
+    }
+    return {};
+}
+
 GeometryError kernelFailure(const std::string& action, const std::string& hint, const Standard_Failure& e)
 {
     const std::string detail = kernelMessage(e);
-    return GeometryError("No se pudo " + action + ": " + hint + (detail.empty() ? std::string() : " (detalle técnico: " + detail + ")"));
+    const std::string cause = explainKernelError(detail);
+    std::string message = "No se pudo " + action + ": " + hint;
+    if (!cause.empty()) {
+        message += ". Causa probable: " + cause;
+    }
+    if (!detail.empty()) {
+        message += " (detalle técnico: " + detail + ")";
+    }
+    return GeometryError(message);
 }
 
 // Deja que el kernel se detenga a media operación cuando el hilo de trabajo pide cancelar (cerrar la ventana, un

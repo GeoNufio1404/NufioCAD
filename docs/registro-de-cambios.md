@@ -63,6 +63,8 @@ Dos campos nuevos del engranaje, ambos en 0 por defecto (los diseños anteriores
 - **U7:** `FeatureTool::primaryField` y `MainWindow::startToolTyping`/`applyToolValue`.
 - **U8:** botón Cancelar en el recuadro «Calculando…», `GeneratorField::group` y secciones plegables en `GeneratorTool`, mover con Ctrl a la rejilla (`FeatureToolsMore.cpp`).
 - **Pruebas:** un paso nuevo en la prueba de interfaz (menú radial y valor junto al cursor) y `test_display_units.cpp`; el inventario de pantallas sigue en 0 problemas en las 9 pantallas.
+- **U9:** `trimToCurvedFace` admite conos (cuerpo auxiliar de la hoja del cono) y superficies libres (`extendedSurface` prolonga una B-spline con `GeomLib` y parte el prisma); `Entity::textOwner` y `TextInfo` para volver a editar el texto (`SketchSession::editSelectedText`, acción «Editar texto…»); `trimEllipse` en `Edit.cpp` (recorte de elipses y arcos de elipse contra cualquier curva). Pruebas: `[cone]`, `[freeface]`, `[ellipse]` y `test_sketch_text_info.cpp`.
+- **U8 (resto):** vista previa translúcida con color según el tema (`Viewport::Impl::toolPreviewColor`) y `explainKernelError` (causa probable en español).
 - **Cómo volver atrás:** no fusionar `feature/fase-15-usabilidad`, o `git revert -m 1` de su fusión; cada punto va en commits separados (U1–U3, U4–U5, U6–U7, U8).
 
 ---

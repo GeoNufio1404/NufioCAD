@@ -283,6 +283,14 @@ Código: **USA**. Rama `feature/fase-15-usabilidad`.
 | USA.18 | Pide un cálculo largo (por ejemplo una rosca de mucha longitud) | El recuadro «Calculando…» trae un botón **Cancelar**; al pulsarlo se cierra la herramienta o se deshace el último cambio y el cálculo se abandona |
 | USA.19 | Abre Herramientas › Par de engranajes | Las preguntas salen en dos secciones plegables («Medidas del engranaje» y «Ajustes de impresión»); pulsar el encabezado las pliega y las despliega |
 | USA.20 | Sólido › Mover cuerpo: arrastra una flecha, y otra vez con **Ctrl** pulsado | Sin Ctrl el valor sale con dos decimales; con Ctrl se pega a una unidad entera (1 mm, 1 cm o 1 in según la unidad) y el estado lo dice |
+| USA.21 | En un sketch, dibuja un texto (herramienta Texto), pulsa Esc, elige una de sus letras con un clic y usa **Sketch › Editar texto…** (o el botón «Editar texto» de la cinta) | Se abre el cuadro del texto con lo que escribiste, la fuente y la altura; al aceptar, las letras se sustituyen por las nuevas en el mismo sitio |
+| USA.22 | Guarda el diseño, ábrelo, elige las letras y «Editar texto…» | Sigue abriendo con el texto original (viaja en el archivo). Sin letras elegidas, la barra dice «Elige primero las letras…» |
+| USA.23 | Dibuja una elipse y una línea que la cruce; Recortar y clic en un tramo de la elipse | La elipse se convierte en un arco de elipse sin ese tramo; los extremos nuevos quedan sobre la línea (arrastra la línea y siguen pegados) |
+| USA.24 | Recorta también un arco de elipse con dos líneas que lo crucen | Si el clic cae entre los dos cortes, el tramo se quita y quedan dos arcos; sin ningún corte, el arco se borra entero |
+| USA.25 | Con un cuerpo con una cara cónica (por ejemplo, una revolución de un triángulo) y un sketch delante de ella: Extruir › «Hasta una cara» y elige la cara cónica | La extrusión llega a la pared del cono y se queda en ella (ya no sale el mensaje «cono o superficie libre») |
+| USA.26 | Lo mismo con la pared de un loft suave entre dos círculos | La extrusión llega a la pared libre y se queda en ella |
+| USA.27 | Cambia el tema a claro y abre una herramienta (por ejemplo Caja) | La vista previa translúcida se ve en un azul más profundo que en el tema oscuro; al cambiar de tema con la herramienta abierta, cambia de color |
+| USA.28 | Provoca un error del kernel (por ejemplo, un redondeo con un radio enorme) | El mensaje del historial dice qué se intentaba, «Causa probable: …» en español y, al final, el detalle técnico |
 
 ## 2. Sketch
 
