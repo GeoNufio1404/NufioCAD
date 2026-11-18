@@ -11,6 +11,7 @@
 #include "FeatureToolsCommon.hpp"
 #include "MainWindow.hpp"
 #include "SketchSession.hpp"
+#include "Ribbon.hpp"
 #include "StartScreen.hpp"
 #include "Units.hpp"
 
@@ -51,6 +52,12 @@
 #include <QTextStream>
 #include <QEvent>
 #include <QThread>
+#include <QScreen>
+#include <QScrollArea>
+#include <QAbstractButton>
+#include <QToolButton>
+#include <QDialog>
+#include <QSet>
 
 #include <algorithm>
 #include <chrono>
@@ -365,6 +372,220 @@ int InterfaceCheck::captureThemes(const QString& folder)
         waitIdle();
     }
     // Sin cambios pendientes, para que cerrar la ventana no pregunte si guardar.
+    undoAll();
+    return 0;
+}
+
+namespace {
+
+// Lo que se ve mal en un widget y sus hijos: recortado por su contenedor, fuera de la pantalla o con el texto cortado.
+QStringList auditWidgets(QWidget* root, const QRect& limit)
+{
+    QStringList findings;
+    const auto describe = [](const QWidget* w) {
+        QString name = QString::fromLatin1(w->metaObject()->className());
+        if (!w->objectName().isEmpty()) {
+            name += QStringLiteral("«%1»").arg(w->objectName());
+        }
+        if (const auto* button = qobject_cast<const QAbstractButton*>(w); button != nullptr && !button->text().isEmpty()) {
+            name += QStringLiteral(" «%1»").arg(button->text());
+        } else if (const auto* label = qobject_cast<const QLabel*>(w); label != nullptr && !label->text().isEmpty()) {
+            name += QStringLiteral(" «%1»").arg(label->text().left(30));
+        }
+        return name;
+    };
+    for (QWidget* w : root->findChildren<QWidget*>()) {
+        if (!w->isVisible() || w->width() < 4 || w->height() < 4) {
+            continue;
+        }
+        // Recortado: parte del widget cae fuera del rectángulo de su padre (salvo dentro de una zona con desplazamiento).
+        const QWidget* parent = w->parentWidget();
+        if (parent != nullptr && qobject_cast<const QScrollArea*>(parent->parentWidget()) == nullptr) {
+            const QRect inside = w->geometry().intersected(parent->rect());
+            if (inside.width() < w->width() - 2 || inside.height() < w->height() - 2) {
+                findings << QStringLiteral("recortado por su contenedor: %1 (%2×%3, se ve %4×%5)")
+                                .arg(describe(w)).arg(w->width()).arg(w->height()).arg(inside.width()).arg(inside.height());
+                continue;
+            }
+        }
+        const QRect onScreen = QRect(w->mapToGlobal(QPoint(0, 0)), w->size());
+        if (!limit.contains(onScreen.topLeft()) || !limit.contains(onScreen.bottomRight())) {
+            findings << QStringLiteral("fuera de la pantalla: %1").arg(describe(w));
+            continue;
+        }
+        if (const auto* button = qobject_cast<const QAbstractButton*>(w); button != nullptr && !button->text().isEmpty()) {
+            const QString text = QString(button->text()).remove(QLatin1Char('&'));
+            // Un botón de la cinta lleva el texto bajo el icono (todo el ancho es del texto) o solo el icono (no se dibuja).
+            const auto* tool = qobject_cast<const QToolButton*>(w);
+            const bool textHidden = tool != nullptr && tool->toolButtonStyle() == Qt::ToolButtonIconOnly;
+            const bool textBelow = tool != nullptr && tool->toolButtonStyle() == Qt::ToolButtonTextUnderIcon;
+            const int available = button->width() - ((button->icon().isNull() || textBelow) ? 12 : 12 + button->iconSize().width());
+            if (!textHidden && button->fontMetrics().horizontalAdvance(text) > available) {
+                findings << QStringLiteral("texto cortado: %1 (el texto mide %2 px y caben %3)")
+                                .arg(describe(w)).arg(button->fontMetrics().horizontalAdvance(text)).arg(available);
+            }
+        } else if (const auto* label = qobject_cast<const QLabel*>(w);
+                   label != nullptr && !label->wordWrap() && label->pixmap().isNull() && !label->text().isEmpty()
+                   && !label->text().startsWith(QLatin1Char('<'))) {
+            if (label->fontMetrics().horizontalAdvance(label->text()) > label->width() + 1) {
+                findings << QStringLiteral("texto cortado: %1 (el texto mide %2 px y caben %3)")
+                                .arg(describe(w)).arg(label->fontMetrics().horizontalAdvance(label->text())).arg(label->width());
+            }
+        }
+    }
+    return findings;
+}
+
+} // namespace
+
+int InterfaceCheck::captureInventory(const QString& folder)
+{
+    QDir().mkpath(folder);
+    QFile report(QDir(folder).filePath(QStringLiteral("inventario.txt")));
+    if (!report.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        return 1;
+    }
+    QTextStream out(&report);
+    out.setEncoding(QStringConverter::Utf8);
+    const QScreen* screen = window_.screen();
+    const QRect available = screen->availableGeometry();
+    window_.move(available.topLeft());  // la posición inicial de la ventana no debe contar como «fuera de la pantalla»
+    settle(500);
+    out << "Pantalla: " << screen->geometry().width() << "x" << screen->geometry().height() << " lógicos, disponibles "
+        << available.width() << "x" << available.height() << ", escala " << screen->devicePixelRatio() << ", DPI lógico "
+        << screen->logicalDotsPerInch() << "\n";
+    out << "Ventana principal: " << window_.width() << "x" << window_.height() << ", mínimo que pide su contenido "
+        << window_.minimumSizeHint().width() << "x" << window_.minimumSizeHint().height() << "\n";
+    const bool windowFits = window_.minimumSizeHint().width() <= available.width() && window_.minimumSizeHint().height() <= available.height();
+    out << (windowFits ? "OK: la ventana puede caber en la pantalla\n"
+                       : "PROBLEMA: el contenido de la ventana exige más que la pantalla disponible: parte queda fuera\n");
+    int problems = windowFits ? 0 : 1;
+
+    const QRect screenRect = screen->geometry();
+    const auto record = [&](const QString& scene, QWidget* widget, const QString& file) {
+        settle(300);
+        if (widget != nullptr && !file.isEmpty()) {
+            widget->grab().save(QDir(folder).filePath(file));
+        }
+        QStringList findings = widget != nullptr ? auditWidgets(widget, screenRect) : QStringList();
+        findings.removeDuplicates();
+        out << "\n== " << scene << (file.isEmpty() ? QString() : QStringLiteral("  [") + file + QStringLiteral("]")) << " ==\n";
+        if (widget != nullptr) {
+            out << "tamaño " << widget->width() << "x" << widget->height() << ", pide como mínimo " << widget->minimumSizeHint().width()
+                << "x" << widget->minimumSizeHint().height() << ", preferido " << widget->sizeHint().width() << "x"
+                << widget->sizeHint().height() << "\n";
+        }
+        if (findings.isEmpty()) {
+            out << "sin problemas encontrados\n";
+        }
+        for (const QString& f : findings) {
+            out << "- " << f << "\n";
+        }
+        problems += int(findings.size());
+        // Lo que la ventana pide para esta escena frente a la pantalla: si no cabe, la ventana crece y se sale.
+        if (widget == &window_) {
+            const QSize need = widget->minimumSizeHint();
+            if (need.width() > available.width() || need.height() > available.height()) {
+                out << "- la ventana con esto abierto pide " << need.width() << "x" << need.height() << " y la pantalla disponible es "
+                    << available.width() << "x" << available.height() << ": no cabe\n";
+                ++problems;
+            }
+        }
+    };
+    const auto panel = [&](const QString& scene, const QString& file) {
+        record(scene, &window_, file);
+        if (window_.propertiesDock_ != nullptr && window_.propertiesDock_->widget() != nullptr && window_.propertiesDock_->isVisible()) {
+            QWidget* content = window_.propertiesDock_->widget();
+            const bool scrolls = content->findChild<QScrollArea*>() != nullptr || qobject_cast<QScrollArea*>(content) != nullptr;
+            out << "panel de herramienta: " << window_.propertiesDock_->width() << "x" << window_.propertiesDock_->height()
+                << ", su contenido necesita " << content->sizeHint().width() << "x" << content->sizeHint().height()
+                << (scrolls ? ", con desplazamiento" : ", SIN desplazamiento") << "\n";
+            if (!scrolls && content->sizeHint().width() > window_.propertiesDock_->width()) {
+                out << "- el contenido del panel es más ancho que el panel (" << content->sizeHint().width() << " frente a "
+                    << window_.propertiesDock_->width() << "): se corta por los lados\n";
+                ++problems;
+            }
+            if (!scrolls && content->sizeHint().height() > window_.propertiesDock_->height()) {
+                out << "- el panel no cabe en alto y no se puede desplazar\n";
+                ++problems;
+            }
+        }
+    };
+
+    // La ventana vacía, con cada pestaña de la cinta.
+    for (int tab : {0, 2}) {
+        window_.ribbon_->setCurrentTab(tab);
+        panel(QStringLiteral("Ventana, pestaña %1 de la cinta").arg(tab), QStringLiteral("ventana-pestana%1.png").arg(tab));
+    }
+    window_.ribbon_->setCurrentTab(0);
+
+    // Cada herramienta con panel y cada generador: se abre, se captura y se cancela.
+    std::vector<std::pair<QString, QAction*>> tools = {{QStringLiteral("Caja"), window_.boxAction_},
+                                                       {QStringLiteral("Cilindro"), window_.cylinderAction_},
+                                                       {QStringLiteral("Engranaje"), window_.gearAction_},
+                                                       {QStringLiteral("Rosca"), window_.threadAction_},
+                                                       {QStringLiteral("Barrido"), window_.sweepAction_},
+                                                       {QStringLiteral("Loft"), window_.loftAction_},
+                                                       {QStringLiteral("Plano de construcción"), window_.planeAction_},
+                                                       {QStringLiteral("Eje de construcción"), window_.axisAction_},
+                                                       {QStringLiteral("Medir"), window_.measureAction_}};
+    for (QAction* generator : window_.generatorActions_) {
+        tools.emplace_back(QStringLiteral("Generador «%1»").arg(generator->text()), generator);
+    }
+    int toolNumber = 0;
+    for (const auto& [name, action] : tools) {
+        ++toolNumber;
+        if (action == nullptr || !action->isEnabled()) {
+            out << "\n== " << name << " ==\nno disponible en esta ventana (se omite)\n";
+            continue;
+        }
+        action->trigger();
+        waitIdle();
+        if (window_.tool_ == nullptr) {
+            out << "\n== " << name << " ==\nno abrió un panel (se omite)\n";
+            continue;
+        }
+        panel(name, QStringLiteral("herramienta-%1.png").arg(toolNumber, 2, 10, QLatin1Char('0')));
+        window_.finishTool(false);
+        waitIdle();
+    }
+
+    // Los diálogos.
+    const auto dialogScene = [&](QDialog& dialog, const QString& name, const QString& file) {
+        dialog.show();
+        settle(300);
+        record(name, &dialog, file);
+        const QRect frame = dialog.frameGeometry();
+        if (!available.contains(frame)) {
+            out << "- el diálogo se sale de la pantalla disponible (" << frame.width() << "x" << frame.height() << " en " << frame.x()
+                << "," << frame.y() << ")\n";
+            ++problems;
+        }
+        dialog.close();
+    };
+    std::vector<std::string> keys;
+    for (const document::Body& body : window_.document_.result().bodies) {
+        keys.push_back(body.key);
+    }
+    ExportDialog exportDialog(window_.document_.result().bodies, keys, &window_);
+    dialogScene(exportDialog, QStringLiteral("Diálogo Exportar"), QStringLiteral("dialogo-exportar.png"));
+    ParametersDialog parameters({{"alto", "12"}, {"ancho", "alto * 2"}, {"mal", "ancho +"}}, &window_);
+    dialogScene(parameters, QStringLiteral("Diálogo Parámetros"), QStringLiteral("dialogo-parametros.png"));
+    SettingsDialog settings(&window_);
+    dialogScene(settings, QStringLiteral("Diálogo Configuración"), QStringLiteral("dialogo-configuracion.png"));
+    BodiesDialog bodies(window_.document_, &window_);
+    dialogScene(bodies, QStringLiteral("Diálogo Cuerpos"), QStringLiteral("dialogo-cuerpos.png"));
+
+    // El sketch con su cinta.
+    blocking(QStringLiteral("abrir un sketch"), [&] { window_.startSketch(sketch::Plane::xy(), QStringLiteral("inventario"), {}); });
+    if (window_.sketch_ != nullptr) {
+        window_.ribbon_->setCurrentTab(1);
+        panel(QStringLiteral("Sketch (cinta del sketch)"), QStringLiteral("sketch.png"));
+        window_.finishSketch();
+        waitIdle();
+    }
+    out << "\nTotal de problemas encontrados: " << problems << "\n";
+    out.flush();
     undoAll();
     return 0;
 }
