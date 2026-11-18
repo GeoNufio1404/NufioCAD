@@ -1,4 +1,5 @@
 #include <nuf/geometry/Printability.hpp>
+#include <nuf/geometry/DisplayUnits.hpp>
 
 #include <nuf/geometry/Modeling.hpp>
 #include <nuf/geometry/Occt.hpp>
@@ -111,11 +112,11 @@ std::vector<PrintIssue> checkPrintable(const std::vector<std::pair<std::string, 
             add(Level::Info, "«" + name + "» tiene demasiadas caras para revisar sus paredes");
         } else if (const double wall = thinnestWall(shape, 2.0 * settings.nozzle); wall > 0.0) {
             if (wall < settings.nozzle) {
-                add(Level::Warning, "Pared de " + number(wall) + " mm en «" + name + "»: es más fina que tu boquilla ("
-                                        + number(settings.nozzle, 1) + " mm) y no se imprimirá");
+                add(Level::Warning, "Pared de " + display::length(wall) + " en «" + name + "»: es más fina que tu boquilla ("
+                                        + display::length(settings.nozzle, 1) + ") y no se imprimirá");
             } else {
-                add(Level::Warning, "Pared de " + number(wall) + " mm en «" + name + "»: menos de dos líneas de boquilla ("
-                                        + number(2.0 * settings.nozzle, 1) + " mm), saldrá débil");
+                add(Level::Warning, "Pared de " + display::length(wall) + " en «" + name + "»: menos de dos líneas de boquilla ("
+                                        + display::length(2.0 * settings.nozzle, 1) + "), saldrá débil");
             }
         }
         const Box box = shape.bounds();
@@ -141,7 +142,7 @@ std::vector<PrintIssue> checkPrintable(const std::vector<std::pair<std::string, 
                 const Shape common = boolean(BooleanOp::Common, a, b);
                 if (!common.isNull() && common.volume() > 1e-3) {
                     add(Level::Warning, "«" + bodies[i].first + "» y «" + bodies[j].first + "» se solapan ("
-                                            + number(common.volume(), 1) + " mm³)");
+                                            + display::volume(common.volume(), 1) + ")");
                 }
             } catch (const GeometryError&) {
                 add(Level::Info, "No se pudo comprobar si «" + bodies[i].first + "» y «" + bodies[j].first + "» se solapan");
@@ -156,9 +157,9 @@ std::vector<PrintIssue> checkPrintable(const std::vector<std::pair<std::string, 
         std::ranges::sort(size);
         std::ranges::sort(bed);
         if (size[0] > bed[0] + 1e-6 || size[1] > bed[1] + 1e-6 || size[2] > bed[2] + 1e-6) {
-            add(Level::Warning, "La pieza mide " + number(all.max.x - all.min.x, 1) + " × " + number(all.max.y - all.min.y, 1) + " × "
-                                    + number(all.max.z - all.min.z, 1) + " mm y no cabe en tu cama ("
-                                    + number(settings.bedX, 0) + " × " + number(settings.bedY, 0) + " × " + number(settings.bedZ, 0) + " mm)");
+            add(Level::Warning, "La pieza mide " + display::number(all.max.x - all.min.x, 1) + " × " + display::number(all.max.y - all.min.y, 1) + " × "
+                                    + display::length(all.max.z - all.min.z, 1) + " y no cabe en tu cama ("
+                                    + display::number(settings.bedX, 0) + " × " + display::number(settings.bedY, 0) + " × " + display::length(settings.bedZ, 0) + ")");
         }
     }
     return issues;

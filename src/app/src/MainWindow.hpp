@@ -31,6 +31,8 @@ class QEvent;
 class QActionGroup;
 class QColor;
 class QVariantAnimation;
+class QComboBox;
+class QFrame;
 class QDockWidget;
 class QCheckBox;
 class QComboBox;
@@ -214,6 +216,8 @@ private:
     QDoubleSpinBox* sectionOffset_ = nullptr;
     QCheckBox* sectionFlip_ = nullptr;
     QLabel* busyBadge_ = nullptr;     // «Calculando…», sobre la vista
+    QFrame* recoveryBar_ = nullptr;   // aviso de la copia de recuperación (U2), sobre la vista, arriba y al centro
+    void placeRecoveryBar();
     BusySpinner* badgeSpinner_ = nullptr;   // el spinner del distintivo
     StatusBanner* statusBanner_ = nullptr;  // la barra de estado, con el spinner a la izquierda
     BusySpinner* statusSpinner_ = nullptr;  // el de la barra de estado (lo tiene el banner)
@@ -280,6 +284,7 @@ private:
     QAction* importDxfAction_ = nullptr;
     std::vector<QAction*> constraintActions_;
     QLabel* cursorLabel_ = nullptr;
+    QComboBox* unitBox_ = nullptr;
     QLabel* modelStatusLabel_ = nullptr;  // primera operación con error o aviso
 };
 

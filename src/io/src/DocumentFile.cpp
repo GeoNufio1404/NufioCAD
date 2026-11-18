@@ -889,7 +889,7 @@ Json toJson(const ViewState& v)
         sketches[std::to_string(id)] = visible;
     }
     return {{"hiddenBodies", v.hiddenBodies}, {"sketches", sketches}, {"origin", v.originVisible},
-            {"ground", v.groundVisible}};
+            {"ground", v.groundVisible}, {"displayUnit", v.displayUnit}};
 }
 
 ViewState viewOf(const Json& j)
@@ -903,6 +903,7 @@ ViewState viewOf(const Json& j)
     }
     v.originVisible = j.at("origin").get<bool>();
     v.groundVisible = j.at("ground").get<bool>();
+    v.displayUnit = j.value("displayUnit", std::string());
     return v;
 }
 

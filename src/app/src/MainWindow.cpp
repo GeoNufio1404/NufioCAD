@@ -22,6 +22,7 @@
 #include <nuf/commands/RenameDocument.hpp>
 #include <nuf/commands/SetBodyInfo.hpp>
 #include <nuf/commands/SetParameters.hpp>
+#include <nuf/geometry/DisplayUnits.hpp>
 #include <nuf/geometry/Exchange.hpp>
 #include <nuf/geometry/Kernel.hpp>
 #include <nuf/commands/AddRecipe.hpp>
@@ -111,6 +112,24 @@ MainWindow::MainWindow(QWidget* parent)
     cursorLabel_ = new QLabel(this);
     cursorLabel_->setMinimumWidth(190);
     statusBar()->addPermanentWidget(cursorLabel_);
+    // Selector de unidad de longitud (U1): el mismo ajuste que Configuración, a un clic. El modelo sigue en mm.
+    unitBox_ = new QComboBox(this);
+    unitBox_->setObjectName(QStringLiteral("unitBox"));
+    unitBox_->setToolTip(QStringLiteral("Unidad con la que se muestran y se escriben las medidas (el modelo sigue en milímetros)"));
+    for (const LengthUnit unit : {LengthUnit::Mm, LengthUnit::Cm, LengthUnit::M, LengthUnit::In}) {
+        unitBox_->addItem(Units::label(unit), int(unit));
+        unitBox_->setItemData(unitBox_->count() - 1, Units::name(unit), Qt::ToolTipRole);
+    }
+    unitBox_->setCurrentIndex(unitBox_->findData(int(Units::instance().length())));
+    unitBox_->setFocusPolicy(Qt::NoFocus);
+    connect(unitBox_, &QComboBox::activated, this, [this](int index) {
+        Units::instance().setLength(LengthUnit(unitBox_->itemData(index).toInt()));
+    });
+    connect(&Units::instance(), &Units::changed, this, [this] {
+        const QSignalBlocker block(unitBox_);
+        unitBox_->setCurrentIndex(unitBox_->findData(int(Units::instance().length())));
+    });
+    statusBar()->addPermanentWidget(unitBox_);
     statusBar()->addPermanentWidget(versions);
     // La indicación de lo que se está haciendo (el mensaje de la barra) va en un banner de color: es donde está
     // lo importante y se olvida con facilidad. El banner está **siempre** (no aparece ni desaparece: con la barra
@@ -172,6 +191,7 @@ MainWindow::MainWindow(QWidget* parent)
     // Las cotas del sketch se escriben en la unidad elegida.
     const auto applyUnits = [this] {
         sketch::setDimensionLengthScale(Units::instance().factor(), 3 + Units::instance().extraDecimals());
+        geometry::display::setUnit(geometry::display::Unit(int(Units::instance().length())));  // Medir, avisos, resúmenes
         if (sketch_) {
             sketch_->refreshView();
         }
@@ -304,6 +324,9 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
 {
     if (watched == viewport_ && busyBadge_ != nullptr && event->type() == QEvent::Resize) {
         busyBadge_->move(16, viewport_->height() - busyBadge_->height() - 16);
+    }
+    if (watched == viewport_ && event->type() == QEvent::Resize) {
+        placeRecoveryBar();
     }
     return QMainWindow::eventFilter(watched, event);
 }

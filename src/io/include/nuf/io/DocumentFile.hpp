@@ -22,8 +22,15 @@ struct ViewState {
     std::map<document::FeatureId, bool> sketchVisibility;     // elegida a mano
     bool originVisible = false;
     bool groundVisible = true;
+    // Unidad con que se mostraban las medidas al guardar («mm», «cm», «m», «in»); vacía en los archivos anteriores.
+    // Es de visualización: no cuenta para decidir si hay cambios sin guardar.
+    std::string displayUnit;
 
-    friend bool operator==(const ViewState&, const ViewState&) = default;
+    friend bool operator==(const ViewState& a, const ViewState& b)
+    {
+        return a.hiddenBodies == b.hiddenBodies && a.sketchVisibility == b.sketchVisibility &&
+               a.originVisible == b.originVisible && a.groundVisible == b.groundVisible;
+    }
 };
 
 // Todo lo que se escribe en un archivo, ya armado (JSON de cada operación, parámetros y los BREP importados, que se

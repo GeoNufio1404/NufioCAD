@@ -308,22 +308,22 @@ void MainWindow::createMenus()
     });
     decorate(parametersAction_, QStringLiteral("parameters-solid"),
              QStringLiteral("Nombrar valores (grosor = 3) y usarlos en las operaciones"), QStringLiteral("Parámetros"));
-    boxAction_ = solidMenu->addAction(QStringLiteral("&Caja"), this, [this] {
+    boxAction_ = solidMenu->addAction(QStringLiteral("&Caja"), QKeySequence(Qt::Key_B), this, [this] {
         startTool(std::make_unique<BoxTool>(document_, *viewport_, std::nullopt));
     });
     decorate(boxAction_, QStringLiteral("box-solid"), QStringLiteral("Una caja con medidas y posición, ligable a parámetros"),
              QStringLiteral("Caja"));
-    cylinderAction_ = solidMenu->addAction(QStringLiteral("Cili&ndro"), this, [this] {
+    cylinderAction_ = solidMenu->addAction(QStringLiteral("Cili&ndro"), QKeySequence(Qt::SHIFT | Qt::Key_C), this, [this] {
         startTool(std::make_unique<CylinderTool>(document_, *viewport_, std::nullopt));
     });
     decorate(cylinderAction_, QStringLiteral("cylinder-solid"),
              QStringLiteral("Un cilindro con diámetro y posición, ligable a parámetros"), QStringLiteral("Cilindro"));
-    gearAction_ = solidMenu->addAction(QStringLiteral("&Engranaje"), this, [this] {
+    gearAction_ = solidMenu->addAction(QStringLiteral("&Engranaje"), QKeySequence(Qt::Key_G), this, [this] {
         startTool(std::make_unique<GearTool>(document_, *viewport_, std::nullopt));
     });
     decorate(gearAction_, QStringLiteral("gear-solid"),
              QStringLiteral("Generar un engranaje recto o helicoidal (perfil de involuta)"), QStringLiteral("Engranaje"));
-    threadAction_ = solidMenu->addAction(QStringLiteral("&Rosca"), this, [this] {
+    threadAction_ = solidMenu->addAction(QStringLiteral("&Rosca"), QKeySequence(Qt::SHIFT | Qt::Key_T), this, [this] {
         startTool(std::make_unique<ThreadTool>(document_, *viewport_, std::nullopt));
     });
     decorate(threadAction_, QStringLiteral("thread-solid"),
@@ -376,6 +376,10 @@ void MainWindow::createMenus()
                                                [this, generator] { startGenerator(*generator); });
         decorate(action, QString::fromStdString(generator->icon()), QString::fromStdString(generator->description()),
                  QString::fromStdString(generator->title()));
+        // Alt+1, Alt+2… abren las herramientas generadoras en el orden del menú (las seis primeras).
+        if (generatorActions_.size() < 9) {
+            action->setShortcut(QKeySequence(QStringLiteral("Alt+%1").arg(generatorActions_.size() + 1)));
+        }
         generatorActions_.push_back(action);
     }
 

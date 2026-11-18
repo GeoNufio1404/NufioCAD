@@ -1,6 +1,7 @@
 #include <nuf/document/Generators.hpp>
 
 #include <nuf/document/Features.hpp>
+#include <nuf/geometry/DisplayUnits.hpp>
 #include <nuf/sketch/Dxf.hpp>
 #include <nuf/sketch/Profiles.hpp>
 
@@ -730,9 +731,10 @@ public:
         const double m = values.at("modulo"), z1 = values.at("dientes_1"), z2 = values.at("dientes_2");
         char text[256];
         std::snprintf(text, sizeof text,
-                      "Relación %g:%g (la rueda 2 gira %.3f veces por vuelta de la 1) · distancia entre ejes %.2f mm · "
-                      "Ø primitivos %.2f y %.2f mm",
-                      z1, z2, z1 / z2, m * (z1 + z2) / 2.0 + values.at("juego"), m * z1, m * z2);
+                      "Relación %g:%g (la rueda 2 gira %.3f veces por vuelta de la 1) · distancia entre ejes %s · "
+                      "Ø primitivos %s y %s",
+                      z1, z2, z1 / z2, geometry::display::length(m * (z1 + z2) / 2.0 + values.at("juego")).c_str(),
+                      geometry::display::length(m * z1).c_str(), geometry::display::length(m * z2).c_str());
         return text;
     }
 
@@ -867,8 +869,9 @@ public:
         char text[320];
         std::snprintf(text, sizeof text,
                       "Relación %g:%g (el piñón da %.3f vueltas por una de la corona, en el mismo sentido) · distancia "
-                      "entre ejes %.2f mm · Ø primitivos %.2f y %.2f mm%s",
-                      zp, zc, zc / zp, m * (zc - zp) / 2.0 - values.at("juego"), m * zc, m * zp,
+                      "entre ejes %s · Ø primitivos %s y %s%s",
+                      zp, zc, zc / zp, geometry::display::length(m * (zc - zp) / 2.0 - values.at("juego")).c_str(),
+                      geometry::display::length(m * zc).c_str(), geometry::display::length(m * zp).c_str(),
                       zc - zp < 8.0 ? " · AVISO: con menos de 8 dientes de diferencia los dientes se estorban" : "");
         return text;
     }
@@ -1016,10 +1019,11 @@ public:
         constexpr double kPi = 3.14159265358979323846;
         char text[320];
         std::snprintf(text, sizeof text,
-                      "La barra avanza %.2f mm por vuelta de la rueda · largo de la barra %.1f mm, %d dientes%s (%.2f "
-                      "vueltas de la rueda) · Ø primitivo de la rueda %.2f mm",
-                      kPi * m * z, rack.length, rack.teeth, rack.mode == 1 ? " (el último cortado)" : "",
-                      rack.length / (kPi * m * z), m * z);
+                      "La barra avanza %s por vuelta de la rueda · largo de la barra %s, %d dientes%s (%.2f "
+                      "vueltas de la rueda) · Ø primitivo de la rueda %s",
+                      geometry::display::length(kPi * m * z).c_str(), geometry::display::length(rack.length, 1).c_str(), rack.teeth,
+                      rack.mode == 1 ? " (el último cortado)" : "", rack.length / (kPi * m * z),
+                      geometry::display::length(m * z).c_str());
         return text;
     }
 
