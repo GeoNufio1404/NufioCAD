@@ -1,4 +1,5 @@
 #include "BodiesDialog.hpp"
+#include "DialogSize.hpp"
 
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -60,6 +61,7 @@ BodiesDialog::BodiesDialog(const document::Document& document, QWidget* parent)
     layout->addLayout(buttons);
     connect(ok, &QPushButton::clicked, this, &QDialog::accept);
     connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
+    fitDialogToScreen(this, QStringLiteral("bodies"));
 }
 
 std::map<std::string, document::BodyInfo> BodiesDialog::info() const

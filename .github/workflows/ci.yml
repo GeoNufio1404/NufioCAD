@@ -54,6 +54,27 @@ jobs:
           xvfb-run -a -s "-screen 0 1600x900x24" ./build/linux-release/src/app/NufioCAD --prueba-interfaz --informe capturas/informe.txt --umbral-ms 1000
           xvfb-run -a -s "-screen 0 1600x900x24" ./build/linux-release/src/app/NufioCAD --captura-temas capturas
 
+      # Fase 20 (interfaz responsiva, R6): la ventana, cada herramienta y cada diálogo deben caber y verse a distintas
+      # pantallas. «--escala» emula pantallas más chicas sobre la pantalla virtual de 1920x1080 (escala 1,25 equivale a una
+      # de 1536x864 y 1,5 a una de 1280x720); cada pareja es «tamaño de ventana escala».
+      # PRUEBA: va con continue-on-error hasta que se vea estable en Linux (las fuentes cambian los anchos); cuando lo
+      # esté, se quita para que bloquee. Falla (código 3) si algo no cabe; el detalle queda en el informe.
+      - name: Prueba de tamaños de pantalla (Xvfb)
+        continue-on-error: true
+        env:
+          QT_QPA_PLATFORM: xcb
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          MESA_GL_VERSION_OVERRIDE: "4.5"
+          MESA_GLSL_VERSION_OVERRIDE: "450"
+        run: |
+          status=0
+          for config in "1024x768 1" "1280x720 1" "1536x864 1.25" "1280x720 1.5"; do
+            set -- $config
+            xvfb-run -a -s "-screen 0 1920x1080x24" ./build/linux-release/src/app/NufioCAD --inventario "capturas/tamanos-$1-e$2" --tamano "$1" --escala "$2" || status=1
+          done
+          xvfb-run -a -s "-screen 0 1920x1080x24" ./build/linux-release/src/app/NufioCAD --prueba-interfaz --informe capturas/informe-1024x768.txt --umbral-ms 1000 --tamano 1024x768 || status=1
+          exit $status
+
       - name: Subir informe y capturas
         if: always()
         uses: actions/upload-artifact@v4

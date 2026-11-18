@@ -77,6 +77,7 @@ public:
 
 protected:
     void closeEvent(QCloseEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dropEvent(QDropEvent* event) override;
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -84,6 +85,9 @@ protected:
 private:
     void createMenus();
     void createDocks();
+    // Fase 20, R4: en ventanas angostas o bajas el navegador y la línea de tiempo se pliegan solos y la cinta se compacta;
+    // al agrandar la ventana vuelven (solo los que se plegaron solos, no los que el usuario cerró).
+    void adaptToSize();
     void updateUndoActions();
     void updateTitle();
 
@@ -173,6 +177,8 @@ private:
     std::uint64_t documentGeneration_ = 0;  // sube al crear o abrir otro diseño: lo que se calculó para el anterior se descarta
 
     render::Viewport* viewport_ = nullptr;
+    bool navigatorAutoHidden_ = false;
+    bool timelineAutoHidden_ = false;
     QDockWidget* navigatorDock_ = nullptr;
     QDockWidget* propertiesDock_ = nullptr;
     QDockWidget* timelineDock_ = nullptr;

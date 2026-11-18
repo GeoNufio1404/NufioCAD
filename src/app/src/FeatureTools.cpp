@@ -15,6 +15,7 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QSpinBox>
 #include <QEvent>
 #include <QLineEdit>
@@ -66,8 +67,22 @@ FeatureTool::~FeatureTool()
 
 void FeatureTool::start()
 {
+    // El contenido va en un área con desplazamiento (así no empuja el tamaño mínimo de la ventana y, si no cabe, se
+    // desplaza en vez de cortarse: Fase 20, R2) y los botones Aceptar y Cancelar quedan fijos abajo, siempre a la vista.
     panel_ = new QWidget();
-    auto* layout = new QVBoxLayout(panel_);
+    auto* outer = new QVBoxLayout(panel_);
+    outer->setContentsMargins(0, 0, 0, 0);
+    outer->setSpacing(0);
+    auto* scroll = new QScrollArea();
+    scroll->setObjectName(QStringLiteral("toolScroll"));
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->viewport()->setAutoFillBackground(false);
+    auto* content = new QWidget();
+    content->setAutoFillBackground(false);
+    scroll->setWidget(content);
+    outer->addWidget(scroll, 1);
+    auto* layout = new QVBoxLayout(content);
     auto* heading = new QLabel(editing_ ? QStringLiteral("Editar %1").arg(QString::fromStdString(original_->name()))
                                         : title());
     QFont bold = heading->font();
@@ -101,15 +116,16 @@ void FeatureTool::start()
     statusLabel_ = new QLabel();
     statusLabel_->setWordWrap(true);
     layout->addWidget(statusLabel_);
+    layout->addStretch();
     auto* buttons = new QHBoxLayout();
+    buttons->setContentsMargins(11, 6, 11, 11);
     okButton_ = new QPushButton(QStringLiteral("Aceptar"));
     okButton_->setDefault(true);
     auto* cancel = new QPushButton(QStringLiteral("Cancelar"));
     buttons->addStretch();
     buttons->addWidget(cancel);
     buttons->addWidget(okButton_);
-    layout->addLayout(buttons);
-    layout->addStretch();
+    outer->addLayout(buttons);
     connect(okButton_, &QPushButton::clicked, this, &FeatureTool::accept);
     connect(cancel, &QPushButton::clicked, this, &FeatureTool::cancelled);
 

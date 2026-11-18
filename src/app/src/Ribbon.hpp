@@ -7,7 +7,11 @@
 class QAction;
 class QFrame;
 class QHBoxLayout;
+class QLabel;
+class QScrollArea;
 class QMenu;
+class QResizeEvent;
+class QShowEvent;
 class QTabBar;
 class QToolButton;
 
@@ -40,24 +44,59 @@ public:
     void setTabVisible(int tab, bool visible);
     void setCurrentTab(int tab);
 
+    // Cómo se adapta la cinta al ancho de la ventana (Fase 20, R3): primero se quitan los nombres bajo los iconos y,
+    // si aún no cabe, los últimos grupos se recogen en un botón «Más» con un menú.
+    enum class Fit { Full, IconsOnly, Collapsed };
+    Fit fit() const { return fit_; }
+    // Cuántos grupos de la pestaña actual están recogidos en el menú «Más».
+    int hiddenGroups() const { return hiddenGroups_; }
+    // Ventana baja: se quitan los nombres de los grupos y la cinta ocupa menos alto (Fase 20, R4).
+    void setCompact(bool compact);
+    bool compact() const { return compact_; }
+
 protected:
     void paintEvent(QPaintEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
+    void showEvent(QShowEvent* event) override;
 
 private:
+    // Un botón de la cinta y lo que hace falta para repetirlo en el menú «Más».
+    struct Entry {
+        QToolButton* button = nullptr;
+        int textMinWidth = 0;
+    };
+    struct Group {
+        QWidget* widget = nullptr;
+        QWidget* separator = nullptr;  // la línea que va antes del grupo (nula en el primero)
+        QString title;
+        QLabel* label = nullptr;  // el nombre del grupo, bajo los botones
+        std::vector<Entry> entries;
+    };
     struct Page {
         QWidget* widget = nullptr;
         QHBoxLayout* layout = nullptr;
         QHBoxLayout* row = nullptr;  // fila de botones del grupo abierto
         QToolButton* trailing = nullptr;  // botón destacado, en la fila de pestañas
+        std::vector<Group> groups;
     };
 
     QToolButton* makeButton(QWidget* parent) const;
     void place(int tab, QWidget* button);
+    // Recalcula qué cabe en la pestaña actual: nombres, iconos y grupos recogidos.
+    void adapt();
+    void fillOverflowMenu(const Page& page, int firstHidden);
 
     QTabBar* tabs_ = nullptr;
     QWidget* host_ = nullptr;
     QHBoxLayout* trailingRow_ = nullptr;
+    QToolButton* overflow_ = nullptr;
+    QScrollArea* scroll_ = nullptr;
+    bool compact_ = false;
+    QMenu* overflowMenu_ = nullptr;
     std::vector<Page> pages_;
+    Fit fit_ = Fit::Full;
+    int hiddenGroups_ = 0;
+    bool adapting_ = false;
 };
 
 } // namespace nuf::app

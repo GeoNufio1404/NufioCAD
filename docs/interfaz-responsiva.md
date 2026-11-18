@@ -71,6 +71,29 @@ La ventana sin nada abierto pide 566×544 y la pantalla disponible es 960×516: 
 
 **7. Escala y DPI (a revisar en R5).** El modo solo emula la escala con `QT_SCALE_FACTOR`; falta probar una pantalla real con 125 % o 150 % y el paso de una ventana entre dos monitores con escalas distintas.
 
+## Estado final de la Fase 20 (18 nov. 2026)
+
+Con el mismo inventario, tras R2 a R6 (paneles con desplazamiento, cinta adaptable, paneles que se pliegan, escala de OpenCASCADE y diálogos acotados): **0 problemas en las 9 pantallas** y salida 0 del modo `--inventario`.
+
+| Pantalla lógica | Antes (R1) | Después |
+|---|---|---|
+| 3840×2160 (escala 0,5) | 0 escenas no caben, 3 paneles cortados | 0 y 0 |
+| 2560×1440 (0,75) | 0 y 3 | 0 y 0 |
+| 1920×1080 (1) | 0 y 3 | 0 y 0 |
+| 1366×768 (1) | 0 y 3 (la ventana crecía a 927 de alto) | 0 y 0 |
+| 1536×864 (1,25) | 5 y 3 | 0 y 0 |
+| 1280×720 (1,5) | 10 y 3 | 0 y 0 |
+| 960×540 (2) | 17 y 3 | 0 y 0 |
+| 1024×768 (1), 1280×720 (1) | (no medidas) | 0 y 0 |
+
+Qué cambió, por problema de arriba:
+1. **La ventana crecía con el panel** → el panel va en un área con desplazamiento y no pide tamaño a la ventana (R2). Con una herramienta abierta el mínimo pasó de 927×927 a 872×544 y, con navegador y línea de tiempo plegados, la ventana cabe en 960×516.
+2. **Generadores cortados por los lados** → el panel se abre del ancho que pide el contenido (hasta el 40 % de la ventana) y, si no cabe, se desplaza (R2).
+3. **Sin desplazamiento** → resuelto; Aceptar y Cancelar quedan fijos abajo.
+4. **Cinta solo con desplazamiento** → se quitan los nombres, luego los últimos grupos pasan al botón «Más »» (R3).
+5. **Con 200 % ni la ventana vacía cabía** → el navegador y la línea de tiempo se pliegan solos y la cinta se compacta cuando la ventana es angosta o baja (R4).
+6. **Escala y DPI** → los textos y el cubo de vistas de OpenCASCADE siguen la escala (R5).
+
 ## Qué falta medir
 
 - El visor con el sketch a escalas altas (iconos y cotas con tamaño en píxeles fijos).

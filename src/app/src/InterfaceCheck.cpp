@@ -408,8 +408,16 @@ QStringList auditWidgets(QWidget* root, const QRect& limit)
                 continue;
             }
         }
+        // Lo que va dentro de un área con desplazamiento queda fuera de la vista a propósito: se llega a ello desplazando.
+        bool scrollable = false;
+        for (const QWidget* up = w->parentWidget(); up != nullptr && up != root; up = up->parentWidget()) {
+            if (qobject_cast<const QScrollArea*>(up) != nullptr) {
+                scrollable = true;
+                break;
+            }
+        }
         const QRect onScreen = QRect(w->mapToGlobal(QPoint(0, 0)), w->size());
-        if (!limit.contains(onScreen.topLeft()) || !limit.contains(onScreen.bottomRight())) {
+        if (!scrollable && (!limit.contains(onScreen.topLeft()) || !limit.contains(onScreen.bottomRight()))) {
             findings << QStringLiteral("fuera de la pantalla: %1").arg(describe(w));
             continue;
         }
@@ -484,6 +492,10 @@ int InterfaceCheck::captureInventory(const QString& folder)
         problems += int(findings.size());
         // Lo que la ventana pide para esta escena frente a la pantalla: si no cabe, la ventana crece y se sale.
         if (widget == &window_) {
+            const Ribbon::Fit fit = window_.ribbon_->fit();
+            out << "cinta: ancho " << window_.ribbon_->width() << ", "
+                << (fit == Ribbon::Fit::Full ? "todo a la vista" : fit == Ribbon::Fit::IconsOnly ? "solo iconos" : "grupos recogidos en «Más»")
+                << ", grupos recogidos " << window_.ribbon_->hiddenGroups() << "\n";
             const QSize need = widget->minimumSizeHint();
             if (need.width() > available.width() || need.height() > available.height()) {
                 out << "- la ventana con esto abierto pide " << need.width() << "x" << need.height() << " y la pantalla disponible es "
@@ -587,7 +599,8 @@ int InterfaceCheck::captureInventory(const QString& folder)
     out << "\nTotal de problemas encontrados: " << problems << "\n";
     out.flush();
     undoAll();
-    return 0;
+    // Código de salida: 0 si todo cabe y se ve; 3 si hay problemas (así una prueba automática puede fallar).
+    return problems > 0 ? 3 : 0;
 }
 
 int InterfaceCheck::run()

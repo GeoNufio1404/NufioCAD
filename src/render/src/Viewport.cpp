@@ -567,6 +567,22 @@ void Viewport::paintGL()
         impl_->view->Invalidate();
     }
 
+    // Escala de pantalla (Fase 20, R5): los textos y símbolos de OpenCASCADE se miden en puntos a la resolución de la
+    // vista (72 por defecto); con 125 %, 150 % o 200 % de escala se suben para que el cubo de vistas, las cotas y los
+    // iconos del sketch tengan el mismo tamaño aparente que el resto de la interfaz. Se rehace también al pasar la
+    // ventana a un monitor con otra escala.
+    const unsigned int wantedResolution = static_cast<unsigned int>(72.0 * devicePixelRatioF() + 0.5);
+    if (impl_->view->RenderingParams().Resolution != wantedResolution) {
+        impl_->view->ChangeRenderingParams().Resolution = wantedResolution;
+        // El cubo de vistas se mide en píxeles: crece con la escala igual que sus letras.
+        const double scale = double(wantedResolution) / 72.0;
+        impl_->viewCube->SetSize(55.0 * scale);
+        impl_->viewCube->SetTransformPersistence(new Graphic3d_TransformPers(
+            Graphic3d_TMF_TriedronPers, Aspect_TOTP_RIGHT_UPPER, Vec2i(int(85.0 * scale), int(85.0 * scale))));
+        impl_->context->Redisplay(impl_->viewCube, false);
+        impl_->view->Invalidate();
+    }
+
     impl_->view->InvalidateImmediate();
     impl_->FlushViewEvents(impl_->context, impl_->view, true);
 }

@@ -39,6 +39,9 @@
 #include <QApplication>
 #include <QActionGroup>
 #include <QCloseEvent>
+#include <QGuiApplication>
+#include <QScreen>
+#include <QResizeEvent>
 #include <QDockWidget>
 #include <QEvent>
 #include <QFileDialog>
@@ -266,7 +269,12 @@ MainWindow::MainWindow(QWidget* parent)
     updateTitle();
     updateUndoActions();
     refreshModel();
-    resize(1440, 900);
+    // Tamaño inicial: el de siempre, pero nunca más grande que la pantalla disponible (Fase 20, R2).
+    {
+        const QScreen* current = screen() != nullptr ? screen() : QGuiApplication::primaryScreen();
+        const QRect available = current != nullptr ? current->availableGeometry() : QRect(0, 0, 1440, 900);
+        resize(std::min(1440, int(available.width() * 0.95)), std::min(900, int(available.height() * 0.95)));
+    }
 
     resizeDocks({navigatorDock_, propertiesDock_}, {240, 300}, Qt::Horizontal);
     // Recuerda tamaño de la ventana y distribución de paneles entre sesiones.
@@ -367,6 +375,36 @@ void MainWindow::whenComputed(std::function<void()> what)
     }
 }
 
+void MainWindow::resizeEvent(QResizeEvent* event)
+{
+    QMainWindow::resizeEvent(event);
+    adaptToSize();
+}
+
+void MainWindow::adaptToSize()
+{
+    if (navigatorDock_ == nullptr || timelineDock_ == nullptr || ribbon_ == nullptr) {
+        return;
+    }
+    const bool narrow = width() < 1100;
+    const bool low = height() < 640;
+    if (narrow && !navigatorDock_->isHidden() && !navigatorAutoHidden_) {
+        navigatorDock_->hide();
+        navigatorAutoHidden_ = true;
+    } else if (!narrow && navigatorAutoHidden_) {
+        navigatorDock_->show();
+        navigatorAutoHidden_ = false;
+    }
+    if (low && !timelineDock_->isHidden() && !timelineAutoHidden_) {
+        timelineDock_->hide();
+        timelineAutoHidden_ = true;
+    } else if (!low && timelineAutoHidden_) {
+        timelineDock_->show();
+        timelineAutoHidden_ = false;
+    }
+    ribbon_->setCompact(low);
+}
+
 void MainWindow::closeEvent(QCloseEvent* event)
 {
     if (!maybeSave()) {
@@ -375,6 +413,15 @@ void MainWindow::closeEvent(QCloseEvent* event)
     }
     recovery_->discard();  // cierre normal: no hace falta la copia
     QSettings settings;
+    // Los paneles que se plegaron solos por el tamaño vuelven a guardarse como visibles.
+    if (navigatorAutoHidden_) {
+        navigatorDock_->show();
+        navigatorAutoHidden_ = false;
+    }
+    if (timelineAutoHidden_) {
+        timelineDock_->show();
+        timelineAutoHidden_ = false;
+    }
     settings.setValue(QStringLiteral("ui/geometry"), saveGeometry());
     settings.setValue(QStringLiteral("ui/layout"), saveState(kLayoutVersion));
     // La ventana desaparece ya: lo que quede calculando se cancela y se espera después, sin que parezca colgada.
@@ -408,7 +455,9 @@ void MainWindow::createDocks()
     scroll->setWidgetResizable(true);
     scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     scroll->setFrameShape(QFrame::NoFrame);
-    scroll->setFixedHeight(timeline_->sizeHint().height() + 16);
+    // La línea de tiempo puede encoger (hasta una franja) si la ventana es baja; no crece más de lo que necesita.
+    scroll->setMaximumHeight(timeline_->sizeHint().height() + 16);
+    scroll->setMinimumHeight(56);
     timelineDock_->setWidget(scroll);
     timelineDock_->setFeatures(QDockWidget::NoDockWidgetFeatures);
     addDockWidget(Qt::BottomDockWidgetArea, timelineDock_);
@@ -594,6 +643,14 @@ void MainWindow::startTool(std::unique_ptr<FeatureTool> tool)
     tool_->start();
     propertiesDock_->setWidget(tool_->panel());
     propertiesDock_->show();
+    // Si hay sitio, el panel se abre del ancho que pide su contenido (hasta el 40 % de la ventana); si no, se desplaza.
+    {
+        const int wanted = tool_->panel()->sizeHint().width() + 24;
+        const int width = std::clamp(wanted, 300, std::max(300, int(this->width() * 0.4)));
+        if (propertiesDock_->width() < width) {
+            resizeDocks({propertiesDock_}, {width}, Qt::Horizontal);
+        }
+    }
     timeline_->setEditing(tool_->editing());
     statusBar()->showMessage(QStringLiteral("Elige las entradas en la vista · Enter acepta · Esc cancela"));
     updateSketchActions();
