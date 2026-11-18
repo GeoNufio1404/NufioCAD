@@ -403,9 +403,17 @@ void NavigatorWidget::refresh(const document::Document& document, const document
         item->setData(0, KeyRole, key);
     };
 
-    auto* origin = new QTreeWidgetItem(this, {QStringLiteral("Origen")});
+    // La raíz es el propio diseño, con su nombre (U5), como en Fusion 360.
+    const QString title = QString::fromStdString(document.name()).isEmpty() ? QStringLiteral("Sin título")
+                                                                            : QString::fromStdString(document.name());
+    auto* root = new QTreeWidgetItem(this, {title});
+    root->setData(0, KindRole, -1);
+    QFont rootFont = root->font(0);
+    rootFont.setBold(true);
+    root->setFont(0, rootFont);
+    auto* origin = new QTreeWidgetItem(root, {QStringLiteral("Origen")});
     checkable(origin, originVisible, OriginItem, {});
-    auto* ground = new QTreeWidgetItem(this, {QStringLiteral("Rejilla del suelo")});
+    auto* ground = new QTreeWidgetItem(root, {QStringLiteral("Rejilla del suelo")});
     checkable(ground, groundVisible, GroundItem, {});
 
     QTreeWidgetItem* planes = nullptr;
@@ -415,7 +423,7 @@ void NavigatorWidget::refresh(const document::Document& document, const document
             continue;
         }
         if (planes == nullptr) {
-            planes = new QTreeWidgetItem(this, {QStringLiteral("Planos de construcción")});
+            planes = new QTreeWidgetItem(root, {QStringLiteral("Planos de construcción")});
         }
         auto* item = new QTreeWidgetItem(planes, {QString::fromStdString(f.name())});
         checkable(item, !hiddenPlanes.contains(f.id()), PlaneItem, QVariant::fromValue<qulonglong>(f.id()));
@@ -428,13 +436,13 @@ void NavigatorWidget::refresh(const document::Document& document, const document
             continue;
         }
         if (axes == nullptr) {
-            axes = new QTreeWidgetItem(this, {QStringLiteral("Ejes de construcción")});
+            axes = new QTreeWidgetItem(root, {QStringLiteral("Ejes de construcción")});
         }
         auto* item = new QTreeWidgetItem(axes, {QString::fromStdString(f.name())});
         checkable(item, !hiddenPlanes.contains(f.id()), PlaneItem, QVariant::fromValue<qulonglong>(f.id()));
     }
 
-    auto* bodies = new QTreeWidgetItem(this, {QStringLiteral("Cuerpos")});
+    auto* bodies = new QTreeWidgetItem(root, {QStringLiteral("Cuerpos")});
     std::map<std::string, QTreeWidgetItem*> components;
     for (const document::Body& body : state.bodies) {
         QTreeWidgetItem* parent = bodies;
@@ -442,7 +450,7 @@ void NavigatorWidget::refresh(const document::Document& document, const document
         if (!component.empty()) {
             auto& node = components[component];
             if (node == nullptr) {
-                node = new QTreeWidgetItem(this, {QString::fromStdString(component)});
+                node = new QTreeWidgetItem(root, {QString::fromStdString(component)});
                 node->setIcon(0, QIcon());
             }
             parent = node;
@@ -459,7 +467,7 @@ void NavigatorWidget::refresh(const document::Document& document, const document
         checkable(node, allShown, ComponentItem, QString::fromStdString(name));
     }
 
-    auto* sketches = new QTreeWidgetItem(this, {QStringLiteral("Sketches")});
+    auto* sketches = new QTreeWidgetItem(root, {QStringLiteral("Sketches")});
     for (std::size_t i = 0; i < std::min(upTo, document.featureCount()); ++i) {
         const document::Feature& f = document.feature(i);
         if (f.kind() != document::FeatureKind::Sketch) {

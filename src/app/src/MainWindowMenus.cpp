@@ -42,6 +42,7 @@
 #include <QKeySequence>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QVBoxLayout>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QFrame>
@@ -176,7 +177,7 @@ void MainWindow::createMenus()
     recentMenu_ = file->addMenu(QStringLiteral("Abrir &reciente"));
     connect(recentMenu_, &QMenu::aboutToShow, this, &MainWindow::rebuildRecentMenu);
     file->addSeparator();
-    addFile(QStringLiteral("&Guardar"), QKeySequence(QKeySequence::Save), QStringLiteral("file-save"),
+    saveAction_ = addFile(QStringLiteral("&Guardar"), QKeySequence(QKeySequence::Save), QStringLiteral("file-save"),
             [this] { saveDocument(); });
     addFile(QStringLiteral("Guardar &como…"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_S),
             QStringLiteral("file-save"), [this] { saveDocumentAs(); });
@@ -605,6 +606,28 @@ void MainWindow::createMenus()
     ribbon_->addTrailing(sketchTab_, finishSketchAction_);
     ribbon_->setTabVisible(sketchTab_, false);
 
+    // Barra de acceso rápido arriba de la cinta (U5): guardar, deshacer, rehacer y el nombre del diseño, como la barra de
+    // aplicación de Fusion 360.
+    QToolBar* quickBar = addToolBar(QStringLiteral("Acceso rápido"));
+    quickBar->setObjectName(QStringLiteral("quickToolbar"));
+    quickBar->setMovable(false);
+    quickBar->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    quickBar->setIconSize(QSize(20, 20));
+    for (QAction* action : {saveAction_, undoAction_, redoAction_}) {
+        if (action != nullptr) {
+            quickBar->addAction(action);
+        }
+    }
+    quickBar->addSeparator();
+    docTitle_ = new QLabel(this);
+    docTitle_->setObjectName(QStringLiteral("docTitle"));
+    docTitle_->setContentsMargins(8, 0, 8, 0);
+    QFont titleFont = docTitle_->font();
+    titleFont.setBold(true);
+    docTitle_->setFont(titleFont);
+    quickBar->addWidget(docTitle_);
+    addToolBarBreak();
+
     QToolBar* ribbonBar = addToolBar(QStringLiteral("Cinta"));
     ribbonBar->setObjectName(QStringLiteral("ribbonToolbar"));
     ribbonBar->setMovable(false);
@@ -701,6 +724,9 @@ void MainWindow::createMenus()
     for (QAction* action : {allMeasures, allConstraints}) {
         action->setCheckable(true);
     }
+    sketchMeasuresAction_ = measures;
+    allMeasuresAction_ = allMeasures;
+    allConstraintsAction_ = allConstraints;
     allMeasures->setChecked(QSettings().value(QStringLiteral("view/sketchAllMeasures"), false).toBool());
     allConstraints->setChecked(QSettings().value(QStringLiteral("view/sketchAllConstraints"), false).toBool());
     const auto applyAll = [this, allMeasures, allConstraints] {
@@ -712,6 +738,12 @@ void MainWindow::createMenus()
     connect(allConstraints, &QAction::toggled, this, applyAll);
     applyAll();
     view->addSeparator();
+    auto* floating = view->addAction(QStringLiteral("Comandos &flotantes sobre el lienzo"));
+    floating->setCheckable(true);
+    floating->setChecked(QSettings().value(QStringLiteral("view/floatingCommands"), false).toBool());
+    floating->setToolTip(QStringLiteral("El panel de cada herramienta flota sobre el lienzo (arriba a la derecha) en vez de ir acoplado"));
+    connect(floating, &QAction::toggled, this,
+            [](bool on) { QSettings().setValue(QStringLiteral("view/floatingCommands"), on); });
     QMenu* panels = view->addMenu(QStringLiteral("&Paneles"));
     panels->addAction(navigatorDock_->toggleViewAction());
     panels->addAction(propertiesDock_->toggleViewAction());
@@ -747,6 +779,73 @@ void MainWindow::createMenus()
         menu->setToolTipsVisible(true);
     }
     assignShortcuts();
+    createSketchPalette();
+}
+
+void MainWindow::createSketchPalette()
+{
+    sketchPalette_ = new QFrame(viewport_);
+    sketchPalette_->setObjectName(QStringLiteral("sketchPalette"));
+    sketchPalette_->setStyleSheet(QStringLiteral(
+        "#sketchPalette { background: rgba(32, 38, 48, 225); border: 1px solid #3A4352; border-radius: 6px; }"
+        "#sketchPalette QCheckBox, #sketchPalette QLabel { color: #E6EAF0; }"));
+    auto* column = new QVBoxLayout(sketchPalette_);
+    column->setContentsMargins(10, 6, 10, 8);
+    column->setSpacing(2);
+    auto* title = new QLabel(QStringLiteral("<b>Mostrar</b>"), sketchPalette_);
+    column->addWidget(title);
+    // Cada casilla es la misma acción del menú Ver: se mantienen al día en los dos sentidos.
+    const std::vector<std::pair<QString, QAction*>> rows = {
+        {QStringLiteral("Medidas"), sketchMeasuresAction_},
+        {QStringLiteral("Medidas de todo"), allMeasuresAction_},
+        {QStringLiteral("Restricciones de todo"), allConstraintsAction_}};
+    for (const auto& [text, action] : rows) {
+        if (action == nullptr) {
+            continue;
+        }
+        auto* box = new QCheckBox(text, sketchPalette_);
+        box->setChecked(action->isChecked());
+        box->setFocusPolicy(Qt::NoFocus);
+        box->setToolTip(action->toolTip());
+        column->addWidget(box);
+        connect(box, &QCheckBox::toggled, action, &QAction::setChecked);
+        connect(action, &QAction::toggled, box, [box](bool on) {
+            const QSignalBlocker block(box);
+            box->setChecked(on);
+        });
+    }
+    auto* ground = new QCheckBox(QStringLiteral("Rejilla"), sketchPalette_);
+    ground->setObjectName(QStringLiteral("paletteGrid"));
+    ground->setChecked(groundVisible_);
+    ground->setFocusPolicy(Qt::NoFocus);
+    ground->setToolTip(QStringLiteral("La rejilla del suelo (la misma casilla del Navegador)"));
+    column->addWidget(ground);
+    connect(ground, &QCheckBox::toggled, this, [this](bool on) {
+        groundVisible_ = on;
+        setViewDirty(true);
+        viewport_->setGroundVisible(on);
+    });
+    sketchPalette_->adjustSize();
+    sketchPalette_->move(12, 12);
+    sketchPalette_->hide();
+}
+
+void MainWindow::updateSketchPalette()
+{
+    if (sketchPalette_ == nullptr) {
+        return;
+    }
+    const bool show = sketch_ != nullptr;
+    if (show) {
+        if (auto* ground = sketchPalette_->findChild<QCheckBox*>(QStringLiteral("paletteGrid"))) {
+            const QSignalBlocker block(ground);
+            ground->setChecked(groundVisible_);
+        }
+        sketchPalette_->adjustSize();
+        sketchPalette_->move(12, 12);
+        sketchPalette_->raise();
+    }
+    sketchPalette_->setVisible(show);
 }
 
 // Atajos de una tecla (o Mayús + tecla) para las herramientas del sólido, sin pisar los del sketch (L R C A P T O M X K D,

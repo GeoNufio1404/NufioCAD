@@ -69,6 +69,9 @@
 #include <QScrollArea>
 #include <QSettings>
 #include <QTimer>
+#include <QHBoxLayout>
+#include <QVBoxLayout>
+#include <QToolButton>
 #include <QStatusBar>
 #include <QVariantAnimation>
 #include <QToolBar>
@@ -503,6 +506,10 @@ void MainWindow::adaptToSize()
         timelineAutoHidden_ = false;
     }
     ribbon_->setCompact(low);
+    // En una ventana baja la barra de acceso rápido se esconde (deshacer y guardar siguen en el menú y con sus teclas).
+    if (auto* quick = findChild<QToolBar*>(QStringLiteral("quickToolbar"))) {
+        quick->setVisible(!low);
+    }
 }
 
 void MainWindow::closeEvent(QCloseEvent* event)
@@ -558,7 +565,70 @@ void MainWindow::createDocks()
     // La línea de tiempo puede encoger (hasta una franja) si la ventana es baja; no crece más de lo que necesita.
     scroll->setMaximumHeight(timeline_->sizeHint().height() + 16);
     scroll->setMinimumHeight(56);
-    timelineDock_->setWidget(scroll);
+    // Controles de reproducción (U5): inicio, anterior, reproducir, siguiente y final; mueven el marcador del historial.
+    auto* timelineBox = new QWidget();
+    auto* timelineColumn = new QVBoxLayout(timelineBox);
+    timelineColumn->setContentsMargins(0, 0, 0, 0);
+    timelineColumn->setSpacing(0);
+    auto* controls = new QHBoxLayout();
+    controls->setContentsMargins(6, 2, 6, 0);
+    controls->setSpacing(2);
+    const auto control = [&](const QString& text, const QString& tip, const char* name) {
+        auto* button = new QToolButton(timelineBox);
+        button->setObjectName(QString::fromLatin1(name));
+        button->setText(text);
+        button->setToolTip(tip);
+        button->setAutoRaise(true);
+        button->setFocusPolicy(Qt::NoFocus);
+        controls->addWidget(button);
+        return button;
+    };
+    auto* toStart = control(QStringLiteral("⏮"), QStringLiteral("Marcador al principio del historial"), "timelineStart");
+    auto* previous = control(QStringLiteral("◀"), QStringLiteral("Marcador un paso hacia atrás"), "timelinePrevious");
+    timelinePlay_ = control(QStringLiteral("▶"), QStringLiteral("Reproducir el historial paso a paso desde el marcador"), "timelinePlay");
+    auto* next = control(QStringLiteral("▶|"), QStringLiteral("Marcador un paso hacia delante"), "timelineNext");
+    auto* toEnd = control(QStringLiteral("⏭"), QStringLiteral("Marcador al final del historial"), "timelineEnd");
+    controls->addStretch();
+    timelineColumn->addLayout(controls);
+    timelineColumn->addWidget(scroll, 1);
+    const auto moveMarker = [this](long target) {
+        if (sketch_ || tool_) {
+            return;
+        }
+        const long end = long(document_.featureCount());
+        const long clamped = std::clamp(target, 0L, end);
+        if (std::size_t(clamped) != document_.marker()) {
+            commands_.push(std::make_unique<commands::SetMarker>(std::size_t(clamped)));
+        }
+    };
+    connect(toStart, &QToolButton::clicked, this, [moveMarker] { moveMarker(0); });
+    connect(previous, &QToolButton::clicked, this, [this, moveMarker] { moveMarker(long(document_.marker()) - 1); });
+    connect(next, &QToolButton::clicked, this, [this, moveMarker] { moveMarker(long(document_.marker()) + 1); });
+    connect(toEnd, &QToolButton::clicked, this, [this, moveMarker] { moveMarker(long(document_.featureCount())); });
+    timelinePlayer_ = new QTimer(this);
+    timelinePlayer_->setInterval(700);
+    connect(timelinePlayer_, &QTimer::timeout, this, [this, moveMarker] {
+        if (sketch_ || tool_ || document_.marker() >= document_.featureCount()) {
+            timelinePlayer_->stop();
+            timelinePlay_->setText(QStringLiteral("▶"));
+            return;
+        }
+        moveMarker(long(document_.marker()) + 1);
+    });
+    connect(timelinePlay_, &QToolButton::clicked, this, [this, moveMarker] {
+        if (timelinePlayer_->isActive()) {
+            timelinePlayer_->stop();
+            timelinePlay_->setText(QStringLiteral("▶"));
+            return;
+        }
+        // Si el marcador ya está al final, se vuelve al principio para ver todo el historial.
+        if (document_.marker() >= document_.featureCount()) {
+            moveMarker(0);
+        }
+        timelinePlayer_->start();
+        timelinePlay_->setText(QStringLiteral("⏸"));
+    });
+    timelineDock_->setWidget(timelineBox);
     timelineDock_->setFeatures(QDockWidget::NoDockWidgetFeatures);
     addDockWidget(Qt::BottomDockWidgetArea, timelineDock_);
 }
@@ -595,6 +665,9 @@ void MainWindow::updateTitle()
                                        : QString::fromStdU16String(path_.stem().u16string());
     setWindowTitle(name + QStringLiteral("[*]"));
     setWindowModified(hasUnsavedWork());
+    if (docTitle_ != nullptr) {
+        docTitle_->setText(name.isEmpty() ? QStringLiteral("Sin título") : name + (hasUnsavedWork() ? QStringLiteral(" •") : QString()));
+    }
     updateStartScreen();
 }
 
@@ -743,6 +816,14 @@ void MainWindow::startTool(std::unique_ptr<FeatureTool> tool)
     tool_->start();
     propertiesDock_->setWidget(tool_->panel());
     propertiesDock_->show();
+    // Opción «Comandos flotantes» (U5): el panel flota sobre el lienzo, arriba a la derecha, en vez de ir acoplado.
+    if (QSettings().value(QStringLiteral("view/floatingCommands"), false).toBool()) {
+        propertiesDock_->setFloating(true);
+        const int width = std::min(std::max(propertiesDock_->width(), 340), std::max(300, viewport_->width() / 2));
+        const int height = std::min(std::max(propertiesDock_->sizeHint().height(), 320), std::max(240, viewport_->height() - 40));
+        propertiesDock_->resize(width, height);
+        propertiesDock_->move(viewport_->mapToGlobal(QPoint(std::max(0, viewport_->width() - width - 16), 16)));
+    }
     // Si hay sitio, el panel se abre del ancho que pide su contenido (hasta el 40 % de la ventana); si no, se desplaza.
     {
         const int wanted = tool_->panel()->sizeHint().width() + 24;
@@ -822,6 +903,7 @@ void MainWindow::finishTool(bool accepted)
     updateBusyBadge();
     // Se destruye después: esta llamada viene de una señal de la herramienta.
     propertiesDock_->setWidget(propertiesPlaceholder_);
+    propertiesDock_->setFloating(false);
     propertiesDock_->hide();  // como los diálogos de Fusion: solo mientras hay un comando
     tool_.release()->deleteLater();
     timeline_->setEditing(std::nullopt);

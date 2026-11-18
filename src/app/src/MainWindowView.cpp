@@ -711,6 +711,7 @@ void MainWindow::updateSketchActions()
         ribbon_->setTabVisible(toolsTab_, !ribbonSketching_);
         ribbon_->setCurrentTab(ribbonSketching_ ? sketchTab_ : solidTab_);
     }
+    updateSketchPalette();
     lookAtSketchAction_->setEnabled(sketch_ != nullptr);
     for (const auto& [tool, action] : toolActions_) {
         action->setEnabled(sketch_ != nullptr);

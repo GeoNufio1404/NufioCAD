@@ -54,6 +54,7 @@
 #include <QSettings>
 #include <QTextStream>
 #include <QEvent>
+#include <QToolBar>
 #include <QThread>
 #include <QScreen>
 #include <QScrollArea>
@@ -467,6 +468,16 @@ int InterfaceCheck::captureInventory(const QString& folder)
         << screen->logicalDotsPerInch() << "\n";
     out << "Ventana principal: " << window_.width() << "x" << window_.height() << ", mínimo que pide su contenido "
         << window_.minimumSizeHint().width() << "x" << window_.minimumSizeHint().height() << "\n";
+    // Qué barras y paneles ocupan alto (para saber de dónde sale el mínimo de la ventana).
+    for (const QWidget* part : window_.findChildren<QWidget*>()) {
+        const bool bar = qobject_cast<const QToolBar*>(part) != nullptr || qobject_cast<const QStatusBar*>(part) != nullptr ||
+                         qobject_cast<const QMenuBar*>(part) != nullptr || qobject_cast<const QDockWidget*>(part) != nullptr;
+        if (bar && part->parentWidget() == &window_) {
+            out << "  parte: " << part->metaObject()->className() << " «" << part->objectName() << "» " << (part->isVisible() ? "visible " : "oculta ")
+                << part->width() << "x" << part->height() << ", mínimo " << part->minimumSizeHint().width() << "x"
+                << part->minimumSizeHint().height() << "\n";
+        }
+    }
     const bool windowFits = window_.minimumSizeHint().width() <= available.width() && window_.minimumSizeHint().height() <= available.height();
     out << (windowFits ? "OK: la ventana puede caber en la pantalla\n"
                        : "PROBLEMA: el contenido de la ventana exige más que la pantalla disponible: parte queda fuera\n");
