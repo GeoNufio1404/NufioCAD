@@ -478,6 +478,16 @@ void MainWindow::createMenus()
     }
 
     sketchMenu->addSeparator();
+    editTextAction_ = sketchMenu->addAction(QStringLiteral("Editar te&xto…"), this, [this] {
+        if (sketch_ == nullptr) {
+            return;
+        }
+        if (!sketch_->editSelectedText()) {
+            statusBar()->showMessage(QStringLiteral("Elige primero las letras de un texto del sketch (clic en una letra)"), 6000);
+        }
+    });
+    decorate(editTextAction_, QStringLiteral("text"),
+             QStringLiteral("Vuelve a abrir el texto elegido para cambiar lo que dice, la fuente o la altura"), QStringLiteral("Editar texto"));
     deleteAction_ = sketchMenu->addAction(QStringLiteral("&Borrar"), QKeySequence(QKeySequence::Delete), this,
                                           [this] { sketch_->deleteSelection(); });
     decorate(deleteAction_, QStringLiteral("delete"));
@@ -600,6 +610,7 @@ void MainWindow::createMenus()
     ribbon_->addGroup(sketchTab_, QStringLiteral("INSERTAR"));
     family(QStringLiteral("Texto"));
     ribbon_->addAction(sketchTab_, importDxfAction_);
+    ribbon_->addAction(sketchTab_, editTextAction_);
     ribbon_->addGroup(sketchTab_, QStringLiteral("OPCIONES"));
     ribbon_->addAction(sketchTab_, constructionAction_);
     ribbon_->addAction(sketchTab_, lockAction_);

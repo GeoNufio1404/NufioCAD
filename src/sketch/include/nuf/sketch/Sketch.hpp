@@ -106,6 +106,15 @@ struct ModelLink {
     int piece = 0;       // qué trozo de su proyección (una spline se trocea)
 };
 
+// Lo que hace falta para volver a editar un texto como texto (U9): las letras son curvas sueltas, y el texto va en
+// la primera de ellas; todas las del mismo texto apuntan a esa en «textOwner».
+struct TextInfo {
+    std::string text;
+    std::string family;
+    double height = 0.0;
+    Vec2 at;  // donde se puso el texto
+};
+
 struct Entity {
     EntityId id = 0;
     Geometry geometry;
@@ -118,6 +127,10 @@ struct Entity {
     bool locked = false;
     // Con vínculo, además se actualiza con el modelo.
     std::optional<ModelLink> link;
+    // Letras de un texto: el id de la primera curva del texto (0 si no es parte de un texto). La primera lleva además
+    // el texto, la fuente, la altura y la posición.
+    EntityId textOwner = 0;
+    std::optional<TextInfo> text;
 };
 
 // ---------------------------------------------------------------------------

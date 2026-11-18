@@ -725,6 +725,7 @@ void MainWindow::updateSketchActions()
     dimensionAction_->setEnabled(sketch_ != nullptr);
     intersectAction_->setEnabled(sketch_ != nullptr);
     importDxfAction_->setEnabled(sketch_ != nullptr);
+    editTextAction_->setEnabled(sketch_ != nullptr);
     for (QAction* action : constraintActions_) {
         action->setEnabled(sketch_ != nullptr);
     }

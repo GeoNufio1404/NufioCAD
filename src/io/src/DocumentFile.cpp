@@ -313,6 +313,13 @@ Json toJson(const sk::Sketch& s)
         if (e.link) {
             je["link"] = {{"edge", e.link->edge}, {"occurrence", e.link->occurrence}, {"piece", e.link->piece}};
         }
+        if (e.textOwner != 0) {
+            je["textOwner"] = e.textOwner;
+        }
+        if (e.text) {
+            je["text"] = {{"text", e.text->text}, {"family", e.text->family}, {"height", e.text->height},
+                          {"x", e.text->at.x}, {"y", e.text->at.y}};
+        }
         entities.push_back(std::move(je));
     }
     Json constraints = Json::array();
@@ -338,6 +345,13 @@ sk::Sketch sketchOf(const Json& j)
         if (je.contains("link")) {
             const Json& jl = je.at("link");
             e.link = sk::ModelLink{text(jl, "edge"), jl.at("occurrence").get<int>(), jl.at("piece").get<int>()};
+        }
+        // Los archivos anteriores no traen el texto: sus letras siguen siendo curvas sueltas.
+        e.textOwner = static_cast<sk::EntityId>(je.value("textOwner", 0ULL));
+        if (je.contains("text")) {
+            const Json& jt = je.at("text");
+            e.text = sk::TextInfo{text(jt, "text"), text(jt, "family"), jt.at("height").get<double>(),
+                                  {jt.at("x").get<double>(), jt.at("y").get<double>()}};
         }
         entities.push_back(std::move(e));
     }

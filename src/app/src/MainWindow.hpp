@@ -307,6 +307,7 @@ private:
     QAction* dimensionAction_ = nullptr;
     QAction* intersectAction_ = nullptr;
     QAction* importDxfAction_ = nullptr;
+    QAction* editTextAction_ = nullptr;
     std::vector<QAction*> constraintActions_;
     QLabel* cursorLabel_ = nullptr;
     QComboBox* unitBox_ = nullptr;
