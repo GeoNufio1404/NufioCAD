@@ -309,6 +309,7 @@ private:
     QCheckBox* variable_ = nullptr;      // redondeo: radio variable
     QComboBox* chamferKind_ = nullptr;  // chaflán: igual, dos distancias, distancia y ángulo
     QDoubleSpinBox* size2_ = nullptr;
+    QDoubleSpinBox* middle_ = nullptr;  // radio a mitad de la arista (0: ninguno)
     QDoubleSpinBox* angle_ = nullptr;
     QCheckBox* flip_ = nullptr;
 };

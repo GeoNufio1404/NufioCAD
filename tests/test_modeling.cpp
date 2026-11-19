@@ -696,6 +696,13 @@ TEST_CASE("Redondeo de radio variable y voladizos", "[fillet][overhang]")
     CHECK(removed > small);
     CHECK(removed < constant);
     CHECK_THROWS_AS(geometry::filletVariable("f", box, {edge}, 0.0, 3.0), geometry::GeometryError);
+
+    // Con un radio en el centro más grueso que los extremos se quita más material que con el cambio recto
+    const geometry::Shape bulged = geometry::filletVariable("f", box, {edge}, 1.0, 1.0, 3.0);
+    REQUIRE(bulged.isValid());
+    CHECK(box.volume() - bulged.volume() > small);
+    CHECK(box.volume() - bulged.volume() < constant);
+    CHECK_THROWS_AS(geometry::filletVariable("f", box, {edge}, 1.0, 3.0, -1.0), geometry::GeometryError);
 }
 
 TEST_CASE("El ángulo de voladizo se puede cambiar: una cara a 63° se avisa a 45° y no a 70°", "[overhang]")

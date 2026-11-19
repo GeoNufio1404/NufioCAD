@@ -622,12 +622,20 @@ void EdgeTool::createFields(QFormLayout* form)
         variable_->setChecked(e != nullptr && e->variable);
         form->addRow(QString(), variable_);
         form->addRow(QStringLiteral("Radio del otro extremo"), size2_);
+        middle_ = lengthBox(e != nullptr ? e->middle : 0.0);
+        middle_->setMinimum(0.0);
+        middle_->setToolTip(QStringLiteral("Radio a mitad de la arista; 0 deja el cambio recto de un extremo al otro."));
+        field("middle", middle_);
+        form->addRow(QStringLiteral("Radio en el centro (0 = ninguno)"), middle_);
         form->setRowVisible(size2_, variable_->isChecked());
+        form->setRowVisible(middle_, variable_->isChecked());
         connect(variable_, &QCheckBox::toggled, this, [this, form] {
             form->setRowVisible(size2_, variable_->isChecked());
+            form->setRowVisible(middle_, variable_->isChecked());
             updatePreview();
         });
         connect(size2_, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
+        connect(middle_, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
     }
     if (style_ == Style::Chamfer) {
         // Chaflán con una distancia por los dos lados, con dos distancias o con distancia y ángulo (O2).
@@ -739,6 +747,7 @@ std::unique_ptr<document::Feature> EdgeTool::build() const
     if (style_ == Style::Fillet && variable_ != nullptr) {
         f->variable = variable_->isChecked();
         f->size2 = size2_->value();
+        f->middle = middle_ != nullptr ? middle_->value() : 0.0;
     }
     if (style_ == Style::Chamfer && chamferKind_ != nullptr) {
         const int k = chamferKind_->currentIndex();

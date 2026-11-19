@@ -518,6 +518,9 @@ FeatureRow rowOf(const Feature& f)
         if (f.kind() == FeatureKind::Fillet && e.variable) {
             params["variable"] = true;
             params["size2"] = e.size2;
+            if (e.middle > 0.0) {
+                params["middle"] = e.middle;
+            }
         }
         if (f.kind() == FeatureKind::Chamfer) {
             params["style"] = e.style == geometry::ChamferStyle::TwoDistances ? "two" : e.style == geometry::ChamferStyle::DistanceAngle ? "angle" : "equal";
@@ -751,6 +754,7 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         }
         e->size = number(p, "size");
         e->variable = p.value("variable", false);
+        e->middle = p.value("middle", 0.0);
         // Los archivos anteriores solo tienen chaflán con una distancia.
         {
             const std::string style = p.value("style", std::string("equal"));

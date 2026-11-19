@@ -44,6 +44,7 @@
 #include <BRepExtrema_DistShapeShape.hxx>
 #include <BRepFilletAPI_MakeChamfer.hxx>
 #include <BRepFilletAPI_MakeFillet.hxx>
+#include <gp_Pnt2d.hxx>
 #include <BRepGProp.hxx>
 #include <BRepOffsetAPI_DraftAngle.hxx>
 #include <BRepOffsetAPI_MakeOffset.hxx>
@@ -1014,15 +1015,23 @@ Shape chamfer(std::string_view tag, const Shape& body, const std::vector<int>& e
                                                      "No se pudo achaflanar: prueba con una distancia menor");
 }
 
-Shape filletVariable(std::string_view tag, const Shape& body, const std::vector<int>& edges, double start, double end)
+Shape filletVariable(std::string_view tag, const Shape& body, const std::vector<int>& edges, double start, double end, double middle)
 {
-    if (start <= kTiny || end <= kTiny) {
+    if (start <= kTiny || end <= kTiny || middle < 0.0) {
         throw GeometryError("Los radios del redondeo deben ser mayores que cero");
     }
     const std::function<void(BRepFilletAPI_MakeFillet&, const TopoDS_Edge&)> add = [&](BRepFilletAPI_MakeFillet& maker, const TopoDS_Edge& edge) {
-        maker.Add(start, end, edge);
+        if (middle > kTiny) {
+            NCollection_Array1<gp_Pnt2d> law(1, 3);
+            law.SetValue(1, gp_Pnt2d(0.0, start));
+            law.SetValue(2, gp_Pnt2d(0.5, middle));
+            law.SetValue(3, gp_Pnt2d(1.0, end));
+            maker.Add(law, edge);
+        } else {
+            maker.Add(start, end, edge);
+        }
     };
-    return edgeOperation<BRepFilletAPI_MakeFillet>(tag, "redondeo", body, edges, std::max(start, end),
+    return edgeOperation<BRepFilletAPI_MakeFillet>(tag, "redondeo", body, edges, std::max({start, end, middle}),
                                                    "No se pudo redondear: prueba con radios menores", add);
 }
 

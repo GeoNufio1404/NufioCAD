@@ -50,6 +50,7 @@ std::vector<Feature::NumericField> EdgeFeature::numericFields()
         fields.push_back(field("angle", "Ángulo", angle, kRadiansPerDegree));
     } else if (variable) {
         fields.push_back(field("size2", "Radio del otro extremo", size2));
+        fields.push_back(field("middle", "Radio en el centro", middle));
     }
     return fields;
 }
