@@ -34,7 +34,7 @@ void AddRecipe::execute(document::Document& doc)
     }
     std::size_t k = 0;
     for (const auto& feature : recipe_.features) {
-        auto instance = document::instantiate(*feature, recipeSketch);
+        auto instance = document::instantiate(*feature, recipeSketch, ids_);
         if (lead != 0) {
             instance->origin = recipe_.origin;
             instance->origin.lead = lead;
@@ -60,7 +60,8 @@ void AddRecipe::execute(document::Document& doc)
         if (std::ranges::find(before, body.key) != before.end()) {
             continue;
         }
-        info[body.key] = {next < recipe_.bodyNames.size() ? recipe_.bodyNames[next] : std::string(), component};
+        info[body.key] = {next < recipe_.bodyNames.size() ? recipe_.bodyNames[next] : std::string(), component,
+                          std::ranges::find(recipe_.fixedBodies, int(next)) != recipe_.fixedBodies.end()};
         ++next;
     }
     doc.setBodyInfo(info);

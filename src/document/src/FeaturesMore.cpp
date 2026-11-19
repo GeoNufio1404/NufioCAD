@@ -500,8 +500,37 @@ struct ResolvedFrame {
     geometry::Frame frame;
 };
 
+// «@axis:<clave>»: el eje de un cuerpo (lo usan las recetas, como el tren planetario, que no conocen los nombres de
+// las caras de lo que generan): la cara cilíndrica o cónica más grande del cuerpo.
+constexpr std::string_view kAxisPrefix = "@axis:";
+
 ResolvedFrame resolveFrame(const ModelState& state, const ElementPick& pick, const char* which)
 {
+    if (pick.ref.name.rfind(kAxisPrefix, 0) == 0) {
+        const std::string key = pick.ref.name.substr(kAxisPrefix.size());
+        const auto body = std::ranges::find_if(state.bodies, [&](const Body& b) { return b.key == key; });
+        if (body == state.bodies.end()) {
+            throw FeatureError(std::string("El cuerpo ") + which + " ya no existe");
+        }
+        std::optional<geometry::Frame> best;
+        double bestSize = -1.0;
+        for (int i = 0; i < body->shape.faceCount(); ++i) {
+            const auto frame = body->shape.faceFrame(i);
+            if (!frame || frame->kind != geometry::Frame::Kind::Axis) {
+                continue;
+            }
+            const geometry::Box box = body->shape.faceBounds(i);
+            const double size = std::abs(box.max.x - box.min.x) + std::abs(box.max.y - box.min.y) + std::abs(box.max.z - box.min.z);
+            if (size > bestSize) {
+                bestSize = size;
+                best = frame;
+            }
+        }
+        if (!best) {
+            throw FeatureError(std::string("El cuerpo ") + which + " no tiene una cara cilíndrica que sirva de eje");
+        }
+        return {std::size_t(body - state.bodies.begin()), *best};
+    }
     if (pick.edge) {
         const auto hit = state.findEdge(pick.ref);
         if (!hit) {
@@ -669,11 +698,25 @@ std::optional<std::string> JointFeature::compute(ModelState& state) const
     return warning;
 }
 
+namespace {
+
+// Las dependencias de una referencia: la de una cara o arista, o la del cuerpo de un «@axis:».
+void addPickDependencies(std::vector<FeatureId>& ids, const geometry::ElementRef& ref)
+{
+    if (ref.name.rfind(kAxisPrefix, 0) == 0) {
+        addAll(ids, geometry::ElementRef{ref.name.substr(kAxisPrefix.size()) + ":", 0});
+    } else {
+        addAll(ids, ref);
+    }
+}
+
+} // namespace
+
 std::vector<FeatureId> JointFeature::dependencies() const
 {
     std::vector<FeatureId> ids;
-    addAll(ids, fixedFace);
-    addAll(ids, movingFace);
+    addPickDependencies(ids, fixedFace);
+    addPickDependencies(ids, movingFace);
     for (const std::string& other : alsoMove) {
         addAll(ids, geometry::ElementRef{other + ":", 0});
     }

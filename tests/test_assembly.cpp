@@ -3,6 +3,7 @@
 #include <nuf/commands/DuplicateBodies.hpp>
 #include <nuf/document/Document.hpp>
 #include <nuf/document/Features.hpp>
+#include <nuf/document/Generators.hpp>
 #include <nuf/document/Interference.hpp>
 #include <nuf/io/DocumentFile.hpp>
 
@@ -447,4 +448,68 @@ TEST_CASE("Las interferencias a lo largo del giro encuentran el peor momento", "
     int calls = 0;
     findInterferencesAlong(doc, id, kPi / 2.0, 9, &checked, 1e-3, [&] { return ++calls > 3; });
     CHECK(checked == 3);
+}
+
+TEST_CASE("El tren planetario engrana a la vez con el sol y la corona, y gira al mover el enlace", "[assembly][planetary]")
+{
+    const Generator* generator = findGenerator("tren-planetario");
+    REQUIRE(generator != nullptr);
+    GeneratorValues values = generator->defaults();
+    Document doc;
+    applyRecipe(doc, generator->make(values, ""));
+    // Sol, 3 planetas, corona, portasatélites, 3 ejes y el eje central: 10 cuerpos.
+    REQUIRE(doc.result().bodies.size() == 10);
+    for (std::size_t i = 0; i < doc.featureCount(); ++i) {
+        INFO(doc.feature(i).name() << ": " << doc.status(doc.feature(i).id()).message);
+        CHECK(doc.status(doc.feature(i).id()).health != Health::Error);
+    }
+    // La corona, la placa y los ejes salen fijos; el sol y los planetas no.
+    const auto& bodies = doc.result().bodies;
+    CHECK_FALSE(doc.isFixed(bodies[0].key));  // sol
+    CHECK_FALSE(doc.isFixed(bodies[1].key));  // planeta 1
+    CHECK(doc.isFixed(bodies[4].key));        // corona: lo único fijo
+    CHECK_FALSE(doc.isFixed(bodies[5].key));  // portasatélites: gira con los planetas
+    CHECK_FALSE(doc.isFixed(bodies[9].key));
+    CHECK(bodies[4].name == "Corona");
+    // El enlace existe, apunta a las 5 uniones (sol, 3 planetas y portasatélites); con 12, 12 y 36 dientes el planeta gira
+    // sobre su eje −36·12/(48·12) = −0,75 veces lo del sol y el portasatélites 12/48 = 0,25.
+    const MotionLinkFeature* link = nullptr;
+    FeatureId linkId = 0;
+    for (std::size_t i = 0; i < doc.featureCount(); ++i) {
+        if (const auto* candidate = dynamic_cast<const MotionLinkFeature*>(&doc.feature(i))) {
+            link = candidate;
+            linkId = candidate->id();
+        }
+    }
+    REQUIRE(link != nullptr);
+    REQUIRE(link->members.size() == 5);
+    CHECK_THAT(link->members[1].ratio, WithinAbs(-0.75, 1e-9));
+    CHECK_THAT(link->members[4].ratio, WithinAbs(0.25, 1e-9));
+    for (const auto& member : link->members) {
+        CHECK(doc.findFeature(member.joint) != nullptr);
+    }
+    // En reposo no se pisan los dientes: los tres engranes están bien puestos (el aire lo da «adelgazar»).
+    const auto rest = findInterferences(doc.result(), 1.0);
+    INFO("parejas que se pisan en reposo: " << rest.size());
+    CHECK(rest.empty());
+    // La unión del portasatélites no lo movió de su sitio (su centro sigue bajo el tren).
+    CHECK_THAT(bodies[5].shape.bounds().min.z, WithinAbs(-4.0, 1e-6));
+    CHECK_THAT(bodies[5].shape.bounds().max.z, WithinAbs(-1.0, 1e-6));
+    // A lo largo de 60° del sol (dos pasos de sus dientes) tampoco se pisan en ninguna posición.
+    int checked = 0;
+    const auto along = findInterferencesAlong(doc, linkId, 60.0 * kPi / 180.0, 12, &checked, 1.0);
+    CHECK(checked == 13);
+    INFO("parejas que se pisan en el giro: " << along.size());
+    CHECK(along.empty());
+}
+
+TEST_CASE("El tren planetario avisa cuando los planetas no caben a partes iguales", "[assembly][planetary]")
+{
+    const Generator* generator = findGenerator("tren-planetario");
+    REQUIRE(generator != nullptr);
+    GeneratorValues values = generator->defaults();
+    // 12 + 36 = 48 dientes entre 3 planetas: entero. Con 5 planetas, no.
+    CHECK(generator->summary(values).find("AVISO") == std::string::npos);
+    values["planetas"] = 5.0;
+    CHECK(generator->summary(values).find("AVISO") != std::string::npos);
 }

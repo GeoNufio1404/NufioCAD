@@ -1985,11 +1985,13 @@ TEST_CASE("Mover varios cuerpos a la vez los mueve y los gira como un solo bloqu
     REQUIRE(loaded->alsoMove == std::vector<std::string>{b});
     std::filesystem::remove(path);
 
-    // Copiar varios a la vez todavía no se puede: avisa en vez de hacer algo a medias.
+    // Copiar varios a la vez (Fase 21): salen tantas copias como cuerpos, y los originales no se tocan.
+    const std::size_t bodiesBefore = doc.result().bodies.size();
     auto copy = std::make_unique<MoveFeature>(*static_cast<const MoveFeature*>(doc.findFeature(id)));
     copy->copy = true;
     doc.replaceFeature(id, std::move(copy));
-    REQUIRE(doc.status(id).health == Health::Error);
+    REQUIRE(doc.status(id).health == Health::Ok);
+    REQUIRE(doc.result().bodies.size() == bodiesBefore + 2);
 }
 
 TEST_CASE("Un cambio nuevo cancela el cálculo en curso y solo vale el último", "[background]")
