@@ -1,6 +1,9 @@
 // Ajustes de impresión de los engranajes: juego entre dientes (adelgaza el diente) y chaflán en la base.
+#include <nuf/document/Document.hpp>
+#include <nuf/document/Generators.hpp>
 #include <nuf/geometry/Modeling.hpp>
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
@@ -297,4 +300,61 @@ TEST_CASE("El par de engranajes en espina de pescado sale válido y la opción s
     io::loadDocument(path, reopened, view);
     std::filesystem::remove(path);
     REQUIRE(static_cast<const GearFeature&>(reopened.feature(0)).spec.herringbone);
+}
+
+TEST_CASE("Con pocos dientes la corrección de perfil evita el diente puntiagudo", "[gear][shift]")
+{
+    CHECK(geometry::recommendedProfileShift(20, 20.0 * std::numbers::pi / 180.0) == 0.0);
+    CHECK(geometry::recommendedProfileShift(10, 20.0 * std::numbers::pi / 180.0) > 0.2);
+    for (int z = 6; z <= 16; ++z) {
+        INFO("dientes " << z);
+        geometry::GearSpec spec = spur();
+        spec.teeth = z;
+        spec.bore = 0.0;
+        const double x = geometry::recommendedProfileShift(z, spec.pressureAngle);
+        spec.profileShift = x;
+        const auto shifted = geometry::gear("g", xy(), spec);
+        REQUIRE(shifted.isValid());
+        // El diente corregido es más grueso: hay más material que sin corrección
+        spec.profileShift = 0.0;
+        double plainVolume = 0.0;
+        try {
+            plainVolume = geometry::gear("g", xy(), spec).volume();
+        } catch (const geometry::GeometryError&) {
+        }
+        CHECK(shifted.volume() > plainVolume);
+    }
+    geometry::GearSpec bad = spur();
+    bad.profileShift = 1.5;
+    CHECK_THROWS_AS(geometry::gear("g", xy(), bad), geometry::GeometryError);
+    bad.profileShift = 0.3;
+    bad.type = geometry::GearType::Internal;
+    CHECK_THROWS_AS(geometry::gear("g", xy(), bad), geometry::GeometryError);
+}
+
+TEST_CASE("El par con pocos dientes corrige la rueda 1 y la 2 lleva la corrección opuesta", "[gear][shift][params]")
+{
+    const document::Generator* pair = document::findGenerator("par-engranajes");
+    REQUIRE(pair != nullptr);
+    document::GeneratorValues values = pair->defaults();
+    values["dientes_1"] = 10.0;
+    values["dientes_2"] = 30.0;
+    values["helice"] = 0.0;
+    document::Document doc;
+    document::applyRecipe(doc, pair->make(values, ""));
+    REQUIRE(doc.result().bodies.size() == 2);
+    geometry::GearSpec plainSpec;
+    plainSpec.module = values.at("modulo");
+    plainSpec.teeth = 10;
+    plainSpec.thickness = values.at("ancho_rueda");
+    plainSpec.bore = values.at("agujero_1");
+    plainSpec.pressureAngle = values.at("presion") * std::numbers::pi / 180.0;
+    // La rueda 1 sale con corrección: más material que la misma rueda sin ella.
+    CHECK(doc.result().bodies[0].shape.volume() > geometry::gear("g", xy(), plainSpec).volume() + 1.0);
+    // Con 20 dientes no hace falta ninguna: el cuerpo es el mismo que sin corrección.
+    values["dientes_1"] = 20.0;
+    document::Document plain;
+    document::applyRecipe(plain, pair->make(values, ""));
+    plainSpec.teeth = 20;
+    CHECK(plain.result().bodies[0].shape.volume() == Catch::Approx(geometry::gear("g", xy(), plainSpec).volume()).epsilon(1e-6));
 }

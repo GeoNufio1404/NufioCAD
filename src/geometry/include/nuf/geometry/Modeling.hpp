@@ -126,6 +126,10 @@ std::vector<Shape> pattern(std::string_view tag, const Shape& body, const Patter
 // (barra dentada: es una rueda de radio infinito).
 enum class GearType { External, Internal, Rack };
 
+// Corrección de perfil recomendada para que un engranaje exterior de «teeth» dientes no salga puntiagudo ni socavado:
+// 0 a partir de 17 dientes (con 20°) y crece al bajar de ahí (x = (z mínimo − z)/z mínimo, con z mínimo = 2/sen²α).
+double recommendedProfileShift(int teeth, double pressureAngle);
+
 struct GearSpec {
     GearType type = GearType::External;
     double rim = 5.0;                    // mm: grosor del aro por fuera de los huecos (interno) o de la base bajo la raíz (cremallera)
@@ -141,6 +145,9 @@ struct GearSpec {
                                          // en el interno se ensancha el hueco. Deja holgura sin mover los ejes
     bool herringbone = false;            // espina de pescado: dos mitades con la hélice contraria (necesita helixAngle ≠ 0; solo exterior).
                                          // Las caras de la segunda mitad llevan «:m2» al final de su nombre
+    double profileShift = 0.0;           // corrección de perfil x (en módulos, solo exterior): x>0 alarga la cabeza y engruesa el diente
+                                         // (evita el socavado y los dientes puntiagudos con pocos dientes); x<0 hace lo contrario.
+                                         // Dos ruedas con x opuestas (x1 = −x2) engranan a la misma distancia entre ejes
     double baseChamfer = 0.0;            // mm: chaflán en las aristas de la cara inicial («pata de elefante» de la primera capa); 0 = sin chaflán;
                                          // solo dientes rectos; el kernel falla de forma irregular con algunas medidas según los dientes (ver chamferStart)
 };

@@ -1249,8 +1249,15 @@ Shape gearSolid(std::string_view tagView, const sketch::Plane& plane, const Gear
     const double rp = spec.module * z / 2.0;
     const double rb = rp * std::cos(spec.pressureAngle);
     // Interno: lo que se dibuja es el hueco (con forma de rueda), así que cabeza y raíz cambian de lado.
-    const double ra = rp + (internal ? 1.25 : 1.0) * spec.module;
-    const double rf = rp - (internal ? 1.0 : 1.25) * spec.module;
+    const double shift = internal ? 0.0 : spec.profileShift;
+    if (std::abs(spec.profileShift) > 1.0) {
+        throw GeometryError("La corrección de perfil debe estar entre -1 y 1 módulos");
+    }
+    if (internal && std::abs(spec.profileShift) > kTiny) {
+        throw GeometryError("El engranaje interno no admite corrección de perfil");
+    }
+    const double ra = rp + ((internal ? 1.25 : 1.0) + shift) * spec.module;
+    const double rf = rp - ((internal ? 1.0 : 1.25) - shift) * spec.module;
     if (spec.herringbone && (internal || std::abs(spec.helixAngle) < kTiny)) {
         throw GeometryError("La espina de pescado necesita un ángulo de hélice (y solo se hace en ruedas exteriores)");
     }
@@ -1270,7 +1277,8 @@ Shape gearSolid(std::string_view tagView, const sketch::Plane& plane, const Gear
     }
     // El juego adelgaza el diente (medio juego por lado, medido sobre la primitiva): un giro constante a cualquier
     // radio. En el interno lo que se dibuja es el hueco, y el diente de la corona se adelgaza ensanchándolo.
-    const double slack = (internal ? -1.0 : 1.0) * spec.backlash / (2.0 * rp);
+    // La corrección de perfil engruesa el diente sobre la primitiva: 2·x·tan(α) de arco por módulo.
+    const double slack = (internal ? -1.0 : 1.0) * spec.backlash / (2.0 * rp) - 2.0 * shift * std::tan(spec.pressureAngle) / z;
     const auto half = [&](double r) {
         return kPi / (2.0 * z) - slack - (inv(std::acos(std::min(1.0, rb / r))) - inv(spec.pressureAngle));
     };
@@ -1604,6 +1612,31 @@ Shape chamferStart(const std::string& tag, const Shape& body, double distance)
 }
 
 } // namespace
+
+double recommendedProfileShift(int teeth, double pressureAngle)
+{
+    const double s = std::sin(pressureAngle);
+    const double zMin = s > 1e-6 ? 2.0 / (s * s) : 1e9;
+    if (teeth >= zMin || teeth < 2) {
+        return 0.0;
+    }
+    const double wanted = std::min(1.0, (zMin - teeth) / zMin);
+    // La corrección engruesa el diente pero también alarga la cabeza, y con pocos dientes la punta se afila: se queda
+    // la mayor corrección (hasta la que quita el socavado) que deja una punta de al menos 0,2 módulos.
+    const auto inv = [](double a) { return std::tan(a) - a; };
+    const double z = teeth;
+    const double rb = z / 2.0 * std::cos(pressureAngle);
+    double best = 0.0;
+    for (double x = 0.0; x <= wanted + 1e-9; x += 0.01) {
+        const double ra = z / 2.0 + 1.0 + x;
+        const double half = (std::numbers::pi / 2.0 + 2.0 * x * std::tan(pressureAngle)) / z -
+                            (inv(std::acos(std::min(1.0, rb / ra))) - inv(pressureAngle));
+        if (half * ra >= 0.2) {
+            best = x;
+        }
+    }
+    return best;
+}
 
 Shape gear(std::string_view tagView, const sketch::Plane& plane, const GearSpec& spec)
 {

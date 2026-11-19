@@ -465,6 +465,7 @@ private:
     QCheckBox* herringbone_ = nullptr;
     QDoubleSpinBox* backlash_ = nullptr;
     QDoubleSpinBox* baseChamfer_ = nullptr;
+    QDoubleSpinBox* shift_ = nullptr;
     QComboBox* type_ = nullptr;
     QComboBox* operation_ = nullptr;
 };
