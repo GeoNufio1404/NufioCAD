@@ -5,6 +5,7 @@
 #include "MainWindow.hpp"
 
 #include "ExportDialog.hpp"
+#include "InterferenceDialog.hpp"
 #include "BodiesDialog.hpp"
 #include "ExpressionSpinBox.hpp"
 #include "GeneratorTool.hpp"

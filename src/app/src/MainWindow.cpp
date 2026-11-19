@@ -274,6 +274,7 @@ MainWindow::MainWindow(QWidget* parent)
         viewport_->setOriginVisible(visible);
     });
     connect(navigator_, &NavigatorWidget::sketchActivated, this, &MainWindow::editSketch);
+    connectAssembly();
     connect(navigator_, &NavigatorWidget::groundVisibilityChanged, this, [this](bool visible) {
         groundVisible_ = visible;
         setViewDirty(true);
@@ -1036,6 +1037,12 @@ void MainWindow::activateFeature(document::FeatureId id)
         break;
     case document::FeatureKind::Joint:
         startTool(std::make_unique<JointTool>(document_, *viewport_, id));
+        break;
+    case document::FeatureKind::Align:
+        startTool(std::make_unique<JointTool>(document_, *viewport_, id, true));
+        break;
+    case document::FeatureKind::MotionLink:
+        startTool(std::make_unique<MotionLinkTool>(document_, *viewport_, id));
         break;
     case document::FeatureKind::Import:
         break;  // no tiene parámetros que editar

@@ -28,6 +28,7 @@ struct BodyInfo {
     std::string name;
     std::string component;
     std::string color;  // «#rrggbb»; vacío: el color de siempre
+    bool fixed = false;  // fijo (Fase 21): las alineaciones y las uniones no lo mueven, mueven siempre la otra pieza
     bool operator==(const BodyInfo&) const = default;
 };
 
@@ -125,6 +126,8 @@ public:
     void setBodyInfo(std::map<std::string, BodyInfo> info);
     // Componente de un cuerpo ("" si no tiene).
     std::string componentOf(const std::string& bodyKey) const;
+    // Si el cuerpo está fijo.
+    bool isFixed(const std::string& bodyKey) const;
 
     // --- Resultado ---
     // El modelo tras la última operación activa.

@@ -14,7 +14,7 @@ La pestaña **HERRAMIENTAS** y el menú Herramientas agrupan los generadores por
 |---|---|
 | **Cajas** | Lightbox, Caja con tapa |
 | **Letreros** | Letrero o llavero |
-| **Engranajes** | Par de engranajes, Engranaje interno, Cremallera, Tornillo sin fin y rueda, Engranajes cónicos |
+| **Engranajes** | Par de engranajes, Engranaje interno, Cremallera, Tornillo sin fin y rueda, Engranajes cónicos, Tren planetario |
 
 Un generador nuevo elige su familia (o crea una); las familias van seguidas en la lista.
 
@@ -265,6 +265,22 @@ rueda 2 de 7,5°. La rueda 1 queda en el origen y la 2 en X = distancia entre ej
 
 Cuerpos **Rueda 1** y **Rueda 2** en el componente «Par de engranajes». Todo está ligado a parámetros: al cambiar los
 dientes o el módulo en Sólido › Parámetros, la distancia y el giro se recalculan solos.
+
+## Tren planetario
+
+Un **sol** en el centro, **2 a 8 planetas** a su alrededor (3 a 120° por defecto) y una **corona** (engranaje interno) que
+los rodea, con el **portasatélites** (una placa) y los **ejes** (uno por planeta y el central). Es el «spinner» que en
+Fusion 360 se arma a mano, ya montado.
+
+- **Condiciones de montaje:** la corona sale con `dientes del sol + 2 × dientes del planeta`; para que todos los
+  planetas engranen a la vez, `(dientes del sol + dientes de la corona) ÷ planetas` debe ser entero (si no, el formulario
+  avisa). Cada planeta lleva su **fase** calculada: `giro_planeta + θ·(zs + zp)/zp`, y la corona `giro_planeta·zp/zr`.
+- **Hélice:** el sol lleva un sentido; los planetas y la corona, el contrario (como en el par y el engranaje interno).
+- **Lo que trae puesto:** la **corona fija**; una **unión giratoria** en cada rueda y en el portasatélites; y un **enlace
+  de movimiento** con la fórmula de Willis (corona quieta): por cada vuelta del sol, el portasatélites da `zs/(zs + zr)`
+  vueltas (con sus ejes y planetas) y cada planeta gira sobre su eje `−zr·zs/((zs + zr)·zp)` veces. Sólido › Enlace de
+  movimiento › «Animar» lo mueve; Sólido › Interferencias comprueba que nada se pisa a lo largo del giro.
+- **Ajustes de impresión:** «Adelgazar el diente» sale en 0,1 mm (tres engranes a la vez necesitan aire para girar).
 
 ## Engranaje interno
 

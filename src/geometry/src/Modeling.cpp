@@ -869,6 +869,37 @@ Shape boolean(BooleanOp op, const Shape& target, const Shape& tool)
     }
 }
 
+std::optional<Overlap> overlap(const Shape& a, const Shape& b, double minVolume)
+{
+    if (a.isNull() || b.isNull()) {
+        return std::nullopt;
+    }
+    const Box ba = a.bounds();
+    const Box bb = b.bounds();
+    if (ba.max.x <= bb.min.x || bb.max.x <= ba.min.x || ba.max.y <= bb.min.y || bb.max.y <= ba.min.y
+        || ba.max.z <= bb.min.z || bb.max.z <= ba.min.z) {
+        return std::nullopt;
+    }
+    try {
+        BRepAlgoAPI_Common common(occtShape(a), occtShape(b));
+        buildCancellable(common);
+        if (!common.IsDone() || common.Shape().IsNull()) {
+            return std::nullopt;
+        }
+        GProp_GProps props;
+        BRepGProp::VolumeProperties(common.Shape(), props);
+        const double volume = std::abs(props.Mass());
+        if (volume < minVolume) {
+            return std::nullopt;
+        }
+        Namer namer(common.Shape());
+        namer.nameUnnamed("interferencia");
+        return Overlap{namer.finish("interferencia"), volume};
+    } catch (const Standard_Failure&) {
+        return std::nullopt;
+    }
+}
+
 bool touches(const Shape& a, const Shape& b)
 {
     if (a.isNull() || b.isNull()) {

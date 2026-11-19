@@ -63,6 +63,10 @@ std::string kindLabel(FeatureKind kind)
         return "Combinar";
     case FeatureKind::Joint:
         return "Unión";
+    case FeatureKind::Align:
+        return "Alinear";
+    case FeatureKind::MotionLink:
+        return "Enlace de movimiento";
     }
     return "Operación";
 }
@@ -400,10 +404,20 @@ std::string Document::defaultName(FeatureKind kind) const
 void Document::setBodyInfo(std::map<std::string, BodyInfo> info)
 {
     // Una entrada vacía no dice nada.
-    std::erase_if(info, [](const auto& entry) { return entry.second.name.empty() && entry.second.component.empty() && entry.second.color.empty(); });
+    std::erase_if(info, [](const auto& entry) {
+        return entry.second.name.empty() && entry.second.component.empty() && entry.second.color.empty() && !entry.second.fixed;
+    });
     if (info == bodyInfo_) {
         return;
     }
+    std::set<std::string> fixed;
+    for (const auto& [key, entry] : info) {
+        if (entry.fixed) {
+            fixed.insert(key);
+        }
+    }
+    const bool fixedChanged = fixed != empty_.fixedBodies;
+    empty_.fixedBodies = std::move(fixed);
     // Los cuerpos que ya no llevan nombre propio vuelven al suyo: se rehace el estado.
     const bool lostName = std::ranges::any_of(bodyInfo_, [&](const auto& entry) {
         const auto next = info.find(entry.first);
@@ -411,7 +425,11 @@ void Document::setBodyInfo(std::map<std::string, BodyInfo> info)
             || (!entry.second.color.empty() && (next == info.end() || next->second.color.empty()));
     });
     bodyInfo_ = std::move(info);
-    if (lostName) {
+    // Fijar o soltar un cuerpo cambia dónde quedan las alineaciones y las uniones: se rehace desde el principio.
+    const bool placements = fixedChanged && std::ranges::any_of(features_, [](const auto& f) {
+        return f->kind() == FeatureKind::Align || f->kind() == FeatureKind::Joint || f->kind() == FeatureKind::MotionLink;
+    });
+    if (lostName || placements) {
         recomputeFrom(0);
     } else {
         applyBodyInfo();
@@ -423,6 +441,12 @@ std::string Document::componentOf(const std::string& bodyKey) const
 {
     const auto it = bodyInfo_.find(bodyKey);
     return it == bodyInfo_.end() ? std::string() : it->second.component;
+}
+
+bool Document::isFixed(const std::string& bodyKey) const
+{
+    const auto it = bodyInfo_.find(bodyKey);
+    return it != bodyInfo_.end() && it->second.fixed;
 }
 
 void Document::applyBodyInfo()

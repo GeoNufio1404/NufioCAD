@@ -345,9 +345,6 @@ std::optional<std::string> MoveFeature::compute(ModelState& state) const
         }
         sources.push_back(found);
     }
-    if (copy && sources.size() > 1) {
-        throw FeatureError("Todavía no se pueden copiar varios cuerpos a la vez: muévelos, o copia de uno en uno");
-    }
     const auto source = sources.front();
     geometry::Axis rotationAxis;
     rotationAxis.direction = {axis == 0 ? 1.0 : 0.0, axis == 1 ? 1.0 : 0.0, axis == 2 ? 1.0 : 0.0};
@@ -378,7 +375,11 @@ std::optional<std::string> MoveFeature::compute(ModelState& state) const
             results.push_back(geometry::moveBody(tag(), item->shape, translation, rotationAxis, angle, copy, rotation, center));
         }
         if (copy) {
-            state.bodies.push_back({tag(), newBodyName(state, *this), std::move(results.front())});
+            // Varias copias a la vez (Fase 21): la primera lleva la clave de la operación y las demás «:c1», «:c2»…
+            for (std::size_t i = 0; i < results.size(); ++i) {
+                const std::string key = i == 0 ? tag() : tag() + ":c" + std::to_string(i);
+                state.bodies.push_back({key, newBodyName(state, *this), std::move(results[i])});
+            }
         } else {
             for (std::size_t i = 0; i < sources.size(); ++i) {
                 sources[i]->shape = std::move(results[i]);
@@ -470,66 +471,361 @@ std::vector<FeatureId> CombineFeature::dependencies() const
 
 // --- Unión entre cuerpos ------------------------------------------------------------
 
+namespace {
+
+// Lo que piden una unión o un alineado: de qué a qué y con qué valores.
+struct PlacementRequest {
+    ElementPick moving;
+    ElementPick target;
+    std::vector<std::string> alsoMove;
+    bool flip = false;
+    double offset = 0.0;
+    double angle = 0.0;
+    double slide = 0.0;
+    double slideY = 0.0;
+    double tiltX = 0.0;
+    double tiltY = 0.0;
+};
+
+// Lo que quedó colocado: el eje y los cuerpos que se movieron (para el enlace de movimiento).
+struct PlacementResult {
+    sketch::Vec3 origin;
+    sketch::Vec3 direction;
+    sketch::Vec3 xAxis;
+    std::vector<std::string> moved;
+};
+
+struct ResolvedFrame {
+    std::size_t body = 0;
+    geometry::Frame frame;
+};
+
+// «@axis:<clave>»: el eje de un cuerpo (lo usan las recetas, como el tren planetario, que no conocen los nombres de
+// las caras de lo que generan): la cara cilíndrica o cónica más grande del cuerpo.
+constexpr std::string_view kAxisPrefix = "@axis:";
+
+ResolvedFrame resolveFrame(const ModelState& state, const ElementPick& pick, const char* which)
+{
+    if (pick.ref.name.rfind(kAxisPrefix, 0) == 0) {
+        const std::string key = pick.ref.name.substr(kAxisPrefix.size());
+        const auto body = std::ranges::find_if(state.bodies, [&](const Body& b) { return b.key == key; });
+        if (body == state.bodies.end()) {
+            throw FeatureError(std::string("El cuerpo ") + which + " ya no existe");
+        }
+        std::optional<geometry::Frame> best;
+        double bestSize = -1.0;
+        for (int i = 0; i < body->shape.faceCount(); ++i) {
+            const auto frame = body->shape.faceFrame(i);
+            if (!frame || frame->kind != geometry::Frame::Kind::Axis) {
+                continue;
+            }
+            const geometry::Box box = body->shape.faceBounds(i);
+            const double size = std::abs(box.max.x - box.min.x) + std::abs(box.max.y - box.min.y) + std::abs(box.max.z - box.min.z);
+            if (size > bestSize) {
+                bestSize = size;
+                best = frame;
+            }
+        }
+        if (!best) {
+            throw FeatureError(std::string("El cuerpo ") + which + " no tiene una cara cilíndrica que sirva de eje");
+        }
+        return {std::size_t(body - state.bodies.begin()), *best};
+    }
+    if (pick.edge) {
+        const auto hit = state.findEdge(pick.ref);
+        if (!hit) {
+            throw FeatureError(std::string("La arista ") + which + " ya no existe");
+        }
+        const auto frame = state.bodies[hit->body].shape.edgeFrame(hit->edge);
+        if (!frame) {
+            throw FeatureError(std::string("La arista ") + which + " no es circular ni recta: elige otra");
+        }
+        return {hit->body, *frame};
+    }
+    const auto hit = state.findFace(pick.ref);
+    if (!hit) {
+        throw FeatureError(std::string("La cara ") + which + " ya no existe");
+    }
+    const auto frame = state.bodies[hit->body].shape.faceFrame(hit->face);
+    if (!frame) {
+        throw FeatureError(std::string("La cara ") + which + " no es plana, cilíndrica, cónica ni esférica: elige otra");
+    }
+    return {hit->body, *frame};
+}
+
+sketch::Vec3 crossOf(const sketch::Vec3& u, const sketch::Vec3& v)
+{
+    return {u.y * v.z - u.z * v.y, u.z * v.x - u.x * v.z, u.x * v.y - u.y * v.x};
+}
+
+// Coloca la pieza «moving» sobre «target»: el marco de uno coincide con el del otro, más los valores pedidos.
+// Si la que se mueve está fija, se mueve la otra (con la transformación inversa). Con dos piezas fijas, error.
+PlacementResult applyPlacement(ModelState& state, const std::string& tag, const PlacementRequest& request)
+{
+    const ResolvedFrame target = resolveFrame(state, request.target, "de destino");
+    const ResolvedFrame moving = resolveFrame(state, request.moving, "que se mueve");
+    if (target.body == moving.body) {
+        throw FeatureError("Los dos elementos son del mismo cuerpo: elige elementos de cuerpos distintos");
+    }
+    const geometry::Frame& a = target.frame;
+    const geometry::Frame& b = moving.frame;
+    const sketch::Vec3 ay = crossOf(a.direction, a.xAxis);
+
+    // Destino: el marco del elemento de destino, con el giro, los deslizamientos y los cabeceos pedidos.
+    const bool facing = a.kind == geometry::Frame::Kind::PlaneFace && b.kind == geometry::Frame::Kind::PlaneFace;
+    sketch::Vec3 toNormal =
+        (facing != request.flip) ? sketch::Vec3{-a.direction.x, -a.direction.y, -a.direction.z} : a.direction;
+    sketch::Vec3 toX = rotateAbout(a.xAxis, a.direction, request.angle);
+    if (request.tiltX != 0.0) {
+        toNormal = rotateAbout(toNormal, a.xAxis, request.tiltX);
+        toX = rotateAbout(toX, a.xAxis, request.tiltX);
+    }
+    if (request.tiltY != 0.0) {
+        toNormal = rotateAbout(toNormal, ay, request.tiltY);
+        toX = rotateAbout(toX, ay, request.tiltY);
+    }
+    sketch::Plane to;
+    to.normal = toNormal;
+    to.xAxis = toX;
+    to.yAxis = crossOf(to.normal, to.xAxis);
+    to.origin = {a.origin.x + a.direction.x * request.offset + a.xAxis.x * request.slide + ay.x * request.slideY,
+                 a.origin.y + a.direction.y * request.offset + a.xAxis.y * request.slide + ay.y * request.slideY,
+                 a.origin.z + a.direction.z * request.offset + a.xAxis.z * request.slide + ay.z * request.slideY};
+    sketch::Plane from;
+    from.origin = b.origin;
+    from.normal = b.direction;
+    from.xAxis = b.xAxis;
+    from.yAxis = crossOf(from.normal, from.xAxis);
+
+    const std::string movingKey = state.bodies[moving.body].key;
+    const std::string targetKey = state.bodies[target.body].key;
+    const bool movingFixed = state.fixedBodies.contains(movingKey);
+    const bool targetFixed = state.fixedBodies.contains(targetKey);
+    if (movingFixed && targetFixed) {
+        throw FeatureError("Las dos piezas están fijas: suelta una para poder moverla");
+    }
+    // Lo que se mueve: la pieza (con sus acompañantes) o, si está fija, la otra.
+    std::vector<std::size_t> group;
+    bool inverse = false;
+    if (movingFixed) {
+        group.push_back(target.body);
+        inverse = true;
+    } else {
+        group.push_back(moving.body);
+        for (const std::string& key : request.alsoMove) {
+            const auto found = std::ranges::find_if(state.bodies, [&](const Body& body) { return body.key == key; });
+            if (found == state.bodies.end()) {
+                throw FeatureError("Uno de los cuerpos que van con la pieza ya no existe");
+            }
+            const std::size_t index = std::size_t(found - state.bodies.begin());
+            if (index != target.body && std::ranges::find(group, index) == group.end() && !state.fixedBodies.contains(key)) {
+                group.push_back(index);
+            }
+        }
+    }
+    PlacementResult result;
+    result.origin = {a.origin.x + a.direction.x * request.offset, a.origin.y + a.direction.y * request.offset,
+                     a.origin.z + a.direction.z * request.offset};
+    result.direction = a.direction;
+    result.xAxis = a.xAxis;
+    try {
+        std::vector<geometry::Shape> placed;
+        for (const std::size_t index : group) {
+            placed.push_back(inverse ? geometry::placeBody(tag, state.bodies[index].shape, to, from)
+                                     : geometry::placeBody(tag, state.bodies[index].shape, from, to));
+        }
+        for (std::size_t i = 0; i < group.size(); ++i) {
+            state.bodies[group[i]].shape = std::move(placed[i]);
+            result.moved.push_back(state.bodies[group[i]].key);
+        }
+    } catch (const geometry::GeometryError& e) {
+        throw FeatureError(e.what());
+    }
+    return result;
+}
+
+// El valor entre los límites (si los hay).
+double clampTo(double value, bool limited, double lo, double hi)
+{
+    if (!limited) {
+        return value;
+    }
+    if (lo > hi) {
+        std::swap(lo, hi);
+    }
+    return std::clamp(value, lo, hi);
+}
+
+} // namespace
+
 std::optional<std::string> JointFeature::compute(ModelState& state) const
 {
-    const auto fixedHit = state.findFace(fixedFace);
-    const auto movingHit = state.findFace(movingFace);
-    if (!fixedHit) {
-        throw FeatureError("La cara fija de la unión ya no existe");
-    }
-    if (!movingHit) {
-        throw FeatureError("La cara móvil de la unión ya no existe");
-    }
-    if (fixedHit->body == movingHit->body) {
-        throw FeatureError("Las dos caras son del mismo cuerpo: elige caras de cuerpos distintos");
-    }
-    const Body& fixedBody = state.bodies[fixedHit->body];
-    Body& movingBody = state.bodies[movingHit->body];
-    const auto a = fixedBody.shape.facePlane(fixedHit->face);
-    const auto b = movingBody.shape.facePlane(movingHit->face);
-    if (!a || !b) {
-        throw FeatureError("Por ahora las uniones solo funcionan con caras planas");
-    }
-    const sketch::Vec3 centerA = fixedBody.shape.faceCenter(fixedHit->face);
-    const sketch::Vec3 centerB = movingBody.shape.faceCenter(movingHit->face);
-
-    const auto cross = [](const sketch::Vec3& u, const sketch::Vec3& v) {
-        return sketch::Vec3{u.y * v.z - u.z * v.y, u.z * v.x - u.x * v.z, u.x * v.y - u.y * v.x};
+    PlacementRequest request;
+    request.moving = {movingFace, movingEdge};
+    request.target = {fixedFace, fixedEdge};
+    request.alsoMove = alsoMove;
+    request.flip = flip;
+    // Cada tipo deja libre lo suyo y fija el resto (en la rígida, solo la distancia).
+    const bool turns = type == JointType::Revolute || type == JointType::Cylindrical || type == JointType::PinSlot ||
+                       type == JointType::Planar || type == JointType::Ball;
+    const bool slidesX = type == JointType::Slider || type == JointType::PinSlot || type == JointType::Planar;
+    const bool slidesY = type == JointType::Planar;
+    const bool tilts = type == JointType::Ball;
+    std::optional<std::string> warning;
+    const auto limit = [&](double value, bool limited, double lo, double hi, const char* what) {
+        const double clamped = clampTo(value, limited, lo, hi);
+        if (clamped != value && !warning) {
+            warning = std::string("Fuera de los límites de la unión: ") + what + " se quedó en el tope";
+        }
+        return clamped;
     };
-    // Sistema de origen: el centro de la cara móvil con los ejes de su plano.
-    sketch::Plane from;
-    from.origin = centerB;
-    from.xAxis = b->xAxis;
-    from.normal = b->normal;
-    from.yAxis = cross(from.normal, from.xAxis);
-    // Destino: el centro de la cara fija, con la normal opuesta (caras enfrentadas)
-    // y el giro y los desplazamientos pedidos.
-    sketch::Plane to;
-    to.normal = flip ? a->normal : sketch::Vec3{-a->normal.x, -a->normal.y, -a->normal.z};
-    to.xAxis = rotateAbout(a->xAxis, a->normal, angle);
-    to.yAxis = cross(to.normal, to.xAxis);
-    to.origin = {centerA.x + a->normal.x * offset + a->xAxis.x * slide, centerA.y + a->normal.y * offset + a->xAxis.y * slide,
-                 centerA.z + a->normal.z * offset + a->xAxis.z * slide};
+    request.offset = type == JointType::Cylindrical ? limit(offset, limitSlide, slideMin, slideMax, "el deslizamiento") : offset;
+    request.angle = turns ? limit(angle, limitAngle, angleMin, angleMax, "el giro") : 0.0;
+    request.slide = slidesX ? limit(slide, limitSlide, slideMin, slideMax, "el deslizamiento") : 0.0;
+    request.slideY = slidesY ? slideY : 0.0;
+    request.tiltX = tilts ? tiltX : 0.0;
+    request.tiltY = tilts ? tiltY : 0.0;
+    const PlacementResult placed = applyPlacement(state, tag(), request);
+    if (type != JointType::Rigid) {
+        JointAxis axis;
+        axis.origin = placed.origin;
+        axis.direction = placed.direction;
+        axis.xAxis = placed.xAxis;
+        axis.dof = (type == JointType::Slider) ? 1 : 0;
+        axis.moved = placed.moved;
+        state.joints[id()] = axis;
+    }
+    return warning;
+}
+
+namespace {
+
+// Las dependencias de una referencia: la de una cara o arista, o la del cuerpo de un «@axis:».
+void addPickDependencies(std::vector<FeatureId>& ids, const geometry::ElementRef& ref)
+{
+    if (ref.name.rfind(kAxisPrefix, 0) == 0) {
+        addAll(ids, geometry::ElementRef{ref.name.substr(kAxisPrefix.size()) + ":", 0});
+    } else {
+        addAll(ids, ref);
+    }
+}
+
+} // namespace
+
+std::vector<FeatureId> JointFeature::dependencies() const
+{
+    std::vector<FeatureId> ids;
+    addPickDependencies(ids, fixedFace);
+    addPickDependencies(ids, movingFace);
+    for (const std::string& other : alsoMove) {
+        addAll(ids, geometry::ElementRef{other + ":", 0});
+    }
+    return ids;
+}
+
+std::vector<Feature::NumericField> JointFeature::numericFields()
+{
+    return {field("offset", "Distancia", offset),
+            field("angle", "Ángulo", angle, kRadiansPerDegree),
+            field("slide", "Desplazamiento", slide),
+            field("slideY", "Desplazamiento Y", slideY),
+            field("tiltX", "Inclinación X", tiltX, kRadiansPerDegree),
+            field("tiltY", "Inclinación Y", tiltY, kRadiansPerDegree)};
+}
+
+// --- Alinear -------------------------------------------------------------------
+
+std::optional<std::string> AlignFeature::compute(ModelState& state) const
+{
+    PlacementRequest request;
+    request.moving = moving;
+    request.target = target;
+    request.alsoMove = alsoMove;
+    request.flip = flip;
+    request.offset = offset;
+    request.angle = angle;
+    applyPlacement(state, tag(), request);
+    return std::nullopt;
+}
+
+std::vector<FeatureId> AlignFeature::dependencies() const
+{
+    std::vector<FeatureId> ids;
+    addAll(ids, moving.ref);
+    addAll(ids, target.ref);
+    for (const std::string& other : alsoMove) {
+        addAll(ids, geometry::ElementRef{other + ":", 0});
+    }
+    return ids;
+}
+
+std::vector<Feature::NumericField> AlignFeature::numericFields()
+{
+    return {field("offset", "Distancia", offset), field("angle", "Ángulo", angle, kRadiansPerDegree)};
+}
+
+// --- Enlace de movimiento ------------------------------------------------------
+
+std::optional<std::string> MotionLinkFeature::compute(ModelState& state) const
+{
+    if (members.size() < 2) {
+        throw FeatureError("Un enlace necesita al menos dos uniones");
+    }
+    // Primero se mira todo y luego se mueve (si una falla, no se mueve ninguna).
+    struct Step {
+        const JointAxis* axis;
+        double amount;
+    };
+    std::vector<Step> steps;
+    for (const Member& member : members) {
+        const auto found = state.joints.find(member.joint);
+        if (found == state.joints.end()) {
+            throw FeatureError("Una de las uniones del enlace ya no existe o es rígida");
+        }
+        steps.push_back({&found->second, member.ratio * position});
+    }
     try {
-        movingBody.shape = geometry::placeBody(tag(), movingBody.shape, from, to);
+        std::map<std::string, geometry::Shape> moved;
+        for (const Step& step : steps) {
+            for (const std::string& key : step.axis->moved) {
+                const auto body = std::ranges::find_if(state.bodies, [&](const Body& b) { return b.key == key; });
+                if (body == state.bodies.end()) {
+                    throw FeatureError("Un cuerpo de una unión del enlace ya no existe");
+                }
+                geometry::Shape& shape = moved.try_emplace(key, body->shape).first->second;
+                if (step.axis->dof == 0) {
+                    geometry::Axis axis;
+                    axis.point = step.axis->origin;
+                    axis.direction = step.axis->direction;
+                    shape = geometry::moveBody(tag(), shape, {}, axis, step.amount, false, {}, step.axis->origin);
+                } else {
+                    const sketch::Vec3 along = step.axis->dof == 1 ? step.axis->xAxis : step.axis->direction;
+                    shape = geometry::moveBody(tag(), shape, {along.x * step.amount, along.y * step.amount, along.z * step.amount},
+                                               geometry::Axis{}, 0.0, false, {}, {});
+                }
+            }
+        }
+        for (auto& [key, shape] : moved) {
+            std::ranges::find_if(state.bodies, [&](const Body& b) { return b.key == key; })->shape = std::move(shape);
+        }
     } catch (const geometry::GeometryError& e) {
         throw FeatureError(e.what());
     }
     return std::nullopt;
 }
 
-std::vector<FeatureId> JointFeature::dependencies() const
+std::vector<FeatureId> MotionLinkFeature::dependencies() const
 {
     std::vector<FeatureId> ids;
-    addAll(ids, fixedFace);
-    addAll(ids, movingFace);
+    for (const Member& member : members) {
+        ids.push_back(member.joint);
+    }
     return ids;
 }
 
-std::vector<Feature::NumericField> JointFeature::numericFields()
+std::vector<Feature::NumericField> MotionLinkFeature::numericFields()
 {
-    return {field("offset", "Distancia", offset), field("angle", "Ángulo", angle, kRadiansPerDegree),
-            field("slide", "Desplazamiento", slide)};
+    return {field("position", "Posición", position, kRadiansPerDegree)};
 }
 
 // --- Eje de construcción ------------------------------------------------------

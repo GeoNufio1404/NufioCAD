@@ -1347,6 +1347,219 @@ public:
     }
 };
 
+// --- Tren planetario ---------------------------------------------------------------------------------------
+// Un sol en el centro, N planetas a su alrededor y una corona (engranaje interno) que los rodea: el «spinner» que en
+// Fusion 360 se arma a mano. Los dientes de cada planeta ya llevan su fase para que engrane a la vez con el sol y con
+// la corona (con 3 planetas a 120° hace falta que (dientes del sol + dientes de la corona) / N sea entero). Va con su
+// portasatélites (una placa) y sus ejes (el central y uno por planeta), con la corona fija, una unión giratoria por
+// rueda y por portasatélites, y un enlace de movimiento: al girar el sol, el portasatélites (con sus ejes y planetas)
+// gira zs/(zs+zr) veces lo que el sol, y cada planeta gira además sobre su eje (fórmula de Willis, corona quieta).
+
+class PlanetaryGear final : public Generator {
+public:
+    std::string category() const override { return "Engranajes"; }
+    std::string id() const override { return "tren-planetario"; }
+    std::string title() const override { return "Tren planetario"; }
+    std::string icon() const override { return "gear-solid"; }
+    std::string description() const override
+    {
+        return "Un sol, varios planetas y una corona que engranan a la vez, con el portasatélites, los ejes, las uniones "
+               "giratorias y el enlace de movimiento puestos: gira el sol y los planetas lo siguen.";
+    }
+
+    std::vector<GeneratorField> fields() const override
+    {
+        using K = GeneratorField::Kind;
+        GeneratorField thin = tuningFields()[0];
+        thin.value = 0.1;  // un tren con tres engranes a la vez necesita aire para girar al imprimirlo
+        return withGroups({gearField(K::Length, "modulo", "Módulo", 2.0, 0.3, 20.0, "El tamaño del diente: igual en el sol, los planetas y la corona"),
+                gearField(K::Count, "dientes_sol", "Dientes del sol", 12.0, 6.0, 300.0),
+                gearField(K::Count, "dientes_planeta", "Dientes de cada planeta", 12.0, 6.0, 300.0,
+                          "La corona sale con dientes del sol + 2 × los del planeta"),
+                gearField(K::Count, "planetas", "Planetas", 3.0, 2.0, 8.0,
+                          "Repartidos a partes iguales; (dientes del sol + dientes de la corona) ÷ planetas debe ser entero"),
+                gearField(K::Angle, "presion", "Ángulo de presión", 20.0, 5.0, 35.0, "Igual en todos (20° es lo normal)"),
+                gearField(K::Length, "ancho_rueda", "Ancho", 8.0, 1.0, 200.0, "A lo largo del eje"),
+                gearField(K::Angle, "helice", "Ángulo de hélice", 0.0, 0.0, 45.0,
+                          "0 = dientes rectos; si no, el sol lleva un sentido y los planetas y la corona el contrario"),
+                herringboneField("Una hélice (el sol en un sentido; los planetas y la corona en el otro)"),
+                gearField(K::Length, "aro", "Grosor del aro de la corona", 6.0, 1.0, 100.0,
+                          "Material por fuera de los huecos de los dientes"),
+                gearField(K::Length, "agujero_sol", "Agujero del sol", 5.0, 1.0, 100.0, "Por él pasa el eje central"),
+                gearField(K::Length, "agujero_planeta", "Agujero de cada planeta", 4.0, 1.0, 100.0, "Por él pasa su eje"),
+                thin, tuningFields()[1]});
+    }
+
+    std::string summary(const GeneratorValues& values) const override
+    {
+        const double zs = values.at("dientes_sol"), zp = values.at("dientes_planeta"), n = values.at("planetas");
+        const double zr = zs + 2.0 * zp;
+        const double check = (zs + zr) / n;
+        char text[420];
+        std::snprintf(text, sizeof text,
+                      "Corona de %g dientes (fija) · por cada vuelta del sol, el portasatélites da %.3f vueltas y cada planeta gira %.3f veces sobre su eje%s",
+                      zr, zs / (zs + zr), zr * zs / ((zs + zr) * zp),
+                      std::abs(check - std::round(check)) > 1e-9
+                          ? " · AVISO: (dientes del sol + de la corona) ÷ planetas no es entero: los planetas no pueden engranar todos a la vez"
+                          : "");
+        return text;
+    }
+
+    Recipe make(const GeneratorValues& values, const std::string& suffix) const override
+    {
+        const auto p = [&](const char* name) { return std::string(name) + suffix; };
+        const std::string modulo = p("modulo"), zs = p("dientes_sol"), zp = p("dientes_planeta"), zr = p("dientes_corona"),
+                          n = p("planetas"), presion = p("presion"), ancho = p("ancho_rueda"), helice = p("helice"),
+                          aro = p("aro"), boreSun = p("agujero_sol"), borePlanet = p("agujero_planeta"),
+                          giro = p("giro_planeta");
+        const int count = int(values.at("planetas"));
+
+        Recipe recipe;
+        recipe.component = "Tren planetario";
+        const auto param = [&](const std::string& name, const std::string& expression) {
+            recipe.parameters.push_back({name, expression});
+        };
+        const auto fromValue = [&](const std::string& name, const char* key) { param(name, number(values.at(key))); };
+        fromValue(modulo, "modulo");
+        fromValue(zs, "dientes_sol");
+        fromValue(zp, "dientes_planeta");
+        fromValue(n, "planetas");
+        fromValue(presion, "presion");
+        fromValue(ancho, "ancho_rueda");
+        param(helice, number(values.count("helice") != 0 ? values.at("helice") : 0.0));
+        fromValue(aro, "aro");
+        fromValue(boreSun, "agujero_sol");
+        fromValue(borePlanet, "agujero_planeta");
+        param(zr, zs + " + 2*" + zp);
+        addTuningParameters(recipe, values, suffix);
+        // La fase de los planetas: igual que en un par de engranajes (un diente del sol apuntando al planeta, un hueco de
+        // éste apuntando al sol), reducida a un paso.
+        const std::string halfStep = "180/" + zp;
+        const std::string step = "360/" + zp;
+        param(giro, "(180 - " + halfStep + ") - floor((180 - " + halfStep + ")/(" + step + "))*(" + step + ")");
+        const std::string orbit = modulo + "*(" + zs + " + " + zp + ")/2";  // radio de la órbita de los planetas
+
+        const auto gear = [&](const std::string& name, const std::string& teeth, const std::string& helix) {
+            auto f = std::make_unique<GearFeature>();
+            f->setName(name);
+            f->base.origin = OriginPlane::XY;
+            f->expressions = {{"module", modulo}, {"teeth", teeth}, {"pressureAngle", presion}, {"thickness", ancho},
+                              {"helixAngle", helix}};
+            applyTuning(*f, suffix);
+            f->spec.herringbone = tuningValue(values, "espina") > 0.5;
+            return f;
+        };
+        const auto cylinder = [&](const std::string& name, const std::string& diameter, const std::string& z,
+                                  const std::string& height) {
+            auto f = std::make_unique<CylinderFeature>();
+            f->setName(name);
+            f->base.origin = OriginPlane::XY;
+            f->expressions = {{"diameter", diameter}, {"z", z}, {"height", height}};
+            return f;
+        };
+
+        // Los cuerpos salen en este orden: sol, planetas, corona, portasatélites, ejes de los planetas y eje central.
+        // (El índice de cada operación es el que usan las referencias «#k» de las uniones.)
+        std::vector<std::string> names;
+        const std::size_t sun = recipe.features.size();
+        {
+            auto f = gear("Engranaje: sol", zs, helice);
+            f->expressions["bore"] = boreSun;
+            recipe.features.push_back(std::move(f));
+            names.push_back("Sol");
+        }
+        std::vector<std::size_t> planets;
+        for (int k = 0; k < count; ++k) {
+            const std::string angle = "360*" + std::to_string(k) + "/" + n;
+            auto f = gear("Engranaje: planeta " + std::to_string(k + 1), zp, "-" + helice);
+            f->expressions["bore"] = borePlanet;
+            f->expressions["x"] = orbit + "*cos(" + angle + ")";
+            f->expressions["y"] = orbit + "*sin(" + angle + ")";
+            f->expressions["rotation"] = giro + " + " + angle + "*(" + zs + " + " + zp + ")/" + zp;
+            planets.push_back(recipe.features.size());
+            recipe.features.push_back(std::move(f));
+            names.push_back("Planeta " + std::to_string(k + 1));
+        }
+        {
+            auto f = gear("Engranaje: corona", zr, "-" + helice);
+            f->spec.type = geometry::GearType::Internal;
+            f->expressions.erase("pressureAngle");
+            f->expressions["pressureAngle"] = presion;
+            f->expressions["rim"] = aro;
+            f->expressions["rotation"] = giro + "*" + zp + "/" + zr;
+            recipe.features.push_back(std::move(f));
+            names.push_back("Corona");
+            recipe.fixedBodies.push_back(int(names.size()) - 1);  // lo único fijo: el resto gira respecto a ella
+        }
+        // El portasatélites: una placa debajo, del tamaño de la corona, y los ejes encima de ella.
+        const std::size_t plate = recipe.features.size();
+        recipe.features.push_back(cylinder("Tren: portasatélites", modulo + "*" + zr + " + 2*" + aro, "-4", "3"));
+        names.push_back("Portasatélites");
+        std::vector<std::size_t> pins;
+        for (int k = 0; k < count; ++k) {
+            const std::string angle = "360*" + std::to_string(k) + "/" + n;
+            auto f = cylinder("Tren: eje del planeta " + std::to_string(k + 1), borePlanet + " - 0.3", "-1", ancho + " + 2");
+            f->expressions["x"] = orbit + "*cos(" + angle + ")";
+            f->expressions["y"] = orbit + "*sin(" + angle + ")";
+            pins.push_back(recipe.features.size());
+            recipe.features.push_back(std::move(f));
+            names.push_back("Eje " + std::to_string(k + 1));
+        }
+        const std::size_t centralPin = recipe.features.size();
+        recipe.features.push_back(cylinder("Tren: eje central", boreSun + " - 0.3", "-1", ancho + " + 2"));
+        names.push_back("Eje central");
+        recipe.bodyNames = names;
+
+        // Una unión giratoria por rueda: su eje (el del agujero) sobre el del eje fijo.
+        const auto axisOf = [](std::size_t feature) {
+            return geometry::ElementRef{"@axis:#" + std::to_string(feature), 0};
+        };
+        const auto joint = [&](const std::string& name, std::size_t pin, std::size_t wheel) {
+            auto f = std::make_unique<JointFeature>();
+            f->setName(name);
+            f->fixedFace = axisOf(pin);
+            f->movingFace = axisOf(wheel);
+            f->type = JointType::Revolute;
+            return f;
+        };
+        std::vector<std::size_t> joints;
+        joints.push_back(recipe.features.size());
+        recipe.features.push_back(joint("Tren: giro del sol", centralPin, sun));
+        for (int k = 0; k < count; ++k) {
+            joints.push_back(recipe.features.size());
+            recipe.features.push_back(joint("Tren: giro del planeta " + std::to_string(k + 1), pins[std::size_t(k)], planets[std::size_t(k)]));
+        }
+        // El portasatélites gira alrededor del eje central y se lleva sus ejes y los planetas («#k» = el cuerpo de la
+        // operación k). Su eje es el de la placa, que está más abajo que el eje central: el desfase (el centro de la placa
+        // menos el del eje, a lo largo del eje) se da como distancia para que la unión no la mueva de sitio.
+        const std::size_t carrier = recipe.features.size();
+        {
+            auto f = joint("Tren: giro del portasatélites", centralPin, plate);
+            f->expressions["offset"] = "-2.5 - " + ancho + "/2";
+            for (const std::size_t pin : pins) {
+                f->alsoMove.push_back("#" + std::to_string(pin));
+            }
+            for (const std::size_t planet : planets) {
+                f->alsoMove.push_back("#" + std::to_string(planet));
+            }
+            recipe.features.push_back(std::move(f));
+        }
+        // El enlace (Willis, con la corona fija): el sol gira θ; el portasatélites gira θ·zs/(zs + zr); cada planeta gira
+        // sobre su eje −θ·zr·zs/((zs + zr)·zp) (el giro de órbita se lo da el portasatélites, que va después).
+        auto link = std::make_unique<MotionLinkFeature>();
+        link->setName("Tren: enlace de movimiento");
+        link->members.push_back({kRecipeFeatureBase + FeatureId(joints[0]), 1.0});
+        const double zsv = values.at("dientes_sol"), zpv = values.at("dientes_planeta");
+        const double zrv = zsv + 2.0 * zpv;
+        for (int k = 0; k < count; ++k) {
+            link->members.push_back({kRecipeFeatureBase + FeatureId(joints[std::size_t(k) + 1]), -zrv * zsv / ((zsv + zrv) * zpv)});
+        }
+        link->members.push_back({kRecipeFeatureBase + FeatureId(carrier), zsv / (zsv + zrv)});
+        recipe.features.push_back(std::move(link));
+        return recipe;
+    }
+};
+
 // --- Cremallera con rueda ----------------------------------------------------------------------
 // Una barra dentada (dientes trapezoidales: la involuta de radio infinito) y la rueda que engrana con ella. La
 // rueda está en el origen y la cremallera debajo, con la línea primitiva tangente a la circunferencia primitiva
@@ -1770,9 +1983,39 @@ std::vector<sketch::Geometry> textOutline(const std::string& text, double height
     return gOutliner && !text.empty() ? gOutliner(text, height, family) : std::vector<sketch::Geometry>{};
 }
 
-std::unique_ptr<Feature> instantiate(const Feature& feature, FeatureId recipeSketch)
+std::unique_ptr<Feature> instantiate(const Feature& feature, FeatureId recipeSketch, const std::vector<FeatureId>& ids)
 {
     std::unique_ptr<Feature> copy = feature.clone();
+    // «@axis:#k» → «@axis:f<id de la operación k>» (el eje del cuerpo que crea).
+    const auto resolveAxis = [&](geometry::ElementRef& ref) {
+        constexpr std::string_view prefix = "@axis:#";
+        if (ref.name.rfind(prefix, 0) == 0) {
+            const std::size_t k = std::stoul(ref.name.substr(prefix.size()));
+            if (k < ids.size()) {
+                ref.name = "@axis:f" + std::to_string(ids[k]);
+            }
+        }
+    };
+    if (auto* joint = dynamic_cast<JointFeature*>(copy.get())) {
+        resolveAxis(joint->fixedFace);
+        resolveAxis(joint->movingFace);
+        // «#k» en los cuerpos que van con la pieza móvil → la clave del cuerpo que crea la operación k.
+        for (std::string& key : joint->alsoMove) {
+            if (!key.empty() && key.front() == '#') {
+                const std::size_t k = std::stoul(key.substr(1));
+                if (k < ids.size()) {
+                    key = "f" + std::to_string(ids[k]);
+                }
+            }
+        }
+    }
+    if (auto* link = dynamic_cast<MotionLinkFeature*>(copy.get())) {
+        for (MotionLinkFeature::Member& member : link->members) {
+            if (member.joint >= kRecipeFeatureBase && member.joint - kRecipeFeatureBase < ids.size()) {
+                member.joint = ids[std::size_t(member.joint - kRecipeFeatureBase)];
+            }
+        }
+    }
     if (auto* extrude = dynamic_cast<ExtrudeFeature*>(copy.get())) {
         for (ProfileRef& profile : extrude->profiles) {
             if (profile.sketch == kRecipeSketch) {
@@ -1793,8 +2036,9 @@ const std::vector<const Generator*>& generators()
     static const RackAndPinion rackAndPinion;
     static const WormAndWheel wormAndWheel;
     static const BevelPair bevelPair;
+    static const PlanetaryGear planetaryGear;
     static const std::vector<const Generator*> all = {&lightbox, &boxWithLid, &sign, &gearPair, &internalGear,
-                                                      &rackAndPinion, &wormAndWheel, &bevelPair};
+                                                      &rackAndPinion, &wormAndWheel, &bevelPair, &planetaryGear};
     return all;
 }
 
@@ -1933,8 +2177,10 @@ void applyRecipe(Document& doc, const Recipe& recipe)
         before.push_back(body.key);
     }
     FeatureId recipeSketch = 0;
+    std::vector<FeatureId> recipeIds;
     for (const auto& feature : recipe.features) {
-        const FeatureId id = doc.insertFeature(instantiate(*feature, recipeSketch), doc.marker());
+        const FeatureId id = doc.insertFeature(instantiate(*feature, recipeSketch, recipeIds), doc.marker());
+        recipeIds.push_back(id);
         if (feature->kind() == FeatureKind::Sketch) {
             recipeSketch = id;
         }
@@ -1946,7 +2192,8 @@ void applyRecipe(Document& doc, const Recipe& recipe)
         if (std::ranges::find(before, body.key) != before.end()) {
             continue;
         }
-        info[body.key] = {next < recipe.bodyNames.size() ? recipe.bodyNames[next] : std::string(), component};
+        info[body.key] = {next < recipe.bodyNames.size() ? recipe.bodyNames[next] : std::string(), component,
+                          std::ranges::find(recipe.fixedBodies, int(next)) != recipe.fixedBodies.end()};
         ++next;
     }
     doc.setBodyInfo(info);

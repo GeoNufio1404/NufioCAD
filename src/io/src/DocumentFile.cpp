@@ -96,8 +96,10 @@ const Table<PatternLayout, 2> kPatternLayouts{{
     {PatternLayout::Linear, "linear"}, {PatternLayout::Circular, "circular"},
 }};
 
-const Table<JointType, 3> kJointTypes{{
+const Table<JointType, 7> kJointTypes{{
     {JointType::Rigid, "rigid"}, {JointType::Revolute, "revolute"}, {JointType::Slider, "slider"},
+    {JointType::Cylindrical, "cylindrical"}, {JointType::PinSlot, "pinslot"}, {JointType::Planar, "planar"},
+    {JointType::Ball, "ball"},
 }};
 
 const Table<AxisRef::Kind, 6> kAxisKinds{{
@@ -551,6 +553,33 @@ FeatureRow rowOf(const Feature& f)
         row.type = "joint";
         params = {{"fixed", toJson(j.fixedFace)}, {"moving", toJson(j.movingFace)}, {"type", nameOf(kJointTypes, j.type)},
                   {"offset", j.offset}, {"angle", j.angle}, {"slide", j.slide}, {"flip", j.flip}};
+        // Lo que se añadió en la Fase 21 solo se escribe si no es lo de siempre (los archivos viejos siguen igual).
+        if (j.fixedEdge) { params["fixedEdge"] = true; }
+        if (j.movingEdge) { params["movingEdge"] = true; }
+        if (!j.alsoMove.empty()) { params["alsoMove"] = j.alsoMove; }
+        if (j.slideY != 0.0) { params["slideY"] = j.slideY; }
+        if (j.tiltX != 0.0) { params["tiltX"] = j.tiltX; }
+        if (j.tiltY != 0.0) { params["tiltY"] = j.tiltY; }
+        if (j.limitAngle) { params["limitAngle"] = {j.angleMin, j.angleMax}; }
+        if (j.limitSlide) { params["limitSlide"] = {j.slideMin, j.slideMax}; }
+        break;
+    }
+    case FeatureKind::Align: {
+        const auto& a = static_cast<const AlignFeature&>(f);
+        row.type = "align";
+        params = {{"moving", toJson(a.moving.ref)}, {"movingEdge", a.moving.edge}, {"target", toJson(a.target.ref)},
+                  {"targetEdge", a.target.edge}, {"alsoMove", a.alsoMove}, {"flip", a.flip}, {"angle", a.angle},
+                  {"offset", a.offset}};
+        break;
+    }
+    case FeatureKind::MotionLink: {
+        const auto& l = static_cast<const MotionLinkFeature&>(f);
+        row.type = "motionlink";
+        Json members = Json::array();
+        for (const auto& m : l.members) {
+            members.push_back({{"joint", m.joint}, {"ratio", m.ratio}});
+        }
+        params = {{"members", members}, {"position", l.position}};
         break;
     }
     case FeatureKind::Move: {
@@ -766,7 +795,39 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         j->angle = number(p, "angle");
         j->slide = number(p, "slide");
         j->flip = p.at("flip").get<bool>();
+        j->fixedEdge = p.value("fixedEdge", false);
+        j->movingEdge = p.value("movingEdge", false);
+        if (p.contains("alsoMove")) { j->alsoMove = p.at("alsoMove").get<std::vector<std::string>>(); }
+        j->slideY = p.contains("slideY") ? number(p, "slideY") : 0.0;
+        j->tiltX = p.contains("tiltX") ? number(p, "tiltX") : 0.0;
+        j->tiltY = p.contains("tiltY") ? number(p, "tiltY") : 0.0;
+        if (p.contains("limitAngle")) {
+            j->limitAngle = true;
+            j->angleMin = finite(p.at("limitAngle").at(0));
+            j->angleMax = finite(p.at("limitAngle").at(1));
+        }
+        if (p.contains("limitSlide")) {
+            j->limitSlide = true;
+            j->slideMin = finite(p.at("limitSlide").at(0));
+            j->slideMax = finite(p.at("limitSlide").at(1));
+        }
         feature = std::move(j);
+    } else if (row.type == "align") {
+        auto a = std::make_unique<AlignFeature>();
+        a->moving = {elementRef(p.at("moving")), p.value("movingEdge", false)};
+        a->target = {elementRef(p.at("target")), p.value("targetEdge", false)};
+        a->alsoMove = p.at("alsoMove").get<std::vector<std::string>>();
+        a->flip = p.at("flip").get<bool>();
+        a->angle = number(p, "angle");
+        a->offset = number(p, "offset");
+        feature = std::move(a);
+    } else if (row.type == "motionlink") {
+        auto l = std::make_unique<MotionLinkFeature>();
+        for (const Json& m : p.at("members")) {
+            l->members.push_back({unsignedValue(m, "joint"), finite(m.at("ratio"))});
+        }
+        l->position = number(p, "position");
+        feature = std::move(l);
     } else if (row.type == "move") {
         auto m = std::make_unique<MoveFeature>();
         m->body = text(p, "body");
@@ -1054,6 +1115,9 @@ SavePlan prepareSave(const Document& document, const ViewState& view, const std:
             if (!info.color.empty()) {
                 bodies[key]["color"] = info.color;
             }
+            if (info.fixed) {
+                bodies[key]["fixed"] = true;
+            }
         }
         plan->bodies = bodies.dump();
     }
@@ -1155,7 +1219,8 @@ void loadDocument(const std::filesystem::path& path, Document& document, ViewSta
             const Json parsed = Json::parse(*bodies);  // con nombre: items() de un temporal queda colgando
             for (const auto& [key, value] : parsed.items()) {
                 bodyInfo[key] = {value.at("name").get<std::string>(), value.at("component").get<std::string>(),
-                                 value.contains("color") ? value.at("color").get<std::string>() : std::string()};
+                                 value.contains("color") ? value.at("color").get<std::string>() : std::string(),
+                                 value.value("fixed", false)};
             }
         }
         for (auto& [pname, expression] : file.readParameters()) {

@@ -354,16 +354,50 @@ void MainWindow::createMenus()
     });
     decorate(organizeAction_, QStringLiteral("components-solid"),
              QStringLiteral("Ponerle nombre a los cuerpos y agruparlos en componentes"), QStringLiteral("Componentes"));
+    duplicateAction_ = solidMenu->addAction(QStringLiteral("&Duplicar"), this, [this] { duplicateBodies(selectedBodyKeys()); });
+    decorate(duplicateAction_, QStringLiteral("copy"),
+             QStringLiteral("Copiar el cuerpo o el componente elegido (en el navegador o en la vista) al lado (Ctrl+D)"),
+             QStringLiteral("Duplicar"));
+    dragAction_ = solidMenu->addAction(QStringLiteral("Arrastrar &piezas"), this, [this](bool on) {
+        viewport_->setBodyDragEnabled(on);
+        statusBar()->showMessage(on ? QStringLiteral("Arrastrar piezas: agarra un cuerpo y arrástralo (Ctrl pega a la rejilla; los fijos no se mueven; con una unión solo se mueve como ella permite) · G para salir")
+                                    : QStringLiteral("Arrastrar piezas apagado"),
+                                 6000);
+    });
+    dragAction_->setCheckable(true);
+    decorate(dragAction_, QStringLiteral("move"),
+             QStringLiteral("Mover piezas con el ratón: arrastra un cuerpo (Ctrl pega a la rejilla); con una unión, solo gira o desliza como ella permite (G)"),
+             QStringLiteral("Arrastrar"));
+    alignAction_ = solidMenu->addAction(QStringLiteral("&Alinear"), this, [this] {
+        startTool(std::make_unique<JointTool>(document_, *viewport_, std::nullopt, true));
+    });
+    decorate(alignAction_, QStringLiteral("align-solid"),
+             QStringLiteral("Colocar una pieza sobre otra de una vez: centro con centro, eje con eje o cara con cara (A)"),
+             QStringLiteral("Alinear"));
+    linkAction_ = solidMenu->addAction(QStringLiteral("Enlace de &movimiento"), this, [this] {
+        startTool(std::make_unique<MotionLinkTool>(document_, *viewport_, std::nullopt));
+    });
+    decorate(linkAction_, QStringLiteral("link-solid"),
+             QStringLiteral("Hacer que varias uniones se muevan a la vez en una proporción (un engranaje gira y el otro lo sigue)"),
+             QStringLiteral("Enlace"));
     jointAction_ = solidMenu->addAction(QStringLiteral("&Unión"), this, [this] {
         startTool(std::make_unique<JointTool>(document_, *viewport_, std::nullopt));
     });
     decorate(jointAction_, QStringLiteral("joint-solid"),
-             QStringLiteral("Unir dos cuerpos por sus caras (rígida, giratoria o deslizante)"), QStringLiteral("Unión"));
+             QStringLiteral("Unir dos piezas por sus caras, aristas o ejes: rígida, giratoria, deslizante, cilíndrica, plana o esférica, con límites"),
+             QStringLiteral("Unión"));
     measureAction_ = solidMenu->addAction(QStringLiteral("&Medir"), this, [this](bool on) { toggleMeasure(on); });
     measureAction_->setCheckable(true);
     decorate(measureAction_, QStringLiteral("measure-solid"),
              QStringLiteral("Medir caras y aristas: área, longitud, radio, distancia y ángulo (Mayús o clic para añadir otra)"),
              QStringLiteral("Medir"));
+    interferenceAction_ = solidMenu->addAction(QStringLiteral("&Interferencias…"), this, [this] {
+        InterferenceDialog dialog(document_, *viewport_, hiddenBodies_, this);
+        dialog.exec();
+    });
+    decorate(interferenceAction_, QStringLiteral("interference-solid"),
+             QStringLiteral("Ver qué cuerpos se pisan y cuánto, ahora y a lo largo del giro de un enlace de movimiento"),
+             QStringLiteral("Interferencias"));
     sectionAction_ = solidMenu->addAction(QStringLiteral("&Sección"), this, [this](bool on) { toggleSection(on); });
     sectionAction_->setCheckable(true);
     decorate(sectionAction_, QStringLiteral("section-solid"),
@@ -570,7 +604,11 @@ void MainWindow::createMenus()
     ribbon_->addAction(solidTab_, combineAction_);
     ribbon_->addGroup(solidTab_, QStringLiteral("ORGANIZAR"));
     ribbon_->addAction(solidTab_, organizeAction_);
+    ribbon_->addAction(solidTab_, duplicateAction_);
+    ribbon_->addAction(solidTab_, dragAction_);
+    ribbon_->addAction(solidTab_, alignAction_);
     ribbon_->addAction(solidTab_, jointAction_);
+    ribbon_->addAction(solidTab_, linkAction_);
     ribbon_->addGroup(solidTab_, QStringLiteral("CONSTRUIR"));
     ribbon_->addAction(solidTab_, planeAction_);
     ribbon_->addAction(solidTab_, axisAction_);
@@ -581,6 +619,7 @@ void MainWindow::createMenus()
     ribbon_->addGroup(solidTab_, QStringLiteral("INSPECCIONAR"));
     ribbon_->addAction(solidTab_, measureAction_);
     ribbon_->addAction(solidTab_, sectionAction_);
+    ribbon_->addAction(solidTab_, interferenceAction_);
     toolsTab_ = ribbon_->addTab(QStringLiteral("HERRAMIENTAS"));
     // Un grupo por familia: las cajas y lightbox juntas, los letreros aparte y los engranajes en el suyo.
     QString shownGroup;
@@ -901,6 +940,9 @@ void MainWindow::assignShortcuts()
     key(moveAction_, QKeySequence(Qt::SHIFT | Qt::Key_G));
     key(combineAction_, QKeySequence(Qt::SHIFT | Qt::Key_U));
     key(jointAction_, QKeySequence(Qt::SHIFT | Qt::Key_J));
+    key(duplicateAction_, QKeySequence(Qt::CTRL | Qt::Key_D));
+    key(dragAction_, QKeySequence(Qt::Key_G));
+    key(alignAction_, QKeySequence(Qt::Key_A));  // las herramientas de sketch (también la A) solo están activas dentro de un sketch
     key(measureAction_, QKeySequence(Qt::Key_I));
     key(sectionAction_, QKeySequence(Qt::SHIFT | Qt::Key_S));
 }

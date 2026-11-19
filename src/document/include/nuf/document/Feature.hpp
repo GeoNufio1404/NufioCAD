@@ -10,6 +10,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -48,13 +49,26 @@ struct AxisLine {
     sketch::Vec3 direction{0.0, 0.0, 1.0};
 };
 
+// Lo que una unión deja dicho para que un enlace de movimiento (Fase 21) pueda mover lo que ella colocó: el eje o la
+// guía por donde se mueve y qué cuerpos van con ella. «dof»: 0 = gira alrededor de «direction», 1 = se desliza por
+// «xAxis», 2 = se desliza por «direction».
+struct JointAxis {
+    sketch::Vec3 origin;
+    sketch::Vec3 direction{0.0, 0.0, 1.0};
+    sketch::Vec3 xAxis{1.0, 0.0, 0.0};
+    int dof = 0;
+    std::vector<std::string> moved;  // claves de los cuerpos que mueve
+};
+
 // Resultado acumulado tras una operación.
 struct ModelState {
+    std::map<FeatureId, JointAxis> joints;      // las uniones que no son rígidas, por id
     std::vector<Body> bodies;
     std::map<FeatureId, SketchOutput> sketches;
     std::map<FeatureId, sketch::Plane> planes;  // planos de construcción
     std::map<FeatureId, AxisLine> axes;         // ejes de construcción
     int bodiesCreated = 0;  // los cuerpos que se han creado (en total)
+    std::set<std::string> fixedBodies;          // las claves de los cuerpos fijos (Fase 21): el documento las pone
     std::map<std::string, int> bodyNameCounts;  // cuántos van de cada clase («Caja» → 2), para numerar «Caja 3»
 
     std::vector<geometry::Shape> shapes() const;
@@ -71,7 +85,7 @@ struct ModelState {
     std::optional<EdgeHit> findEdge(const geometry::ElementRef& ref) const;
 };
 
-enum class FeatureKind { Sketch, Extrude, Revolve, Import, Fillet, Chamfer, Shell, Hole, Mirror, Pattern, ConstructionPlane, ConstructionAxis, Gear, Thread, Sweep, Loft, Move, Combine, Joint, Box, Cylinder, Split };
+enum class FeatureKind { Sketch, Extrude, Revolve, Import, Fillet, Chamfer, Shell, Hole, Mirror, Pattern, ConstructionPlane, ConstructionAxis, Gear, Thread, Sweep, Loft, Move, Combine, Joint, Box, Cylinder, Split, Align, MotionLink };
 
 enum class Health {
     Ok,

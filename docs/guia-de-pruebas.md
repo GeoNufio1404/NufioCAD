@@ -663,6 +663,23 @@ Código: **GEN**.
 | DIS.5 | Desinstala desde Configuración › Aplicaciones | Se quita todo, y los `.nuf` dejan de estar asociados |
 | DIS.6 | Lanza el flujo **Publicar** a mano en GitHub (Actions › Publicar › Run workflow) | Termina bien en Windows y en Linux y deja los instaladores y los SHA-256 como artefactos (nunca se ha ejecutado: arregla lo que falle) |
 | DIS.7 | En Fedora o Ubuntu: `packaging/linux/crear-appimage.sh` y ejecuta el AppImage; instala el `.deb` o el `.rpm` | Arrancan, con su icono en el menú y la asociación de `.nuf` |
+| ASM.1 | Con dos cuerpos: clic derecho en uno en el Navegador › **Duplicar** (o `Ctrl+D`) | Sale una copia al lado, llamada con el siguiente número («Caja 1» → «Caja 2»); es una sola operación Mover en el historial; Ctrl+Z la quita |
+| ASM.2 | Con un componente (por ejemplo un par de engranajes): clic derecho en el componente › Duplicar | Salen todos sus cuerpos, en un componente nuevo con el siguiente número |
+| ASM.3 | Clic derecho en un cuerpo › **Fijar** | Aparece un candado en el Navegador; **Soltar** lo quita; sobrevive a guardar y abrir |
+| ASM.4 | Elige dos o más cuerpos (Ctrl o Mayús en el Navegador) › clic derecho › **Crear componente con la selección…** | Piden un nombre y los cuerpos pasan a una carpeta; **Sacar del componente** los devuelve |
+| ASM.5 | Dos piezas separadas: **Alinear** (`A`): elige la cara de abajo de una y la de arriba de otra | La primera salta y queda apoyada y centrada sobre la otra, con vista previa antes de aceptar |
+| ASM.6 | Alinear el **eje de un agujero** de una pieza con el **eje de un cilindro** de otra (clic en las caras cilíndricas, o en dos aristas circulares) | Quedan coaxiales (por ejemplo un engranaje metido en su eje); «Del otro lado» y «Girar 90°» cambian la posición |
+| ASM.7 | Fija la pieza que iba a moverse y repite el alineado | Se mueve la otra pieza; con las dos fijas, error claro |
+| ASM.8 | **Unión** entre una placa y un bloque: prueba los tipos Giratoria, Deslizante, Cilíndrica, Plana y Esférica y cambia sus valores | Cada tipo deja mover solo lo suyo; con «Límite de giro» (0° a 90°) pedir 180° se queda en el tope y avisa en naranja |
+| ASM.9 | En la herramienta de una unión giratoria o deslizante: **▶ Animar** | La pieza se mueve sola entre los límites; al parar, vuelve a su valor |
+| ASM.10 | Enciende **Arrastrar piezas** (`G`) y arrastra un cuerpo suelto (con `Ctrl`, a la rejilla) | Una sombra azul lo sigue; al soltar queda guardado como una operación **Mover**; sobre el vacío la vista se orbita como siempre; una pieza fija no se agarra |
+| ASM.11 | Con una unión giratoria puesta, arrastra la pieza que coloca | Solo gira sobre su eje (en vivo, respetando los límites); al soltar, el ángulo queda en la propia unión; Ctrl+Z lo deshace |
+| ASM.12 | Con dos uniones giratorias: **Enlace de movimiento**: marca las dos, razón 1 y −2, y gira la posición o pulsa ▶ Animar | Las dos giran a la vez, la segunda al revés y al doble |
+| ASM.13 | **Interferencias…** con dos cuerpos que se pisan | La lista da la pareja y el volumen común; al elegir la fila se ve en rojo en la vista |
+| ASM.14 | Interferencias › «A lo largo del giro de» un enlace › Revisar el giro | Da, de cada pareja que se pisa, el peor momento; con **Parar** corta; sin interferencias lo dice |
+| ASM.15 | Herramientas › Engranajes › **Tren planetario** (valores por defecto) | Sale el sol, 3 planetas, la corona, el portasatélites y los ejes en un componente «Tren planetario 1», con la corona fija |
+| ASM.16 | En el tren planetario: Sólido › **Enlace de movimiento** › elige el enlace › **▶ Animar** | Gira el sol, los planetas giran sobre su eje y el portasatélites con ellos, y los dientes engranan sin pisarse; Interferencias › Revisar el giro no encuentra nada |
+| ASM.17 | Tren planetario con 5 planetas (12, 12 y 36 dientes) | El formulario avisa de que (dientes del sol + de la corona) ÷ planetas no es entero |
 | GEN.9 | **Rosca interior**: caja, agujero de Ø 6.47 con la herramienta Agujero, y rosca M8 con operación «Cortar» | El agujero queda roscado |
 
 #### 3.6.3 Barrido y loft

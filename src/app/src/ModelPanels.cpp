@@ -1,9 +1,11 @@
 #include "ModelPanels.hpp"
+#include "Icons.hpp"
 #include "Theme.hpp"
 
 #include <QContextMenuEvent>
 #include <QHeaderView>
 #include <QHelpEvent>
+#include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -72,6 +74,10 @@ QString glyph(document::FeatureKind kind)
         return QStringLiteral("⊕");
     case document::FeatureKind::Joint:
         return QStringLiteral("⚓");
+    case document::FeatureKind::Align:
+        return QStringLiteral("⊞");
+    case document::FeatureKind::MotionLink:
+        return QStringLiteral("⛓");
     }
     return QStringLiteral("?");
 }
@@ -348,6 +354,7 @@ NavigatorWidget::NavigatorWidget(QWidget* parent)
 {
     setHeaderHidden(true);
     setColumnCount(1);
+    setSelectionMode(QAbstractItemView::ExtendedSelection);  // varios cuerpos o componentes a la vez (Duplicar, Fijar…)
     connect(this, &QTreeWidget::itemChanged, this, [this](QTreeWidgetItem* item) {
         if (refreshing_) {
             return;
@@ -398,6 +405,8 @@ void NavigatorWidget::refresh(const document::Document& document, const document
 {
     refreshing_ = true;
     clear();
+    fixed_.clear();
+    inComponent_.clear();
     const auto checkable = [](QTreeWidgetItem* item, bool on, int kind, const QVariant& key) {
         item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
         item->setCheckState(0, on ? Qt::Checked : Qt::Unchecked);
@@ -459,6 +468,13 @@ void NavigatorWidget::refresh(const document::Document& document, const document
         }
         auto* item = new QTreeWidgetItem(parent, {QString::fromStdString(body.name)});
         checkable(item, !hiddenBodies.contains(body.key), BodyItem, QString::fromStdString(body.key));
+        inComponent_[body.key] = !component.empty();
+        if (document.isFixed(body.key)) {
+            // Un candado marca el cuerpo fijo: no se mueve con Alinear, Unión ni arrastrando.
+            fixed_.insert(body.key);
+            item->setIcon(0, uiIcon(QStringLiteral("lock")));
+            item->setToolTip(0, QStringLiteral("Fijo: no se mueve (clic derecho › Soltar)"));
+        }
     }
     // Cada componente se muestra u oculta de una vez (marcado si todos sus cuerpos se ven).
     for (auto& [name, node] : components) {
@@ -485,6 +501,75 @@ void NavigatorWidget::refresh(const document::Document& document, const document
     }
     expandAll();
     refreshing_ = false;
+}
+
+std::vector<std::string> NavigatorWidget::selectedBodies() const
+{
+    std::vector<std::string> keys;
+    const auto add = [&](const std::string& key) {
+        if (std::ranges::find(keys, key) == keys.end()) {
+            keys.push_back(key);
+        }
+    };
+    for (QTreeWidgetItem* item : selectedItems()) {
+        const int kind = item->data(0, KindRole).toInt();
+        if (kind == BodyItem) {
+            add(item->data(0, KeyRole).toString().toStdString());
+        } else if (kind == ComponentItem) {
+            for (int i = 0; i < item->childCount(); ++i) {
+                add(item->child(i)->data(0, KeyRole).toString().toStdString());
+            }
+        }
+    }
+    return keys;
+}
+
+void NavigatorWidget::contextMenuEvent(QContextMenuEvent* event)
+{
+    QTreeWidgetItem* under = itemAt(event->pos());
+    if (under == nullptr) {
+        return;
+    }
+    const int kind = under->data(0, KindRole).toInt();
+    if (kind != BodyItem && kind != ComponentItem) {
+        return;
+    }
+    // Un clic derecho sobre algo que no está elegido lo elige solo (lo que se espera de un menú contextual).
+    if (!under->isSelected()) {
+        clearSelection();
+        under->setSelected(true);
+    }
+    const std::vector<std::string> keys = selectedBodies();
+    if (keys.empty()) {
+        return;
+    }
+    const bool allFixed = std::ranges::all_of(keys, [&](const std::string& key) { return fixed_.contains(key); });
+    const bool anyGrouped = std::ranges::any_of(keys, [&](const std::string& key) {
+        const auto it = inComponent_.find(key);
+        return it != inComponent_.end() && it->second;
+    });
+    QMenu menu(this);
+    QAction* duplicate = menu.addAction(QStringLiteral("Duplicar	Ctrl+D"));
+    QAction* move = menu.addAction(QStringLiteral("Mover…"));
+    menu.addSeparator();
+    QAction* fix = menu.addAction(allFixed ? QStringLiteral("Soltar (dejar de fijar)") : QStringLiteral("Fijar"));
+    QAction* group = menu.addAction(QStringLiteral("Crear componente con la selección…"));
+    QAction* ungroup = anyGrouped ? menu.addAction(QStringLiteral("Sacar del componente")) : nullptr;
+    QAction* chosen = menu.exec(event->globalPos());
+    if (chosen == nullptr) {
+        return;
+    }
+    if (chosen == duplicate) {
+        emit duplicateRequested(keys);
+    } else if (chosen == move) {
+        emit moveRequested(keys);
+    } else if (chosen == fix) {
+        emit fixRequested(keys, !allFixed);
+    } else if (chosen == group) {
+        emit componentRequested(keys);
+    } else if (ungroup != nullptr && chosen == ungroup) {
+        emit ungroupRequested(keys);
+    }
 }
 
 } // namespace nuf::app
