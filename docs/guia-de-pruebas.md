@@ -635,6 +635,10 @@ Código: **GEN**.
 | GEN.6 | Sólido › **Rosca**; medida M8 × 1.25, largo `10` | Varilla roscada; el panel dice el diámetro menor (6.47 mm) |
 | GEN.7 | Cambiar «Medida» a M6; luego tocar el diámetro a mano | La medida pasa a «Personalizada» |
 | GEN.8 | «Rosca a izquierdas» | La hélice gira al otro lado |
+| GEN.9 | Caja con tapa › **Forma: Redonda** (diámetro 100) y, aparte, «Cierre: Tornillos» | La caja es un cilindro hueco con la tapa redonda al lado; con tornillos, los cuatro postes quedan sobre la circunferencia, a 45° |
+| GEN.10 | Caja con tapa rectangular › **Bisagra atrás** (nudillos de 7 mm, largo 40) | La tapa queda cerrada sobre la caja (0,2 mm por encima) y unida por tres nudillos al borde de atrás; cada cuerpo sigue siendo suyo (Navegador: Caja y Tapa); el agujero del pasador cruza los tres; mete un trozo de filamento y la tapa gira |
+| GEN.11 | Caja con tapa › «Ranuras por pared» 3 y «Paredes con ranuras: Las cuatro» | Salen tres ranuras de 2 mm una sobre otra, a media altura, en cada pared |
+| GEN.12 | Caja con tapa › **Clips para cerrarla**, solos y con bisagra | Dos resaltes en los lados cortos de la caja y dos lengüetas con gancho en la tapa; al cerrar la tapa los ganchos quedan justo bajo los resaltes (imprime y prueba que encajan con un clic) |
 | GEN.9 | **Rosca interior**: caja, agujero de Ø 6.47 con la herramienta Agujero, y rosca M8 con operación «Cortar» | El agujero queda roscado |
 
 #### 3.6.3 Barrido y loft

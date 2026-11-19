@@ -403,3 +403,7 @@ Con «Canal para tira LED», un muro bajo (un anillo de «Grosor del muro del ca
 ## Caja con tapa: divisiones, patas, ranuras y tornillos
 
 «Divisiones interiores» reparte la caja a lo ancho con paredes de su grosor (llegan 3 mm por debajo del borde); «Patas» añade cuatro discos bajo el fondo (la caja baja de Z = 0: el slicer la apoya sola); «Ranuras de ventilación» corta ranuras de 2 mm en el centro de la tapa; y «Tornillo» (M2 a M6) fija el poste, el agujero de roscar y el de paso de la tapa de ese tornillo.
+
+## Caja con tapa: redonda, bisagra, ranuras en las paredes y clips
+
+Todo es opcional. **Forma redonda:** un cilindro hueco con tapa redonda y los postes sobre la circunferencia (divisiones, bisagra, clips y ranuras de pared solo existen en la rectangular). **Bisagra:** tres nudillos a lo largo del borde de atrás (dos de la caja y uno de la tapa, con 0,4 mm de aire entre ellos) y un agujero para un pasador de filamento (el diámetro del pasador más 0,3 mm); la tapa sale **cerrada** sobre la caja, a 0,2 mm, y se imprime ahí mismo. **Ranuras de ventilación en las paredes:** N ranuras de 2 mm una sobre otra, a media altura, en las paredes largas, en las cortas o en las cuatro. **Clips:** en cada lado corto, un resalte de 1 mm en la caja y una lengüeta de la tapa con un gancho que queda justo bajo el resalte al cerrar (ancho y largo de la lengüeta ajustables); funciona con el cierre por labio o por tornillos.

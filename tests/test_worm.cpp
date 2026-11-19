@@ -385,3 +385,119 @@ TEST_CASE("El Lightbox con canal LED y la caja con divisiones, patas, ranuras y 
         CHECK(same->result().bodies[0].shape.volume() == Catch::Approx(boxVolume));
     }
 }
+
+TEST_CASE("La caja con tapa redonda, con bisagra, con ranuras en las paredes y con clips", "[generator][box]")
+{
+    const document::Generator* generator = document::findGenerator("caja-con-tapa");
+    REQUIRE(generator != nullptr);
+    const auto build = [&](const document::GeneratorValues& values) {
+        auto doc = std::make_unique<document::Document>();
+        document::applyRecipe(*doc, generator->make(values, ""));
+        for (std::size_t i = 0; i < doc->featureCount(); ++i) {
+            INFO(doc->feature(i).name());
+            REQUIRE(doc->status(doc->feature(i).id()).health != document::Health::Error);
+        }
+        return doc;
+    };
+    const auto common = [](const document::Document& doc) {
+        return std::abs(geometry::boolean(geometry::BooleanOp::Common, doc.result().bodies[0].shape, doc.result().bodies[1].shape).volume());
+    };
+    const document::GeneratorValues plain = generator->defaults();
+    const auto base = build(plain);
+    const double boxVolume = base->result().bodies[0].shape.volume();
+    const double pi = std::numbers::pi;
+
+    {   // Redonda: un cilindro de 100 de diámetro, hueco por dentro, y la tapa aparte
+        document::GeneratorValues round = plain;
+        round["forma"] = 1.0;
+        const auto doc = build(round);
+        REQUIRE(doc->result().bodies.size() == 2);
+        const geometry::Box b = doc->result().bodies[0].shape.bounds();
+        CHECK(b.max.x - b.min.x == Catch::Approx(100.0).margin(0.1));
+        CHECK(b.max.y - b.min.y == Catch::Approx(100.0).margin(0.1));
+        CHECK(doc->result().bodies[0].shape.volume() == Catch::Approx(pi * 2500.0 * 40.0 - pi * 48.0 * 48.0 * 38.0).epsilon(0.005));
+        CHECK(doc->result().bodies[1].shape.bounds().min.x > 50.0);  // la tapa, al lado
+        // Con tornillos: cuatro postes sobre la circunferencia, sin chocar con la pared
+        round["cierre"] = 1.0;
+        const auto screwed = build(round);
+        CHECK(screwed->result().bodies.size() == 2);
+    }
+    {   // Bisagra: la tapa queda cerrada sobre la caja, sin tocarla ni unirse a ella
+        document::GeneratorValues hinged = plain;
+        hinged["bisagra"] = 1.0;
+        const auto doc = build(hinged);
+        REQUIRE(doc->result().bodies.size() == 2);
+        CHECK(common(*doc) < 0.5);
+        const geometry::Box lid = doc->result().bodies[1].shape.bounds();
+        CHECK(lid.min.x > -50.1);
+        CHECK(lid.max.x < 50.1);
+        CHECK(lid.max.z == Catch::Approx(40.0 + 0.2 + 2.0).margin(0.2));
+        // Sin chocar con el labio de la tapa puesto dentro, y con los nudillos fuera de la pared de atrás (y = fondo/2 + radio)
+        CHECK(doc->result().bodies[0].shape.bounds().max.y > 30.0 + 3.0);
+        // Una bisagra demasiado larga para la caja avisa
+        hinged["bisagra_largo"] = 100.0;
+        CHECK_THROWS(generator->make(hinged, ""));
+        // Y no existe en la caja redonda (se ignora)
+        hinged["bisagra_largo"] = 40.0;
+        hinged["forma"] = 1.0;
+        CHECK(build(hinged)->result().bodies[1].shape.bounds().min.x > 50.0);
+    }
+    {   // Ranuras en las paredes largas: 3 por pared, de 48 × 2 (el ancho de la pared) × 2 → 2 · 3 · 192
+        document::GeneratorValues vents = plain;
+        vents["ranuras_pared"] = 3.0;
+        const auto doc = build(vents);
+        CHECK(boxVolume - doc->result().bodies[0].shape.volume() == Catch::Approx(2.0 * 3.0 * 48.0 * 2.0 * 2.0).epsilon(0.02));
+        vents["paredes_ranuras"] = 2.0;  // las cuatro: las cortas llevan ranuras de 28 × 2 × 2
+        const auto all = build(vents);
+        CHECK(boxVolume - all->result().bodies[0].shape.volume() ==
+              Catch::Approx(2.0 * 3.0 * 48.0 * 2.0 * 2.0 + 2.0 * 3.0 * 28.0 * 2.0 * 2.0).epsilon(0.02));
+    }
+    {   // Clips: un resalte a cada lado de la caja y las lengüetas con gancho en la tapa; cerrados no chocan
+        document::GeneratorValues clipped = plain;
+        clipped["clips"] = 1.0;
+        clipped["bisagra"] = 1.0;
+        const auto doc = build(clipped);
+        REQUIRE(doc->result().bodies.size() == 2);
+        CHECK(doc->result().bodies[0].shape.bounds().max.x == Catch::Approx(51.0).margin(0.05));
+        CHECK(doc->result().bodies[0].shape.volume() > boxVolume);
+        CHECK(doc->result().bodies[1].shape.bounds().max.x == Catch::Approx(52.6).margin(0.1));
+        CHECK(common(*doc) < 0.5);
+        // El ancho de los clips pasa por un parámetro
+        bool found = false;
+        for (const document::Parameter& parameter : generator->make(clipped, "").parameters) {
+            found = found || (parameter.name == "clip_ancho" && parameter.expression == "10");
+        }
+        CHECK(found);
+    }
+    {   // Todo junto con tornillos, y un diseño anterior sin las preguntas nuevas se hace igual
+        document::GeneratorValues all = plain;
+        all["bisagra"] = 1.0;
+        all["clips"] = 1.0;
+        all["ranuras_pared"] = 2.0;
+        all["ranuras"] = 4.0;
+        all["divisiones"] = 1.0;
+        all["patas"] = 1.0;
+        CHECK(build(all)->result().bodies.size() == 2);
+        document::GeneratorValues old = plain;
+        for (const char* key : {"forma", "bisagra", "clips", "ranuras_pared", "paredes_ranuras", "diametro", "bisagra_diametro",
+                                "bisagra_largo", "bisagra_pasador", "clip_ancho", "clip_largo"}) {
+            old.erase(key);
+        }
+        CHECK(build(old)->result().bodies[0].shape.volume() == Catch::Approx(boxVolume));
+    }
+}
+
+TEST_CASE("EXPLORAR la bisagra", "[.hinge-explore]")
+{
+    const document::Generator* generator = document::findGenerator("caja-con-tapa");
+    document::GeneratorValues values = generator->defaults();
+    values["bisagra"] = 1.0;
+    document::Document doc;
+    document::applyRecipe(doc, generator->make(values, ""));
+    for (std::size_t i = 0; i < doc.featureCount(); ++i) {
+        std::printf("%2zu %-40s cuerpos tras ella: %zu\n", i, doc.feature(i).name().c_str(), doc.stateBefore(i + 1).bodies.size());
+    }
+    const auto common = geometry::boolean(geometry::BooleanOp::Common, doc.result().bodies[0].shape, doc.result().bodies[1].shape);
+    const geometry::Box b = common.bounds();
+    std::printf("comun %.2f en x %.2f..%.2f y %.2f..%.2f z %.2f..%.2f\n", common.volume(), b.min.x, b.max.x, b.min.y, b.max.y, b.min.z, b.max.z);
+}

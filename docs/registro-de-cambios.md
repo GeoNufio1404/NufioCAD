@@ -84,6 +84,8 @@ Dos campos nuevos del engranaje, ambos en 0 por defecto (los diseños anteriores
 - **3MF** (`writeThreeMf`): ZIP sin comprimir con un objeto por cuerpo, nombre y material de color por filamento; el diálogo de Exportar lo ofrece.
 - **Letrero:** texto de varias líneas (`GeneratorField::multiline`, un `QPlainTextEdit`), alineación y espacio entre líneas.
 - **Lightbox y Caja con tapa:** canal para tira LED; divisiones, patas, ranuras de ventilación y catálogo de tornillos M2 a M6.
+- **Caja con tapa (ampliación del 19 nov. 2026):** forma redonda, bisagra de nudillos con pasador de filamento (tapa cerrada sobre la caja), ranuras de ventilación en las paredes y clips de cierre, todo opcional.
+- **Inventario de pantallas:** con un tamaño pedido igual al de la pantalla, la ventana con su barra de título se salía por abajo (en una pantalla de 1280×720 con barra de tareas el hueco real es de 1280×641): ahora el inventario ajusta la ventana a ese hueco, y el resultado ya no dice «fuera de la pantalla» sin motivo.
 - **Tarjeta de inicio** sobre el lienzo vacío y **revisión de la malla** (`analyzeMesh`) en el diálogo de Exportar.
 - **Cómo volver atrás:** no fusionar `feature/fase-17-generadores`.
 
