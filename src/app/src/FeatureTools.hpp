@@ -714,17 +714,22 @@ private:
     std::vector<std::string> checked_;  // herramientas marcadas (al editar)
 };
 
-// Unión: dos caras planas (la fija y la móvil) de dos cuerpos se enfrentan.
+// Alinear y unir (Fase 21): dos caras o aristas (un centro, un eje) de dos cuerpos se colocan una sobre la otra. El
+// primer tipo, «Alinear», lo hace de una vez; los demás dejan una unión que se puede mover, con límites y animar.
 class JointTool final : public FeatureTool {
     Q_OBJECT
 
 public:
-    JointTool(document::Document& document, render::Viewport& viewport, std::optional<document::FeatureId> editing);
+    // «align»: empieza en el tipo «Alinear» (el botón y la tecla A).
+    JointTool(document::Document& document, render::Viewport& viewport, std::optional<document::FeatureId> editing,
+              bool align = false);
 
     std::unique_ptr<document::Feature> build() const override;
+    void stopPreview() override;
+    void accept() override;
 
 protected:
-    QString title() const override { return QStringLiteral("Unión"); }
+    QString title() const override { return alignMode() ? QStringLiteral("Alinear") : QStringLiteral("Unión"); }
     void createFields(QFormLayout* form) override;
     void selectionChanged(const render::ModelSelection& selection) override;
     QString inputsText() const override;
@@ -734,18 +739,46 @@ protected:
 
 private:
     void updateVisibility();
-    QString faceText(const geometry::ElementRef& ref) const;
-    // Centro y normal de la cara fija (donde se miden la distancia, el ángulo y el desplazamiento).
-    std::optional<std::pair<sketch::Vec3, sketch::Plane>> fixedFace() const;
+    bool alignMode() const;
+    QString pickText(const document::ElementPick& pick) const;
+    std::optional<geometry::Frame> frameOf(const document::ElementPick& pick) const;
+    std::optional<std::string> bodyOf(const document::ElementPick& pick) const;
+    // Lo que se mueve y adónde llega, según el tipo (en una unión, lo primero elegido es la fija).
+    document::ElementPick movingPick() const;
+    document::ElementPick targetPick() const;
+    // Los otros cuerpos del componente de la pieza que se mueve (se mueven con ella).
+    std::vector<std::string> companions() const;
+    void startAnimation();
+    void stopAnimation();
 
-    geometry::ElementRef fixed_;
-    geometry::ElementRef moving_;
+    document::ElementPick first_;
+    document::ElementPick second_;
+    bool startAsAlign_ = false;
     QComboBox* type_ = nullptr;
     QDoubleSpinBox* offset_ = nullptr;
     QDoubleSpinBox* angle_ = nullptr;
     QDoubleSpinBox* slide_ = nullptr;
+    QDoubleSpinBox* slideY_ = nullptr;
+    QDoubleSpinBox* tiltX_ = nullptr;
+    QDoubleSpinBox* tiltY_ = nullptr;
     QCheckBox* flip_ = nullptr;
+    QPushButton* turn_ = nullptr;
+    QCheckBox* limitAngle_ = nullptr;
+    QDoubleSpinBox* angleMin_ = nullptr;
+    QDoubleSpinBox* angleMax_ = nullptr;
+    QCheckBox* limitSlide_ = nullptr;
+    QDoubleSpinBox* slideMin_ = nullptr;
+    QDoubleSpinBox* slideMax_ = nullptr;
+    QPushButton* animate_ = nullptr;
     QFormLayout* form_ = nullptr;
+    // Animación de la unión (el cuadro que se mueve y entre qué valores).
+    QTimer* animationTimer_ = nullptr;
+    QDoubleSpinBox* animatedBox_ = nullptr;
+    bool animatedAngle_ = false;
+    double animationFrom_ = 0.0;
+    double animationLow_ = 0.0;
+    double animationHigh_ = 0.0;
+    double animationPhase_ = 0.0;
 };
 
 // Rosca: varilla roscada métrica (con medidas estándar M3…M24 o propias).

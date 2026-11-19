@@ -71,6 +71,10 @@ std::map<std::string, document::BodyInfo> BodiesDialog::info() const
         document::BodyInfo info;
         info.name = table_->item(row, NameColumn)->text().trimmed().toStdString();
         info.component = table_->item(row, ComponentColumn)->text().trimmed().toStdString();
+        // Lo fijo no se cambia aquí (se hace con la chincheta del navegador): se conserva.
+        if (const auto old = original_.find(keys_[std::size_t(row)]); old != original_.end()) {
+            info.fixed = old->second.fixed;
+        }
         result[keys_[std::size_t(row)]] = info;
     }
     return result;

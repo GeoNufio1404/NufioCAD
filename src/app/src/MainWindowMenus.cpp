@@ -354,11 +354,18 @@ void MainWindow::createMenus()
     });
     decorate(organizeAction_, QStringLiteral("components-solid"),
              QStringLiteral("Ponerle nombre a los cuerpos y agruparlos en componentes"), QStringLiteral("Componentes"));
+    alignAction_ = solidMenu->addAction(QStringLiteral("&Alinear"), this, [this] {
+        startTool(std::make_unique<JointTool>(document_, *viewport_, std::nullopt, true));
+    });
+    decorate(alignAction_, QStringLiteral("align-solid"),
+             QStringLiteral("Colocar una pieza sobre otra de una vez: centro con centro, eje con eje o cara con cara (A)"),
+             QStringLiteral("Alinear"));
     jointAction_ = solidMenu->addAction(QStringLiteral("&Unión"), this, [this] {
         startTool(std::make_unique<JointTool>(document_, *viewport_, std::nullopt));
     });
     decorate(jointAction_, QStringLiteral("joint-solid"),
-             QStringLiteral("Unir dos cuerpos por sus caras (rígida, giratoria o deslizante)"), QStringLiteral("Unión"));
+             QStringLiteral("Unir dos piezas por sus caras, aristas o ejes: rígida, giratoria, deslizante, cilíndrica, plana o esférica, con límites"),
+             QStringLiteral("Unión"));
     measureAction_ = solidMenu->addAction(QStringLiteral("&Medir"), this, [this](bool on) { toggleMeasure(on); });
     measureAction_->setCheckable(true);
     decorate(measureAction_, QStringLiteral("measure-solid"),
@@ -570,6 +577,7 @@ void MainWindow::createMenus()
     ribbon_->addAction(solidTab_, combineAction_);
     ribbon_->addGroup(solidTab_, QStringLiteral("ORGANIZAR"));
     ribbon_->addAction(solidTab_, organizeAction_);
+    ribbon_->addAction(solidTab_, alignAction_);
     ribbon_->addAction(solidTab_, jointAction_);
     ribbon_->addGroup(solidTab_, QStringLiteral("CONSTRUIR"));
     ribbon_->addAction(solidTab_, planeAction_);
@@ -901,6 +909,7 @@ void MainWindow::assignShortcuts()
     key(moveAction_, QKeySequence(Qt::SHIFT | Qt::Key_G));
     key(combineAction_, QKeySequence(Qt::SHIFT | Qt::Key_U));
     key(jointAction_, QKeySequence(Qt::SHIFT | Qt::Key_J));
+    key(alignAction_, QKeySequence(Qt::Key_A));  // las herramientas de sketch (también la A) solo están activas dentro de un sketch
     key(measureAction_, QKeySequence(Qt::Key_I));
     key(sectionAction_, QKeySequence(Qt::SHIFT | Qt::Key_S));
 }

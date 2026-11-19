@@ -1388,6 +1388,76 @@ int InterfaceCheck::run()
         undoAll();
     });
 
+    // Alinear y unir (Fase 21): la herramienta se abre sobre un alineado hecho, se recorren todos sus tipos (con la vista
+    // previa de cada uno) y al aceptar como «Giratoria» el alineado pasa a ser una unión que se puede mover.
+    step(QStringLiteral("Alinear y unir dos cuerpos (herramienta, tipos y límites)"), [&] {
+        const auto addBoxAt = [&](double x) {
+            auto box = std::make_unique<document::BoxFeature>();
+            box->base.origin = document::OriginPlane::XY;
+            box->x = x;
+            blocking(QStringLiteral("agregar una caja"),
+                     [&] { window_.commands_.push(std::make_unique<commands::AddFeature>(std::move(box))); });
+        };
+        addBoxAt(0.0);
+        addBoxAt(60.0);
+        waitIdle();
+        expect(window_.document_.result().bodies.size() == 2, QStringLiteral("no hay dos cuerpos"));
+        if (window_.document_.result().bodies.size() != 2) {
+            undoAll();
+            return;
+        }
+        const auto faceFacing = [&](std::size_t body, double z) {
+            const geometry::Shape& shape = window_.document_.result().bodies[body].shape;
+            for (int i = 0; i < shape.faceCount(); ++i) {
+                if (const auto plane = shape.facePlane(i); plane && plane->normal.z * z > 0.9) {
+                    return shape.faceRef(i);
+                }
+            }
+            return geometry::ElementRef{};
+        };
+        auto align = std::make_unique<document::AlignFeature>();
+        align->moving = {faceFacing(1, -1.0), false};
+        align->target = {faceFacing(0, 1.0), false};
+        const document::FeatureId alignId = window_.document_.nextId();
+        blocking(QStringLiteral("agregar el alineado"),
+                 [&] { window_.commands_.push(std::make_unique<commands::AddFeature>(std::move(align))); });
+        waitIdle();
+        expect(window_.document_.status(alignId).health == document::Health::Ok, QStringLiteral("el alineado dio error"));
+        // La segunda caja quedó sobre la primera, centrada.
+        const geometry::Box top = window_.document_.result().bodies[1].shape.bounds();
+        expect(std::abs(top.min.z - 10.0) < 1e-6 && std::abs(top.min.x - 0.0) < 1e-6,
+               QStringLiteral("el alineado no apoyó la caja sobre la otra"));
+        blocking(QStringLiteral("abrir la herramienta Alinear"), [&] { window_.activateFeature(alignId); });
+        waitIdle();
+        expect(window_.tool_ != nullptr, QStringLiteral("no se abrió la herramienta Alinear"));
+        auto* type = window_.propertiesDock_->widget() != nullptr ? window_.propertiesDock_->widget()->findChild<QComboBox*>() : nullptr;
+        expect(type != nullptr && type->count() == 8, QStringLiteral("la lista de tipos no tiene los 8 tipos"));
+        if (type != nullptr && window_.tool_ != nullptr) {
+            for (int index = 1; index < type->count(); ++index) {
+                blocking(QStringLiteral("cambiar el tipo"), [&] { type->setCurrentIndex(index); });
+                waitIdle();
+                expect(window_.tool_ != nullptr, QStringLiteral("la herramienta se cerró al cambiar de tipo"));
+            }
+            blocking(QStringLiteral("elegir Giratoria"), [&] { type->setCurrentIndex(2); });
+            waitIdle();
+            if (QPushButton* ok = button(QStringLiteral("Aceptar")); ok != nullptr && ok->isEnabled()) {
+                blocking(QStringLiteral("aceptar"), [&] { ok->click(); });
+            }
+            waitFor([this] { return window_.tool_ == nullptr; }, 10000);
+            waitIdle();
+            const auto* joint = dynamic_cast<const document::JointFeature*>(window_.document_.findFeature(alignId));
+            expect(joint != nullptr && joint->type == document::JointType::Revolute,
+                   QStringLiteral("al aceptar como Giratoria no quedó una unión giratoria"));
+        }
+        if (window_.tool_ != nullptr) {
+            if (QPushButton* cancel = button(QStringLiteral("Cancelar"))) {
+                cancel->click();
+            }
+            waitFor([this] { return window_.tool_ == nullptr; }, 10000);
+        }
+        undoAll();
+    });
+
     // Cota de un clic, al estilo Onshape: la figura se dibuja con clics (sin cota), la herramienta Cota la acota con un
     // clic y el valor se escribe en un campo sobre el lienzo (no en un diálogo); un clic en la cota la reabre.
     step(QStringLiteral("Cota de un clic con el valor escrito sobre el lienzo"), [&] {

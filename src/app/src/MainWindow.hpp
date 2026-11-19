@@ -217,6 +217,7 @@ private:
     QAction* combineAction_ = nullptr;
     QAction* organizeAction_ = nullptr;
     QAction* jointAction_ = nullptr;
+    QAction* alignAction_ = nullptr;
     QAction* measureAction_ = nullptr;
     QAction* boxAction_ = nullptr;
     QAction* cylinderAction_ = nullptr;
