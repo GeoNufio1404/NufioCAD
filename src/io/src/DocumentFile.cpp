@@ -640,6 +640,10 @@ FeatureRow rowOf(const Feature& f)
                   {"diameter", t.spec.diameter}, {"pitch", t.spec.pitch},
                   {"length", t.spec.length}, {"leftHanded", t.spec.leftHanded},
                   {"operation", nameOf(kOperations, t.operation)}};
+        if (t.onCylinder) {
+            params["onCylinder"] = true;
+            params["cylinderFace"] = toJson(t.cylinderFace);
+        }
         break;
     }
     case FeatureKind::Gear: {
@@ -912,6 +916,10 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
     } else if (row.type == "thread") {
         auto t = std::make_unique<ThreadFeature>();
         t->base = attachmentOf(p.at("base"));
+        t->onCylinder = p.value("onCylinder", false);
+        if (t->onCylinder) {
+            t->cylinderFace = elementRef(p.at("cylinderFace"));
+        }
         t->x = p.value("x", 0.0);  // los archivos anteriores no lo traen
         t->y = p.value("y", 0.0);
         t->clearance = p.value("clearance", 0.0);

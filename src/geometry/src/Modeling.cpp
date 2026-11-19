@@ -2325,6 +2325,22 @@ Shape thread(std::string_view tagView, const sketch::Plane& plane, const ThreadS
                       "revisa el paso y el diámetro: el diámetro menor (diámetro − 1,23 × paso) debe ser positivo");
 }
 
+Shape threadOnCylinderTool(std::string_view tag, const Shape::CylinderInfo& info, const ThreadSpec& spec)
+{
+    const sketch::Plane plane = sketch::Plane::fromPointAndNormal(info.start, info.direction);
+    ThreadSpec used = spec;
+    used.length = info.length;
+    if (info.hole) {
+        used.diameter = 2.0 * info.radius + 2.0 * 0.6134 * spec.pitch;
+        return thread(tag, plane, used);
+    }
+    used.diameter = 2.0 * info.radius;
+    const Shape rod = thread(tag, plane, used);
+    // Un poco más ancho que el cilindro para no dejar una lámina en las crestas.
+    const Shape sleeve = cylinder(tag, plane, 2.0 * info.radius + 0.1, info.length);
+    return boolean(BooleanOp::Cut, sleeve, rod);
+}
+
 double wormLeadAngle(const WormSpec& spec)
 {
     return std::atan(spec.starts * spec.module / spec.pitchDiameter);

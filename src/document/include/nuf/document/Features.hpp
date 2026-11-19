@@ -330,6 +330,10 @@ public:
     double clearance = 0.0;
     geometry::ThreadSpec spec;
     Operation operation = Operation::NewBody;
+    // Rosca sobre una cara cilíndrica que ya existe (un agujero o un cilindro macizo): se corta del cuerpo en todo el largo de
+    // la cara, con su diámetro; del «spec» solo se usan el paso y el sentido. La cara se busca por nombre.
+    bool onCylinder = false;
+    geometry::ElementRef cylinderFace;
 
     FeatureKind kind() const override { return FeatureKind::Thread; }
     std::unique_ptr<Feature> clone() const override { return std::make_unique<ThreadFeature>(*this); }

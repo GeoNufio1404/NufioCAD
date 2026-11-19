@@ -840,9 +840,16 @@ protected:
 
 private:
     void adjustDirection();
+    // Con una cara cilíndrica elegida (agujero o cilindro macizo) solo cuentan el paso y el sentido; el resto se oculta.
+    void showCylinderMode(bool on);
 
     QFormLayout* form_ = nullptr;
     Placement placement_;
+    bool cylinderMode_ = false;
+    geometry::ElementRef cylinderFace_;
+    double cylinderDiameter_ = 0.0;
+    bool cylinderHole_ = false;
+    double cylinderLength_ = 0.0;
     QDoubleSpinBox* clearance_ = nullptr;
     QComboBox* standard_ = nullptr;
     QDoubleSpinBox* diameter_ = nullptr;

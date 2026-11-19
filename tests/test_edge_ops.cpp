@@ -2225,6 +2225,79 @@ TEST_CASE("Buscar caras y aristas por nombre da lo mismo con el índice guardado
     REQUIRE(mismatches == 0);
 }
 
+TEST_CASE("Roscar un agujero y un cilindro que ya existen, en todo su largo, y se guarda", "[thread][io]")
+{
+    // Un agujero pasante de Ø 6,5 en la caja de 20×10×5: la rosca interior le quita material en las crestas
+    Document doc = boxDocument();
+    const FeatureId sk = addHoleSketch(doc, {{10, 5}});
+    geometry::HoleSpec spec;
+    spec.diameter = 6.5;
+    spec.throughAll = true;
+    REQUIRE(doc.status(addHole(doc, sk, spec)).health == Health::Ok);
+    const double drilled = doc.result().bodies.front().shape.volume();
+    const geometry::Shape& drilledShape = doc.result().bodies.front().shape;
+    geometry::ElementRef wall;
+    for (int i = 0; i < drilledShape.faceCount(); ++i) {
+        if (const auto info = drilledShape.cylinderFace(i)) {
+            CHECK(info->hole);
+            CHECK(info->radius == Catch::Approx(3.25).margin(1e-6));
+            CHECK(info->length == Catch::Approx(5.0).margin(1e-6));
+            wall = drilledShape.faceRef(i);
+        }
+    }
+    REQUIRE(!wall.empty());
+    auto thread = std::make_unique<ThreadFeature>();
+    thread->onCylinder = true;
+    thread->cylinderFace = wall;
+    thread->spec.pitch = 1.25;
+    const FeatureId t = doc.addFeature(std::move(thread));
+    REQUIRE(doc.status(t).health == Health::Ok);
+    const geometry::Shape& threaded = doc.result().bodies.front().shape;
+    CHECK(threaded.isValid());
+    CHECK(threaded.volume() < drilled - 1.0);  // las canales de la rosca quitan material
+    CHECK(threaded.volume() > drilled - 80.0);
+
+    // Ida y vuelta por el archivo
+    const auto path = std::filesystem::temp_directory_path() / "nuf_rosca_existente.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    REQUIRE(reopened.status(t).health == Health::Ok);
+    REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(threaded.volume(), 1e-9));
+
+    // Un cilindro macizo (un perno de Ø 8 y 10 de largo): la rosca exterior también quita material
+    Document pin;
+    auto rod = std::make_unique<CylinderFeature>();
+    rod->base.origin = OriginPlane::XY;
+    rod->diameter = 8.0;
+    rod->height = 10.0;
+    REQUIRE(pin.status(pin.addFeature(std::move(rod))).health == Health::Ok);
+    const geometry::Shape& solid = pin.result().bodies.front().shape;
+    const double before = solid.volume();
+    geometry::ElementRef side;
+    for (int i = 0; i < solid.faceCount(); ++i) {
+        if (const auto info = solid.cylinderFace(i)) {
+            CHECK(!info->hole);
+            CHECK(info->length == Catch::Approx(10.0).margin(1e-6));
+            side = solid.faceRef(i);
+        }
+    }
+    REQUIRE(!side.empty());
+    auto outer = std::make_unique<ThreadFeature>();
+    outer->onCylinder = true;
+    outer->cylinderFace = side;
+    outer->spec.pitch = 1.25;
+    const FeatureId ot = pin.addFeature(std::move(outer));
+    REQUIRE(pin.status(ot).health == Health::Ok);
+    const geometry::Shape& bolt = pin.result().bodies.front().shape;
+    CHECK(bolt.isValid());
+    CHECK(bolt.volume() < before - 1.0);
+    CHECK(bolt.volume() > before * 0.5);
+}
+
 TEST_CASE("Una rosca y un engranaje se colocan en una posición X/Y del plano", "[thread][gear]")
 {
     Document doc;

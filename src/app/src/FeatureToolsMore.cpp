@@ -1442,6 +1442,11 @@ ThreadTool::ThreadTool(document::Document& document, render::Viewport& viewport,
                        std::optional<document::FeatureId> editing)
     : FeatureTool(document, viewport, editing)
 {
+    if (const auto* t = dynamic_cast<const document::ThreadFeature*>(original_.get()); t != nullptr && t->onCylinder) {
+        cylinderMode_ = true;
+        cylinderFace_ = t->cylinderFace;
+    }
+    placeAtClick_ = true;
 }
 
 void ThreadTool::createFields(QFormLayout* form)
@@ -1488,6 +1493,17 @@ void ThreadTool::createFields(QFormLayout* form)
     form->addRow(QStringLiteral("Operación"), operation_);
     form->addRow(QStringLiteral("Holgura"), clearance_);
     form->setRowVisible(clearance_, operation_->currentIndex() == 2);
+    if (cylinderMode_) {
+        // Al editar una rosca puesta sobre un cilindro: se saca su medida de la cara.
+        if (const auto hit = before().findFace(cylinderFace_)) {
+            if (const auto info = before().bodies[hit->body].shape.cylinderFace(hit->face)) {
+                cylinderDiameter_ = 2.0 * info->radius;
+                cylinderHole_ = info->hole;
+                cylinderLength_ = info->length;
+            }
+        }
+        showCylinderMode(true);
+    }
     connect(standard_, &QComboBox::currentIndexChanged, this, [this](int index) {
         if (index > 0) {
             diameter_->setValue(kMetric[index - 1].diameter);
@@ -1515,9 +1531,52 @@ void ThreadTool::createFields(QFormLayout* form)
     }
 }
 
+void ThreadTool::showCylinderMode(bool on)
+{
+    cylinderMode_ = on;
+    for (QWidget* w : {static_cast<QWidget*>(placement_.base), static_cast<QWidget*>(placement_.x), static_cast<QWidget*>(placement_.y),
+                       static_cast<QWidget*>(diameter_), static_cast<QWidget*>(length_), static_cast<QWidget*>(operation_)}) {
+        form_->setRowVisible(w, !on);
+    }
+    form_->setRowVisible(clearance_, !on && operation_->currentIndex() == 2);
+}
+
 void ThreadTool::selectionChanged(const render::ModelSelection& selection)
 {
+    // Una cara cilíndrica (un agujero o un cilindro macizo) se rosca tal como está, en todo su largo.
+    for (const render::ModelSelection::Face& f : selection.faces) {
+        const auto hit = before().findFace(f.ref);
+        if (!hit) {
+            continue;
+        }
+        if (const auto info = before().bodies[hit->body].shape.cylinderFace(hit->face)) {
+            cylinderFace_ = f.ref;
+            cylinderDiameter_ = 2.0 * info->radius;
+            cylinderHole_ = info->hole;
+            cylinderLength_ = info->length;
+            // Ya que se está eligiendo, se propone la medida métrica más cercana (la del paso normal de esa medida).
+            int best = -1;
+            double gap = 0.3;
+            for (int i = 0; i < int(std::size(kMetric)); ++i) {
+                const double wanted = info->hole ? kMetric[i].diameter - 2.0 * 0.6134 * kMetric[i].pitch : kMetric[i].diameter;
+                if (std::abs(wanted - cylinderDiameter_) < gap) {
+                    gap = std::abs(wanted - cylinderDiameter_);
+                    best = i;
+                }
+            }
+            if (best >= 0) {
+                standard_->setCurrentIndex(best + 1);
+            }
+            showCylinderMode(true);
+            viewport_.clearModelSelection();
+            updatePreview();
+            return;
+        }
+    }
     if (placementSelection(placement_, selection)) {
+        if (cylinderMode_) {
+            showCylinderMode(false);
+        }
         adjustDirection();
         updatePreview();
     }
@@ -1539,6 +1598,16 @@ std::unique_ptr<document::Feature> ThreadTool::build() const
     if (original_) {
         f->setName(original_->name());
     }
+    if (cylinderMode_) {
+        f->onCylinder = true;
+        f->cylinderFace = cylinderFace_;
+        f->spec.pitch = pitch_->value();
+        f->spec.leftHanded = left_->isChecked();
+        f->spec.diameter = diameter_->value();
+        f->spec.length = length_->value();
+        f->operation = document::Operation::Cut;
+        return f;
+    }
     f->base = placementAttachment(placement_);
     f->x = placement_.x->value();
     f->y = placement_.y->value();
@@ -1558,6 +1627,12 @@ QString ThreadTool::inputsText() const
     spec.diameter = diameter_->value();
     spec.pitch = pitch_->value();
     const Units& units = Units::instance();
+    if (cylinderMode_) {
+        return cylinderHole_ ? QStringLiteral("Rosca interior en el agujero de Ø %1 · largo %2")
+                                   .arg(units.formatWithUnit(cylinderDiameter_), units.formatWithUnit(cylinderLength_))
+                             : QStringLiteral("Rosca exterior en el cilindro de Ø %1 · largo %2")
+                                   .arg(units.formatWithUnit(cylinderDiameter_), units.formatWithUnit(cylinderLength_));
+    }
     if (operation_->currentIndex() == 2) {
         return QStringLiteral("Rosca interior: agujero de Ø %1 (tornillo Ø %2 + holgura) · «Largo» negativo entra en la pieza")
             .arg(units.formatWithUnit(spec.diameter + 2.0 * clearance_->value()), units.formatWithUnit(spec.diameter));
@@ -1568,6 +1643,9 @@ QString ThreadTool::inputsText() const
 
 std::optional<FeatureTool::Arrow> ThreadTool::dimensionArrow(const std::string& key) const
 {
+    if (cylinderMode_) {
+        return std::nullopt;
+    }
     if (key == "x" || key == "y") {
         return placementArrow(placement_, key);
     }
@@ -1593,7 +1671,7 @@ std::optional<FeatureTool::Arrow> ThreadTool::dimensionArrow(const std::string& 
 
 bool ThreadTool::removesMaterial() const
 {
-    return operation_ != nullptr && operation_->currentIndex() == 2;
+    return cylinderMode_ || (operation_ != nullptr && operation_->currentIndex() == 2);
 }
 
 // --- Patrón -----------------------------------------------------------------------

@@ -248,6 +248,22 @@ std::vector<Feature::NumericField> GearFeature::numericFields()
 
 std::optional<std::string> ThreadFeature::compute(ModelState& state) const
 {
+    if (onCylinder) {
+        const auto hit = state.findFace(cylinderFace);
+        if (!hit) {
+            throw FeatureError("Ya no existe la cara cilíndrica que se iba a roscar");
+        }
+        const auto info = state.bodies[hit->body].shape.cylinderFace(hit->face);
+        if (!info) {
+            throw FeatureError("La cara elegida ya no es un cilindro");
+        }
+        try {
+            const geometry::Shape tool = geometry::threadOnCylinderTool(tag(), *info, spec);
+            return applyOperation(state, *this, Operation::Cut, tool);
+        } catch (const geometry::GeometryError& e) {
+            throw FeatureError(e.what());
+        }
+    }
     std::optional<std::string> warning;
     sketch::Plane plane = resolvePlane(state, base, "de la rosca", "se usa su última posición", warning);
     plane.origin = plane.toWorld({x, y});
@@ -269,6 +285,10 @@ std::optional<std::string> ThreadFeature::compute(ModelState& state) const
 std::vector<FeatureId> ThreadFeature::dependencies() const
 {
     std::vector<FeatureId> ids;
+    if (onCylinder) {
+        addAll(ids, cylinderFace);
+        return ids;
+    }
     addAttachmentDependencies(ids, base);
     return ids;
 }

@@ -234,6 +234,11 @@ Shape thread(std::string_view tag, const sketch::Plane& plane, const ThreadSpec&
 // Diámetro menor de la rosca (el del agujero que se roscará).
 double threadMinorDiameter(const ThreadSpec& spec);
 
+// El sólido que hay que RESTAR de un cuerpo para roscar una cara cilíndrica que ya existe, en todo su largo: en un agujero,
+// la varilla roscada cuyo diámetro menor es el del agujero (rosca interior); en un cilindro macizo, el anillo que queda
+// entre el cilindro y la varilla del mismo diámetro (rosca exterior). Del «spec» se usan el paso y el sentido.
+Shape threadOnCylinderTool(std::string_view tag, const Shape::CylinderInfo& cylinder, const ThreadSpec& spec);
+
 // Tornillo sin fin: una varilla con «starts» entradas (1 a 4) cuyo perfil axial es el de una cremallera de ese módulo
 // (cabeza 1 módulo, raíz 1,25 módulos, flancos al ángulo de presión). El avance por vuelta es starts·π·módulo.
 struct WormSpec {

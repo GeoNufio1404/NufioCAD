@@ -5,6 +5,8 @@
 #include <BRepAdaptor_Curve.hxx>
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepBndLib.hxx>
+#include <BRepTools.hxx>
+#include <gp_Cylinder.hxx>
 #include <BRepCheck_Analyzer.hxx>
 #include <BRepGProp.hxx>
 #include <BRep_Tool.hxx>
@@ -303,6 +305,40 @@ std::optional<Frame> Shape::edgeFrame(int index) const
         return makeFrame(toVec3(mid.XYZ()), toVec3(curve.Line().Direction().XYZ()), Frame::Kind::Axis);
     }
     return std::nullopt;
+}
+
+std::optional<Shape::CylinderInfo> Shape::cylinderFace(int index) const
+{
+    if (index < 0 || index >= faceCount()) {
+        return std::nullopt;
+    }
+    const TopoDS_Face face = faceAt(*this, index);
+    const BRepAdaptor_Surface surface(face);
+    if (surface.GetType() != GeomAbs_Cylinder) {
+        return std::nullopt;
+    }
+    const gp_Cylinder cylinder = surface.Cylinder();
+    double u0 = 0.0;
+    double u1 = 0.0;
+    double v0 = 0.0;
+    double v1 = 0.0;
+    BRepTools::UVBounds(face, u0, u1, v0, v1);
+    CylinderInfo info;
+    const gp_Ax1 axis = cylinder.Axis();
+    info.direction = toVec3(axis.Direction().XYZ());
+    info.radius = cylinder.Radius();
+    info.length = v1 - v0;
+    info.start = toVec3(axis.Location().Translated(gp_Vec(axis.Direction()) * v0).XYZ());
+    // La normal natural de un cilindro sale del eje; si la cara está invertida (o el sistema es indirecto) apunta al eje: es un agujero.
+    bool outward = face.Orientation() != TopAbs_REVERSED;
+    if (!cylinder.Position().Direct()) {
+        outward = !outward;
+    }
+    info.hole = !outward;
+    if (info.length <= 1e-9 || info.radius <= 1e-9) {
+        return std::nullopt;
+    }
+    return info;
 }
 
 Box Shape::faceBounds(int index) const
