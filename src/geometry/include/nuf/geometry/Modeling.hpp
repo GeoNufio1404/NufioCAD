@@ -124,7 +124,7 @@ std::vector<Shape> pattern(std::string_view tag, const Shape& body, const Patter
 
 // Tipo de dentado: rueda exterior, corona con los dientes hacia dentro (engranaje interno) o cremallera
 // (barra dentada: es una rueda de radio infinito).
-enum class GearType { External, Internal, Rack };
+enum class GearType { External, Internal, Rack, Worm, Bevel };
 
 // Corrección de perfil recomendada para que un engranaje exterior de «teeth» dientes no salga puntiagudo ni socavado:
 // 0 a partir de 17 dientes (con 20°) y crece al bajar de ahí (x = (z mínimo − z)/z mínimo, con z mínimo = 2/sen²α).
@@ -143,8 +143,17 @@ struct GearSpec {
                                          // se corta a esa medida (el último diente queda cortado); no puede ser mayor
     double backlash = 0.0;               // mm: cuánto se adelgaza cada diente medido sobre la circunferencia primitiva (0 = sin juego);
                                          // en el interno se ensancha el hueco. Deja holgura sin mover los ejes
+    double herringboneGroove = 0.0;     // mm: surco en el centro de la espina de pescado, donde se juntan las dos mitades (0 = sin surco);
+                                         // se corta una corona hasta la raíz de los dientes, a lo ancho de esta medida
     bool herringbone = false;            // espina de pescado: dos mitades con la hélice contraria (necesita helixAngle ≠ 0; solo exterior).
                                          // Las caras de la segunda mitad llevan «:m2» al final de su nombre
+    double wormDiameter = 20.0;          // tipo Worm: diámetro primitivo del tornillo (mm); «teeth» son sus entradas (1 a 4),
+                                         // «thickness» su largo, «module» y «pressureAngle» los axiales; el resto de campos no cuenta
+    bool leftHanded = false;             // tipo Worm: hélice a izquierdas
+    int mateTeeth = 20;                  // tipo Bevel: dientes de la rueda que engrana con esta (con ejes a 90°) y que fija el ángulo del cono;
+                                         // «thickness» es el ancho de cara medido sobre el cono (el largo axial es ancho·cos del ángulo del cono),
+                                         // «module» el del extremo grande; el vértice del cono queda a un radio primitivo de la rueda pareja
+    double heightScale = 1.0;            // uso interno: escala la cabeza y la raíz del diente (los cónicos la fijan solos)
     double profileShift = 0.0;           // corrección de perfil x (en módulos, solo exterior): x>0 alarga la cabeza y engruesa el diente
                                          // (evita el socavado y los dientes puntiagudos con pocos dientes); x<0 hace lo contrario.
                                          // Dos ruedas con x opuestas (x1 = −x2) engranan a la misma distancia entre ejes
@@ -194,6 +203,25 @@ Shape thread(std::string_view tag, const sketch::Plane& plane, const ThreadSpec&
 
 // Diámetro menor de la rosca (el del agujero que se roscará).
 double threadMinorDiameter(const ThreadSpec& spec);
+
+// Tornillo sin fin: una varilla con «starts» entradas (1 a 4) cuyo perfil axial es el de una cremallera de ese módulo
+// (cabeza 1 módulo, raíz 1,25 módulos, flancos al ángulo de presión). El avance por vuelta es starts·π·módulo.
+struct WormSpec {
+    double module = 2.0;           // mm (módulo axial: el de la rueda que engrana con él)
+    int starts = 1;                // entradas, de 1 a 4
+    double pitchDiameter = 20.0;   // mm, diámetro primitivo del tornillo (suele ser 8 a 12 módulos)
+    double length = 30.0;          // mm a lo largo de la normal (el signo da el sentido)
+    double pressureAngle = 0.3490658503988659;  // rad (20°)
+    bool leftHanded = false;       // hélice a izquierdas
+};
+
+// Ángulo de avance del tornillo (rad): atan(entradas·módulo / diámetro primitivo). La rueda que engrana con él lleva
+// ese mismo ángulo de hélice.
+double wormLeadAngle(const WormSpec& spec);
+
+// El tornillo con su eje a lo largo de la normal del plano, desde el origen. Caras: «tag:tornillo», «tag:inicio» y
+// «tag:fin». Lanza GeometryError si los datos no valen.
+Shape worm(std::string_view tag, const sketch::Plane& plane, const WormSpec& spec);
 
 struct SweepSpec {
     bool followPath = true;  // el perfil gira con la trayectoria; si no, queda paralelo a sí mismo

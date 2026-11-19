@@ -358,3 +358,26 @@ TEST_CASE("El par con pocos dientes corrige la rueda 1 y la 2 lleva la correcci�
     plainSpec.teeth = 20;
     CHECK(plain.result().bodies[0].shape.volume() == Catch::Approx(geometry::gear("g", xy(), plainSpec).volume()).epsilon(1e-6));
 }
+
+TEST_CASE("El surco central de la espina de pescado quita material solo entre la raíz y la cabeza", "[gear][herringbone]")
+{
+    geometry::GearSpec spec = spur();
+    spec.helixAngle = 20.0 * std::numbers::pi / 180.0;
+    spec.herringbone = true;
+    const auto plain = geometry::gear("g", xy(), spec);
+    spec.herringboneGroove = 1.0;
+    const auto grooved = geometry::gear("g", xy(), spec);
+    REQUIRE(grooved.isValid());
+    const double removed = plain.volume() - grooved.volume();
+    // Una corona de 1 mm de alto entre la raíz (r = 17,5) y la cabeza (r = 22): menos que el anillo entero y más que nada
+    const double ring = std::numbers::pi * (22.0 * 22.0 - 17.5 * 17.5);
+    CHECK(removed > 0.3 * ring);
+    CHECK(removed < 1.0 * ring);
+    // El núcleo sigue de una pieza: el sólido es uno
+    CHECK(grooved.bounds().max.z == Catch::Approx(10.0).margin(1e-6));
+    spec.herringbone = false;
+    CHECK_THROWS_AS(geometry::gear("g", xy(), spec), geometry::GeometryError);
+    spec.herringbone = true;
+    spec.herringboneGroove = 6.0;
+    CHECK_THROWS_AS(geometry::gear("g", xy(), spec), geometry::GeometryError);
+}

@@ -191,6 +191,9 @@ public:
     void showDimensionArc(const sketch::Vec3& center, const sketch::Vec3& axis, const sketch::Vec3& start, double angle);
     void hideDimensionArrow();
     bool isSketching() const;
+    // Suelta todos los botones del ratón para la navegación: si la vista se quedó creyendo que uno sigue pulsado (por
+    // ejemplo, porque su suelta la recibió otro widget), girar o desplazar se quedaba «pegado» al ratón.
+    void resetNavigationInput();
 
     // Herramienta de navegación (barra inferior): mientras está activa, el
     // arrastre izquierdo orbita, desplaza o hace zoom, sin seleccionar ni dibujar.
@@ -293,6 +296,7 @@ protected:
     void keyPressEvent(QKeyEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
     void leaveEvent(QEvent* event) override;
+    void focusOutEvent(QFocusEvent* event) override;
 
 private:
     // Botones que se pasan a OCCT (sin el izquierdo si lo usa una herramienta).

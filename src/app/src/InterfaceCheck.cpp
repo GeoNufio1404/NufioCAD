@@ -12,6 +12,7 @@
 #include "MainWindow.hpp"
 #include "SketchSession.hpp"
 #include "Ribbon.hpp"
+#include "FieldMarks.hpp"
 #include "RadialMenu.hpp"
 #include "ValueInput.hpp"
 #include "StartScreen.hpp"
@@ -36,6 +37,7 @@
 #include <QRegularExpression>
 #include <QColor>
 #include <optional>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QImage>
@@ -705,6 +707,105 @@ int InterfaceCheck::run()
         expect(waitFor([this] { return window_.tool_ == nullptr; }, 10000), QStringLiteral("no se cerró al cancelar"));
         waitIdle();
         expect(window_.document_.featureCount() == 0, QStringLiteral("cancelar cambió el diseño"));
+    });
+
+    // Engranaje: cada tipo parte de sus valores, los cuadros del problema se marcan y la espina de pescado pone su ángulo.
+    step(QStringLiteral("Engranaje: valores por tipo, cuadros marcados y ángulo recomendado"), [&] {
+        blocking(QStringLiteral("abrir Engranaje"), [&] { window_.gearAction_->trigger(); });
+        waitIdle();
+        QWidget* panel = window_.propertiesDock_ != nullptr ? window_.propertiesDock_->widget() : nullptr;
+        expect(panel != nullptr, QStringLiteral("no hay panel de propiedades"));
+        if (panel == nullptr) {
+            return;
+        }
+        QComboBox* type = nullptr;
+        for (QComboBox* c : panel->findChildren<QComboBox*>()) {
+            if (c->findText(QStringLiteral("Cónico (ejes a 90°)")) >= 0) {
+                type = c;
+            }
+        }
+        expect(type != nullptr, QStringLiteral("no hay lista de tipos con «Cónico»"));
+        expect(button(QStringLiteral("Valores por defecto de este tipo")) != nullptr, QStringLiteral("falta el botón de valores por defecto"));
+        const auto spinWith = [&](double value, int decimals) -> QDoubleSpinBox* {
+            for (QDoubleSpinBox* b : panel->findChildren<QDoubleSpinBox*>()) {
+                if (std::abs(b->value() - value) < 1e-9 && b->decimals() >= decimals) {
+                    return b;
+                }
+            }
+            return nullptr;
+        };
+        if (type == nullptr) {
+            return;
+        }
+        // Cónico: dientes 15, pareja 30 y ancho de cara 8, aunque se viniera del engranaje recto.
+        type->setCurrentIndex(4);
+        waitIdle();
+        expect(spinWith(15.0, 0) != nullptr && spinWith(30.0, 0) != nullptr && spinWith(8.0, 0) != nullptr,
+               QStringLiteral("el cónico no partió de 15 dientes, pareja de 30 y ancho de cara 8"));
+        // Un ancho de cara imposible: el error se dice abajo y el cuadro del ancho se marca en rojo.
+        QDoubleSpinBox* face = spinWith(8.0, 0);
+        if (face != nullptr) {
+            face->setValue(60.0);
+            waitIdle();
+            expect(markOf(face) == Mark::Error, QStringLiteral("el ancho de cara imposible no se marcó en rojo"));
+            face->setValue(8.0);
+            waitIdle();
+            expect(markOf(face) == Mark::None, QStringLiteral("la marca roja no se quitó al arreglar el valor"));
+        }
+        // Espina de pescado sin hélice: se pone 20° y el cuadro se marca en naranja con su aviso.
+        type->setCurrentIndex(0);
+        waitIdle();
+        QCheckBox* spine = nullptr;
+        for (QCheckBox* c : panel->findChildren<QCheckBox*>()) {
+            if (c->text().startsWith(QStringLiteral("Espina de pescado"))) {
+                spine = c;
+            }
+        }
+        expect(spine != nullptr, QStringLiteral("no hay casilla de espina de pescado"));
+        if (spine != nullptr) {
+            spine->setChecked(true);
+            waitIdle();
+            QDoubleSpinBox* helix = nullptr;
+            for (QDoubleSpinBox* b : panel->findChildren<QDoubleSpinBox*>()) {
+                if (markOf(b) == Mark::Warning) {
+                    helix = b;
+                }
+            }
+            expect(helix != nullptr && std::abs(helix->value() - 20.0) < 1e-9,
+                   QStringLiteral("la espina de pescado no puso 20° de hélice marcados en naranja"));
+        }
+        if (QPushButton* cancel = button(QStringLiteral("Cancelar"))) {
+            cancel->click();
+        }
+        waitFor([this] { return window_.tool_ == nullptr; }, 10000);
+        waitIdle();
+    });
+
+    // El menú radial se queda con el clic entero: la pulsación no sube a la vista (que se quedaría girando o desplazando
+    // sin ver nunca la suelta).
+    step(QStringLiteral("Menú radial: el clic no pasa a la vista"), [&] {
+        const QPoint at = window_.viewport_->rect().center();
+        QMouseEvent press(QEvent::MouseButtonPress, at, at, Qt::RightButton, Qt::RightButton, Qt::NoModifier);
+        QMouseEvent release(QEvent::MouseButtonRelease, at, at, Qt::RightButton, Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(window_.viewport_, &press);
+        QApplication::sendEvent(window_.viewport_, &release);
+        settle(150);
+        RadialMenu* menu = nullptr;
+        for (RadialMenu* m : window_.viewport_->findChildren<RadialMenu*>()) {
+            if (m->isVisible()) {
+                menu = m;
+            }
+        }
+        expect(menu != nullptr, QStringLiteral("no se abrió el menú radial"));
+        if (menu != nullptr) {
+            QMouseEvent inside(QEvent::MouseButtonPress, QPointF(20, 20), menu->mapToGlobal(QPointF(20, 20)), Qt::RightButton,
+                               Qt::RightButton, Qt::NoModifier);
+            inside.setAccepted(false);
+            QApplication::sendEvent(menu, &inside);
+            expect(inside.isAccepted(), QStringLiteral("el menú radial dejó subir la pulsación a la vista"));
+            menu->choose(-1);
+        }
+        settle(150);
     });
 
     // Unidades: cambian los cuadros y el texto; se restauran al terminar.

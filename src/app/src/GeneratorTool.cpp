@@ -159,6 +159,34 @@ void GeneratorTool::createFields(QFormLayout* form)
             track(f.key.c_str(), static_cast<QDoubleSpinBox*>(widget));
         }
     }
+    // Espina de pescado sin ángulo de hélice (Par de engranajes): se pone el recomendado y se avisa en naranja.
+    {
+        QComboBox* spine = nullptr;
+        QDoubleSpinBox* helix = nullptr;
+        for (const Row& row : rows_) {
+            if (row.field.key == "espina") {
+                spine = qobject_cast<QComboBox*>(row.widget);
+            } else if (row.field.key == "helice") {
+                helix = qobject_cast<QDoubleSpinBox*>(row.widget);
+            }
+        }
+        if (spine != nullptr && helix != nullptr) {
+            connect(spine, &QComboBox::currentIndexChanged, this, [this, spine, helix] {
+                if (spine->currentIndex() == 1 && helix->value() < 0.01) {
+                    {
+                        const QSignalBlocker blocker(helix);
+                        helix->setValue(20.0);
+                    }
+                    setNotice(QStringLiteral("Se puso automáticamente un ángulo de hélice de 20° (el recomendado para la espina de "
+                                             "pescado, entre 20° y 30°); cámbialo si quieres otro."),
+                              helix);
+                    updatePreview();
+                } else if (spine->currentIndex() == 0) {
+                    clearNotice();
+                }
+            });
+        }
+    }
     auto* reset = new QPushButton(QStringLiteral("Restablecer valores"));
     reset->setToolTip(QStringLiteral("Vuelve todas las respuestas a las que trae el generador y olvida las que se recordaban"));
     connect(reset, &QPushButton::clicked, this, [this] { resetValues(); });
@@ -169,6 +197,7 @@ void GeneratorTool::createFields(QFormLayout* form)
 // Todas las respuestas vuelven a las del generador, y se olvidan las recordadas de formularios anteriores.
 void GeneratorTool::resetValues()
 {
+    clearNotice();
     QSettings settings;
     settings.remove(QStringLiteral("generator/%1").arg(QString::fromStdString(generator_.id())));
     updating_ = true;
@@ -400,11 +429,15 @@ void GeneratorTool::showResult(const Calculation& calculation, bool first)
         viewport_.fitAll();
     }
     refreshArrow();
+    std::vector<std::pair<std::string, QWidget*>> widgets;
+    for (const Row& row : rows_) {
+        widgets.emplace_back(row.field.key, row.widget);
+    }
     if (problem.empty()) {
-        statusLabel_->clear();
+        showStatus(QString(), Mark::None, widgets);
         okButton_->setEnabled(true);
     } else {
-        statusLabel_->setText(QStringLiteral("<span style='color:%1'>%2</span>").arg(toneColor(Tone::Error), QString::fromStdString(problem).toHtmlEscaped()));
+        showStatus(QString::fromStdString(problem), Mark::Error, widgets);
         okButton_->setEnabled(false);
     }
 }

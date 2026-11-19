@@ -600,10 +600,14 @@ FeatureRow rowOf(const Feature& f)
                   {"helixAngle", g.spec.helixAngle}, {"operation", nameOf(kOperations, g.operation)},
                   {"gearType", g.spec.type == geometry::GearType::Internal ? "internal"
                                : g.spec.type == geometry::GearType::Rack   ? "rack"
+                               : g.spec.type == geometry::GearType::Worm   ? "worm"
+                               : g.spec.type == geometry::GearType::Bevel  ? "bevel"
                                                                            : "external"},
                   {"rim", g.spec.rim}, {"length", g.spec.length},
                   {"backlash", g.spec.backlash}, {"baseChamfer", g.spec.baseChamfer},
-                  {"herringbone", g.spec.herringbone}, {"profileShift", g.spec.profileShift}};
+                  {"herringbone", g.spec.herringbone}, {"profileShift", g.spec.profileShift}, {"wormDiameter", g.spec.wormDiameter},
+                  {"leftHanded", g.spec.leftHanded}, {"mateTeeth", g.spec.mateTeeth},
+                  {"herringboneGroove", g.spec.herringboneGroove}};
         break;
     }
     case FeatureKind::ConstructionAxis: {
@@ -815,11 +819,17 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
             const std::string type = p.value("gearType", std::string("external"));
             g->spec.type = type == "internal" ? geometry::GearType::Internal
                            : type == "rack"   ? geometry::GearType::Rack
+                           : type == "worm"   ? geometry::GearType::Worm
+                           : type == "bevel"  ? geometry::GearType::Bevel
                                               : geometry::GearType::External;
             g->spec.rim = p.value("rim", 5.0);
             g->spec.length = p.value("length", 0.0);  // los anteriores: barra de dientes completos
             g->spec.backlash = p.value("backlash", 0.0);  // los anteriores: sin juego ni chaflán
             g->spec.baseChamfer = p.value("baseChamfer", 0.0);
+            g->spec.wormDiameter = p.value("wormDiameter", 20.0);
+            g->spec.leftHanded = p.value("leftHanded", false);
+            g->spec.mateTeeth = p.value("mateTeeth", 20);
+            g->spec.herringboneGroove = p.value("herringboneGroove", 0.0);
             g->spec.profileShift = p.value("profileShift", 0.0);  // los anteriores: sin corrección
             g->spec.herringbone = p.value("herringbone", false);  // los anteriores: sin espina de pescado
         }

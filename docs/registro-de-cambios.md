@@ -78,6 +78,20 @@ Dos campos nuevos del engranaje, ambos en 0 por defecto (los diseños anteriores
 ---
 
 
+## Mejoras de las pruebas de la Fase 16 — 18 nov. 2026
+
+- **Cuadros del error marcados:** además del mensaje de abajo, el borde de los cuadros que el mensaje nombra se pone rojo (error) o naranja (aviso); se buscan por palabras clave de cada campo (`FieldMarks.hpp`), en las herramientas y en los generadores.
+- **Avisos propios en naranja** (`FeatureTool::setNotice`): lo que la herramienta pone sola, con su cuadro marcado. La espina de pescado sin hélice pone 20° y lo avisa (herramienta Engranaje y Par de engranajes).
+- **Valores por defecto por tipo** en el Engranaje, con el botón «Valores por defecto de este tipo»: al cambiar de tipo se parte de los valores de fábrica de ese tipo.
+- **Clic derecho que bloqueaba la vista:** la pulsación sobre el menú radial subía a la vista (que empezaba a girar o desplazar) y la suelta se la quedaba el menú, así que la vista no veía nunca soltar el botón. Ahora el menú se queda con el clic entero, se cierra al pulsar fuera, no se abre si hay otro botón pulsado y la vista suelta los botones al perder el foco (`Viewport::resetNavigationInput`).
+
+## Fase 16, E4 a E6: tornillo sin fin, cónicos y selector de tipo — 18 nov. 2026
+
+- **Qué hace:** el **tornillo sin fin** (1 a 4 entradas) con su rueda helicoidal, los **engranajes cónicos** a 90° y el **surco central** de la espina de pescado; el panel del Engranaje elige el tipo y enseña solo sus campos. Dos generadores nuevos: «Tornillo sin fin y rueda» y «Engranajes cónicos».
+- **Cómo:** `twistedRod` (la rosca generalizada: una sección que gira al avanzar, por tramos) sirve a la rosca y al tornillo; `GearType::Worm` y `GearType::Bevel` en `GearSpec` (campos `wormDiameter`, `leftHanded`, `mateTeeth`, `heightScale`, `herringboneGroove`, que viajan en el archivo y se ligan a parámetros); el cónico reutiliza el loft del engranaje helicoidal con una homotecia respecto al vértice del cono.
+- **Pruebas:** `tests/test_worm.cpp` (tornillo, cónico y los dos generadores con la booleana: sin material compartido bien girados, choque mal girados) y el surco en `test_gear_tuning.cpp`.
+- **Cómo volver atrás:** no fusionar `feature/fase-16-familias`.
+
 ## Fase 16, E1: engranaje de espina de pescado — 18 nov. 2026
 
 - `GearSpec::herringbone` (`Modeling.cpp`, `gearSolid`): dos lofts (`Half`) con la hélice contraria que se cosen en el contorno de la mitad; volumen igual al del helicoidal; caras de la segunda mitad con «:m2». Se guarda como `herringbone` en el archivo.

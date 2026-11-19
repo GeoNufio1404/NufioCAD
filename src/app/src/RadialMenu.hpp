@@ -27,10 +27,13 @@ public:
 
 protected:
     void paintEvent(QPaintEvent* event) override;
+    void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
     void leaveEvent(QEvent* event) override;
+    // Pulsar en cualquier sitio fuera del anillo lo cierra (el clic sigue su camino).
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     static constexpr int kOuter = 140;  // radio exterior del anillo

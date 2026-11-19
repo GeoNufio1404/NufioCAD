@@ -1,6 +1,7 @@
 #include "RadialMenu.hpp"
 
 #include <QAction>
+#include <QApplication>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
@@ -35,6 +36,26 @@ void RadialMenu::openAt(const QPoint& center)
     show();
     raise();
     setFocus();
+    qApp->installEventFilter(this);
+}
+
+void RadialMenu::mousePressEvent(QMouseEvent* event)
+{
+    // El menú se queda con el clic entero (la pulsación y la suelta): si la pulsación subiera hasta la vista, ésta
+    // empezaría a girar o desplazar y nunca vería la suelta, que llega aquí.
+    event->accept();
+}
+
+bool RadialMenu::eventFilter(QObject* watched, QEvent* event)
+{
+    if (event->type() == QEvent::MouseButtonPress && isVisible()) {
+        const auto* mouse = static_cast<QMouseEvent*>(event);
+        if (!rect().contains(mapFromGlobal(mouse->globalPosition().toPoint()))) {
+            hide();
+            deleteLater();
+        }
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 int RadialMenu::sectorAt(const QPoint& point) const
