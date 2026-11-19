@@ -95,6 +95,15 @@ Shape fuseBalanced(std::vector<Shape> parts);
 // true si las formas se tocan o se solapan (para elegir con qué unir).
 bool touches(const Shape& a, const Shape& b);
 
+// El volumen que dos cuerpos tienen en común (Fase 21, interferencias): nada si no se pisan o si lo común es menor que
+// «minVolume» mm³ (tocarse por una cara no cuenta). Lo primero que mira es que sus cajas se crucen, así que parejas
+// lejanas cuestan casi nada.
+struct Overlap {
+    Shape shape;
+    double volume = 0.0;
+};
+std::optional<Overlap> overlap(const Shape& a, const Shape& b, double minVolume = 1e-3);
+
 // Redondea (radio en mm) o achaflana (distancia en mm) las aristas del cuerpo
 // dadas por su índice (Shape::findEdge). Las cadenas de aristas tangentes se
 // siguen solas. Las caras nuevas se llaman «tag:redondeo:<arista>» o

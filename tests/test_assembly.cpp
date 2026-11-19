@@ -1,7 +1,9 @@
 // Fase 21: piezas fijas, Alinear, uniones con límites y enlaces de movimiento.
 
+#include <nuf/commands/DuplicateBodies.hpp>
 #include <nuf/document/Document.hpp>
 #include <nuf/document/Features.hpp>
+#include <nuf/document/Interference.hpp>
 #include <nuf/io/DocumentFile.hpp>
 
 #include <catch2/catch_test_macros.hpp>
@@ -333,4 +335,116 @@ TEST_CASE("Un enlace de movimiento mueve varias uniones en la proporción pedida
     REQUIRE(reopened.status(id).health == Health::Ok);
     const geometry::Box again = reopened.result().bodies[3].shape.bounds();
     CHECK_THAT(again.max.y - again.min.y, WithinAbs(20.0, 1e-6));
+}
+
+TEST_CASE("Duplicar copia varios cuerpos de una vez, con nombres y componente nuevos", "[assembly][duplicate]")
+{
+    Document doc;
+    addBox(doc, 0, 0, 0, 10, 10, 10);
+    addBox(doc, 20, 0, 0, 10, 10, 10);
+    addBox(doc, 40, 0, 0, 10, 10, 10);
+    const std::string a = body(doc, 0).key;
+    const std::string b = body(doc, 1).key;
+    const std::string c = body(doc, 2).key;
+    doc.setBodyInfo({{a, {"Tapa", "Caja 1", false}}, {b, {"Base 1", "Caja 1", false}}, {c, {"Suelto", "", false}}});
+
+    commands::DuplicateBodies duplicate({a, b, c}, {0, 100, 0});
+    duplicate.execute(doc);
+    REQUIRE(doc.result().bodies.size() == 6);
+    REQUIRE(duplicate.newKeys().size() == 3);
+    const auto find = [&](const std::string& key) -> const Body& {
+        for (const Body& x : doc.result().bodies) {
+            if (x.key == key) {
+                return x;
+            }
+        }
+        FAIL("falta el cuerpo");
+        return doc.result().bodies.front();
+    };
+    // Cada copia, desplazada 100 en Y, con el siguiente número en su nombre.
+    CHECK_THAT(find(duplicate.newKeys()[0]).shape.bounds().min.y, WithinAbs(100.0, 1e-6));
+    CHECK_THAT(find(duplicate.newKeys()[2]).shape.bounds().min.x, WithinAbs(40.0, 1e-6));
+    CHECK(find(duplicate.newKeys()[0]).name == "Tapa 2");
+    CHECK(find(duplicate.newKeys()[1]).name == "Base 2");
+    CHECK(find(duplicate.newKeys()[2]).name == "Suelto 2");
+    // Las dos primeras van a un componente nuevo (el mismo), la tercera a ninguno.
+    CHECK(doc.componentOf(duplicate.newKeys()[0]) == "Caja 2");
+    CHECK(doc.componentOf(duplicate.newKeys()[1]) == "Caja 2");
+    CHECK(doc.componentOf(duplicate.newKeys()[2]).empty());
+    // Los originales no cambian de sitio ni de componente.
+    CHECK_THAT(find(a).shape.bounds().min.y, WithinAbs(0.0, 1e-6));
+    CHECK(doc.componentOf(a) == "Caja 1");
+    // Duplicar otra vez el componente da el siguiente número.
+    commands::DuplicateBodies again({a, b}, {0, 200, 0});
+    again.execute(doc);
+    CHECK(doc.componentOf(again.newKeys()[0]) == "Caja 3");
+    CHECK(find(again.newKeys()[0]).name == "Tapa 3");
+    // Deshacer lo quita todo; rehacer lo vuelve a poner igual.
+    again.undo(doc);
+    CHECK(doc.result().bodies.size() == 6);
+    CHECK(doc.componentOf(again.newKeys()[0]).empty());
+    duplicate.undo(doc);
+    CHECK(doc.result().bodies.size() == 3);
+    duplicate.execute(doc);
+    CHECK(doc.result().bodies.size() == 6);
+    CHECK(find(duplicate.newKeys()[0]).name == "Tapa 2");
+}
+
+TEST_CASE("Duplicar un cuerpo fijo da una copia suelta", "[assembly][duplicate][fixed]")
+{
+    Document doc;
+    addBox(doc, 0, 0, 0, 10, 10, 10);
+    const std::string a = body(doc, 0).key;
+    doc.setBodyInfo({{a, {"Base", "", true}}});
+    commands::DuplicateBodies duplicate({a}, {20, 0, 0});
+    duplicate.execute(doc);
+    REQUIRE(doc.result().bodies.size() == 2);
+    CHECK(doc.isFixed(a));
+    CHECK_FALSE(doc.isFixed(duplicate.newKeys()[0]));
+}
+
+TEST_CASE("Las interferencias dan los cuerpos que se pisan y su volumen común", "[assembly][interference]")
+{
+    Document doc;
+    addBox(doc, 0, 0, 0, 10, 10, 10);
+    addBox(doc, 5, 0, 0, 10, 10, 10);   // se pisa con la primera: 5×10×10 en común
+    addBox(doc, 15, 0, 0, 10, 10, 10);  // toca a la segunda por una cara: no cuenta
+    addBox(doc, 100, 0, 0, 10, 10, 10); // lejos
+    const auto pairs = findInterferences(doc.result());
+    REQUIRE(pairs.size() == 1);
+    CHECK_THAT(pairs[0].volume, WithinAbs(500.0, 1e-6));
+    CHECK(pairs[0].first == body(doc, 0).key);
+    CHECK(pairs[0].second == body(doc, 1).key);
+    CHECK_THAT(pairs[0].shape.volume(), WithinAbs(500.0, 1e-6));
+    // Los ocultos no estorban.
+    CHECK(findInterferences(doc.result(), 1e-3, {body(doc, 1).key}).empty());
+    // Con un mínimo mayor que lo común, tampoco.
+    CHECK(findInterferences(doc.result(), 600.0).empty());
+}
+
+TEST_CASE("Las interferencias a lo largo del giro encuentran el peor momento", "[assembly][interference][link]")
+{
+    Document doc;
+    const FeatureId a = plateWithBlock(doc, 0, JointType::Revolute, 0.0);
+    const FeatureId b = plateWithBlock(doc, 1000, JointType::Revolute, 0.0);
+    addBox(doc, 48, 56, 5, 4, 6, 5);  // un poste junto al bloque: solo lo toca al girar
+    auto link = std::make_unique<MotionLinkFeature>();
+    link->members = {{a, 1.0}, {b, -2.0}};
+    const FeatureId id = doc.addFeature(std::move(link));
+    REQUIRE(doc.status(id).health == Health::Ok);
+    CHECK(findInterferences(doc.result()).empty());  // quieto no se pisan
+
+    int checked = 0;
+    const auto hit = findInterferencesAlong(doc, id, kPi / 2.0, 9, &checked);
+    CHECK(checked == 10);
+    REQUIRE(hit.size() == 1);
+    // Lo peor no es de canto (80 mm³ a 90°) sino a 70°, cuando la esquina del bloque entra más en el poste.
+    CHECK(hit[0].volume > 85.0);
+    CHECK_THAT(hit[0].at, WithinAbs(7.0 * kPi / 18.0, 1e-9));
+    // Un giro corto, de 5°, no llega al poste.
+    CHECK(findInterferencesAlong(doc, id, kPi / 36.0, 5, &checked).empty());
+    // Se puede cancelar entre posición y posición.
+    int calls = 0;
+    findInterferencesAlong(doc, id, kPi / 2.0, 9, &checked, 1e-3, [&] { return ++calls > 3; });
+    CHECK(checked == 3);
 }

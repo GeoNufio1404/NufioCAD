@@ -345,9 +345,6 @@ std::optional<std::string> MoveFeature::compute(ModelState& state) const
         }
         sources.push_back(found);
     }
-    if (copy && sources.size() > 1) {
-        throw FeatureError("Todavía no se pueden copiar varios cuerpos a la vez: muévelos, o copia de uno en uno");
-    }
     const auto source = sources.front();
     geometry::Axis rotationAxis;
     rotationAxis.direction = {axis == 0 ? 1.0 : 0.0, axis == 1 ? 1.0 : 0.0, axis == 2 ? 1.0 : 0.0};
@@ -378,7 +375,11 @@ std::optional<std::string> MoveFeature::compute(ModelState& state) const
             results.push_back(geometry::moveBody(tag(), item->shape, translation, rotationAxis, angle, copy, rotation, center));
         }
         if (copy) {
-            state.bodies.push_back({tag(), newBodyName(state, *this), std::move(results.front())});
+            // Varias copias a la vez (Fase 21): la primera lleva la clave de la operación y las demás «:c1», «:c2»…
+            for (std::size_t i = 0; i < results.size(); ++i) {
+                const std::string key = i == 0 ? tag() : tag() + ":c" + std::to_string(i);
+                state.bodies.push_back({key, newBodyName(state, *this), std::move(results[i])});
+            }
         } else {
             for (std::size_t i = 0; i < sources.size(); ++i) {
                 sources[i]->shape = std::move(results[i]);
