@@ -465,9 +465,24 @@ int InterfaceCheck::captureInventory(const QString& folder)
     const QRect available = screen->availableGeometry();
     window_.move(available.topLeft());  // la posición inicial de la ventana no debe contar como «fuera de la pantalla»
     settle(500);
+    // Con el tamaño pedido igual al de la pantalla, la ventana con su barra de título y sus bordes se sale por abajo (en una
+    // pantalla de 1280×720 con barra de tareas la ventana maximizada mide 1280×641 de contenido): se ajusta al hueco real,
+    // que es lo que vería quien maximiza la ventana en esa pantalla.
+    {
+        const QSize chrome = window_.frameGeometry().size() - window_.size();
+        const QSize fitted = available.size() - chrome;
+        if (window_.width() > fitted.width() || window_.height() > fitted.height()) {
+            window_.resize(std::min(window_.width(), fitted.width()), std::min(window_.height(), fitted.height()));
+            window_.adaptToSize();
+            window_.move(available.topLeft());
+            settle(500);
+        }
+    }
     out << "Pantalla: " << screen->geometry().width() << "x" << screen->geometry().height() << " lógicos, disponibles "
         << available.width() << "x" << available.height() << ", escala " << screen->devicePixelRatio() << ", DPI lógico "
         << screen->logicalDotsPerInch() << "\n";
+    out << "Posición de la ventana: " << window_.x() << "," << window_.y() << " (con marco " << window_.frameGeometry().x() << ","
+        << window_.frameGeometry().y() << " " << window_.frameGeometry().width() << "x" << window_.frameGeometry().height() << ")\n";
     out << "Ventana principal: " << window_.width() << "x" << window_.height() << ", mínimo que pide su contenido "
         << window_.minimumSizeHint().width() << "x" << window_.minimumSizeHint().height() << "\n";
     // Qué barras y paneles ocupan alto (para saber de dónde sale el mínimo de la ventana).
