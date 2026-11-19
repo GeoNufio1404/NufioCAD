@@ -34,7 +34,7 @@ struct Body {
     std::string key;   // estable: «f<id>» de la operación que lo creó
     std::string name;  // «Cuerpo1»
     geometry::Shape shape;
-    std::string color; // «#rrggbb» elegido por el usuario; vacío: el gris de siempre
+    std::string color{};  // «#rrggbb» elegido por el usuario; vacío: el gris de siempre
 };
 
 // Sketch ya colocado en su plano.
