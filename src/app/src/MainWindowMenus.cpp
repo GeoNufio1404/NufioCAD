@@ -354,6 +354,10 @@ void MainWindow::createMenus()
     });
     decorate(organizeAction_, QStringLiteral("components-solid"),
              QStringLiteral("Ponerle nombre a los cuerpos y agruparlos en componentes"), QStringLiteral("Componentes"));
+    duplicateAction_ = solidMenu->addAction(QStringLiteral("&Duplicar"), this, [this] { duplicateBodies(selectedBodyKeys()); });
+    decorate(duplicateAction_, QStringLiteral("copy"),
+             QStringLiteral("Copiar el cuerpo o el componente elegido (en el navegador o en la vista) al lado (Ctrl+D)"),
+             QStringLiteral("Duplicar"));
     alignAction_ = solidMenu->addAction(QStringLiteral("&Alinear"), this, [this] {
         startTool(std::make_unique<JointTool>(document_, *viewport_, std::nullopt, true));
     });
@@ -577,6 +581,7 @@ void MainWindow::createMenus()
     ribbon_->addAction(solidTab_, combineAction_);
     ribbon_->addGroup(solidTab_, QStringLiteral("ORGANIZAR"));
     ribbon_->addAction(solidTab_, organizeAction_);
+    ribbon_->addAction(solidTab_, duplicateAction_);
     ribbon_->addAction(solidTab_, alignAction_);
     ribbon_->addAction(solidTab_, jointAction_);
     ribbon_->addGroup(solidTab_, QStringLiteral("CONSTRUIR"));
@@ -909,6 +914,7 @@ void MainWindow::assignShortcuts()
     key(moveAction_, QKeySequence(Qt::SHIFT | Qt::Key_G));
     key(combineAction_, QKeySequence(Qt::SHIFT | Qt::Key_U));
     key(jointAction_, QKeySequence(Qt::SHIFT | Qt::Key_J));
+    key(duplicateAction_, QKeySequence(Qt::CTRL | Qt::Key_D));
     key(alignAction_, QKeySequence(Qt::Key_A));  // las herramientas de sketch (también la A) solo están activas dentro de un sketch
     key(measureAction_, QKeySequence(Qt::Key_I));
     key(sectionAction_, QKeySequence(Qt::SHIFT | Qt::Key_S));

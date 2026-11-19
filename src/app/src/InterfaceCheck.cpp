@@ -13,6 +13,7 @@
 #include "SketchSession.hpp"
 #include "Ribbon.hpp"
 #include "FieldMarks.hpp"
+#include "ModelPanels.hpp"
 #include "RadialMenu.hpp"
 #include "ValueInput.hpp"
 #include "StartScreen.hpp"
@@ -1455,6 +1456,39 @@ int InterfaceCheck::run()
             }
             waitFor([this] { return window_.tool_ == nullptr; }, 10000);
         }
+        undoAll();
+    });
+
+    // Duplicar, fijar y soltar desde el navegador (Fase 21): lo mismo que hace el clic derecho, sin abrir el menú.
+    step(QStringLiteral("Duplicar y fijar un cuerpo desde el navegador"), [&] {
+        auto box = std::make_unique<document::BoxFeature>();
+        box->base.origin = document::OriginPlane::XY;
+        blocking(QStringLiteral("agregar una caja"),
+                 [&] { window_.commands_.push(std::make_unique<commands::AddFeature>(std::move(box))); });
+        waitIdle();
+        expect(window_.document_.result().bodies.size() == 1, QStringLiteral("no hay un cuerpo"));
+        if (window_.document_.result().bodies.size() != 1) {
+            undoAll();
+            return;
+        }
+        const std::string key = window_.document_.result().bodies[0].key;
+        blocking(QStringLiteral("duplicar"), [&] { emit window_.navigator_->duplicateRequested({key}); });
+        waitIdle();
+        expect(window_.document_.result().bodies.size() == 2, QStringLiteral("Duplicar no creó la copia"));
+        if (window_.document_.result().bodies.size() == 2) {
+            expect(window_.document_.result().bodies[1].name == QStringLiteral("Caja 2").toStdString(),
+                   QStringLiteral("la copia no se llama «Caja 2» sino «%1»")
+                       .arg(QString::fromStdString(window_.document_.result().bodies[1].name)));
+            const geometry::Box a = window_.document_.result().bodies[0].shape.bounds();
+            const geometry::Box b = window_.document_.result().bodies[1].shape.bounds();
+            expect(b.min.x >= a.max.x, QStringLiteral("la copia no quedó al lado"));
+        }
+        blocking(QStringLiteral("fijar"), [&] { emit window_.navigator_->fixRequested({key}, true); });
+        waitIdle();
+        expect(window_.document_.isFixed(key), QStringLiteral("no quedó fijo"));
+        blocking(QStringLiteral("soltar"), [&] { emit window_.navigator_->fixRequested({key}, false); });
+        waitIdle();
+        expect(!window_.document_.isFixed(key), QStringLiteral("no se soltó"));
         undoAll();
     });
 

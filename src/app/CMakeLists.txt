@@ -13,6 +13,7 @@ add_executable(nuf_app
     src/MainWindowView.cpp
     src/MainWindowCommon.hpp
     src/MainWindowFiles.cpp
+    src/MainWindowAssembly.cpp
     src/MainWindow.hpp
     src/FeatureTools.cpp
     src/FeatureToolsProfile.cpp

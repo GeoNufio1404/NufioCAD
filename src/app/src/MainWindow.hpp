@@ -154,6 +154,14 @@ private:
 
     // Operaciones sólidas.
     void startTool(std::unique_ptr<FeatureTool> tool);
+    // Piezas de un conjunto (Fase 21): duplicar, fijar, agrupar; MainWindowAssembly.cpp.
+    void connectAssembly();
+    std::vector<std::string> selectedBodyKeys() const;
+    void duplicateBodies(const std::vector<std::string>& keys);
+    void setBodiesFixed(const std::vector<std::string>& keys, bool fix);
+    void groupBodies(const std::vector<std::string>& keys);
+    QAction* duplicateAction_ = nullptr;
+    std::vector<std::string> bodyClipboard_;  // Ctrl+C / Ctrl+V de cuerpos
     // El modelo se recalcula en segundo plano: lo que necesita el resultado nuevo espera (avisa y devuelve true).
     bool modelBusy();
     // ¿Hay algo cargando? El modelo, la vista previa de una herramienta, una exportación, una importación, una

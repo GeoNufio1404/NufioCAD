@@ -54,10 +54,8 @@ DuplicateBodies::DuplicateBodies(std::vector<std::string> keys, sketch::Vec3 off
 void DuplicateBodies::execute(document::Document& doc)
 {
     oldInfo_ = doc.bodyInfo();
-    std::set<std::string> before;
     std::set<std::string> usedNames;
     for (const document::Body& body : doc.result().bodies) {
-        before.insert(body.key);
         usedNames.insert(body.name);
     }
     std::map<std::string, std::string> originalName;
@@ -74,22 +72,20 @@ void DuplicateBodies::execute(document::Document& doc)
     }
     add_->execute(doc);
 
-    // Los cuerpos nuevos salen en el orden de los originales.
+    // Las claves de los cuerpos nuevos no dependen del cálculo (que puede ir todavía en segundo plano): la primera es
+    // la de la operación y las demás llevan «:c1», «:c2»… (ver MoveFeature::compute), en el orden de los originales.
+    const std::string tag = "f" + std::to_string(add_->id());
     std::vector<std::string> fresh;
-    for (const document::Body& body : doc.result().bodies) {
-        if (!before.contains(body.key)) {
-            fresh.push_back(body.key);
-        }
+    for (std::size_t i = 0; i < keys_.size(); ++i) {
+        fresh.push_back(i == 0 ? tag : tag + ":c" + std::to_string(i));
     }
     newKeys_ = fresh;
-    if (fresh.size() != keys_.size()) {
-        return;  // la operación falló (el aviso lo da el historial): no hay nada que nombrar
-    }
     std::map<std::string, document::BodyInfo> info = doc.bodyInfo();
     std::map<std::string, std::string> newComponent;  // componente original → el de las copias
     for (std::size_t i = 0; i < keys_.size(); ++i) {
         document::BodyInfo entry;
-        const std::string name = nextName(originalName[keys_[i]], usedNames);
+        const std::string& original = originalName[keys_[i]];
+        const std::string name = nextName(original.empty() ? std::string("Cuerpo") : original, usedNames);
         usedNames.insert(name);
         entry.name = name;
         const std::string component = doc.componentOf(keys_[i]);

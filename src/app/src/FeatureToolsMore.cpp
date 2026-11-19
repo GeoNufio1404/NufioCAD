@@ -207,9 +207,13 @@ constexpr double kHoldTolerance = 9.0;  // y a cuántos se despega (el «softblo
 }
 
 MoveTool::MoveTool(document::Document& document, render::Viewport& viewport,
-                   std::optional<document::FeatureId> editing)
+                   std::optional<document::FeatureId> editing, const std::vector<std::string>& initial)
     : FeatureTool(document, viewport, editing)
 {
+    if (!initial.empty() && !original_) {
+        body_ = initial.front();
+        alsoMove_.assign(initial.begin() + 1, initial.end());
+    }
     if (const auto* m = dynamic_cast<const document::MoveFeature*>(original_.get())) {
         body_ = m->body;
         alsoMove_ = m->alsoMove;
@@ -399,12 +403,7 @@ void MoveTool::choose(const std::vector<std::string>& keys)
         const std::string key = bodyList_->item(i)->data(Qt::UserRole).toString().toStdString();
         bodyList_->item(i)->setCheckState(std::ranges::find(keys, key) != keys.end() ? Qt::Checked : Qt::Unchecked);
     }
-    if (copy_ != nullptr) {
-        copy_->setEnabled(keys.size() == 1);
-        if (keys.size() > 1) {
-            copy_->setChecked(false);
-        }
-    }
+    // Copiar vale con varios cuerpos a la vez (Fase 21): salen tantas copias como cuerpos.
 }
 
 std::optional<sketch::Vec3> MoveTool::bodiesCenter() const

@@ -628,7 +628,9 @@ class MoveTool final : public FeatureTool {
     Q_OBJECT
 
 public:
-    MoveTool(document::Document& document, render::Viewport& viewport, std::optional<document::FeatureId> editing);
+    // «initial»: los cuerpos que empiezan elegidos (el primero es el principal); por ejemplo, los de un componente.
+    MoveTool(document::Document& document, render::Viewport& viewport, std::optional<document::FeatureId> editing,
+             const std::vector<std::string>& initial = {});
     ~MoveTool() override;
 
     std::unique_ptr<document::Feature> build() const override;

@@ -7,9 +7,11 @@
 #include <QTreeWidget>
 #include <QWidget>
 
+#include <map>
 #include <optional>
 #include <set>
 #include <string>
+#include <vector>
 
 namespace nuf::app {
 
@@ -75,7 +77,17 @@ public:
                  const std::set<std::string>& hiddenBodies, const std::set<document::FeatureId>& visibleSketches,
                  bool originVisible, bool groundVisible, const std::set<document::FeatureId>& hiddenPlanes);
 
+    // Las claves de los cuerpos elegidos en el árbol (un componente elegido cuenta con todos sus cuerpos).
+    std::vector<std::string> selectedBodies() const;
+
 signals:
+    // Lo que se pide con el clic derecho (Fase 21): duplicar, fijar o soltar, agrupar en un componente nuevo, sacar del
+    // componente y mover.
+    void duplicateRequested(const std::vector<std::string>& keys);
+    void fixRequested(const std::vector<std::string>& keys, bool fix);
+    void componentRequested(const std::vector<std::string>& keys);
+    void ungroupRequested(const std::vector<std::string>& keys);
+    void moveRequested(const std::vector<std::string>& keys);
     void bodyVisibilityChanged(const std::string& key, bool visible);
     void sketchVisibilityChanged(nuf::document::FeatureId id, bool visible);
     void originVisibilityChanged(bool visible);
@@ -84,8 +96,13 @@ signals:
     void componentVisibilityChanged(const std::string& name, bool visible);
     void sketchActivated(nuf::document::FeatureId id);
 
+protected:
+    void contextMenuEvent(QContextMenuEvent* event) override;
+
 private:
     bool refreshing_ = false;
+    std::set<std::string> fixed_;  // los cuerpos fijos (para el texto del menú)
+    std::map<std::string, bool> inComponent_;
 };
 
 } // namespace nuf::app

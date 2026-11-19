@@ -274,6 +274,7 @@ MainWindow::MainWindow(QWidget* parent)
         viewport_->setOriginVisible(visible);
     });
     connect(navigator_, &NavigatorWidget::sketchActivated, this, &MainWindow::editSketch);
+    connectAssembly();
     connect(navigator_, &NavigatorWidget::groundVisibilityChanged, this, [this](bool visible) {
         groundVisible_ = visible;
         setViewDirty(true);

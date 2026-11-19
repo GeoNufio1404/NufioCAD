@@ -107,7 +107,7 @@ bool MainWindow::sketchVisible(document::FeatureId id, std::size_t upTo) const
 void MainWindow::updateExportAction()
 {
     updateStartScreen();
-    for (QAction* action : {filletAction_, chamferAction_, shellAction_, holeAction_, mirrorAction_, splitAction_, patternAction_, moveAction_, combineAction_, organizeAction_, alignAction_, jointAction_}) {
+    for (QAction* action : {filletAction_, chamferAction_, shellAction_, holeAction_, mirrorAction_, splitAction_, patternAction_, moveAction_, combineAction_, organizeAction_, duplicateAction_, alignAction_, jointAction_}) {
         if (action != nullptr) {
             action->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane() && !document_.result().bodies.empty());
         }
@@ -323,15 +323,7 @@ void MainWindow::toggleMeasure(bool on)
                 updateMeasure();
             }
         });
-        // Ctrl+C con Medir activo copia el resultado al portapapeles.
-        auto* copy = new QShortcut(QKeySequence::Copy, viewport_);
-        copy->setContext(Qt::WidgetShortcut);
-        connect(copy, &QShortcut::activated, this, [this] {
-            if (measureAction_ != nullptr && measureAction_->isChecked() && !lastMeasureText_.isEmpty()) {
-                QGuiApplication::clipboard()->setText(lastMeasureText_);
-                statusBar()->showMessage(QStringLiteral("Medida copiada al portapapeles"), 4000);
-            }
-        });
+        // (Ctrl+C con Medir activo copia el resultado al portapapeles: lo atiende connectAssembly.)
     }
     viewport_->clearModelSelection();
     viewport_->setAdditiveSelection(on);
