@@ -110,6 +110,16 @@ void ReplaceRecipe::execute(document::Document& doc)
     // Las operaciones nuevas, ya colocadas; todo se cambia de una vez (un solo recálculo del historial).
     std::vector<std::unique_ptr<document::Feature>> features;
     inPlace_ = sameShape(doc, group, recipe_);
+    // El componente que tenían los cuerpos del grupo de antes: el rehecho lo conserva (con su número).
+    std::string keptComponent;
+    for (const document::Body& body : doc.result().bodies) {
+        for (const document::FeatureId id : group) {
+            const document::Feature* old = doc.findFeature(id);
+            if (old != nullptr && hasTag(body.key, *old) && !doc.componentOf(body.key).empty()) {
+                keptComponent = doc.componentOf(body.key);
+            }
+        }
+    }
     document::FeatureId recipeSketch = 0;
     std::size_t k = 0;
     bool placed = false;
@@ -174,6 +184,18 @@ void ReplaceRecipe::execute(document::Document& doc)
 
     // Los cuerpos nuevos de la receta (sin nombre propio todavía) reciben los nombres y el componente de la receta.
     std::map<std::string, document::BodyInfo> info = doc.bodyInfo();
+    // El componente que ya tienen los cuerpos de la receta (con su número); si no tienen, uno nuevo numerado.
+    std::string component;
+    for (const document::Body& body : doc.result().bodies) {
+        const bool ours = std::ranges::any_of(ids_, [&](document::FeatureId id) { return hasTag(body.key, *doc.findFeature(id)); });
+        if (ours && info.contains(body.key) && !info.at(body.key).component.empty()) {
+            component = info.at(body.key).component;
+            break;
+        }
+    }
+    if (component.empty()) {
+        component = !keptComponent.empty() ? keptComponent : document::numberedComponent(info, recipe_.component);
+    }
     std::size_t next = 0;
     for (const document::Body& body : doc.result().bodies) {
         const bool ours = std::ranges::any_of(ids_, [&](document::FeatureId id) { return hasTag(body.key, *doc.findFeature(id)); });
@@ -181,7 +203,7 @@ void ReplaceRecipe::execute(document::Document& doc)
             continue;
         }
         if (!info.contains(body.key)) {
-            info[body.key] = {next < recipe_.bodyNames.size() ? recipe_.bodyNames[next] : std::string(), recipe_.component};
+            info[body.key] = {next < recipe_.bodyNames.size() ? recipe_.bodyNames[next] : std::string(), component};
         }
         ++next;
     }

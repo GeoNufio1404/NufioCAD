@@ -93,7 +93,7 @@ TEST_CASE("Documento: sketch + extrusión crean un cuerpo", "[document][model]")
     REQUIRE(doc.findFeature(ex)->name() == "Extrusión1");
     REQUIRE(doc.status(ex).health == Health::Ok);
     REQUIRE(doc.result().bodies.size() == 1);
-    REQUIRE(doc.result().bodies.front().name == "Cuerpo1");
+    REQUIRE(doc.result().bodies.front().name == "Extrusión 1");
     REQUIRE_THAT(totalVolume(doc.result()), WithinRel(1000.0, 1e-9));
     REQUIRE(doc.defaultName(FeatureKind::Extrude) == "Extrusión2");
 }
@@ -214,7 +214,7 @@ TEST_CASE("Documento: unir, cuerpo nuevo e intersecar", "[document][model]")
     const FeatureId b = doc.addFeature(sketchOn(rectangleSketch(50, 0, 60, 10)));
     doc.addFeature(extrudeAll(doc, b, 10));
     REQUIRE(doc.result().bodies.size() == 2);
-    REQUIRE(doc.result().bodies[1].name == "Cuerpo2");
+    REQUIRE(doc.result().bodies[1].name == "Extrusión 2");
     // Un puente que toca los dos los une en uno.
     const FeatureId c = doc.addFeature(sketchOn(rectangleSketch(5, 2, 55, 8)));
     doc.addFeature(extrudeAll(doc, c, 4));

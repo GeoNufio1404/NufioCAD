@@ -1094,8 +1094,11 @@ Shape rackGear(const std::string& tag, const sketch::Plane& plane, const GearSpe
     if (spec.pressureAngle < 5.0 * kDeg || spec.pressureAngle > 35.0 * kDeg) {
         throw GeometryError("El ángulo de presión debe estar entre 5° y 35°");
     }
-    if (std::abs(spec.helixAngle) > kTiny) {
-        throw GeometryError("La cremallera solo se hace con dientes rectos (sin ángulo de hélice)");
+    if (std::abs(spec.helixAngle) > 45.0 * kDeg) {
+        throw GeometryError("El ángulo de hélice no puede pasar de 45°");
+    }
+    if (spec.herringbone && std::abs(spec.helixAngle) < kTiny) {
+        throw GeometryError("La espina de pescado necesita un ángulo de hélice");
     }
     if (spec.rim <= kTiny) {
         throw GeometryError("El grosor de la base de la cremallera debe ser mayor que cero");
@@ -1195,22 +1198,138 @@ Shape rackGear(const std::string& tag, const sketch::Plane& plane, const GearSpe
             }
         }
         const gp_Dir normal = toDir(plane.normal);
-        BRepBuilderAPI_MakeFace face(gp_Pln(toPnt(plane.origin), normal), outline.Wire(), true);
-        BRepPrimAPI_MakePrism prism(face.Face(), gp_Vec(normal).Multiplied(spec.thickness), true);
-        if (!prism.IsDone()) {
-            throw GeometryError("No se pudo extruir la cremallera");
+        const gp_Pnt origin = toPnt(plane.origin);
+        if (std::abs(spec.helixAngle) < kTiny) {
+            BRepBuilderAPI_MakeFace face(gp_Pln(origin, normal), outline.Wire(), true);
+            BRepPrimAPI_MakePrism prism(face.Face(), gp_Vec(normal).Multiplied(spec.thickness), true);
+            if (!prism.IsDone()) {
+                throw GeometryError("No se pudo extruir la cremallera");
+            }
+            Namer namer(prism.Shape());
+            namer.name(prism.FirstShape(), tag + ":inicio");
+            namer.name(prism.LastShape(), tag + ":fin");
+            for (const auto& [edge, name] : edges) {
+                for (const TopoDS_Shape& side : prism.Generated(edge)) {
+                    namer.name(side, tag + ":lado:" + name);
+                }
+            }
+            Shape result = namer.finish(tag);
+            if (!result.isValid()) {
+                throw GeometryError("La cremallera no es un sólido válido");
+            }
+            return result;
         }
-        Namer namer(prism.Shape());
-        namer.name(prism.FirstShape(), tag + ":inicio");
-        namer.name(prism.LastShape(), tag + ":fin");
-        for (const auto& [edge, name] : edges) {
-            for (const TopoDS_Shape& side : prism.Generated(edge)) {
-                namer.name(side, tag + ":lado:" + name);
+
+        // Con hélice los dientes van inclinados: cada sección se corre a lo largo de la barra (X del plano) tan(hélice)
+        // por cada unidad de ancho, que es lo que hace el diente de una rueda helicoidal en su punto de contacto. Con
+        // espina de pescado la segunda mitad deshace el corrimiento (una «V» de dientes). Se hace como el engranaje
+        // helicoidal: un loft reglado por mitad, dos tapas planas, todo cosido; las caras de la segunda mitad llevan «:m2».
+        const double slope = std::tan(spec.helixAngle);
+        const gp_Vec along(toDir(plane.xAxis));
+        const auto sectionAt = [&](double height, double shift) {
+            gp_Trsf move;
+            move.SetTranslation(gp_Vec(normal).Multiplied(height) + along.Multiplied(shift));
+            BRepBuilderAPI_Transform moved(outline.Wire(), move, true);
+            return TopoDS::Wire(moved.Shape());
+        };
+        struct Half {
+            std::unique_ptr<BRepOffsetAPI_ThruSections> loft;
+            std::vector<TopoDS_Edge> firstEdges;
+        };
+        std::vector<Half> halves;
+        const auto makeLoft = [&](double h0, double s0, double h1, double s1, bool original) {
+            Half piece;
+            piece.loft = std::make_unique<BRepOffsetAPI_ThruSections>(false, true, 1e-6);
+            const TopoDS_Wire first = original ? outline.Wire() : sectionAt(h0, s0);
+            piece.loft->AddWire(first);
+            piece.loft->AddWire(sectionAt(h1, s1));
+            for (TopoDS_Iterator children(first); children.More(); children.Next()) {
+                piece.firstEdges.push_back(TopoDS::Edge(children.Value()));
+            }
+            buildCancellable(*piece.loft);
+            if (!piece.loft->IsDone()) {
+                throw GeometryError("No se pudo generar la cremallera helicoidal");
+            }
+            halves.push_back(std::move(piece));
+        };
+        const double width = spec.thickness;
+        TopoDS_Wire lastWire;
+        if (spec.herringbone) {
+            makeLoft(0.0, 0.0, width / 2.0, slope * width / 2.0, true);
+            makeLoft(width / 2.0, slope * width / 2.0, width, 0.0, false);
+            lastWire = sectionAt(width, 0.0);
+        } else {
+            makeLoft(0.0, 0.0, width, slope * width, true);
+            lastWire = sectionAt(width, slope * width);
+        }
+        const double sign = width > 0 ? 1.0 : -1.0;
+        const auto cap = [&](const gp_Pnt& where, const TopoDS_Wire& wire, bool end) {
+            TopoDS_Face face = BRepBuilderAPI_MakeFace(gp_Pln(where, normal), wire, true).Face();
+            if ((sign > 0) != end) {
+                face.Reverse();  // el principio mira hacia atrás y el final hacia delante
+            }
+            return face;
+        };
+        const TopoDS_Face startCap = cap(origin, outline.Wire(), false);
+        const TopoDS_Face endCap = cap(gp_Pnt(origin.XYZ() + normal.XYZ() * width), lastWire, true);
+        BRepBuilderAPI_Sewing sewing(1e-6);
+        for (const Half& each : halves) {
+            for (TopExp_Explorer ex(each.loft->Shape(), TopAbs_FACE); ex.More(); ex.Next()) {
+                sewing.Add(ex.Current());
+            }
+        }
+        sewing.Add(startCap);
+        sewing.Add(endCap);
+        sewing.Perform();
+        TopoDS_Shell shell;
+        if (const TopExp_Explorer ex(sewing.SewedShape(), TopAbs_SHELL); ex.More()) {
+            shell = TopoDS::Shell(ex.Current());
+        }
+        if (shell.IsNull()) {
+            throw GeometryError("No se pudo cerrar la cremallera helicoidal");
+        }
+        TopoDS_Solid solid = BRepBuilderAPI_MakeSolid(shell).Solid();
+        // Hacia fuera: la cara de la base (la de abajo, plana) debe mirar a -Y del plano.
+        for (std::size_t index = 0; index < edges.size(); ++index) {
+            if (edges[index].second != "base") {
+                continue;
+            }
+            for (const TopoDS_Shape& side : halves.front().loft->Generated(halves.front().firstEdges[index])) {
+                const TopoDS_Shape modified = sewing.Modified(side);
+                const TopoDS_Face face = TopoDS::Face(modified.IsNull() ? side : modified);
+                const BRepAdaptor_Surface probe(face);
+                gp_Pnt onFace;
+                gp_Vec du;
+                gp_Vec dv;
+                probe.D1(0.5 * (probe.FirstUParameter() + probe.LastUParameter()),
+                         0.5 * (probe.FirstVParameter() + probe.LastVParameter()), onFace, du, dv);
+                gp_Vec outward = du.Crossed(dv);
+                if (face.Orientation() == TopAbs_REVERSED) {
+                    outward.Reverse();
+                }
+                if (outward.Dot(-gp_Vec(toDir(plane.yAxis))) < 0.0) {
+                    solid.Reverse();
+                }
+            }
+            break;
+        }
+        Namer namer(solid);
+        const auto sewnShape = [&](const TopoDS_Shape& shape) {
+            const TopoDS_Shape modified = sewing.Modified(shape);
+            return modified.IsNull() ? shape : modified;
+        };
+        namer.name(sewnShape(startCap), tag + ":inicio");
+        namer.name(sewnShape(endCap), tag + ":fin");
+        for (std::size_t h = 0; h < halves.size(); ++h) {
+            for (std::size_t index = 0; index < edges.size(); ++index) {
+                for (const TopoDS_Shape& side : halves[h].loft->Generated(halves[h].firstEdges[index])) {
+                    namer.name(sewnShape(side), tag + ":lado:" + edges[index].second + (h == 0 ? "" : ":m2"));
+                }
             }
         }
         Shape result = namer.finish(tag);
         if (!result.isValid()) {
-            throw GeometryError("La cremallera no es un sólido válido");
+            throw GeometryError("La cremallera helicoidal no es un sólido válido");
         }
         return result;
     } catch (const Standard_Failure& e) {
@@ -1288,11 +1407,8 @@ Shape gearSolid(std::string_view tagView, const sketch::Plane& plane, const Gear
     }
     const double ra = rp + ((internal ? 1.25 : 1.0) + shift) * spec.module * spec.heightScale;
     const double rf = rp - ((internal ? 1.0 : 1.25) - shift) * spec.module * spec.heightScale;
-    if (spec.herringbone && (internal || std::abs(spec.helixAngle) < kTiny)) {
-        throw GeometryError("La espina de pescado necesita un ángulo de hélice (y solo se hace en ruedas exteriores)");
-    }
-    if (internal && std::abs(spec.helixAngle) > kTiny) {
-        throw GeometryError("El engranaje interno solo se hace con dientes rectos (sin ángulo de hélice)");
+    if (spec.herringbone && std::abs(spec.helixAngle) < kTiny) {
+        throw GeometryError("La espina de pescado necesita un ángulo de hélice");
     }
     if (internal && spec.rim <= kTiny) {
         throw GeometryError("El grosor del aro del engranaje interno debe ser mayor que cero");
@@ -1499,10 +1615,18 @@ Shape gearSolid(std::string_view tagView, const sketch::Plane& plane, const Gear
         }
         const double sign = spec.thickness > 0 ? 1.0 : -1.0;
         const gp_Pnt endPoint(origin.XYZ() + normal.XYZ() * spec.thickness);
-        // Tapa: cara plana con el contorno y, si hay agujero, su círculo; hacia fuera del sólido.
+        // Tapa: cara plana con el contorno y, si hay agujero, su círculo; hacia fuera del sólido. En el interno el contorno
+        // es el hueco de la corona y el círculo exterior es el del aro.
         const auto cap = [&](const gp_Pnt& where, const TopoDS_Wire& wire, bool end) {
-            BRepBuilderAPI_MakeFace face(gp_Pln(where, normal), wire, true);
-            if (spec.bore > 0.0) {
+            const auto outerWire = [&] {
+                return BRepBuilderAPI_MakeWire(BRepBuilderAPI_MakeEdge(gp_Circ(gp_Ax2(where, normal, toDir(plane.xAxis)), ra + spec.rim)).Edge()).Wire();
+            };
+            BRepBuilderAPI_MakeFace face = internal ? BRepBuilderAPI_MakeFace(gp_Pln(where, normal), outerWire(), true)
+                                                    : BRepBuilderAPI_MakeFace(gp_Pln(where, normal), wire, true);
+            if (internal) {
+                face.Add(TopoDS::Wire(wire.Reversed()));
+            }
+            if (!internal && spec.bore > 0.0) {
                 const TopoDS_Edge ring = BRepBuilderAPI_MakeEdge(gp_Circ(gp_Ax2(where, normal, toDir(plane.xAxis)), spec.bore / 2.0)).Edge();
                 face.Add(TopoDS::Wire(BRepBuilderAPI_MakeWire(ring).Wire().Reversed()));
             }
@@ -1514,8 +1638,18 @@ Shape gearSolid(std::string_view tagView, const sketch::Plane& plane, const Gear
         };
         const TopoDS_Face startCap = cap(origin, outline.Wire(), false);
         const TopoDS_Face endCap = cap(endPoint, lastWire, true);
+        TopoDS_Face outerWall;
+        if (internal) {
+            const gp_Pnt base(spec.thickness > 0 ? origin : endPoint);
+            BRepPrimAPI_MakeCylinder ring(gp_Ax2(base, normal, toDir(plane.xAxis)), ra + spec.rim, std::abs(spec.thickness));
+            for (TopExp_Explorer ex(ring.Shape(), TopAbs_FACE); ex.More(); ex.Next()) {
+                if (BRepAdaptor_Surface(TopoDS::Face(ex.Current())).GetType() == GeomAbs_Cylinder) {
+                    outerWall = TopoDS::Face(ex.Current());
+                }
+            }
+        }
         TopoDS_Face boreWall;
-        if (spec.bore > 0.0) {
+        if (!internal && spec.bore > 0.0) {
             const gp_Pnt base(spec.thickness > 0 ? origin : endPoint);
             BRepPrimAPI_MakeCylinder bore(gp_Ax2(base, normal, toDir(plane.xAxis)), spec.bore / 2.0, std::abs(spec.thickness));
             for (TopExp_Explorer ex(bore.Shape(), TopAbs_FACE); ex.More(); ex.Next()) {
@@ -1535,6 +1669,9 @@ Shape gearSolid(std::string_view tagView, const sketch::Plane& plane, const Gear
         sewing.Add(endCap);
         if (!boreWall.IsNull()) {
             sewing.Add(boreWall);
+        }
+        if (!outerWall.IsNull()) {
+            sewing.Add(outerWall);
         }
         sewing.Perform();
         TopoDS_Shell shell;
@@ -1565,7 +1702,8 @@ Shape gearSolid(std::string_view tagView, const sketch::Plane& plane, const Gear
                         outward.Reverse();
                     }
                     const gp_Vec radial = gp_Vec(origin, tip) - gp_Vec(normal) * gp_Vec(origin, tip).Dot(gp_Vec(normal));
-                    if (outward.Dot(radial) < 0.0) {
+                    // Los dientes de una corona son un hueco: su normal hacia fuera del sólido mira al eje.
+                    if ((internal ? -1.0 : 1.0) * outward.Dot(radial) < 0.0) {
                         solid.Reverse();
                     }
                 }
@@ -1581,6 +1719,9 @@ Shape gearSolid(std::string_view tagView, const sketch::Plane& plane, const Gear
         namer.name(sewnShape(endCap), tag + ":fin");
         if (!boreWall.IsNull()) {
             namer.name(sewnShape(boreWall), tag + ":lado:agujero");
+        }
+        if (!outerWall.IsNull()) {
+            namer.name(sewnShape(outerWall), tag + ":lado:exterior");
         }
         for (std::size_t h = 0; h < halves.size(); ++h) {
             for (std::size_t index = 0; index < edges.size(); ++index) {

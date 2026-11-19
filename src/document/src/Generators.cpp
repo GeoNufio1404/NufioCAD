@@ -649,14 +649,14 @@ double tuningValue(const GeneratorValues& values, const char* key)
     return values.count(key) != 0 ? values.at(key) : 0.0;
 }
 
-GeneratorField herringboneField()
+GeneratorField herringboneField(const char* single = "Una hélice (la rueda 2 en sentido contrario)")
 {
     GeneratorField f;
     f.kind = GeneratorField::Kind::Choice;
     f.key = "espina";
     f.label = "Dientes helicoidales";
     f.value = 0.0;
-    f.choices = {"Una hélice (la rueda 2 en sentido contrario)", "Espina de pescado (doble hélice)"};
+    f.choices = {single, "Espina de pescado (doble hélice)"};
     f.hint = "La espina de pescado lleva dos mitades con la hélice contraria: cancela el empuje lateral. Necesita un ángulo de hélice";
     return f;
 }
@@ -788,7 +788,7 @@ public:
 
         Recipe recipe;
         recipe.component = "Par de engranajes";
-        recipe.bodyNames = {"Rueda 1", "Rueda 2"};
+        recipe.bodyNames = {"Engranaje 1", "Engranaje 2"};
         const auto param = [&](const std::string& name, const std::string& expression) {
             recipe.parameters.push_back({name, expression});
         };
@@ -889,6 +889,9 @@ public:
                 gearField(K::Count, "dientes_pinon", "Dientes del piñón", 12.0, 6.0, 300.0),
                 gearField(K::Angle, "presion", "Ángulo de presión", 20.0, 5.0, 35.0, "Igual en los dos (20° es lo normal)"),
                 gearField(K::Length, "ancho_rueda", "Ancho", 8.0, 1.0, 200.0, "A lo largo del eje"),
+                gearField(K::Angle, "helice", "Ángulo de hélice", 0.0, 0.0, 45.0,
+                          "0 = dientes rectos; si no, la corona y el piñón llevan el mismo sentido"),
+                herringboneField("Una hélice (corona y piñón con el mismo sentido)"),
                 gearField(K::Length, "aro", "Grosor del aro de la corona", 6.0, 1.0, 100.0,
                           "Material por fuera de los huecos de los dientes"),
                 gearField(K::Length, "agujero_pinon", "Agujero del piñón", 5.0, 0.0, 100.0, "0 = macizo"),
@@ -930,6 +933,8 @@ public:
         Recipe recipe;
         recipe.component = "Engranaje interno";
         recipe.bodyNames = {"Corona", "Piñón"};
+        const std::string helice = p("helice");
+        recipe.parameters.push_back({helice, number(values.count("helice") != 0 ? values.at("helice") : 0.0)});
         const auto param = [&](const std::string& name, const char* key) {
             recipe.parameters.push_back({name, number(values.at(key))});
         };
@@ -950,6 +955,8 @@ public:
         ring->expressions = {{"module", modulo}, {"teeth", zc}, {"pressureAngle", presion}, {"thickness", ancho},
                              {"rim", aro}};
         applyTuning(*ring, suffix);
+        ring->expressions["helixAngle"] = helice;  // los dos con el mismo sentido: en un engranaje interno engranan así
+        ring->spec.herringbone = tuningValue(values, "espina") > 0.5;
         recipe.features.push_back(std::move(ring));
 
         auto pinion = std::make_unique<GearFeature>();
@@ -959,6 +966,8 @@ public:
                                {"bore", bore},
                                {"x", modulo + "*(" + zc + " - " + zp + ")/2 - " + juego}};
         applyTuning(*pinion, suffix);
+        pinion->expressions["helixAngle"] = helice;
+        pinion->spec.herringbone = tuningValue(values, "espina") > 0.5;
         recipe.features.push_back(std::move(pinion));
         return recipe;
     }
@@ -1012,6 +1021,9 @@ public:
                 rounded,
                 gearField(K::Angle, "presion", "Ángulo de presión", 20.0, 5.0, 30.0, "Igual en los dos (20° es lo normal)"),
                 gearField(K::Length, "ancho_rueda", "Ancho", 8.0, 1.0, 200.0, "A lo largo del eje"),
+                gearField(K::Angle, "helice", "Ángulo de hélice", 0.0, 0.0, 45.0,
+                          "0 = dientes rectos; si no, los dientes de la barra se inclinan lo mismo que los de la rueda"),
+                herringboneField("Una hélice (la barra con la misma inclinación)"),
                 gearField(K::Length, "base", "Grosor de la base de la barra", 5.0, 1.0, 100.0, "Bajo la raíz de los dientes"),
                 gearField(K::Length, "agujero_rueda", "Agujero de la rueda", 5.0, 0.0, 100.0, "0 = macizo"),
                 gearField(K::Length, "juego", "Juego entre dientes", 0.15, 0.0, 2.0,
@@ -1077,8 +1089,10 @@ public:
         const RackSize rack = rackSize(values);
 
         Recipe recipe;
-        recipe.component = "Cremallera";
+        recipe.component = "Cremallera y rueda";
         recipe.bodyNames = {"Rueda", "Cremallera"};
+        const std::string helice = p("helice");
+        recipe.parameters.push_back({helice, number(values.count("helice") != 0 ? values.at("helice") : 0.0)});
         const auto param = [&](const std::string& name, const std::string& expression) {
             recipe.parameters.push_back({name, expression});
         };
@@ -1111,6 +1125,8 @@ public:
         wheel->expressions = {{"module", modulo}, {"teeth", z}, {"pressureAngle", presion}, {"thickness", ancho},
                               {"bore", bore}, {"rotation", giro}};
         applyTuning(*wheel, suffix);
+        wheel->expressions["helixAngle"] = helice;
+        wheel->spec.herringbone = tuningValue(values, "espina") > 0.5;
         recipe.features.push_back(std::move(wheel));
 
         auto bar = std::make_unique<GearFeature>();
@@ -1126,6 +1142,8 @@ public:
             bar->expressions["length"] = largo;  // la barra se corta a esa medida
         }
         applyTuning(*bar, suffix);
+        bar->expressions["helixAngle"] = helice;  // con el mismo ángulo y signo que la rueda, la barra sigue a sus dientes
+        bar->spec.herringbone = tuningValue(values, "espina") > 0.5;
         recipe.features.push_back(std::move(bar));
         return recipe;
     }
@@ -1205,8 +1223,8 @@ public:
                           giro = p("giro_rueda"), xrueda = p("x_rueda");
 
         Recipe recipe;
-        recipe.component = "Tornillo sin fin";
-        recipe.bodyNames = {"Rueda", "Tornillo"};
+        recipe.component = "Tornillo sin fin y rueda";
+        recipe.bodyNames = {"Rueda", "Tornillo sin fin"};
         const auto param = [&](const std::string& name, const std::string& expression) {
             recipe.parameters.push_back({name, expression});
         };
@@ -1514,6 +1532,21 @@ std::vector<FeatureId> generatedGroup(const Document& doc, FeatureId lead)
     return ids;
 }
 
+std::string numberedComponent(const std::map<std::string, BodyInfo>& info, const std::string& base)
+{
+    if (base.empty()) {
+        return {};
+    }
+    for (int n = 1; n < 10000; ++n) {
+        const std::string name = base + " " + std::to_string(n);
+        const bool used = std::ranges::any_of(info, [&](const auto& entry) { return entry.second.component == name; });
+        if (!used) {
+            return name;
+        }
+    }
+    return base;
+}
+
 void applyRecipe(Document& doc, const Recipe& recipe)
 {
     std::vector<Parameter> parameters = doc.parameters();
@@ -1533,12 +1566,13 @@ void applyRecipe(Document& doc, const Recipe& recipe)
         }
     }
     std::map<std::string, BodyInfo> info = doc.bodyInfo();
+    const std::string component = numberedComponent(info, recipe.component);
     std::size_t next = 0;
     for (const Body& body : doc.result().bodies) {
         if (std::ranges::find(before, body.key) != before.end()) {
             continue;
         }
-        info[body.key] = {next < recipe.bodyNames.size() ? recipe.bodyNames[next] : std::string(), recipe.component};
+        info[body.key] = {next < recipe.bodyNames.size() ? recipe.bodyNames[next] : std::string(), component};
         ++next;
     }
     doc.setBodyInfo(info);

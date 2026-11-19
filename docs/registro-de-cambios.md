@@ -78,6 +78,12 @@ Dos campos nuevos del engranaje, ambos en 0 por defecto (los diseños anteriores
 ---
 
 
+## Espina de pescado en corona y cremallera, y nombres de cuerpos y componentes — 19 nov. 2026
+
+- **Corona y cremallera helicoidales y en espina de pescado:** la corona (tipo Interno) admite ángulo de hélice y espina de pescado (los lofts de las secciones giradas, con la tapa de aro y la pared exterior cosidas); la cremallera admite inclinación de los dientes y «V» (secciones corridas a lo largo de la barra). Con la corona y el piñón del mismo sentido, y con la cremallera con el mismo ángulo y signo que su rueda, engranan sin chocar (probado con la booleana). Los generadores Engranaje interno y Cremallera traen «Ángulo de hélice» y «Dientes helicoidales».
+- **Nombres según lo que se hizo:** los cuerpos nuevos ya no son «Cuerpo1»: «Caja 1», «Cilindro 1», «Extrusión 2», «Engranaje 1», «Corona 1»… (`newBodyName`, con un contador por clase). Los generadores agrupan en componentes numerados («Par de engranajes 1», «Par de engranajes 2», «Lightbox 1»…; `numberedComponent`), con los cuerpos con su nombre propio («Engranaje 1» y «Engranaje 2», «Caja» y «Tapa»); al rehacer un generador conserva su componente.
+- **Cómo volver atrás:** no fusionar `feature/espina-corona-nombres`.
+
 ## Mejoras de las pruebas de la Fase 16 — 18 nov. 2026
 
 - **Cuadros del error marcados:** además del mensaje de abajo, el borde de los cuadros que el mensaje nombra se pone rojo (error) o naranja (aviso); se buscan por palabras clave de cada campo (`FieldMarks.hpp`), en las herramientas y en los generadores.

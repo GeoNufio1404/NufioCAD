@@ -53,7 +53,8 @@ struct ModelState {
     std::map<FeatureId, SketchOutput> sketches;
     std::map<FeatureId, sketch::Plane> planes;  // planos de construcción
     std::map<FeatureId, AxisLine> axes;         // ejes de construcción
-    int bodiesCreated = 0;  // para numerar «Cuerpo N»
+    int bodiesCreated = 0;  // los cuerpos que se han creado (en total)
+    std::map<std::string, int> bodyNameCounts;  // cuántos van de cada clase («Caja» → 2), para numerar «Caja 3»
 
     std::vector<geometry::Shape> shapes() const;
     // Cuerpo y cara que señala la referencia, en cualquier cuerpo.
@@ -141,6 +142,10 @@ private:
     std::string name_;
     bool suppressed_ = false;
 };
+
+// Nombre de un cuerpo nuevo según la operación que lo crea y cuántos de esa clase ya hay: «Caja 1», «Cilindro 2»,
+// «Engranaje 1», «Extrusión 3»… (un generador pone luego sus propios nombres, como «Tapa»).
+std::string newBodyName(ModelState& state, const Feature& feature);
 
 // Operaciones a las que apunta una referencia (los «f<id>:» de su nombre).
 std::vector<FeatureId> featuresIn(const geometry::ElementRef& ref);

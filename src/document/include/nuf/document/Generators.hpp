@@ -121,4 +121,8 @@ std::vector<FeatureId> generatedGroup(const Document& doc, FeatureId lead);
 // Sirve para la vista previa en un documento vacío; el comando de la interfaz hace lo mismo con deshacer.
 void applyRecipe(Document& doc, const Recipe& recipe);
 
+// El nombre del componente de una receta con su número: «Par de engranajes 1», y el siguiente que se haga, «… 2»
+// (el menor número que no está ya en uso). Vacío si la receta no agrupa.
+std::string numberedComponent(const std::map<std::string, BodyInfo>& info, const std::string& base);
+
 } // namespace nuf::document

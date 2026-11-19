@@ -542,8 +542,8 @@ void GearTool::createFields(QFormLayout* form)
         row(bore_, type == 0 || bevel);
         row(mateTeeth_, bevel);
         row(groove_, type == 0 && herringbone_->isChecked());
-        row(helix_, type == 0);
-        row(herringbone_, type == 0);
+        row(helix_, type <= 2);
+        row(herringbone_, type <= 2);
         row(shift_, type == 0);
         row(recommend, type == 0);
         row(rim_, type == 1 || type == 2);

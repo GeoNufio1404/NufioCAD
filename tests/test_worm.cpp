@@ -196,3 +196,118 @@ TEST_CASE("El par de engranajes cónicos engrana sin chocar, y choca con la coro
         CHECK(geometry::boolean(geometry::BooleanOp::Common, bad.result().bodies[0].shape, bad.result().bodies[1].shape).volume() > 2.0 * common);
     }
 }
+
+TEST_CASE("La corona y la cremallera helicoidales y en espina de pescado engranan sin chocar y conservan su volumen", "[gear][herringbone][rack]")
+{
+    const double pi = std::numbers::pi;
+    const auto xy = sketch::Plane::fromPointAndNormal({0, 0, 0}, {0, 0, 1});
+    const double beta = 20.0 * pi / 180.0;
+    const auto count = [](const geometry::Shape& shape, const std::string& part) {
+        int n = 0;
+        for (int i = 0; i < shape.faceCount(); ++i) {
+            n += shape.faceName(i).find(part) != std::string::npos ? 1 : 0;
+        }
+        return n;
+    };
+    for (const bool herringbone : {false, true}) {
+        INFO("espina de pescado " << herringbone);
+        geometry::GearSpec ring;
+        ring.type = geometry::GearType::Internal;
+        ring.teeth = 40;
+        ring.module = 2.0;
+        ring.thickness = 10.0;
+        ring.rim = 5.0;
+        const double straightRing = geometry::gear("c", xy, ring).volume();
+        ring.helixAngle = beta;
+        ring.herringbone = herringbone;
+        const auto crown = geometry::gear("c", xy, ring);
+        REQUIRE(crown.isValid());
+        CHECK(crown.volume() == Catch::Approx(straightRing).epsilon(0.002));  // girar las secciones no cambia el área
+        CHECK((count(crown, ":m2") > 0) == herringbone);
+        CHECK(count(crown, ":lado:exterior") == 1);
+        geometry::GearSpec pinion;
+        pinion.teeth = 20;
+        pinion.module = 2.0;
+        pinion.thickness = 10.0;
+        pinion.helixAngle = beta;  // en un engranaje interno los dos llevan el mismo sentido
+        pinion.herringbone = herringbone;
+        const auto small = geometry::moveBody("p", geometry::gear("p", xy, pinion), {20, 0, 0}, {{0, 0, 0}, {0, 0, 1}}, 0.0, false);
+        CHECK(std::abs(geometry::boolean(geometry::BooleanOp::Common, crown, small).volume()) < 0.5);
+        pinion.helixAngle = -beta;
+        const auto wrong = geometry::moveBody("p", geometry::gear("p", xy, pinion), {20, 0, 0}, {{0, 0, 0}, {0, 0, 1}}, 0.0, false);
+        CHECK(std::abs(geometry::boolean(geometry::BooleanOp::Common, crown, wrong).volume()) > 20.0);
+
+        geometry::GearSpec rack;
+        rack.type = geometry::GearType::Rack;
+        rack.teeth = 10;
+        rack.module = 2.0;
+        rack.thickness = 10.0;
+        rack.rim = 5.0;
+        const double straightRack = geometry::gear("r", xy, rack).volume();
+        rack.helixAngle = beta;
+        rack.herringbone = herringbone;
+        const auto bar = geometry::gear("r", xy, rack);
+        REQUIRE(bar.isValid());
+        CHECK(bar.volume() == Catch::Approx(straightRack).epsilon(0.001));  // inclinar los dientes no cambia el volumen
+        CHECK((count(bar, ":m2") > 0) == herringbone);
+        geometry::GearSpec wheel;
+        wheel.teeth = 20;
+        wheel.module = 2.0;
+        wheel.thickness = 10.0;
+        wheel.helixAngle = beta;  // la barra lleva el mismo ángulo y signo que la rueda
+        wheel.herringbone = herringbone;
+        const auto placed = geometry::moveBody("r", bar, {-5.0 * pi * 2.0, -20.0, 0}, {{0, 0, 0}, {0, 0, 1}}, 0.0, false);
+        CHECK(std::abs(geometry::boolean(geometry::BooleanOp::Common, placed, geometry::gear("w", xy, wheel)).volume()) < 0.5);
+        rack.helixAngle = -beta;
+        const auto bad = geometry::moveBody("r", geometry::gear("r", xy, rack), {-5.0 * pi * 2.0, -20.0, 0}, {{0, 0, 0}, {0, 0, 1}}, 0.0, false);
+        CHECK(std::abs(geometry::boolean(geometry::BooleanOp::Common, bad, geometry::gear("w", xy, wheel)).volume()) > 20.0);
+    }
+}
+
+TEST_CASE("Los generadores de corona y de cremallera admiten hélice y espina de pescado y engranan", "[generator][gear][herringbone]")
+{
+    for (const char* id : {"engranaje-interno", "cremallera"}) {
+        for (const double spine : {0.0, 1.0}) {
+            INFO(id << " espina " << spine);
+            const document::Generator* generator = document::findGenerator(id);
+            REQUIRE(generator != nullptr);
+            document::GeneratorValues values = generator->defaults();
+            values["helice"] = 20.0;
+            values["espina"] = spine;
+            values["adelgazar"] = 0.0;
+            values["chaflan_base"] = 0.0;
+            document::Document doc;
+            document::applyRecipe(doc, generator->make(values, ""));
+            REQUIRE(doc.result().bodies.size() == 2);
+            for (const auto& body : doc.result().bodies) {
+                REQUIRE(body.shape.isValid());
+            }
+            const double common = geometry::boolean(geometry::BooleanOp::Common, doc.result().bodies[0].shape, doc.result().bodies[1].shape).volume();
+            CHECK(std::abs(common) < 3.0);
+        }
+    }
+}
+
+TEST_CASE("Los cuerpos y componentes se numeran según lo que se hizo", "[bodies][generator]")
+{
+    document::Document doc;
+    const document::Generator* pair = document::findGenerator("par-engranajes");
+    const document::Generator* box = document::findGenerator("caja-con-tapa");
+    REQUIRE(pair != nullptr);
+    document::applyRecipe(doc, pair->make(pair->defaults(), ""));
+    document::GeneratorValues second = pair->defaults();
+    document::applyRecipe(doc, pair->make(second, document::freeSuffix(doc, *pair, second)));
+    REQUIRE(doc.result().bodies.size() == 4);
+    const auto info = [&](std::size_t i) { return doc.bodyInfo().at(doc.result().bodies[i].key); };
+    CHECK(info(0).component == "Par de engranajes 1");
+    CHECK(info(1).component == "Par de engranajes 1");
+    CHECK(info(2).component == "Par de engranajes 2");
+    CHECK(info(0).name == "Engranaje 1");
+    CHECK(info(3).name == "Engranaje 2");
+    if (box != nullptr) {
+        document::applyRecipe(doc, box->make(box->defaults(), document::freeSuffix(doc, *box, box->defaults())));
+        CHECK(info(4).component == "Caja con tapa 1");
+        CHECK(info(4).name == "Caja");
+        CHECK(info(5).name == "Tapa");
+    }
+}
