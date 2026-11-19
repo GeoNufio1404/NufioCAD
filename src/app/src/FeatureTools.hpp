@@ -12,6 +12,8 @@
 
 #include <QObject>
 #include <QPointer>
+
+#include "FieldMarks.hpp"
 #include <QString>
 
 #include <memory>
@@ -169,6 +171,18 @@ protected:
     QLabel* statusLabel_ = nullptr;
     QPushButton* okButton_ = nullptr;
     bool updating_ = false;  // al rellenar los campos, sin vista previa
+
+    // Aviso que no viene del cálculo sino de algo que la herramienta puso sola (un ángulo recomendado, por ejemplo): sale
+    // en naranja bajo los cuadros y el cuadro «field» se marca también; se quita al cambiar ese cuadro a mano.
+    void setNotice(const QString& text, QDoubleSpinBox* field);
+    void clearNotice();
+    // Los cuadros registrados con field(), con su clave, para marcarlos.
+    std::vector<std::pair<std::string, QWidget*>> markableFields() const;
+    // Pone el estado de abajo (el texto ya con su color) y marca los cuadros que el mensaje nombra: rojo si es un error,
+    // naranja si es un aviso; después añade el aviso propio, si hay.
+    void showStatus(const QString& message, Mark level, const std::vector<std::pair<std::string, QWidget*>>& widgets);
+    QString notice_;
+    QPointer<QDoubleSpinBox> noticeField_;
 
     bool eventFilter(QObject* watched, QEvent* event) override;
 
@@ -452,6 +466,8 @@ protected:
 private:
     // En una cara, «Cortar» va hacia dentro de la pieza y lo demás hacia fuera (el signo del ancho).
     void adjustDirection();
+    // Pone los valores de fábrica del tipo elegido (dientes, módulo, ancho…), sin tocar la colocación ni la operación.
+    void applyTypeDefaults();
 
     Placement placement_;
     QDoubleSpinBox* module_ = nullptr;

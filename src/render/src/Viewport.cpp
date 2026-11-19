@@ -805,6 +805,20 @@ void Viewport::keyPressEvent(QKeyEvent* event)
     QOpenGLWidget::keyPressEvent(event);
 }
 
+void Viewport::resetNavigationInput()
+{
+    if (impl_->UpdateMouseButtons(Vec2i(0, 0), Aspect_VKeyMouse_NONE, Aspect_VKeyFlags_NONE, false)) {
+        update();
+    }
+}
+
+void Viewport::focusOutEvent(QFocusEvent* event)
+{
+    QOpenGLWidget::focusOutEvent(event);
+    // Al perder el foco (se abre un menú, una ventana, otro panel) no llegarán las sueltas de lo que estuviera pulsado.
+    resetNavigationInput();
+}
+
 void Viewport::leaveEvent(QEvent* event)
 {
     QOpenGLWidget::leaveEvent(event);

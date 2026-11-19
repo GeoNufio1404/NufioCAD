@@ -820,6 +820,10 @@ Código: **PAR**.
 | PAR.33 | Pon «Ancho de cara» 60 en los cónicos | La herramienta avisa de que el ancho de cara es demasiado grande y da el máximo recomendado |
 | PAR.34 | Sólido › Engranaje: abre la lista «Tipo» y recorre las cinco opciones | Cada tipo enseña solo sus campos (Tornillo sin fin: Entradas, Largo, Diámetro, Hélice a izquierdas; Cónico: Dientes de la rueda pareja y Ancho de cara; Cremallera e Interno: Aro o base) |
 | PAR.35 | Engranaje exterior con ángulo de hélice 20° y la casilla «Espina de pescado»: pon un surco central de 1 | Aparece un surco anular en el medio, del ancho pedido, que llega hasta la raíz de los dientes y no parte la rueda |
+| PAR.36 | Sólido › Engranaje: pon un ancho de cara imposible en el tipo Cónico (60) | El mensaje rojo de abajo dice el problema **y el cuadro del ancho se marca con borde rojo**; al corregirlo, el borde vuelve a la normalidad. Con un ángulo y una longitud que no son congruentes, se marcan los dos |
+| PAR.37 | Sólido › Engranaje: cambia entre Exterior, Interno, Cremallera, Tornillo sin fin y Cónico | Cada tipo parte de sus valores de fábrica (Cónico: 15 dientes, pareja de 30, ancho de cara 8). El botón **«Valores por defecto de este tipo»** (bajo la lista «Tipo») los vuelve a poner cuando quieras |
+| PAR.38 | En Engranaje exterior marca «Espina de pescado» con la hélice en 0 | Se pone sola una hélice de 20°; abajo sale un **aviso naranja** y el cuadro de la hélice se marca con borde naranja; al cambiarlo a mano, el aviso desaparece. Lo mismo en el Par de engranajes con «Espina de pescado» |
+| PAR.39 | Clic derecho corto en la vista (sin arrastrar) y, con el menú radial abierto, clic derecho o izquierdo dentro del anillo; luego mueve el ratón | El menú actúa (o se cierra con el centro) y la vista **no se queda girando ni desplazando** al mover el ratón. Pulsar fuera del anillo lo cierra. Si giras con el clic izquierdo y tocas el derecho, no se abre el menú |
 
 ### 4.5 Todos los generadores: reabrir, recordar y restablecer
 

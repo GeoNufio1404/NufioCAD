@@ -392,6 +392,7 @@ void FeatureTool::updatePreview()
         viewport_.clearToolPreview();
         viewport_.hideDistanceHandle();
         statusLabel_->clear();
+        markByMessage(markableFields(), QString(), Mark::None);
         okButton_->setEnabled(false);
         return;
     }
@@ -456,20 +457,82 @@ void FeatureTool::showPreview(const document::Feature& feature, const document::
     const QString text = QString::fromStdString(result.status.message);
     switch (result.status.health) {
     case document::Health::Error:
-        statusLabel_->setText(QStringLiteral("<span style='color:%1'>%2</span>").arg(toneColor(Tone::Error), text.toHtmlEscaped()));
+        showStatus(text, Mark::Error, markableFields());
         okButton_->setEnabled(false);
         break;
     case document::Health::Warning:
-        statusLabel_->setText(QStringLiteral("<span style='color:%1'>%2</span>").arg(toneColor(Tone::Warning), text.toHtmlEscaped()));
+        showStatus(text, Mark::Warning, markableFields());
         okButton_->setEnabled(true);
         break;
     default:
-        statusLabel_->clear();
+        showStatus(QString(), Mark::None, markableFields());
         okButton_->setEnabled(true);
         break;
     }
     afterPreview(before());
     refreshArrow();
+}
+
+std::vector<std::pair<std::string, QWidget*>> FeatureTool::markableFields() const
+{
+    std::vector<std::pair<std::string, QWidget*>> widgets;
+    for (const auto& [key, box] : fields_) {
+        widgets.emplace_back(key, box);
+    }
+    return widgets;
+}
+
+void FeatureTool::showStatus(const QString& message, Mark level, const std::vector<std::pair<std::string, QWidget*>>& widgets)
+{
+    markByMessage(widgets, message, level);
+    QString status;
+    if (level != Mark::None && !message.isEmpty()) {
+        status = QStringLiteral("<span style='color:%1'>%2</span>")
+                     .arg(toneColor(level == Mark::Error ? Tone::Error : Tone::Warning), message.toHtmlEscaped());
+    }
+    if (!notice_.isEmpty()) {
+        if (!status.isEmpty()) {
+            status += QStringLiteral("<br>");
+        }
+        status += QStringLiteral("<span style='color:%1'>%2</span>").arg(toneColor(Tone::Warning), notice_.toHtmlEscaped());
+        if (noticeField_ != nullptr && markOf(noticeField_) == Mark::None) {
+            markField(noticeField_, Mark::Warning);
+        }
+    }
+    if (status.isEmpty()) {
+        statusLabel_->clear();
+    } else {
+        statusLabel_->setText(status);
+    }
+}
+
+void FeatureTool::setNotice(const QString& text, QDoubleSpinBox* field)
+{
+    notice_ = text;
+    noticeField_ = field;
+    if (field != nullptr) {
+        // Cambiar el cuadro a mano acepta el valor: el aviso ya no hace falta.
+        connect(field, &QDoubleSpinBox::valueChanged, this, [this, field] {
+            if (noticeField_ == field) {
+                clearNotice();
+            }
+        }, Qt::SingleShotConnection);
+    }
+    showStatus(QString(), Mark::None, markableFields());
+}
+
+void FeatureTool::clearNotice()
+{
+    const QPointer<QDoubleSpinBox> field = noticeField_;
+    notice_.clear();
+    noticeField_ = nullptr;
+    if (field != nullptr && markOf(field) == Mark::Warning) {
+        markField(field, Mark::None);
+    }
+    if (statusLabel_ != nullptr && !updating_) {
+        // Si el estado era solo el aviso, se quita (lo demás lo rehace la vista previa).
+        statusLabel_->clear();
+    }
 }
 
 std::optional<sketch::Vec3> FeatureTool::bodyCenter(const std::string& key) const

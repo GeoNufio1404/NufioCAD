@@ -373,11 +373,14 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
         const auto* mouse = static_cast<QMouseEvent*>(event);
         if (mouse->button() == Qt::RightButton) {
             if (event->type() == QEvent::MouseButtonPress) {
-                radialPending_ = !tool_ && findChild<RadialMenu*>() == nullptr;
+                // Solo con el botón derecho solo: con otro pulsado (girando con el izquierdo) no hay menú.
+                const auto menus = findChildren<RadialMenu*>();
+                const bool menuOpen = std::any_of(menus.begin(), menus.end(), [](const RadialMenu* m) { return m->isVisible(); });
+                radialPending_ = !tool_ && !menuOpen && mouse->buttons() == Qt::RightButton;
                 radialPress_ = mouse->position().toPoint();
             } else if (radialPending_) {
                 radialPending_ = false;
-                if ((mouse->position().toPoint() - radialPress_).manhattanLength() < 6) {
+                if (mouse->buttons() == Qt::NoButton && (mouse->position().toPoint() - radialPress_).manhattanLength() < 6) {
                     openRadialMenu(mouse->position().toPoint());
                 }
             }

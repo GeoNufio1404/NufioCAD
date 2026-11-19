@@ -485,6 +485,10 @@ void GearTool::createFields(QFormLayout* form)
                                                                                       : 0);
     }
     form->addRow(QStringLiteral("Tipo"), type_);
+    auto* defaults = new QPushButton(QStringLiteral("Valores por defecto de este tipo"));
+    defaults->setToolTip(QStringLiteral("Pone dientes, módulo, ancho y demás en los valores de fábrica del tipo elegido (no toca la colocación)"));
+    connect(defaults, &QPushButton::clicked, this, [this] { applyTypeDefaults(); });
+    form->addRow(QString(), defaults);
     form->addRow(QStringLiteral("Módulo"), module_);
     form->addRow(QStringLiteral("Dientes"), teeth_);
     form->addRow(QStringLiteral("Giro inicial"), rotation_);
@@ -500,6 +504,16 @@ void GearTool::createFields(QFormLayout* form)
     form->addRow(QString(), herringbone_);
     connect(herringbone_, &QCheckBox::toggled, this, [this, form] {
         form->setRowVisible(groove_, type_->currentIndex() == 0 && herringbone_->isChecked());
+        if (herringbone_->isChecked() && !updating_ && std::abs(helix_->value()) < 1e-9) {
+            // La espina de pescado necesita hélice: se pone la recomendada y se avisa.
+            const QSignalBlocker blocker(helix_);
+            helix_->setValue(20.0);
+            setNotice(QStringLiteral("Se puso automáticamente un ángulo de hélice de 20° (el recomendado para la espina de pescado, "
+                                     "entre 20° y 30°); cámbialo si quieres otro."),
+                      helix_);
+        } else if (!herringbone_->isChecked()) {
+            clearNotice();
+        }
         updatePreview();
     });
     form->addRow(QStringLiteral("Aro (interno) o base (cremallera)"), rim_);
@@ -550,12 +564,52 @@ void GearTool::createFields(QFormLayout* form)
     showType();
     connect(type_, &QComboBox::currentIndexChanged, this, [this, showType] {
         showType();
-        updatePreview();
+        applyTypeDefaults();  // cada tipo parte de sus valores de fábrica (si no, el cónico heredaba los del engranaje recto)
     });
     for (QDoubleSpinBox* box : {teeth_, rotation_, module_, pressure_, thickness_, bore_, helix_, rim_, backlash_, baseChamfer_, shift_,
                                 wormDiameter_, mateTeeth_, groove_}) {
         connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
     }
+}
+
+void GearTool::applyTypeDefaults()
+{
+    const int type = type_->currentIndex();  // 0 exterior, 1 interno, 2 cremallera, 3 tornillo sin fin, 4 cónico
+    struct Defaults {
+        double teeth, thickness, bore;
+    };
+    const Defaults values[] = {{20, 10, 5}, {40, 10, 0}, {10, 10, 0}, {1, 40, 0}, {15, 8, 5}};
+    const Defaults& d = values[std::clamp(type, 0, 4)];
+    const auto set = [](QDoubleSpinBox* box, double value) {
+        const QSignalBlocker blocker(box);
+        box->setValue(value);
+    };
+    clearNotice();
+    set(module_, 2.0);
+    set(teeth_, d.teeth);
+    set(rotation_, 0.0);
+    set(pressure_, 20.0);
+    // El ancho conserva su signo (en una cara, «Cortar» va hacia dentro).
+    set(thickness_, thickness_->value() < 0.0 ? -d.thickness : d.thickness);
+    set(bore_, d.bore);
+    set(helix_, 0.0);
+    set(rim_, 5.0);
+    set(backlash_, 0.0);
+    set(baseChamfer_, 0.0);
+    set(shift_, 0.0);
+    set(wormDiameter_, 20.0);
+    set(mateTeeth_, 30.0);
+    set(groove_, 0.0);
+    {
+        const QSignalBlocker one(herringbone_);
+        herringbone_->setChecked(false);
+    }
+    {
+        const QSignalBlocker two(leftHanded_);
+        leftHanded_->setChecked(false);
+    }
+    adjustDirection();
+    updatePreview();
 }
 
 void GearTool::selectionChanged(const render::ModelSelection& selection)
