@@ -92,6 +92,7 @@ Dos campos nuevos del engranaje, ambos en 0 por defecto (los diseños anteriores
 
 - **O5:** el ángulo de voladizo de la revisión de impresión se elige en el diálogo (**Voladizo máximo**, `PrintSettings::overhangAngle`) y se acuerda.
 - **O6:** color propio por cuerpo (`BodyInfo::color`, `Body::color`): columna Color en «Cuerpos y componentes», se dibuja en la vista y se guarda en el archivo (los archivos anteriores abren sin color).
+- **Tanda 2 (20 nov. 2026):** O2 radio en el centro del redondeo variable (`filletVariable(…, middle)`); O3 agujero con un clic en una cara (`HoleFeature::onFace`, `Viewport::lastPickPoint`) y rosca sobre un agujero o cilindro existentes (`ThreadFeature::onCylinder`, `Shape::cylinderFace`, `threadOnCylinderTool`); O1 patrón y espejo de una operación (`sourceFeature`, `ModelState::operationTools`) y patrón a lo largo de una trayectoria (`PatternLayout::Path`, `pathPoints`); O4 dividir con una cara curva (`SplitFeature::byFace`, `splitBodyByFace`).
 - **Cómo volver atrás:** no fusionar `feature/pendientes-fases`.
 
 ## Fase 19: distribución — 19 nov. 2026
