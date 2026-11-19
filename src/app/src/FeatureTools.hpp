@@ -397,6 +397,8 @@ protected:
     bool removesMaterial() const override { return false; }
 
 private:
+    document::FeatureId sourceOp_ = 0;  // si no es 0: se refleja esa operación en vez de un cuerpo
+    QFormLayout* form_ = nullptr;
     std::string body_;
     geometry::ElementRef face_;
     std::vector<document::FeatureId> planeIds_;  // los planos de construcción del desplegable (tras los 4 fijos)
@@ -880,6 +882,7 @@ protected:
 private:
     void updateVisibility();
 
+    document::FeatureId sourceOp_ = 0;  // si no es 0: se repite esa operación en vez de un cuerpo
     std::string body_;
     std::vector<document::FeatureId> axisIds_;  // ejes de construcción del desplegable (tras X, Y, Z)
     QFormLayout* form_ = nullptr;

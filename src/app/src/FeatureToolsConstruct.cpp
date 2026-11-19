@@ -33,20 +33,28 @@ MirrorTool::MirrorTool(document::Document& document, render::Viewport& viewport,
 {
     if (const auto* m = dynamic_cast<const document::MirrorFeature*>(original_.get())) {
         body_ = m->body;
+        sourceOp_ = m->sourceFeature;
         face_ = m->plane.face;
     }
 }
 
 void MirrorTool::createFields(QFormLayout* form)
 {
+    form_ = form;
     bodyBox_ = new QComboBox();
     for (const document::Body& b : before().bodies) {
         bodyBox_->addItem(QString::fromStdString(b.name), QString::fromStdString(b.key));
     }
-    if (body_.empty() && bodyBox_->count() > 0) {
+    // También se puede reflejar una operación (un agujero, un corte…) en vez de un cuerpo entero.
+    for (const auto& [id, op] : before().operationTools) {
+        const document::Feature* f = document_.findFeature(id);
+        bodyBox_->addItem(QStringLiteral("Operación: %1").arg(f ? QString::fromStdString(f->name()) : QStringLiteral("?")),
+                          QStringLiteral("op:%1").arg(qulonglong(id)));
+    }
+    if (body_.empty() && sourceOp_ == 0 && bodyBox_->count() > 0) {
         body_ = bodyBox_->itemData(0).toString().toStdString();
     }
-    if (const int at = bodyBox_->findData(QString::fromStdString(body_)); at >= 0) {
+    if (const int at = bodyBox_->findData(sourceOp_ != 0 ? QStringLiteral("op:%1").arg(qulonglong(sourceOp_)) : QString::fromStdString(body_)); at >= 0) {
         bodyBox_->setCurrentIndex(at);
     }
     plane_ = combo({QStringLiteral("Plano XY"), QStringLiteral("Plano XZ"), QStringLiteral("Plano YZ"),
@@ -82,13 +90,21 @@ void MirrorTool::createFields(QFormLayout* form)
     form->addRow(QStringLiteral("Reflejar también"), others_);
     form->addRow(QStringLiteral("Plano de simetría"), plane_);
     form->addRow(QStringLiteral("Operación"), operation_);
-    connect(bodyBox_, &QComboBox::currentIndexChanged, this, [this] {
-        body_ = bodyBox_->currentData().toString().toStdString();
+    const auto refresh = [this] {
+        form_->setRowVisible(others_, sourceOp_ == 0);
+        form_->setRowVisible(operation_, sourceOp_ == 0);
+    };
+    connect(bodyBox_, &QComboBox::currentIndexChanged, this, [this, refresh] {
+        const QString data = bodyBox_->currentData().toString();
+        sourceOp_ = data.startsWith(QLatin1String("op:")) ? document::FeatureId(data.mid(3).toULongLong()) : 0;
+        body_ = sourceOp_ != 0 ? std::string() : data.toStdString();
+        refresh();
         updatePreview();
     });
     for (QComboBox* box : {plane_, operation_}) {
         connect(box, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
     }
+    refresh();
 }
 
 void MirrorTool::selectionChanged(const render::ModelSelection& selection)
@@ -105,7 +121,7 @@ void MirrorTool::selectionChanged(const render::ModelSelection& selection)
 
 std::unique_ptr<document::Feature> MirrorTool::build() const
 {
-    if (body_.empty()) {
+    if (body_.empty() && sourceOp_ == 0) {
         return nullptr;
     }
     auto f = std::make_unique<document::MirrorFeature>();
@@ -113,6 +129,7 @@ std::unique_ptr<document::Feature> MirrorTool::build() const
         f->setName(original_->name());
     }
     f->body = body_;
+    f->sourceFeature = sourceOp_;
     for (int i = 0; others_ != nullptr && i < others_->count(); ++i) {
         const std::string key = others_->item(i)->data(Qt::UserRole).toString().toStdString();
         if (others_->item(i)->checkState() == Qt::Checked && key != body_) {

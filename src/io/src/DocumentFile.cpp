@@ -537,6 +537,9 @@ FeatureRow rowOf(const Feature& f)
         if (!m.alsoBodies.empty()) {
             params["alsoBodies"] = m.alsoBodies;
         }
+        if (m.sourceFeature != 0) {
+            params["source"] = m.sourceFeature;
+        }
         break;
     }
     case FeatureKind::Split: {
@@ -680,6 +683,9 @@ FeatureRow rowOf(const Feature& f)
         if (!pt.alsoBodies.empty()) {
             params["alsoBodies"] = pt.alsoBodies;
         }
+        if (pt.sourceFeature != 0) {
+            params["source"] = pt.sourceFeature;
+        }
         break;
     }
     case FeatureKind::Hole: {
@@ -792,6 +798,7 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
                 m->alsoBodies.push_back(other.get<std::string>());
             }
         }
+        m->sourceFeature = p.value("source", std::uint64_t(0));
         feature = std::move(m);
     } else if (row.type == "plane") {
         auto cp = std::make_unique<ConstructionPlaneFeature>();
@@ -985,6 +992,7 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
                 pt->alsoBodies.push_back(other.get<std::string>());
             }
         }
+        pt->sourceFeature = p.value("source", std::uint64_t(0));
         feature = std::move(pt);
     } else if (row.type == "hole") {
         auto h = std::make_unique<HoleFeature>();

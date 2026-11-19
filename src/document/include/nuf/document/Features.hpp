@@ -200,6 +200,7 @@ class MirrorFeature final : public Feature {
 public:
     std::string body;            // clave del cuerpo («f3»)
     std::vector<std::string> alsoBodies;  // otros cuerpos que se reflejan a la vez (O1); cada uno da su copia
+    FeatureId sourceFeature = 0;  // si no es 0: se refleja esa operación (un agujero, un corte…) en vez de cuerpos; «operation» no cuenta
     SketchAttachment plane;      // dónde está el plano de simetría
     Operation operation = Operation::Join;
 
@@ -502,6 +503,7 @@ class PatternFeature final : public Feature {
 public:
     std::string body;                          // clave del cuerpo («f3»)
     std::vector<std::string> alsoBodies;       // otros cuerpos que se repiten a la vez (O1), cada uno con sus copias
+    FeatureId sourceFeature = 0;               // si no es 0: se repite esa operación (un agujero, un corte…) en vez de cuerpos
     PatternLayout layout = PatternLayout::Linear;
     int axis = 0;                              // 0 = X, 1 = Y, 2 = Z (por el origen)
     FeatureId axisRef = 0;                     // si no es 0, un eje de construcción (en vez de axis)

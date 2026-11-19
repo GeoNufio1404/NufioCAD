@@ -911,6 +911,33 @@ std::vector<FeatureId> ConstructionAxisFeature::dependencies() const
 
 std::optional<std::string> PatternFeature::compute(ModelState& state) const
 {
+    if (sourceFeature != 0) {
+        // Repetir una operación (un agujero, un corte…): su sólido se copia con el patrón y se aplica igual que ella.
+        const auto original = state.operationTools.find(sourceFeature);
+        if (original == state.operationTools.end()) {
+            throw FeatureError("La operación que se iba a repetir ya no existe");
+        }
+        geometry::PatternSpec spec;
+        spec.circular = layout == PatternLayout::Circular;
+        spec.axis.direction = {axis == 0 ? 1.0 : 0.0, axis == 1 ? 1.0 : 0.0, axis == 2 ? 1.0 : 0.0};
+        if (axisRef != 0) {
+            const auto line = state.axes.find(axisRef);
+            if (line == state.axes.end()) {
+                throw FeatureError("El eje de construcción del patrón ya no existe");
+            }
+            spec.axis.point = line->second.point;
+            spec.axis.direction = line->second.direction;
+        }
+        spec.spacing = spacing;
+        spec.angle = angle;
+        spec.count = count;
+        try {
+            const std::vector<geometry::Shape> copies = geometry::pattern(tag(), original->second.shape, spec);
+            return applyOperation(state, *this, Operation(original->second.operation), geometry::fuseBalanced(copies));
+        } catch (const geometry::GeometryError& e) {
+            throw FeatureError(e.what());
+        }
+    }
     const auto source = std::ranges::find_if(state.bodies, [&](const Body& b) { return b.key == body; });
     if (source == state.bodies.end()) {
         throw FeatureError("El cuerpo que se iba a repetir ya no existe");
@@ -971,6 +998,13 @@ std::optional<std::string> PatternFeature::compute(ModelState& state) const
 std::vector<FeatureId> PatternFeature::dependencies() const
 {
     std::vector<FeatureId> ids;
+    if (sourceFeature != 0) {
+        ids.push_back(sourceFeature);
+        if (axisRef != 0) {
+            ids.push_back(axisRef);
+        }
+        return ids;
+    }
     addAll(ids, geometry::ElementRef{body + ":", 0});  // la operación que creó el cuerpo
     for (const std::string& other : alsoBodies) {
         addAll(ids, geometry::ElementRef{other + ":", 0});

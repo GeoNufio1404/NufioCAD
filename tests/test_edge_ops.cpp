@@ -341,6 +341,62 @@ TEST_CASE("Un agujero simple resta un cilindro de la profundidad pedida", "[hole
     REQUIRE_THAT(two.result().bodies.front().shape.volume(), WithinRel(kBox - 2 * kPi * 4.0 * 3.0, 1e-6));
 }
 
+TEST_CASE("Repetir y reflejar una operación (un agujero) en vez de un cuerpo, con archivo", "[hole][pattern][mirror][io]")
+{
+    Document doc = boxDocument();
+    const FeatureId sk = addHoleSketch(doc, {{4, 5}});
+    geometry::HoleSpec spec;
+    spec.diameter = 4;
+    spec.depth = 3;
+    const FeatureId hole = addHole(doc, sk, spec);
+    REQUIRE(doc.status(hole).health == Health::Ok);
+    const double one = kBox - kPi * 4.0 * 3.0;
+    REQUIRE_THAT(doc.result().bodies.front().shape.volume(), WithinRel(one, 1e-6));
+
+    // Patrón lineal del agujero: 3 en total, cada 5 mm en X (no se solapan: Ø 4 y paso 5)
+    auto pattern = std::make_unique<PatternFeature>();
+    pattern->sourceFeature = hole;
+    pattern->layout = PatternLayout::Linear;
+    pattern->axis = 0;
+    pattern->count = 3;
+    pattern->spacing = 5.0;
+    const FeatureId pid = doc.addFeature(std::move(pattern));
+    REQUIRE(doc.status(pid).health == Health::Ok);
+    REQUIRE(doc.result().bodies.size() == 1);
+    REQUIRE_THAT(doc.result().bodies.front().shape.volume(), WithinRel(kBox - 3.0 * kPi * 4.0 * 3.0, 1e-6));
+
+    // Se guarda y se abre igual
+    const auto path = std::filesystem::temp_directory_path() / "nuf_patron_operacion.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    REQUIRE(reopened.status(pid).health == Health::Ok);
+    REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(doc.result().bodies.front().shape.volume(), 1e-9));
+
+    // Si la operación original se borra, el patrón da un error claro en vez de dejar el modelo a medias
+    Document broken = boxDocument();
+    auto lost = std::make_unique<PatternFeature>();
+    lost->sourceFeature = 9999;
+    const FeatureId lostId = broken.addFeature(std::move(lost));
+    CHECK(broken.status(lostId).health == Health::Error);
+
+    // Espejo del agujero respecto del plano YZ por el centro de la caja (x = 10): el agujero de x = 4 cae en x = 16
+    Document mirrored = boxDocument();
+    const FeatureId sk2 = addHoleSketch(mirrored, {{4, 5}});
+    const FeatureId hole2 = addHole(mirrored, sk2, spec);
+    REQUIRE(mirrored.status(hole2).health == Health::Ok);
+    const double before = mirrored.result().bodies.front().shape.volume();
+    auto mirror = std::make_unique<MirrorFeature>();
+    mirror->sourceFeature = hole2;
+    mirror->plane.origin = OriginPlane::YZ;  // plano x = 0: el agujero reflejado cae fuera de la caja y no corta nada
+    const FeatureId mid = mirrored.addFeature(std::move(mirror));
+    CHECK(mirrored.status(mid).health != Health::Error);
+    CHECK(mirrored.result().bodies.front().shape.volume() == Catch::Approx(before).margin(1e-6));
+}
+
 TEST_CASE("Un agujero puesto con un clic en una cara entra en el material, se guarda y sigue a la pieza", "[hole][io]")
 {
     Document doc = boxDocument();

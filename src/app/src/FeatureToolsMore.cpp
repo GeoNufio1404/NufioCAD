@@ -1682,6 +1682,7 @@ PatternTool::PatternTool(document::Document& document, render::Viewport& viewpor
 {
     if (const auto* p = dynamic_cast<const document::PatternFeature*>(original_.get())) {
         body_ = p->body;
+        sourceOp_ = p->sourceFeature;
     }
 }
 
@@ -1692,10 +1693,16 @@ void PatternTool::createFields(QFormLayout* form)
     for (const document::Body& b : before().bodies) {
         bodyBox_->addItem(QString::fromStdString(b.name), QString::fromStdString(b.key));
     }
-    if (body_.empty() && bodyBox_->count() > 0) {
+    // También se puede repetir una operación (un agujero, un corte…) en vez de un cuerpo entero.
+    for (const auto& [id, op] : before().operationTools) {
+        const document::Feature* f = document_.findFeature(id);
+        bodyBox_->addItem(QStringLiteral("Operación: %1").arg(f ? QString::fromStdString(f->name()) : QStringLiteral("?")),
+                          QStringLiteral("op:%1").arg(qulonglong(id)));
+    }
+    if (body_.empty() && sourceOp_ == 0 && bodyBox_->count() > 0) {
         body_ = bodyBox_->itemData(0).toString().toStdString();
     }
-    if (const int at = bodyBox_->findData(QString::fromStdString(body_)); at >= 0) {
+    if (const int at = bodyBox_->findData(sourceOp_ != 0 ? QStringLiteral("op:%1").arg(qulonglong(sourceOp_)) : QString::fromStdString(body_)); at >= 0) {
         bodyBox_->setCurrentIndex(at);
     }
     layout_ = combo({QStringLiteral("Lineal"), QStringLiteral("Circular")});
@@ -1750,7 +1757,10 @@ void PatternTool::createFields(QFormLayout* form)
     form->addRow(QStringLiteral("Ángulo total"), angle_);
     form->addRow(QStringLiteral("Operación"), operation_);
     connect(bodyBox_, &QComboBox::currentIndexChanged, this, [this] {
-        body_ = bodyBox_->currentData().toString().toStdString();
+        const QString data = bodyBox_->currentData().toString();
+        sourceOp_ = data.startsWith(QLatin1String("op:")) ? document::FeatureId(data.mid(3).toULongLong()) : 0;
+        body_ = sourceOp_ != 0 ? std::string() : data.toStdString();
+        updateVisibility();
         updatePreview();
     });
     connect(layout_, &QComboBox::currentIndexChanged, this, [this] {
@@ -1772,11 +1782,14 @@ void PatternTool::updateVisibility()
     const bool circular = layout_->currentIndex() == 1;
     form_->setRowVisible(spacing_, !circular);
     form_->setRowVisible(angle_, circular);
+    // Una operación se repite igual que ella era (corta, une…): sin otros cuerpos ni operación propia.
+    form_->setRowVisible(others_, sourceOp_ == 0);
+    form_->setRowVisible(operation_, sourceOp_ == 0);
 }
 
 std::unique_ptr<document::Feature> PatternTool::build() const
 {
-    if (body_.empty()) {
+    if (body_.empty() && sourceOp_ == 0) {
         return nullptr;
     }
     auto f = std::make_unique<document::PatternFeature>();
@@ -1784,6 +1797,7 @@ std::unique_ptr<document::Feature> PatternTool::build() const
         f->setName(original_->name());
     }
     f->body = body_;
+    f->sourceFeature = sourceOp_;
     for (int i = 0; others_ != nullptr && i < others_->count(); ++i) {
         const std::string key = others_->item(i)->data(Qt::UserRole).toString().toStdString();
         if (others_->item(i)->checkState() == Qt::Checked && key != body_) {
