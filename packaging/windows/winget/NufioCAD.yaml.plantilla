@@ -1,0 +1,5 @@
+PackageIdentifier: NufioCAD.NufioCAD
+PackageVersion: <VERSION>
+DefaultLocale: es-ES
+ManifestType: version
+ManifestVersion: 1.6.0

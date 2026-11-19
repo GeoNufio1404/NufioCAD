@@ -76,6 +76,8 @@ set_target_properties(nuf_app PROPERTIES
     WIN32_EXECUTABLE ON)   # sin consola en Windows
 
 nuf_set_warnings(nuf_app)
+# La versión sale de project(... VERSION) para que el instalador, el programa y la ventana «Acerca de» digan lo mismo.
+target_compile_definitions(nuf_app PRIVATE NUF_VERSION="${PROJECT_VERSION}")
 target_link_libraries(nuf_app PRIVATE
     Qt6::Widgets
     Qt6::Svg
@@ -89,6 +91,30 @@ if(WIN32)
     target_link_libraries(nuf_app PRIVATE dbghelp)
 endif()
 
+# Instalación (Windows, D1): el ejecutable en bin/ con todas las DLL de las que depende (OpenCASCADE y demás, las que vcpkg
+# deja junto al ejecutable) y, con windeployqt, las DLL y los plugins de Qt; más los avisos de licencias de terceros.
+# `cmake --install build/windows-release --prefix <carpeta>` deja una copia lista para ejecutar; `cpack` la empaqueta.
+if(WIN32)
+    include(GNUInstallDirs)
+    install(TARGETS nuf_app RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    # Las DLL de vcpkg (OpenCASCADE y lo que éste necesita: FreeType, libpng, zlib, bzip2, Brotli, SQLite…). TARGET_RUNTIME_DLLS no
+    # trae las de segundo nivel (sin ellas el programa se queda esperando en un aviso de «falta una DLL» sin ventana).
+    if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET AND EXISTS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin")
+        install(DIRECTORY "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin/"
+                DESTINATION ${CMAKE_INSTALL_BINDIR} FILES_MATCHING PATTERN "*.dll")
+    endif()
+    install(FILES $<TARGET_RUNTIME_DLLS:nuf_app> DESTINATION ${CMAKE_INSTALL_BINDIR})
+    qt_generate_deploy_app_script(
+        TARGET nuf_app
+        OUTPUT_SCRIPT nuf_qt_deploy_script
+        NO_UNSUPPORTED_PLATFORM_ERROR)
+    install(SCRIPT ${nuf_qt_deploy_script})
+    install(FILES "${PROJECT_SOURCE_DIR}/packaging/AVISOS-DE-TERCEROS.txt"
+            DESTINATION .)
+    install(FILES "${PROJECT_SOURCE_DIR}/third_party/planegcs/LICENSE"
+            DESTINATION licencias RENAME PlaneGCS-LICENSE.txt)
+endif()
+
 # Instalación (Linux): ejecutable, entrada de menú, iconos y tipo MIME de .nuf.
 if(UNIX AND NOT APPLE)
     include(GNUInstallDirs)
@@ -97,6 +123,10 @@ if(UNIX AND NOT APPLE)
             DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
     install(FILES "${PROJECT_SOURCE_DIR}/packaging/linux/nufiocad-mime.xml"
             DESTINATION ${CMAKE_INSTALL_DATADIR}/mime/packages RENAME nufiocad.xml)
+    install(FILES "${PROJECT_SOURCE_DIR}/packaging/AVISOS-DE-TERCEROS.txt"
+            DESTINATION ${CMAKE_INSTALL_DOCDIR})
+    install(FILES "${PROJECT_SOURCE_DIR}/third_party/planegcs/LICENSE"
+            DESTINATION ${CMAKE_INSTALL_DOCDIR}/licencias RENAME PlaneGCS-LICENSE.txt)
     foreach(size 16 24 32 48 64 128 256)
         install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/app/nufiocad-${size}.png"
                 DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/${size}x${size}/apps

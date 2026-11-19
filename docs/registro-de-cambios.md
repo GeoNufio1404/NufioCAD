@@ -78,6 +78,15 @@ Dos campos nuevos del engranaje, ambos en 0 por defecto (los diseños anteriores
 ---
 
 
+## Fase 19: distribución — 19 nov. 2026
+
+- **Instalador y paquetes** (`cmake/Packaging.cmake`, reglas de instalación de `src/app/CMakeLists.txt`): Windows con NSIS y ZIP (DLL de Qt, OpenCASCADE y vcpkg, plugins con `windeployqt`, asociación de `.nuf`, avisos de licencias); Linux con `.tar.gz`, `.deb`, `.rpm` y AppImage (`packaging/linux/crear-appimage.sh`).
+- **Firma:** `packaging/windows/firmar.ps1` y `cmake/FirmarPaquete.cmake`; sin certificado no firman y no fallan.
+- **Flujo `publicar.yml`** (etiqueta `vX.Y.Z`): compila, empaqueta, firma si hay secretos, SHA-256 y versión en borrador. El CI de Linux ya genera el `.tar.gz`.
+- **Avisos de terceros** (`packaging/AVISOS-DE-TERCEROS.txt`) y guía [`distribucion.md`](distribucion.md); plantillas de winget.
+- La versión del programa sale de `project(NufioCAD VERSION …)` (`NUF_VERSION`).
+- **Cómo volver atrás:** no fusionar `feature/fase-19-distribucion`.
+
 ## Fase 18 (parte): ampliaciones de modelado — 19 nov. 2026
 
 - **Chaflán:** dos distancias o distancia y ángulo (`ChamferStyle`, `ChamferSpec`); un clic en una cara elige todas sus aristas (`Shape::faceEdges`).

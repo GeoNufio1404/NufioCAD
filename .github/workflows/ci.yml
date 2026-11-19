@@ -35,6 +35,11 @@ jobs:
       - name: Autoprueba de la app
         run: ./build/linux-release/src/app/NufioCAD --self-check
 
+      # Fase 19 (D1): que las reglas de instalación y de empaquetado sigan funcionando (el .tar.gz no necesita nada más).
+      - name: Empaquetar (.tar.gz)
+        working-directory: build/linux-release
+        run: cpack -G TGZ
+
       # Prueba de interfaz con la ventana real sobre una pantalla virtual (Xvfb) y OpenGL por software (Mesa):
       # abre cada herramienta, dibuja, comprueba píxeles (guía naranja, vista previa, temas) y que ninguna parada
       # de la interfaz pase del umbral. Las capturas de los dos temas se suben para mirarlas a ojo.
