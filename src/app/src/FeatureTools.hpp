@@ -392,6 +392,7 @@ private:
     geometry::ElementRef face_;
     std::vector<document::FeatureId> planeIds_;  // los planos de construcción del desplegable (tras los 4 fijos)
     QComboBox* bodyBox_ = nullptr;
+    QListWidget* others_ = nullptr;  // los demás cuerpos que se reflejan a la vez
     QComboBox* plane_ = nullptr;
     QComboBox* operation_ = nullptr;
 };

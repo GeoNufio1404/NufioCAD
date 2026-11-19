@@ -639,6 +639,12 @@ Código: **GEN**.
 | GEN.10 | Caja con tapa rectangular › **Bisagra atrás** (nudillos de 7 mm, largo 40) | La tapa queda cerrada sobre la caja (0,2 mm por encima) y unida por tres nudillos al borde de atrás; cada cuerpo sigue siendo suyo (Navegador: Caja y Tapa); el agujero del pasador cruza los tres; mete un trozo de filamento y la tapa gira |
 | GEN.11 | Caja con tapa › «Ranuras por pared» 3 y «Paredes con ranuras: Las cuatro» | Salen tres ranuras de 2 mm una sobre otra, a media altura, en cada pared |
 | GEN.12 | Caja con tapa › **Clips para cerrarla**, solos y con bisagra | Dos resaltes en los lados cortos de la caja y dos lengüetas con gancho en la tapa; al cerrar la tapa los ganchos quedan justo bajo los resaltes (imprime y prueba que encajan con un clic) |
+| MOD.1 | Sólido › Chaflán: elige una arista y el tipo **Dos distancias** (2 y 4) | El chaflán sale asimétrico (2 por una cara, 4 por la otra); «Medir desde la otra cara» lo gira al revés; con **Distancia y ángulo** (3 y 60°) el otro lado sale de 3·tan 60° |
+| MOD.2 | Sólido › Redondeo o Chaflán: haz clic en **una cara** del cuerpo | Se eligen todas sus aristas a la vez; otro clic en la misma cara las quita |
+| MOD.3 | Sólido › Vaciado: marca **Vaciado cerrado** y haz clic en una cara de una caja | El panel pide solo un clic; la caja queda con una cavidad cerrada por dentro (úsala con la Sección para verla) y el volumen baja en lo que mide el hueco |
+| MOD.4 | Sólido › Sección: elige «Cara plana elegida» (con una cara marcada antes) o un plano de construcción | El corte pasa por esa cara o ese plano; la posición lo mete hacia dentro y «Ver el otro lado» lo invierte |
+| MOD.5 | Sólido › Medir: elige dos caras y pulsa **Ctrl+C**, luego pega en un editor | Se copia el resultado (distancia, ángulo…); la barra de estado dice «Medida copiada» |
+| MOD.6 | Con dos cuerpos: Sólido › Espejo, elige uno y marca el otro en «Reflejar también» | Salen los dos reflejados (con «Cuerpo nuevo», dos cuerpos nuevos); cambiar uno de los originales rehace su copia |
 | GEN.9 | **Rosca interior**: caja, agujero de Ø 6.47 con la herramienta Agujero, y rosca M8 con operación «Cortar» | El agujero queda roscado |
 
 #### 3.6.3 Barrido y loft

@@ -3171,3 +3171,45 @@ TEST_CASE("El tipo y el aro del engranaje se guardan y la rueda sigue siendo ext
     REQUIRE(static_cast<const GearFeature*>(reopened.findFeature(doc.feature(0).id()))->spec.type == geometry::GearType::External);
     REQUIRE_THAT(reopened.result().bodies[1].shape.volume(), WithinRel(doc.result().bodies[1].shape.volume(), 1e-9));
 }
+
+TEST_CASE("El espejo refleja varios cuerpos a la vez y se guarda", "[mirror][io]")
+{
+    Document doc = boxDocument();
+    addMove(doc, {0, 40, 0}, 0.0, true);  // un segundo cuerpo (f3), copia del primero
+    REQUIRE(doc.result().bodies.size() == 2);
+    auto m = std::make_unique<MirrorFeature>();
+    m->body = "f2";
+    m->alsoBodies = {"f3"};
+    m->plane.origin = OriginPlane::YZ;
+    m->operation = Operation::NewBody;
+    const FeatureId id = doc.addFeature(std::move(m));
+    REQUIRE(doc.status(id).health == Health::Ok);
+    REQUIRE(doc.result().bodies.size() == 4);
+    for (std::size_t i = 2; i < 4; ++i) {
+        REQUIRE_THAT(doc.result().bodies[i].shape.volume(), WithinRel(kBox, 1e-6));
+        REQUIRE_THAT(doc.result().bodies[i].shape.bounds().min.x, Catch::Matchers::WithinAbs(-20.0, 1e-6));
+    }
+    // Una copia está 40 mm más allá en Y que la otra
+    REQUIRE_THAT(std::abs(doc.result().bodies[3].shape.bounds().min.y - doc.result().bodies[2].shape.bounds().min.y),
+                 Catch::Matchers::WithinAbs(40.0, 1e-6));
+    // Con un cuerpo que ya no existe en la lista avisa y refleja los demás
+    auto lost = std::make_unique<MirrorFeature>();
+    lost->body = "f2";
+    lost->alsoBodies = {"f99"};
+    lost->plane.origin = OriginPlane::XY;
+    lost->operation = Operation::NewBody;
+    const FeatureId warned = doc.addFeature(std::move(lost));
+    REQUIRE(doc.status(warned).health == Health::Warning);
+
+    const auto path = std::filesystem::temp_directory_path() / "nuf_espejo_varios.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    const auto* again = dynamic_cast<const MirrorFeature*>(reopened.findFeature(id));
+    REQUIRE(again != nullptr);
+    REQUIRE(again->alsoBodies == std::vector<std::string>{"f3"});
+    REQUIRE(reopened.result().bodies.size() == doc.result().bodies.size());
+}

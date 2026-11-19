@@ -78,6 +78,14 @@ Dos campos nuevos del engranaje, ambos en 0 por defecto (los diseños anteriores
 ---
 
 
+## Fase 18 (parte): ampliaciones de modelado — 19 nov. 2026
+
+- **Chaflán:** dos distancias o distancia y ángulo (`ChamferStyle`, `ChamferSpec`); un clic en una cara elige todas sus aristas (`Shape::faceEdges`).
+- **Vaciado cerrado** (`shellClosed`): cavidad cerrada del espesor pedido, sin abrir caras.
+- **Sección** por una cara plana o un plano de construcción; **Ctrl+C** copia la medida.
+- **Espejo de varios cuerpos** a la vez (`MirrorFeature::alsoBodies`).
+- **Cómo volver atrás:** no fusionar `feature/fase-18-modelado`.
+
 ## Fase 17: generadores y salida — 19 nov. 2026
 
 - **SVG como sketch** (`nuf/sketch/Svg.hpp`): lector sin dependencias (trazados, formas básicas, transformaciones, unidades) que da el mismo resultado que un DXF; la acción de Sketch lee DXF o SVG según la extensión.

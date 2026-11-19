@@ -525,6 +525,9 @@ FeatureRow rowOf(const Feature& f)
         const auto& m = static_cast<const MirrorFeature&>(f);
         row.type = "mirror";
         params = {{"body", m.body}, {"plane", toJson(m.plane)}, {"operation", nameOf(kOperations, m.operation)}};
+        if (!m.alsoBodies.empty()) {
+            params["alsoBodies"] = m.alsoBodies;
+        }
         break;
     }
     case FeatureKind::ConstructionPlane: {
@@ -718,6 +721,11 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         m->body = text(p, "body");
         m->plane = attachmentOf(p.at("plane"));
         m->operation = parseEnum(kOperations, text(p, "operation"), "operación");
+        if (p.contains("alsoBodies")) {
+            for (const Json& other : p.at("alsoBodies")) {
+                m->alsoBodies.push_back(other.get<std::string>());
+            }
+        }
         feature = std::move(m);
     } else if (row.type == "plane") {
         auto cp = std::make_unique<ConstructionPlaneFeature>();

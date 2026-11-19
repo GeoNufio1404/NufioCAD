@@ -67,7 +67,19 @@ void MirrorTool::createFields(QFormLayout* form)
         plane_->setCurrentIndex(at);
         operation_->setCurrentIndex(m->operation == document::Operation::NewBody ? 1 : 0);
     }
+    // Otros cuerpos que se reflejan a la vez (O1): una casilla por cada uno (el cuerpo de arriba ya va).
+    others_ = new QListWidget();
+    others_->setMaximumHeight(90);
+    for (const document::Body& b : before().bodies) {
+        auto* item = new QListWidgetItem(QString::fromStdString(b.name), others_);
+        item->setData(Qt::UserRole, QString::fromStdString(b.key));
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+        const auto* m = dynamic_cast<const document::MirrorFeature*>(original_.get());
+        item->setCheckState(m != nullptr && std::ranges::find(m->alsoBodies, b.key) != m->alsoBodies.end() ? Qt::Checked : Qt::Unchecked);
+    }
+    connect(others_, &QListWidget::itemChanged, this, [this] { updatePreview(); });
     form->addRow(QStringLiteral("Cuerpo"), bodyBox_);
+    form->addRow(QStringLiteral("Reflejar también"), others_);
     form->addRow(QStringLiteral("Plano de simetría"), plane_);
     form->addRow(QStringLiteral("Operación"), operation_);
     connect(bodyBox_, &QComboBox::currentIndexChanged, this, [this] {
@@ -101,6 +113,12 @@ std::unique_ptr<document::Feature> MirrorTool::build() const
         f->setName(original_->name());
     }
     f->body = body_;
+    for (int i = 0; others_ != nullptr && i < others_->count(); ++i) {
+        const std::string key = others_->item(i)->data(Qt::UserRole).toString().toStdString();
+        if (others_->item(i)->checkState() == Qt::Checked && key != body_) {
+            f->alsoBodies.push_back(key);
+        }
+    }
     f->operation = operation_->currentIndex() == 1 ? document::Operation::NewBody : document::Operation::Join;
     const int plane = plane_->currentIndex();
     if (plane < 3) {
@@ -137,7 +155,12 @@ QString MirrorTool::inputsText() const
     if (plane_->currentIndex() == 3 && face_.empty()) {
         return QStringLiteral("Elige en la vista la cara plana que hace de plano de simetría");
     }
-    return QStringLiteral("Reflejar «%1»").arg(bodyBox_->currentText());
+    int extra = 0;
+    for (int i = 0; others_ != nullptr && i < others_->count(); ++i) {
+        extra += others_->item(i)->checkState() == Qt::Checked && others_->item(i)->data(Qt::UserRole).toString().toStdString() != body_ ? 1 : 0;
+    }
+    return extra == 0 ? QStringLiteral("Reflejar «%1»").arg(bodyBox_->currentText())
+                      : QStringLiteral("Reflejar «%1» y otros %2 cuerpos").arg(bodyBox_->currentText()).arg(extra);
 }
 
 // --- Plano de construcción ---------------------------------------------------------

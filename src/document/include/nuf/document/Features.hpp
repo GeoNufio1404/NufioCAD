@@ -197,6 +197,7 @@ public:
 class MirrorFeature final : public Feature {
 public:
     std::string body;            // clave del cuerpo («f3»)
+    std::vector<std::string> alsoBodies;  // otros cuerpos que se reflejan a la vez (O1); cada uno da su copia
     SketchAttachment plane;      // dónde está el plano de simetría
     Operation operation = Operation::Join;
 

@@ -574,14 +574,35 @@ std::optional<std::string> MirrorFeature::compute(ModelState& state) const
     std::optional<std::string> warning;
     const sketch::Plane mirrorPlane =
         resolvePlane(state, plane, "del plano de simetría", "se usa su última posición", warning);
-    geometry::Shape mirrored;
+    // Todos los cuerpos a reflejar (el principal y los demás), tal como estaban antes de empezar: reflejar uno con «Unir» cambia
+    // la lista de cuerpos, así que se toman las formas de antemano.
+    std::vector<std::pair<std::string, geometry::Shape>> sources = {{body, source->shape}};
+    int missing = 0;
+    for (const std::string& key : alsoBodies) {
+        const auto other = std::ranges::find_if(state.bodies, [&](const Body& b) { return b.key == key; });
+        if (other == state.bodies.end()) {
+            ++missing;
+        } else if (key != body) {
+            sources.emplace_back(key, other->shape);
+        }
+    }
     try {
-        mirrored = geometry::mirror(tag(), source->shape, mirrorPlane);
-        if (auto extra = applyOperation(state, *this, operation, mirrored)) {
-            warning = warning ? *warning + " " + *extra : *extra;
+        std::size_t index = 0;
+        for (const auto& [key, shape] : sources) {
+            // Cada copia lleva su número en el nombre de las caras, para que no se repitan entre cuerpos.
+            const std::string name = index == 0 ? tag() : tag() + ":c" + std::to_string(index);
+            ++index;
+            const geometry::Shape mirrored = geometry::mirror(name, shape, mirrorPlane);
+            if (auto extra = applyOperation(state, *this, operation, mirrored)) {
+                warning = warning ? *warning + " " + *extra : *extra;
+            }
         }
     } catch (const geometry::GeometryError& e) {
         throw FeatureError(e.what());
+    }
+    if (missing > 0) {
+        const std::string text = missing == 1 ? "Un cuerpo de la lista ya no existe." : "Algunos cuerpos de la lista ya no existen.";
+        warning = warning ? *warning + " " + text : text;
     }
     return warning;
 }
@@ -590,6 +611,9 @@ std::vector<FeatureId> MirrorFeature::dependencies() const
 {
     std::vector<FeatureId> ids;
     addAll(ids, geometry::ElementRef{body + ":", 0});  // la operación que creó el cuerpo
+    for (const std::string& other : alsoBodies) {
+        addAll(ids, geometry::ElementRef{other + ":", 0});
+    }
     addAttachmentDependencies(ids, plane);
     return ids;
 }
