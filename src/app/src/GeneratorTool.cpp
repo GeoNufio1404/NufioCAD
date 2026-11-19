@@ -10,6 +10,7 @@
 #include <QFontComboBox>
 #include <QFormLayout>
 #include <QLineEdit>
+#include <QPlainTextEdit>
 #include <QLabel>
 #include <QPushButton>
 #include <QToolButton>
@@ -71,7 +72,13 @@ void GeneratorTool::createFields(QFormLayout* form)
             }
         }
         QWidget* widget = nullptr;
-        if (f.kind == document::GeneratorField::Kind::Text) {
+        if (f.kind == document::GeneratorField::Kind::Text && f.multiline) {
+            auto* edit = new QPlainTextEdit(QString::fromStdString(f.text));
+            edit->setMaximumHeight(int(edit->fontMetrics().lineSpacing() * 4.5));
+            edit->setTabChangesFocus(true);
+            connect(edit, &QPlainTextEdit::textChanged, this, [this] { updatePreview(); });
+            widget = edit;
+        } else if (f.kind == document::GeneratorField::Kind::Text) {
             auto* edit = new QLineEdit(QString::fromStdString(f.text));
             connect(edit, &QLineEdit::textChanged, this, [this] { updatePreview(); });
             widget = edit;
@@ -206,7 +213,9 @@ void GeneratorTool::resetValues()
         if (row == rows_.end()) {
             continue;
         }
-        if (f.kind == document::GeneratorField::Kind::Text) {
+        if (f.kind == document::GeneratorField::Kind::Text && f.multiline) {
+            static_cast<QPlainTextEdit*>(row->widget)->setPlainText(QString::fromStdString(f.text));
+        } else if (f.kind == document::GeneratorField::Kind::Text) {
             static_cast<QLineEdit*>(row->widget)->setText(QString::fromStdString(f.text));
         } else if (f.kind == document::GeneratorField::Kind::Font) {
             if (!f.text.empty()) {
@@ -254,7 +263,9 @@ document::GeneratorValues GeneratorTool::values() const
 {
     document::GeneratorValues result;
     for (const Row& row : rows_) {
-        if (row.field.kind == document::GeneratorField::Kind::Text) {
+        if (row.field.kind == document::GeneratorField::Kind::Text && row.field.multiline) {
+            result.texts[row.field.key] = static_cast<QPlainTextEdit*>(row.widget)->toPlainText().toStdString();
+        } else if (row.field.kind == document::GeneratorField::Kind::Text) {
             result.texts[row.field.key] = static_cast<QLineEdit*>(row.widget)->text().toStdString();
         } else if (row.field.kind == document::GeneratorField::Kind::Font) {
             result.texts[row.field.key] = static_cast<QFontComboBox*>(row.widget)->currentFont().family().toStdString();

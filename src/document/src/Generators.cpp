@@ -457,6 +457,8 @@ public:
         text.label = "Texto";
         text.kind = K::Text;
         text.text = "Nufio";
+        text.multiline = true;
+        text.hint = "Varias líneas: pulsa Intro para empezar otra";
         GeneratorField font;
         font.key = "fuente";
         font.label = "Fuente";
@@ -471,6 +473,8 @@ public:
                 text,
                 font,
                 length("altura_texto", "Tamaño del texto", 20.0, 3.0, 300.0, "Tamaño de la fuente; las letras mayúsculas miden ~70 %"),
+                choice("alineacion", "Alineación", {"Centrado", "A la izquierda", "A la derecha"}),
+                length("interlinea", "Espacio entre líneas", 2.0, 0.0, 100.0, "Se suma a la altura del texto (solo con varias líneas)"),
                 mode,
                 length("margen", "Margen de la placa", 5.0, 1.0, 100.0, "Entre el texto y el borde"),
                 length("grosor", "Grosor de la placa", 3.0, 0.8, 50.0),
@@ -508,24 +512,76 @@ public:
         const std::string textKey = values.texts.count("texto") ? values.texts.at("texto") : std::string();
         const std::string family = values.texts.count("fuente") ? values.texts.at("fuente") : std::string();
 
-        // El contorno de las letras, centrado en el origen.
-        const std::vector<sketch::Geometry> outline = textOutline(textKey, v("altura_texto"), family);
-        if (outline.empty()) {
-            throw std::runtime_error("No se pudo crear el texto (¿está vacío o la fuente no existe?)");
+        // El contorno de las letras, línea por línea: la primera arriba y las demás debajo, a la distancia de una línea base a la
+        // siguiente (altura del texto por 1,1 más el espacio extra), alineadas a la izquierda, al centro o a la derecha.
+        // Los diseños anteriores no traen alineación ni espacio: se leen como centrado y 2 mm.
+        const int align = values.count("alineacion") != 0 ? int(values.at("alineacion")) : 0;
+        const double extraSpace = values.count("interlinea") != 0 ? values.at("interlinea") : 2.0;
+        const double pitch = v("altura_texto") * 1.1 + extraSpace;
+        std::vector<std::string> lines;
+        {
+            std::string current;
+            for (const char c : textKey) {
+                if (c == '\n') {
+                    lines.push_back(current);
+                    current.clear();
+                } else if (c != '\r') {
+                    current.push_back(c);
+                }
+            }
+            lines.push_back(current);
         }
-        double minX = 1e300, minY = 1e300, maxX = -1e300, maxY = -1e300;
-        for (const sketch::Geometry& g : outline) {
-            for (const sketch::Vec2& point : sketch::polyline(g)) {
-                minX = std::min(minX, point.x);
-                maxX = std::max(maxX, point.x);
-                minY = std::min(minY, point.y);
-                maxY = std::max(maxY, point.y);
+        struct TextLine {
+            std::vector<sketch::Geometry> outline;
+            double minX = 1e300, maxX = -1e300, minY = 1e300, maxY = -1e300;
+            double row = 0.0;
+        };
+        std::vector<TextLine> rows;
+        for (std::size_t i = 0; i < lines.size(); ++i) {
+            if (lines[i].find_first_not_of(" \t") == std::string::npos) {
+                continue;  // una línea en blanco solo deja su hueco
+            }
+            TextLine row;
+            row.outline = textOutline(lines[i], v("altura_texto"), family);
+            row.row = -double(i) * pitch;
+            for (const sketch::Geometry& g : row.outline) {
+                for (const sketch::Vec2& point : sketch::polyline(g)) {
+                    row.minX = std::min(row.minX, point.x);
+                    row.maxX = std::max(row.maxX, point.x);
+                    row.minY = std::min(row.minY, point.y);
+                    row.maxY = std::max(row.maxY, point.y);
+                }
+            }
+            if (!row.outline.empty()) {
+                rows.push_back(std::move(row));
             }
         }
-        const sketch::Vec2 shift{-(minX + maxX) / 2.0, -(minY + maxY) / 2.0};
+        if (rows.empty()) {
+            throw std::runtime_error("No se pudo crear el texto (¿está vacío o la fuente no existe?)");
+        }
+        double widest = 0.0;
+        for (const TextLine& row : rows) {
+            widest = std::max(widest, row.maxX - row.minX);
+        }
+        // Desplazamiento de cada línea (para alinearla) y caja de todo el texto.
+        std::vector<sketch::Vec2> offsets;
+        double minX = 1e300, minY = 1e300, maxX = -1e300, maxY = -1e300;
+        for (const TextLine& row : rows) {
+            const double width = row.maxX - row.minX;
+            const double dx = align == 1 ? -row.minX : align == 2 ? widest - width - row.minX : (widest - width) / 2.0 - row.minX;
+            offsets.push_back({dx, row.row});
+            minX = std::min(minX, row.minX + dx);
+            maxX = std::max(maxX, row.maxX + dx);
+            minY = std::min(minY, row.minY + row.row);
+            maxY = std::max(maxY, row.maxY + row.row);
+        }
+        const sketch::Vec2 center{-(minX + maxX) / 2.0, -(minY + maxY) / 2.0};
         sketch::Sketch lettering;
-        for (const sketch::EntityId id : sketch::importDrawing(lettering, {outline, {}}, shift)) {
-            lettering.entity(id)->locked = true;
+        for (std::size_t i = 0; i < rows.size(); ++i) {
+            const sketch::Vec2 shift{offsets[i].x + center.x, offsets[i].y + center.y};
+            for (const sketch::EntityId id : sketch::importDrawing(lettering, {rows[i].outline, {}}, shift)) {
+                lettering.entity(id)->locked = true;
+            }
         }
         // Las regiones que rellenan el hueco de una letra (el interior de una «O») no son letra: se descartan.
         const std::vector<sketch::Profile> found = sketch::findProfiles(lettering);

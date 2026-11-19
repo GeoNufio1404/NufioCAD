@@ -22,6 +22,7 @@ namespace nuf::document {
 // Una pregunta del formulario del generador.
 struct GeneratorField {
     enum class Kind { Length, Choice, Text, Font, Count, Angle };
+    bool multiline = false;            // Text: varias líneas (un cuadro de texto en vez de una línea)
     std::string key;
     std::string label;
     std::string hint;                  // ayuda breve bajo el campo
