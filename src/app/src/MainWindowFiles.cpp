@@ -30,6 +30,7 @@
 #include <QMimeData>
 #include <QPushButton>
 #include <QSettings>
+#include <QInputDialog>
 #include <QToolButton>
 #include <QCheckBox>
 #include <functional>
@@ -108,6 +109,10 @@ io::ViewState MainWindow::currentView() const
     view.originVisible = originVisible_;
     view.groundVisible = groundVisible_;
     view.displayUnit = Units::label(Units::instance().length()).toStdString();
+    if (const auto camera = viewport_->cameraState(); camera.valid) {
+        view.camera = {camera.eye[0], camera.eye[1], camera.eye[2], camera.center[0], camera.center[1], camera.center[2],
+                       camera.up[0], camera.up[1], camera.up[2], camera.scale, camera.orthographic ? 1.0 : 0.0};
+    }
     return view;
 }
 
@@ -125,6 +130,7 @@ void MainWindow::applyView(const io::ViewState& view)
     groundVisible_ = view.groundVisible;
     viewport_->setOriginVisible(originVisible_);
     viewport_->setGroundVisible(groundVisible_);
+    savedCamera_ = view.camera;
 }
 
 // Deja la ventana sin sketch ni herramienta en curso (lo que no se terminó se
@@ -239,7 +245,13 @@ bool MainWindow::openPath(const std::filesystem::path& path, bool recovered, con
     refreshModel();
     // El modelo se calcula en segundo plano: encuadre y resumen cuando esté listo.
     whenComputed([this, path] {
-        viewport_->fitAll();
+        if (savedCamera_.size() == 11) {
+            // El diseño guardó cómo se miraba: se vuelve a esa vista en vez de encuadrar todo.
+            const std::vector<double>& c = savedCamera_;
+            viewport_->setCameraState({true, {c[0], c[1], c[2]}, {c[3], c[4], c[5]}, {c[6], c[7], c[8]}, c[9], c[10] > 0.5});
+        } else {
+            viewport_->fitAll();
+        }
         int failed = 0;
         for (std::size_t i = 0; i < document_.featureCount(); ++i) {
             failed += document_.status(document_.feature(i).id()).health == document::Health::Error ? 1 : 0;
@@ -367,6 +379,91 @@ void MainWindow::importStep()
     }
 }
 
+// Vuelve a leer del disco un STEP ya importado (que cambió desde entonces) y sustituye el sólido de esa importación; lo que se
+// hizo después sobre él se rehace solo. Se puede deshacer (O6).
+void MainWindow::reimportStep()
+{
+    if (isEditing()) {
+        return;
+    }
+    if (importRun_.running()) {
+        statusBar()->showMessage(QStringLiteral("Ya se está importando un STEP; espera a que termine"), 4000);
+        return;
+    }
+    std::vector<const document::ImportFeature*> imports;
+    for (std::size_t i = 0; i < document_.featureCount(); ++i) {
+        if (const auto* feature = dynamic_cast<const document::ImportFeature*>(&document_.feature(i)); feature != nullptr) {
+            imports.push_back(feature);
+        }
+    }
+    if (imports.empty()) {
+        statusBar()->showMessage(QStringLiteral("Este diseño no tiene ninguna importación de STEP"), 6000);
+        return;
+    }
+    const document::ImportFeature* chosen = imports.front();
+    if (imports.size() > 1) {
+        QStringList names;
+        for (const auto* feature : imports) {
+            names << QString::fromStdString(feature->name());
+        }
+        bool ok = false;
+        const QString picked = QInputDialog::getItem(this, QStringLiteral("Actualizar importación"), QStringLiteral("¿Cuál?"), names, 0, false, &ok);
+        if (!ok) {
+            return;
+        }
+        chosen = imports[std::size_t(names.indexOf(picked))];
+    }
+    std::filesystem::path path = chosen->sourcePath.empty() ? std::filesystem::path{} : toPath(QString::fromStdString(chosen->sourcePath));
+    std::error_code ignored;
+    if (path.empty() || !std::filesystem::exists(path, ignored)) {
+        const QString file = QFileDialog::getOpenFileName(this, QStringLiteral("¿Dónde está ahora «%1»?").arg(QString::fromStdString(chosen->source)),
+                                                          lastDirectory(), QStringLiteral("Archivos STEP (*.step *.stp);;Todos los archivos (*)"));
+        if (file.isEmpty()) {
+            return;
+        }
+        path = toPath(file);
+    }
+    struct Outcome {
+        geometry::StepImport imported;
+        QString error;
+    };
+    auto outcome = std::make_shared<Outcome>();
+    const std::uint64_t generation = documentGeneration_;
+    const document::FeatureId id = chosen->id();
+    const QString name = QString::fromStdString(chosen->name());
+    statusBar()->showMessage(QStringLiteral("Actualizando %1 desde su archivo… puedes seguir mirando el diseño").arg(name));
+    importRun_.start(
+        [outcome, path] {
+            try {
+                outcome->imported = geometry::readStep(path);
+            } catch (const std::exception& e) {
+                outcome->error = QString::fromUtf8(e.what());
+            } catch (...) {
+                outcome->error = QStringLiteral("error desconocido al leer el archivo");
+            }
+        },
+        [this, outcome, path, id, name, generation] {
+            updateBusyBadge();
+            statusBar()->clearMessage();
+            if (!outcome->error.isEmpty()) {
+                QMessageBox::warning(this, QStringLiteral("Actualizar importación"), QStringLiteral("No se pudo leer «%1».\n\n%2").arg(name, outcome->error));
+                return;
+            }
+            const auto* current = dynamic_cast<const document::ImportFeature*>(document_.findFeature(id));
+            if (generation != documentGeneration_ || current == nullptr || isEditing()) {
+                statusBar()->showMessage(QStringLiteral("Se descartó la actualización de %1: el diseño cambió mientras se leía").arg(name), 10000);
+                return;
+            }
+            auto updated = std::make_unique<document::ImportFeature>(*current);
+            updated->brep = std::make_shared<const std::string>(std::move(outcome->imported.brep));
+            updated->notes = std::move(outcome->imported.warnings);
+            updated->sourcePath = QString(fromPath(std::filesystem::absolute(path))).toStdString();
+            commands_.push(std::make_unique<commands::EditFeature>(id, std::move(updated), "Actualizar importación"));
+            statusBar()->showMessage(QStringLiteral("«%1» actualizado desde su archivo").arg(name), 8000);
+        });
+    updateBusyBadge();
+}
+
 // Agrega el sólido del STEP como una operación más del historial (se puede
 // deshacer). El diseño guarda el sólido ya reparado, no la ruta del archivo.
 // Leer y reparar el STEP (lo que tarda) va en un hilo aparte; la ventana sigue viva y el historial se toca
@@ -416,6 +513,7 @@ bool MainWindow::importStepFile(const std::filesystem::path& path)
             }
             auto feature = std::make_unique<document::ImportFeature>();
             feature->source = name.toStdString();
+            feature->sourcePath = QString(fromPath(std::filesystem::absolute(path))).toStdString();
             feature->setName(QString(fromPath(path.stem())).toStdString());
             feature->brep = std::make_shared<const std::string>(std::move(outcome->imported.brep));
             feature->notes = std::move(outcome->imported.warnings);

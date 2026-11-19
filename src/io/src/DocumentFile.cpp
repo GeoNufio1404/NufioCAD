@@ -661,6 +661,9 @@ FeatureRow rowOf(const Feature& f)
         const auto& i = static_cast<const ImportFeature&>(f);
         row.type = "import";
         params = {{"source", i.source}, {"notes", i.notes}, {"blob", blobKey(f.id())}};
+        if (!i.sourcePath.empty()) {
+            params["sourcePath"] = i.sourcePath;
+        }
         break;
     }
     }
@@ -920,6 +923,7 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
     } else if (row.type == "import") {
         auto i = std::make_unique<ImportFeature>();
         i->source = text(p, "source");
+        i->sourcePath = p.value("sourcePath", std::string());
         for (const Json& note : p.at("notes")) {
             i->notes.push_back(note.get<std::string>());
         }
@@ -959,7 +963,7 @@ Json toJson(const ViewState& v)
         sketches[std::to_string(id)] = visible;
     }
     return {{"hiddenBodies", v.hiddenBodies}, {"sketches", sketches}, {"origin", v.originVisible},
-            {"ground", v.groundVisible}, {"displayUnit", v.displayUnit}};
+            {"ground", v.groundVisible}, {"displayUnit", v.displayUnit}, {"camera", v.camera}};
 }
 
 ViewState viewOf(const Json& j)
@@ -974,6 +978,14 @@ ViewState viewOf(const Json& j)
     v.originVisible = j.at("origin").get<bool>();
     v.groundVisible = j.at("ground").get<bool>();
     v.displayUnit = j.value("displayUnit", std::string());
+    if (j.contains("camera") && j.at("camera").is_array()) {
+        for (const Json& value : j.at("camera")) {
+            v.camera.push_back(value.get<double>());
+        }
+        if (v.camera.size() != 11) {
+            v.camera.clear();
+        }
+    }
     return v;
 }
 

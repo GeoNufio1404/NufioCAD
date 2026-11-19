@@ -150,6 +150,7 @@ private:
     void updateStartScreen();
     void showRecents();
     bool importStepFile(const std::filesystem::path& path);
+    void reimportStep();
 
     // Operaciones sólidas.
     void startTool(std::unique_ptr<FeatureTool> tool);
@@ -228,6 +229,7 @@ private:
     QDoubleSpinBox* sectionOffset_ = nullptr;
     QCheckBox* sectionFlip_ = nullptr;
     // Sección por un plano de construcción o por una cara plana (O5): el plano elegido y la lista de planos de construcción.
+    std::vector<double> savedCamera_;  // la cámara con que se guardó el diseño abierto (vacía: encuadrar)
     QString lastMeasureText_;  // el resultado de Medir en texto plano, para Ctrl+C (O5)
     sketch::Plane sectionCustom_;
     bool hasSectionCustom_ = false;
@@ -268,6 +270,7 @@ private:
     QAction* exportAction_ = nullptr;
     QAction* printAction_ = nullptr;
     QAction* importAction_ = nullptr;
+    QAction* reimportAction_ = nullptr;
     QMenu* recentMenu_ = nullptr;
     std::unique_ptr<Recovery> recovery_;
     StartScreen* startScreen_ = nullptr;

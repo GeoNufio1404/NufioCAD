@@ -100,6 +100,43 @@ void Viewport::fitAll()
     update();
 }
 
+Viewport::CameraState Viewport::cameraState() const
+{
+    CameraState state;
+    const Handle(Graphic3d_Camera) camera = impl_->view->Camera();
+    if (camera.IsNull()) {
+        return state;
+    }
+    const gp_Pnt eye = camera->Eye();
+    const gp_Pnt center = camera->Center();
+    const gp_Dir up = camera->Up();
+    state.valid = true;
+    state.eye = {eye.X(), eye.Y(), eye.Z()};
+    state.center = {center.X(), center.Y(), center.Z()};
+    state.up = {up.X(), up.Y(), up.Z()};
+    state.scale = camera->Scale();
+    state.orthographic = camera->IsOrthographic();
+    return state;
+}
+
+void Viewport::setCameraState(const CameraState& state)
+{
+    if (!state.valid || impl_->view->Camera().IsNull()) {
+        return;
+    }
+    const Handle(Graphic3d_Camera) camera = impl_->view->Camera();
+    if (state.orthographic) {
+        camera->SetProjectionType(Graphic3d_Camera::Projection_Orthographic);
+    } else {
+        camera->SetProjectionType(Graphic3d_Camera::Projection_Perspective);
+    }
+    camera->SetEyeAndCenter(gp_Pnt(state.eye[0], state.eye[1], state.eye[2]), gp_Pnt(state.center[0], state.center[1], state.center[2]));
+    camera->SetUp(gp_Dir(state.up[0], state.up[1], state.up[2]));
+    camera->SetScale(state.scale);
+    impl_->view->Invalidate();
+    update();
+}
+
 void Viewport::resetView()
 {
     impl_->view->SetProj(V3d_TypeOfOrientation_Zup_AxoRight, false);

@@ -434,6 +434,7 @@ TEST_CASE("Un diseño con un STEP importado se guarda, se abre y se sigue modela
     auto imported = std::make_unique<ImportFeature>();
     const geometry::StepImport data = geometry::readStep(step);
     imported->source = "pieza.step";
+    imported->sourcePath = "C:/piezas/pieza.step";
     imported->setName("pieza");
     imported->brep = std::make_shared<const std::string>(data.brep);
     const FeatureId importId = doc.addFeature(std::move(imported));
@@ -475,6 +476,7 @@ TEST_CASE("Un diseño con un STEP importado se guarda, se abre y se sigue modela
     REQUIRE_THAT(reopened.result().bodies[0].shape.volume(), WithinRel(expected, 1e-3));
     const auto* again = static_cast<const ImportFeature*>(reopened.findFeature(importId));
     REQUIRE(again->source == "pieza.step");
+    REQUIRE(again->sourcePath == "C:/piezas/pieza.step");  // la ruta viaja para poder volver a leer el archivo
     REQUIRE(io::dumpDocument(path).find("pieza.step") != std::string::npos);
 
     // Sin el sólido guardado, el archivo está dañado y se dice.
@@ -543,4 +545,28 @@ TEST_CASE("Guardar en dos tiempos: el plan no depende del documento y escribe lo
 
     // Un plan vacío no escribe nada y avisa.
     REQUIRE_THROWS_AS(io::writeSave(tempFile("vacio.nuf"), io::SavePlan{}), io::NufError);
+}
+
+TEST_CASE("La cámara viaja en el archivo y un diseño anterior se abre sin ella", "[io][view]")
+{
+    Document doc;
+    const FeatureId sk = doc.addFeature(sketchOn(rectangleSketch(0, 0, 10, 10)));
+    doc.addFeature(extrudeAll(doc, sk, 5, Operation::NewBody));
+    io::ViewState view;
+    view.camera = {100, -80, 60, 5, 5, 2.5, 0, 0, 1, 42.5, 1};
+    const auto path = tempFile("camara.nuf");
+    Cleanup cleanup{path};
+    io::saveDocument(path, doc, view);
+    Document reopened;
+    io::ViewState back;
+    io::loadDocument(path, reopened, back);
+    REQUIRE(back.camera == view.camera);
+    // Sin cámara guardada, queda vacía y no cuenta como cambio de la vista
+    io::saveDocument(path, doc, {});
+    io::ViewState plain;
+    io::loadDocument(path, reopened, plain);
+    REQUIRE(plain.camera.empty());
+    io::ViewState other;
+    other.camera = {1, 2, 3, 4, 5, 6, 0, 0, 1, 1, 1};
+    REQUIRE(plain == other);
 }

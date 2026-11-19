@@ -139,6 +139,13 @@ void MainWindow::updateExportAction()
     if (importAction_ != nullptr) {
         importAction_->setEnabled(!sketch_ && !tool_);
     }
+    if (reimportAction_ != nullptr) {
+        bool any = false;
+        for (std::size_t i = 0; i < document_.featureCount() && !any; ++i) {
+            any = document_.feature(i).kind() == document::FeatureKind::Import;
+        }
+        reimportAction_->setEnabled(!sketch_ && !tool_ && any);
+    }
     if (exportAction_ != nullptr) {
         exportAction_->setEnabled(!sketch_ && !tool_ && !document_.result().bodies.empty());
     }

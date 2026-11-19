@@ -184,6 +184,8 @@ void MainWindow::createMenus()
     file->addSeparator();
     importAction_ = addFile(QStringLiteral("&Importar STEP…"), QKeySequence(Qt::CTRL | Qt::Key_I),
                             QStringLiteral("file-open"), &MainWindow::importStep);
+    reimportAction_ = addFile(QStringLiteral("Actualizar &importación desde su archivo…"), QKeySequence(), QStringLiteral("file-open"),
+                              &MainWindow::reimportStep);
     exportAction_ = addFile(QStringLiteral("&Exportar…"), QKeySequence(), QStringLiteral("file-export"),
                             &MainWindow::exportBodies);
     exportAction_->setEnabled(false);

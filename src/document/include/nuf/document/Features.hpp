@@ -475,6 +475,7 @@ public:
 class ImportFeature final : public Feature {
 public:
     std::string source;                       // nombre del archivo, para mostrar
+    std::string sourcePath;                   // la ruta completa donde estaba al importarlo (vacía en los diseños anteriores): para volver a leerlo
     std::shared_ptr<const std::string> brep;  // compartido: las copias no lo duplican
     std::vector<std::string> notes;           // avisos de la importación
 
