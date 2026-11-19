@@ -714,17 +714,24 @@ DxfDrawing readSvg(std::istream& in)
                     viewBox = true;
                 }
             }
-            const auto width = tag.attributes.contains("width") ? lengthMm(tag.attributes.at("width")) : std::nullopt;
-            const auto height = tag.attributes.contains("height") ? lengthMm(tag.attributes.at("height")) : std::nullopt;
+            // Ancho y alto del documento en mm (0 = no vienen o no tienen unidad que se pueda convertir).
+            double widthMm = 0.0;
+            double heightMm = 0.0;
+            if (const auto it = tag.attributes.find("width"); it != tag.attributes.end()) {
+                widthMm = lengthMm(it->second).value_or(0.0);
+            }
+            if (const auto it = tag.attributes.find("height"); it != tag.attributes.end()) {
+                heightMm = lengthMm(it->second).value_or(0.0);
+            }
             if (viewBox) {
-                unitScale = width ? *width / vw : height ? *height / vh : 25.4 / 96.0;
+                unitScale = widthMm > 0.0 ? widthMm / vw : heightMm > 0.0 ? heightMm / vh : 25.4 / 96.0;
                 viewX = vx;
                 viewY = vy;
                 viewH = vh;
                 haveHeight = true;
-            } else if (height) {
+            } else if (heightMm > 0.0) {
                 unitScale = 25.4 / 96.0;
-                viewH = *height / unitScale;
+                viewH = heightMm / unitScale;
                 haveHeight = true;
             }
         }
