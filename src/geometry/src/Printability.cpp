@@ -20,15 +20,6 @@ namespace nuf::geometry {
 
 namespace {
 
-std::string number(double value, int decimals = 2)
-{
-    std::ostringstream out;
-    out.setf(std::ios::fixed);
-    out.precision(decimals);
-    out << value;
-    return out.str();
-}
-
 double dot(const sketch::Vec3& a, const sketch::Vec3& b)
 {
     return a.x * b.x + a.y * b.y + a.z * b.z;
