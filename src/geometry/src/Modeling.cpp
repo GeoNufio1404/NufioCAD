@@ -83,6 +83,7 @@
 #include <gp_Pln.hxx>
 
 #include <algorithm>
+#include <functional>
 #include <cmath>
 #include <numbers>
 #include <memory>
@@ -1640,6 +1641,16 @@ double recommendedProfileShift(int teeth, double pressureAngle)
 
 Shape gear(std::string_view tagView, const sketch::Plane& plane, const GearSpec& spec)
 {
+    if (spec.type == GearType::Worm) {
+        WormSpec w;
+        w.module = spec.module;
+        w.starts = spec.teeth;
+        w.pitchDiameter = spec.wormDiameter;
+        w.length = spec.thickness;
+        w.pressureAngle = spec.pressureAngle;
+        w.leftHanded = spec.leftHanded;
+        return worm(tagView, plane, w);
+    }
     if (spec.baseChamfer < 0.0) {
         throw GeometryError("El chaflán de la base no puede ser negativo");
     }
@@ -1781,39 +1792,15 @@ double threadMinorDiameter(const ThreadSpec& spec)
     return spec.diameter - 2.0 * 0.6134 * spec.pitch;
 }
 
-Shape thread(std::string_view tagView, const sketch::Plane& plane, const ThreadSpec& spec)
+// Varilla cuya sección es una curva r(φ) que gira al avanzar (un tornillo de una o más entradas): a cada altura la
+// misma curva girada, así que la hélice es UNA superficie por tramos más dos tapas. «radiusAt(s)» da el radio de la
+// superficie a la distancia axial s (periódica); «lead» es el avance por vuelta; «what» y «wall» solo dan nombre
+// a los mensajes y a la cara lateral.
+static Shape twistedRod(const std::string& tag, const sketch::Plane& plane, const std::function<double(double)>& radiusAt,
+                 double lead, double length, bool leftHanded, int kPoints, int sectionsPerTurn, double smooth, const std::string& wall,
+                 const char* what, const char* hint)
 {
-    const std::string tag(tagView);
     constexpr double kPi = std::numbers::pi;
-    if (spec.pitch <= kTiny) {
-        throw GeometryError("El paso de la rosca debe ser mayor que cero");
-    }
-    if (spec.diameter <= 4.0 * spec.pitch * 0.6134 * 0.5 + kTiny || threadMinorDiameter(spec) <= 0.2) {
-        throw GeometryError("El diámetro es demasiado pequeño para ese paso");
-    }
-    if (std::abs(spec.length) < spec.pitch) {
-        throw GeometryError("La rosca debe medir al menos un paso de largo");
-    }
-    const double rMax = spec.diameter / 2.0;
-    const double rMin = threadMinorDiameter(spec) / 2.0;
-    const double pitch = spec.pitch;
-    // Radio de la rosca a lo largo de un paso: cresta, flanco, fondo, flanco.
-    const auto profile = [&](double s) {
-        s -= pitch * std::floor(s / pitch);
-        const double crest = pitch / 8.0;
-        const double root = pitch / 4.0;
-        const double flank = (pitch - crest - root) / 2.0;
-        if (s < crest) {
-            return rMax;
-        }
-        if (s < crest + flank) {
-            return rMax - (rMax - rMin) * (s - crest) / flank;
-        }
-        if (s < crest + flank + root) {
-            return rMin;
-        }
-        return rMin + (rMax - rMin) * (s - crest - flank - root) / flank;
-    };
     try {
         const gp_Pnt origin = toPnt(plane.origin);
         const gp_Dir normal = toDir(plane.normal);
@@ -1821,8 +1808,7 @@ Shape thread(std::string_view tagView, const sketch::Plane& plane, const ThreadS
         // la misma curva girada, así que la rosca es UNA superficie (lineal a lo largo del eje, por
         // secciones giradas) más dos tapas: 3 caras en vez de cientos, que es lo que hace rápido todo lo
         // que viene después (comprobar, mallar, booleanas).
-        constexpr int kPoints = 32;
-        const double hand = spec.leftHanded ? -1.0 : 1.0;
+                const double hand = leftHanded ? -1.0 : 1.0;
         occ::handle<HPntArray> array = new HPntArray(1, kPoints);
         for (int i = 0; i < kPoints; ++i) {
             const double phi = 2.0 * kPi * i / kPoints;
@@ -1832,8 +1818,8 @@ Shape thread(std::string_view tagView, const sketch::Plane& plane, const ThreadS
             double r = 0.0;
             constexpr int kWindow = 9;
             for (int w = 0; w < kWindow; ++w) {
-                const double offset = (double(w) / (kWindow - 1) - 0.5) * (pitch / 12.0);
-                r += profile(-hand * pitch * phi / (2.0 * kPi) + offset);
+                const double offset = (double(w) / (kWindow - 1) - 0.5) * (smooth);
+                r += radiusAt(-hand * lead * phi / (2.0 * kPi) + offset);
             }
             r /= kWindow;
             array->SetValue(i + 1, toPnt(plane.toWorld({r * std::cos(phi), r * std::sin(phi)})));
@@ -1841,23 +1827,23 @@ Shape thread(std::string_view tagView, const sketch::Plane& plane, const ThreadS
         GeomAPI_Interpolate interpolation(array, true, 1e-7);
         interpolation.Perform();
         if (!interpolation.IsDone()) {
-            throw GeometryError("No se pudo trazar el perfil de la rosca");
+            throw GeometryError(std::string("No se pudo trazar el perfil de ") + what);
         }
         const occ::handle<Geom_BSplineCurve> curve = interpolation.Curve();
 
-        const double turns = std::abs(spec.length) / pitch;
+        const double turns = std::abs(length) / lead;
         // Una sección cada 45° (8 por vuelta), unidas por una curva cúbica en cada polo de la sección:
         // la superficie es suave (C2) en toda la hélice, que es lo que necesitan las booleanas (con
         // aristas vivas entre secciones no encontraban la intersección con los planos del bloque).
-        const int sections = std::clamp(int(std::ceil(turns * 8.0)), 6, 1600);
+        const int sections = std::clamp(int(std::ceil(turns * sectionsPerTurn)), 6, 1600);
         const int nPoles = curve->NbPoles();
         std::vector<gp_Trsf> moves;
         for (int k = 0; k <= sections; ++k) {
             const double t = double(k) / sections;
             gp_Trsf turn;
-            turn.SetRotation(gp_Ax1(origin, normal), hand * 2.0 * kPi * turns * t * (spec.length < 0 ? -1.0 : 1.0));
+            turn.SetRotation(gp_Ax1(origin, normal), hand * 2.0 * kPi * turns * t * (length < 0 ? -1.0 : 1.0));
             gp_Trsf slide;
-            slide.SetTranslation(gp_Vec(normal).Multiplied(spec.length * t));
+            slide.SetTranslation(gp_Vec(normal).Multiplied(length * t));
             moves.push_back(slide * turn);
         }
         // Una cara por cada vuelta y media: el mallado (lo más caro de dibujar la rosca) crece más que
@@ -1883,7 +1869,7 @@ Shape thread(std::string_view tagView, const sketch::Plane& plane, const ThreadS
                 GeomAPI_Interpolate along(path, parameters, false, 1e-9);
                 along.Perform();
                 if (!along.IsDone()) {
-                    throw GeometryError("No se pudo trazar la hélice de la rosca");
+                    throw GeometryError(std::string("No se pudo trazar la hélice de ") + what);
                 }
                 helices.push_back(along.Curve());
             }
@@ -1916,7 +1902,7 @@ Shape thread(std::string_view tagView, const sketch::Plane& plane, const ThreadS
                 const gp_Pnt mid = onEdge.Value(0.5 * (onEdge.FirstParameter() + onEdge.LastParameter()));
                 const double along = gp_Vec(origin, mid).Dot(gp_Vec(normal));
                 const bool atStart = std::abs(along) < 1e-6;
-                const bool atEnd = std::abs(along - spec.length) < 1e-6;
+                const bool atEnd = std::abs(along - length) < 1e-6;
                 if ((!atStart && !atEnd) || (atStart && lateral != &sides.front()) || (atEnd && lateral != &sides.back())) {
                     continue;
                 }
@@ -1925,7 +1911,7 @@ Shape thread(std::string_view tagView, const sketch::Plane& plane, const ThreadS
             }
         }
         if (startCap.IsNull() || endCap.IsNull()) {
-            throw GeometryError("No se pudo cerrar la rosca");
+            throw GeometryError(std::string("No se pudo cerrar ") + what);
         }
         BRepBuilderAPI_Sewing sewing(1e-6);
         for (const TopoDS_Face& lateral : sides) {
@@ -1939,7 +1925,7 @@ Shape thread(std::string_view tagView, const sketch::Plane& plane, const ThreadS
             shell = TopoDS::Shell(ex.Current());
         }
         if (shell.IsNull()) {
-            throw GeometryError("No se pudo cerrar la rosca");
+            throw GeometryError(std::string("No se pudo cerrar ") + what);
         }
         BRepBuilderAPI_MakeSolid makeSolid(shell);
         TopoDS_Solid solid = makeSolid.Solid();
@@ -1971,15 +1957,93 @@ Shape thread(std::string_view tagView, const sketch::Plane& plane, const ThreadS
         };
         namer.name(sewn(startCap), tag + ":inicio");
         namer.name(sewn(endCap), tag + ":fin");
-        namer.nameUnnamed(tag + ":rosca");
+        namer.nameUnnamed(tag + ":" + wall);
         Shape result = namer.finish(tag);
         if (!result.isValid()) {
-            throw GeometryError("La rosca no es un sólido válido");
+            throw GeometryError(std::string(what) + " no es un sólido válido");
         }
         return result;
     } catch (const Standard_Failure& e) {
-        throw kernelFailure("generar la rosca", "revisa el paso y el diámetro: el diámetro menor (diámetro − 1,23 × paso) debe ser positivo", e);
+        throw kernelFailure(std::string("generar ") + what, hint, e);
     }
+}
+
+Shape thread(std::string_view tagView, const sketch::Plane& plane, const ThreadSpec& spec)
+{
+    const std::string tag(tagView);
+    if (spec.pitch <= kTiny) {
+        throw GeometryError("El paso de la rosca debe ser mayor que cero");
+    }
+    if (spec.diameter <= 4.0 * spec.pitch * 0.6134 * 0.5 + kTiny || threadMinorDiameter(spec) <= 0.2) {
+        throw GeometryError("El diámetro es demasiado pequeño para ese paso");
+    }
+    if (std::abs(spec.length) < spec.pitch) {
+        throw GeometryError("La rosca debe medir al menos un paso de largo");
+    }
+    const double rMax = spec.diameter / 2.0;
+    const double rMin = threadMinorDiameter(spec) / 2.0;
+    const double pitch = spec.pitch;
+    // Radio de la rosca a lo largo de un paso: cresta, flanco, fondo, flanco.
+    const auto profile = [&](double s) {
+        s -= pitch * std::floor(s / pitch);
+        const double crest = pitch / 8.0;
+        const double root = pitch / 4.0;
+        const double flank = (pitch - crest - root) / 2.0;
+        if (s < crest) {
+            return rMax;
+        }
+        if (s < crest + flank) {
+            return rMax - (rMax - rMin) * (s - crest) / flank;
+        }
+        if (s < crest + flank + root) {
+            return rMin;
+        }
+        return rMin + (rMax - rMin) * (s - crest - flank - root) / flank;
+    };
+    return twistedRod(tag, plane, profile, pitch, spec.length, spec.leftHanded, 32, 8, pitch / 12.0, "rosca", "la rosca",
+                      "revisa el paso y el diámetro: el diámetro menor (diámetro − 1,23 × paso) debe ser positivo");
+}
+
+double wormLeadAngle(const WormSpec& spec)
+{
+    return std::atan(spec.starts * spec.module / spec.pitchDiameter);
+}
+
+Shape worm(std::string_view tagView, const sketch::Plane& plane, const WormSpec& spec)
+{
+    const std::string tag(tagView);
+    constexpr double kPi = std::numbers::pi;
+    if (spec.module <= kTiny) {
+        throw GeometryError("El módulo debe ser mayor que cero");
+    }
+    if (spec.starts < 1 || spec.starts > 4) {
+        throw GeometryError("El tornillo sin fin tiene de 1 a 4 entradas");
+    }
+    if (spec.pressureAngle < 5.0 * kPi / 180.0 || spec.pressureAngle > 35.0 * kPi / 180.0) {
+        throw GeometryError("El ángulo de presión debe estar entre 5° y 35°");
+    }
+    const double m = spec.module;
+    const double rp = spec.pitchDiameter / 2.0;
+    if (rp - 1.25 * m < 0.5 * m) {
+        throw GeometryError("El diámetro primitivo del tornillo es demasiado pequeño para ese módulo (usa al menos 5 módulos)");
+    }
+    const double axialPitch = kPi * m;
+    const double lead = spec.starts * axialPitch;
+    const double tanA = std::tan(spec.pressureAngle);
+    if (axialPitch / 4.0 - m * tanA < 0.05 * m) {
+        throw GeometryError("Con ese ángulo de presión el filete sale puntiagudo: usa menos ángulo");
+    }
+    if (std::abs(spec.length) < lead) {
+        throw GeometryError("El tornillo debe medir al menos una vuelta (entradas × π × módulo) de largo");
+    }
+    // Radio a la distancia axial s: un diente de cremallera por cada paso axial, centrado en s = 0.
+    const auto radiusAt = [=](double s) {
+        s -= axialPitch * std::floor(s / axialPitch + 0.5);
+        const double height = (axialPitch / 4.0 - std::abs(s)) / tanA;
+        return rp + std::clamp(height, -1.25 * m, m);
+    };
+    return twistedRod(tag, plane, radiusAt, lead, spec.length, spec.leftHanded, 32 * spec.starts, 8 * spec.starts, axialPitch / 24.0, "tornillo",
+                      "el tornillo sin fin", "prueba con otro módulo, más diámetro primitivo o menos entradas");
 }
 
 Shape sweep(std::string_view tagView, const SketchRegion& profile, const sketch::Sketch& pathSketch,

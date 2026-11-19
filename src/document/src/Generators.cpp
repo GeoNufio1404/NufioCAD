@@ -1131,6 +1131,128 @@ public:
     }
 };
 
+// --- Tornillo sin fin y rueda (E4) ----------------------------------------------------------------
+// Un tornillo de 1 a 4 entradas (perfil axial de cremallera) y la rueda helicoidal que engrana con él: el módulo es el
+// axial del tornillo y el transversal de la rueda, y la rueda lleva como ángulo de hélice el ángulo de avance del
+// tornillo, del mismo sentido. Los ejes se cruzan a 90°, a la distancia (Ø tornillo + Ø rueda)/2 (más el juego), y la
+// rueda va girada para que un hueco de ella caiga sobre un filete del tornillo. La rueda es cilíndrica (sin garganta).
+
+class WormAndWheel final : public Generator {
+public:
+    std::string category() const override { return "Engranajes"; }
+    std::string id() const override { return "tornillo-sin-fin"; }
+    std::string title() const override { return "Tornillo sin fin y rueda"; }
+    std::string icon() const override { return "gear-solid"; }
+    std::string description() const override
+    {
+        return "Un tornillo sin fin (de 1 a 4 entradas) y la rueda helicoidal que engrana con él, con los ejes a 90°, a la "
+               "distancia correcta y con la rueda girada para que encajen. Reducciones grandes en poco espacio; con pocas "
+               "entradas y un diámetro grande el tornillo no se deja mover por la rueda (autobloqueo).";
+    }
+
+    std::vector<GeneratorField> fields() const override
+    {
+        using K = GeneratorField::Kind;
+        GeneratorField hand;
+        hand.kind = K::Choice;
+        hand.key = "mano";
+        hand.label = "Sentido de la hélice";
+        hand.value = 0.0;
+        hand.choices = {"A derechas", "A izquierdas"};
+        hand.hint = "La rueda lleva el mismo sentido";
+        return withGroups({gearField(K::Length, "modulo", "Módulo", 2.0, 0.3, 20.0, "Axial en el tornillo y transversal en la rueda"),
+                gearField(K::Count, "entradas", "Entradas del tornillo", 1.0, 1.0, 4.0, "Más entradas: más avance por vuelta y menos reducción"),
+                gearField(K::Count, "dientes_rueda", "Dientes de la rueda", 30.0, 6.0, 300.0),
+                gearField(K::Length, "diam_tornillo", "Diámetro primitivo del tornillo", 20.0, 5.0, 200.0,
+                          "Suele valer de 8 a 12 módulos; más grueso, menos ángulo de avance"),
+                gearField(K::Length, "largo_tornillo", "Largo del tornillo", 40.0, 8.0, 400.0, "Se ajusta a pasos axiales enteros"),
+                hand,
+                gearField(K::Angle, "presion", "Ángulo de presión", 20.0, 5.0, 25.0, "Axial en el tornillo (20° es lo normal)"),
+                gearField(K::Length, "ancho_rueda", "Ancho de la rueda", 8.0, 1.0, 200.0, "A lo largo de su eje"),
+                gearField(K::Length, "agujero_rueda", "Agujero de la rueda", 5.0, 0.0, 100.0, "0 = macizo"),
+                gearField(K::Length, "juego", "Juego entre dientes", 0.15, 0.0, 2.0,
+                          "Aire para que giren sin atascarse al imprimir (aleja el tornillo de la rueda)"),
+                tuningFields()[0]});
+    }
+
+    std::string summary(const GeneratorValues& values) const override
+    {
+        constexpr double kPi = 3.14159265358979323846;
+        const double m = values.at("modulo"), n = values.at("entradas"), z = values.at("dientes_rueda"),
+                     d = values.at("diam_tornillo");
+        const double lead = std::atan(n * m / d) * 180.0 / kPi;
+        char text[320];
+        std::snprintf(text, sizeof text,
+                      "Reducción %g:%g (el tornillo da %g vueltas por una de la rueda) · ángulo de avance %.1f°%s · distancia "
+                      "entre ejes %s · Ø primitivo de la rueda %s",
+                      z, n, z / n, lead, lead < 5.0 ? " (probablemente autobloqueante)" : "",
+                      geometry::display::length((d + m * z) / 2.0 + values.at("juego")).c_str(),
+                      geometry::display::length(m * z).c_str());
+        return text;
+    }
+
+    std::map<std::string, ArrowSpec> arrows() const override
+    {
+        return {{"ancho_rueda", {0, 'z', false}}};
+    }
+
+    Recipe make(const GeneratorValues& values, const std::string& suffix) const override
+    {
+        const auto p = [&](const char* name) { return std::string(name) + suffix; };
+        const std::string modulo = p("modulo"), n = p("entradas"), z = p("dientes_rueda"), diam = p("diam_tornillo"),
+                          largo = p("largo_tornillo"), mano = p("mano"), presion = p("presion"), ancho = p("ancho_rueda"),
+                          bore = p("agujero_rueda"), juego = p("juego"), avance = p("avance"), helice = p("helice_rueda"),
+                          giro = p("giro_rueda"), xrueda = p("x_rueda");
+
+        Recipe recipe;
+        recipe.component = "Tornillo sin fin";
+        recipe.bodyNames = {"Rueda", "Tornillo"};
+        const auto param = [&](const std::string& name, const std::string& expression) {
+            recipe.parameters.push_back({name, expression});
+        };
+        param(modulo, number(values.at("modulo")));
+        param(n, number(values.at("entradas")));
+        param(z, number(values.at("dientes_rueda")));
+        param(diam, number(values.at("diam_tornillo")));
+        param(largo, number(values.at("largo_tornillo")));
+        param(mano, number(values.count("mano") != 0 ? values.at("mano") : 0.0));
+        param(presion, number(values.at("presion")));
+        param(ancho, number(values.at("ancho_rueda")));
+        param(bore, number(values.at("agujero_rueda")));
+        param(juego, number(values.at("juego")));
+        addTuningParameters(recipe, values, suffix);
+        // Ángulo de avance del tornillo (grados) = ángulo de hélice de la rueda; con el sentido a izquierdas, negativo.
+        param(avance, "atan(" + n + "*" + modulo + "/" + diam + ")");
+        param(helice, "(1 - 2*" + mano + ")*" + avance);
+        // La rueda se centra a un número entero de pasos axiales del extremo del tornillo, y se gira para que el hueco de
+        // un diente (a mitad de su ancho, donde la hélice la ha girado la mitad) caiga sobre un filete.
+        param(xrueda, modulo + "*pi*round(" + largo + "/(2*" + modulo + "*pi))");
+        const std::string step = "360/" + z;
+        const std::string start = "(-90 + 180/" + z + " - (" + ancho + "*tan(" + helice + ")/(" + modulo + "*" + z +
+                                  "/2))*180/pi/2)";
+        param(giro, start + " - floor(" + start + "/(" + step + "))*(" + step + ")");
+
+        auto wheel = std::make_unique<GearFeature>();
+        wheel->setName("Engranaje: rueda");
+        wheel->base.origin = OriginPlane::XY;
+        wheel->expressions = {{"module", modulo}, {"teeth", z}, {"pressureAngle", presion}, {"thickness", ancho},
+                              {"bore", bore}, {"helixAngle", helice}, {"x", xrueda}, {"rotation", giro}};
+        wheel->expressions["backlash"] = "adelgazar" + suffix;
+        recipe.features.push_back(std::move(wheel));
+
+        // El tornillo va por el plano YZ (su eje es el X del mundo), al otro lado de la rueda (Y negativa), a media altura.
+        auto screw = std::make_unique<GearFeature>();
+        screw->setName("Engranaje: tornillo sin fin");
+        screw->base.origin = OriginPlane::YZ;
+        screw->spec.type = geometry::GearType::Worm;
+        screw->expressions = {{"module", modulo}, {"teeth", n}, {"wormDiameter", diam}, {"pressureAngle", presion},
+                              {"thickness", largo}, {"leftHanded", mano},
+                              {"x", "-((" + diam + " + " + modulo + "*" + z + ")/2 + " + juego + ")"}, {"y", ancho + "/2"}};
+        recipe.features.push_back(std::move(screw));
+        return recipe;
+    }
+};
+
 } // namespace
 
 GeneratorValues Generator::defaults() const
@@ -1181,8 +1303,9 @@ const std::vector<const Generator*>& generators()
     static const GearPair gearPair;
     static const InternalGear internalGear;
     static const RackAndPinion rackAndPinion;
+    static const WormAndWheel wormAndWheel;
     static const std::vector<const Generator*> all = {&lightbox, &boxWithLid, &sign, &gearPair, &internalGear,
-                                                      &rackAndPinion};
+                                                      &rackAndPinion, &wormAndWheel};
     return all;
 }
 

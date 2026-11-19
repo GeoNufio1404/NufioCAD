@@ -28,6 +28,7 @@ add_executable(nuf_tests
     bench_sketch.cpp
     test_annotations_overlap.cpp
     test_gear_tuning.cpp
+    test_worm.cpp
     test_display_units.cpp
     test_sketch_text_info.cpp)
 
