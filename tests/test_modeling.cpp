@@ -674,3 +674,25 @@ TEST_CASE("Vaciado cerrado: una caja de 20 queda con una cavidad de 16 y paredes
     // El vaciado normal sigue pidiendo una cara
     CHECK_THROWS_AS(geometry::shell("s", box, {}, 2.0, false), geometry::GeometryError);
 }
+
+TEST_CASE("Redondeo de radio variable y voladizos", "[fillet][overhang]")
+{
+    using namespace nuf;
+    const auto plane = sketch::Plane::fromPointAndNormal({0, 0, 0}, {0, 0, 1});
+    const geometry::Shape box = geometry::box("b", plane, 20.0, 20.0, 20.0, false, 0.0);
+    int edge = -1;
+    for (int i = 0; i < box.edgeCount() && edge < 0; ++i) {
+        if (box.edgeLine(i).has_value()) {
+            edge = i;
+        }
+    }
+    REQUIRE(edge >= 0);
+    const double constant = box.volume() - geometry::fillet("f", box, {edge}, 3.0).volume();
+    const double small = box.volume() - geometry::fillet("f", box, {edge}, 1.0).volume();
+    const geometry::Shape tapered = geometry::filletVariable("f", box, {edge}, 1.0, 3.0);
+    REQUIRE(tapered.isValid());
+    const double removed = box.volume() - tapered.volume();
+    CHECK(removed > small);
+    CHECK(removed < constant);
+    CHECK_THROWS_AS(geometry::filletVariable("f", box, {edge}, 0.0, 3.0), geometry::GeometryError);
+}

@@ -982,6 +982,18 @@ Shape chamfer(std::string_view tag, const Shape& body, const std::vector<int>& e
                                                      "No se pudo achaflanar: prueba con una distancia menor");
 }
 
+Shape filletVariable(std::string_view tag, const Shape& body, const std::vector<int>& edges, double start, double end)
+{
+    if (start <= kTiny || end <= kTiny) {
+        throw GeometryError("Los radios del redondeo deben ser mayores que cero");
+    }
+    const std::function<void(BRepFilletAPI_MakeFillet&, const TopoDS_Edge&)> add = [&](BRepFilletAPI_MakeFillet& maker, const TopoDS_Edge& edge) {
+        maker.Add(start, end, edge);
+    };
+    return edgeOperation<BRepFilletAPI_MakeFillet>(tag, "redondeo", body, edges, std::max(start, end),
+                                                   "No se pudo redondear: prueba con radios menores", add);
+}
+
 Shape chamfer(std::string_view tag, const Shape& body, const std::vector<int>& edges, const ChamferSpec& spec)
 {
     if (spec.style == ChamferStyle::Equal) {

@@ -2,6 +2,7 @@
 #include <nuf/geometry/Modeling.hpp>
 #include <nuf/sketch/Profiles.hpp>
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
@@ -348,4 +349,20 @@ TEST_CASE("Revisión de la malla: una caja y un cilindro salen cerrados, bien or
     const Shape round = cylinder(5, 8);
     CHECK(analyzeMesh(round, MeshQuality::low()).volumeDeviation() > analyzeMesh(round, MeshQuality::high()).volumeDeviation());
     CHECK(analyzeMesh(Shape{}, MeshQuality::medium()).triangles == 0);
+}
+
+TEST_CASE("Voladizos: una caja apoyada no tiene; un escalón en voladizo sí", "[exchange][overhang]")
+{
+    // Una caja apoyada en la cama: su cara de abajo está en la Z mínima, no es voladizo
+    const OverhangReport box = analyzeOverhang(extrudedRectangle(10, 20, 30), MeshQuality::medium(), 45.0);
+    CHECK(box.overhangArea == 0.0);
+    CHECK(box.totalArea == Catch::Approx(2.0 * (10 * 20 + 10 * 30 + 20 * 30)).epsilon(1e-6));
+    // Dos cajas, la de arriba más ancha: su cara de abajo (el techo) mira hacia abajo sin apoyarse
+    const Shape base = extrudedRectangle(10, 10, 10);
+    const Shape wide = extrudedRectangle(30, 10, 10);
+    const auto planeUp = sketch::Plane::fromPointAndNormal({0, 0, 10}, {0, 0, 1});
+    const Shape lifted = placeBody("w", wide, sketch::Plane::xy(), planeUp);
+    const Shape both = boolean(BooleanOp::Fuse, base, lifted);
+    const OverhangReport step = analyzeOverhang(both, MeshQuality::medium(), 45.0);
+    CHECK(step.overhangArea == Catch::Approx(20.0 * 10.0).epsilon(1e-6));  // la parte de la placa que sobresale de la base
 }

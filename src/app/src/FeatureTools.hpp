@@ -305,6 +305,7 @@ private:
     Style style_;
     std::vector<geometry::ElementRef> edges_;
     QDoubleSpinBox* size_ = nullptr;
+    QCheckBox* variable_ = nullptr;      // redondeo: radio variable
     QComboBox* chamferKind_ = nullptr;  // chaflán: igual, dos distancias, distancia y ángulo
     QDoubleSpinBox* size2_ = nullptr;
     QDoubleSpinBox* angle_ = nullptr;

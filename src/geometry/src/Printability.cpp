@@ -1,6 +1,7 @@
 #include <nuf/geometry/Printability.hpp>
 #include <nuf/geometry/DisplayUnits.hpp>
 
+#include <nuf/geometry/Exchange.hpp>
 #include <nuf/geometry/Modeling.hpp>
 #include <nuf/geometry/Occt.hpp>
 
@@ -11,6 +12,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <locale>
 #include <optional>
 #include <sstream>
 
@@ -117,6 +119,19 @@ std::vector<PrintIssue> checkPrintable(const std::vector<std::pair<std::string, 
             } else {
                 add(Level::Warning, "Pared de " + display::length(wall) + " en «" + name + "»: menos de dos líneas de boquilla ("
                                         + display::length(2.0 * settings.nozzle, 1) + "), saldrá débil");
+            }
+        }
+        // Voladizos: caras que miran hacia abajo más de 45° sin apoyarse en la cama; se avisa si pasan de 5 mm² (lo menor es ruido).
+        if (shape.faceCount() <= kMaxFacesForWalls && shape.isValid()) {
+            const OverhangReport overhang = analyzeOverhang(shape, MeshQuality::low(), 45.0);
+            if (overhang.overhangArea > 5.0) {
+                std::ostringstream text;
+                text.imbue(std::locale::classic());
+                text.setf(std::ios::fixed);
+                text.precision(0);
+                text << "«" << name << "» tiene unos " << overhang.overhangArea / 100.0 << " cm² de voladizo (caras que miran hacia abajo más de 45°): "
+                     << "necesitará soportes o girar la pieza";
+                add(Level::Warning, text.str());
             }
         }
         const Box box = shape.bounds();

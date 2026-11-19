@@ -48,6 +48,15 @@ struct MeshReport {
 };
 MeshReport analyzeMesh(const Shape& shape, const MeshQuality& quality);
 
+// Voladizos (O5): el área de las caras que miran hacia abajo más de lo que permite «maxAngle» (grados desde la vertical:
+// con 45°, las que se inclinan menos de 45° respecto a la horizontal) sin apoyarse en la cama (Z mínima del cuerpo), y el
+// área total de la malla.
+struct OverhangReport {
+    double overhangArea = 0.0;  // mm²
+    double totalArea = 0.0;     // mm²
+};
+OverhangReport analyzeOverhang(const Shape& shape, const MeshQuality& quality, double maxAngleDegrees);
+
 // Todas las formas juntas en un solo archivo. Lanzan GeometryError si no hay
 // nada que exportar o no se puede escribir.
 void writeStl(const std::filesystem::path& path, const std::vector<Shape>& shapes, const MeshQuality& quality);

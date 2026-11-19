@@ -612,6 +612,23 @@ void EdgeTool::createFields(QFormLayout* form)
     }
     form->addRow(style_ == Style::Fillet ? QStringLiteral("Radio") : QStringLiteral("Distancia"), size_);
     connect(size_, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
+    if (style_ == Style::Fillet) {
+        // Radio variable: de un radio en un extremo de la arista a otro radio en el otro (O2).
+        const auto* e = dynamic_cast<const document::EdgeFeature*>(original_.get());
+        variable_ = new QCheckBox(QStringLiteral("Radio variable (de un extremo al otro)"));
+        size2_ = lengthBox(e != nullptr ? e->size2 : 2.0);
+        size2_->setMinimum(0.01);
+        field("size2", size2_);
+        variable_->setChecked(e != nullptr && e->variable);
+        form->addRow(QString(), variable_);
+        form->addRow(QStringLiteral("Radio del otro extremo"), size2_);
+        form->setRowVisible(size2_, variable_->isChecked());
+        connect(variable_, &QCheckBox::toggled, this, [this, form] {
+            form->setRowVisible(size2_, variable_->isChecked());
+            updatePreview();
+        });
+        connect(size2_, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
+    }
     if (style_ == Style::Chamfer) {
         // Chaflán con una distancia por los dos lados, con dos distancias o con distancia y ángulo (O2).
         const auto* e = dynamic_cast<const document::EdgeFeature*>(original_.get());
@@ -719,6 +736,10 @@ std::unique_ptr<document::Feature> EdgeTool::build() const
     }
     f->edges = edges_;
     f->size = size_->value();
+    if (style_ == Style::Fillet && variable_ != nullptr) {
+        f->variable = variable_->isChecked();
+        f->size2 = size2_->value();
+    }
     if (style_ == Style::Chamfer && chamferKind_ != nullptr) {
         const int k = chamferKind_->currentIndex();
         f->style = k == 1 ? geometry::ChamferStyle::TwoDistances : k == 2 ? geometry::ChamferStyle::DistanceAngle : geometry::ChamferStyle::Equal;

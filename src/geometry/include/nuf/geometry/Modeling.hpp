@@ -105,6 +105,9 @@ Shape fillet(std::string_view tag, const Shape& body, const std::vector<int>& ed
 // Chaflán de varias medidas: «distance» es la distancia sobre la cara de referencia (la primera de las dos que comparten
 // la arista; con «flip», la otra) y, según el tipo, la otra distancia sobre la cara vecina o el ángulo con que el chaflán se
 // aparta de esa cara de referencia (rad, entre 0 y 90°).
+// Redondeo de radio variable (O2): en cada arista elegida el radio va de «start» en su primer vértice a «end» en el último.
+Shape filletVariable(std::string_view tag, const Shape& body, const std::vector<int>& edges, double start, double end);
+
 enum class ChamferStyle { Equal, TwoDistances, DistanceAngle };
 struct ChamferSpec {
     ChamferStyle style = ChamferStyle::Equal;

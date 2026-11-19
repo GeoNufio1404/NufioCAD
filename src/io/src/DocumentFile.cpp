@@ -513,6 +513,10 @@ FeatureRow rowOf(const Feature& f)
         const auto& e = static_cast<const EdgeFeature&>(f);
         row.type = f.kind() == FeatureKind::Fillet ? "fillet" : "chamfer";
         params = {{"edges", toJson(e.edges)}, {"size", e.size}};
+        if (f.kind() == FeatureKind::Fillet && e.variable) {
+            params["variable"] = true;
+            params["size2"] = e.size2;
+        }
         if (f.kind() == FeatureKind::Chamfer) {
             params["style"] = e.style == geometry::ChamferStyle::TwoDistances ? "two" : e.style == geometry::ChamferStyle::DistanceAngle ? "angle" : "equal";
             params["size2"] = e.size2;
@@ -705,6 +709,7 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
             e->edges.push_back(elementRef(edge));
         }
         e->size = number(p, "size");
+        e->variable = p.value("variable", false);
         // Los archivos anteriores solo tienen chaflán con una distancia.
         {
             const std::string style = p.value("style", std::string("equal"));

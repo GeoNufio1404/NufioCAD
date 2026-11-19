@@ -334,6 +334,7 @@ void MainWindow::toggleMeasure(bool on)
         statusBar()->showMessage(QStringLiteral("Medir: elige una cara o arista y, para compararla, otra más · Esc termina"));
     } else {
         measurePanel_->hide();
+        viewport_->hideDimensionArrow();
         statusBar()->clearMessage();
     }
 }
@@ -374,6 +375,7 @@ void MainWindow::updateMeasure()
     };
     if (elements.empty()) {
         measureRun_.cancel();
+        viewport_->hideDimensionArrow();
         updateBusyBadge();
         place(QStringLiteral("<b>Medir</b><br>Elige una cara o una arista.<br>Con otra más, mide la distancia y el ángulo."));
         return;
@@ -410,6 +412,12 @@ void MainWindow::updateMeasure()
                 lastMeasureText_ += QLatin1Char('\n') + QString::fromStdString(line);
             }
             html += QStringLiteral("<br><i>Ctrl+C copia estos valores</i>");
+            // La línea de la medida: el segmento más corto entre los dos elementos, dibujado en la vista.
+            if (outcome->measurement.hasSegment) {
+                viewport_->showDimensionArrow(outcome->measurement.from, outcome->measurement.to);
+            } else {
+                viewport_->hideDimensionArrow();
+            }
             if (moreThanTwo) {
                 html += QStringLiteral("<br><i>Se miden las dos últimas por orden de lista.</i>");
             }

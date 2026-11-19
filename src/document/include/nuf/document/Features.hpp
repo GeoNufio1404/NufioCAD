@@ -134,7 +134,8 @@ public:
     double size = 1.0;  // radio o distancia, mm
     // Solo el chaflán: igual por los dos lados, con dos distancias o con distancia y ángulo (O2).
     geometry::ChamferStyle style = geometry::ChamferStyle::Equal;
-    double size2 = 1.0;                // la segunda distancia, mm
+    double size2 = 1.0;                // la segunda distancia, mm (chaflán) o el radio del otro extremo (redondeo variable)
+    bool variable = false;             // redondeo de radio variable: de «size» a «size2» a lo largo de la arista
     double angle = 0.7853981633974483; // rad, con la distancia y ángulo
     bool flip = false;                 // la cara de referencia es la otra de las dos
 
@@ -153,7 +154,7 @@ public:
 protected:
     geometry::Shape apply(std::string_view tag, const geometry::Shape& body, const std::vector<int>& indices) const override
     {
-        return geometry::fillet(tag, body, indices, size);
+        return variable ? geometry::filletVariable(tag, body, indices, size, size2) : geometry::fillet(tag, body, indices, size);
     }
 };
 

@@ -48,6 +48,8 @@ std::vector<Feature::NumericField> EdgeFeature::numericFields()
     if (kind() == FeatureKind::Chamfer) {
         fields.push_back(field("size2", "Segunda distancia", size2));
         fields.push_back(field("angle", "Ángulo", angle, kRadiansPerDegree));
+    } else if (variable) {
+        fields.push_back(field("size2", "Radio del otro extremo", size2));
     }
     return fields;
 }
