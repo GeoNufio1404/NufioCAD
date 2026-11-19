@@ -107,13 +107,18 @@ bool MainWindow::sketchVisible(document::FeatureId id, std::size_t upTo) const
 void MainWindow::updateExportAction()
 {
     updateStartScreen();
-    for (QAction* action : {filletAction_, chamferAction_, shellAction_, holeAction_, mirrorAction_, splitAction_, patternAction_, moveAction_, combineAction_, organizeAction_, duplicateAction_, alignAction_, jointAction_, linkAction_, interferenceAction_}) {
+    for (QAction* action : {filletAction_, chamferAction_, shellAction_, holeAction_, mirrorAction_, splitAction_, patternAction_, moveAction_, combineAction_, organizeAction_, duplicateAction_, dragAction_, alignAction_, jointAction_, linkAction_, interferenceAction_}) {
         if (action != nullptr) {
             action->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane() && !document_.result().bodies.empty());
         }
     }
     for (QAction* action : generatorActions_) {
         action->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane());
+    }
+    // Sin cuerpos, o con una herramienta o un sketch abiertos, arrastrar piezas se apaga solo.
+    if (dragAction_ != nullptr && !dragAction_->isEnabled() && dragAction_->isChecked()) {
+        dragAction_->setChecked(false);
+        viewport_->setBodyDragEnabled(false);
     }
     if (sectionAction_ != nullptr) {
         if ((sketch_ || tool_) && sectionAction_->isChecked()) {

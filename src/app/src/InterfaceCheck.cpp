@@ -1538,6 +1538,79 @@ int InterfaceCheck::run()
         undoAll();
     });
 
+    // Arrastrar piezas (Fase 21): las señales del visor se simulan (agarrar, arrastrar, soltar). Una pieza suelta se
+    // mueve lo arrastrado y queda guardada como un Mover; una colocada por una unión giratoria solo gira.
+    step(QStringLiteral("Arrastrar piezas (libre y con una unión giratoria)"), [&] {
+        const auto addBoxAt = [&](double x, double z) {
+            auto box = std::make_unique<document::BoxFeature>();
+            box->base.origin = document::OriginPlane::XY;
+            box->x = x;
+            box->z = z;
+            blocking(QStringLiteral("agregar una caja"),
+                     [&] { window_.commands_.push(std::make_unique<commands::AddFeature>(std::move(box))); });
+        };
+        addBoxAt(0.0, 0.0);
+        waitIdle();
+        expect(window_.document_.result().bodies.size() == 1, QStringLiteral("no hay un cuerpo"));
+        if (window_.document_.result().bodies.size() != 1) {
+            undoAll();
+            return;
+        }
+        const QString key = QString::fromStdString(window_.document_.result().bodies[0].key);
+        const double x0 = window_.document_.result().bodies[0].shape.bounds().min.x;
+        blocking(QStringLiteral("arrastrar libre"), [&] {
+            emit window_.viewport_->bodyDragStarted(key, {5.0, 5.0, 10.0});
+            emit window_.viewport_->bodyDragged(key, {12.0, 3.0, 0.0}, false);
+            emit window_.viewport_->bodyDragFinished(key, true);
+        });
+        waitIdle();
+        const geometry::Box moved = window_.document_.result().bodies[0].shape.bounds();
+        expect(std::abs(moved.min.x - (x0 + 12.0)) < 1e-6 && std::abs(moved.min.y - 3.0) < 1e-6,
+               QStringLiteral("el arrastre libre no movió el cuerpo 12 y 3 mm (quedó en %1, %2)").arg(moved.min.x).arg(moved.min.y));
+        expect(window_.document_.featureCount() == 2, QStringLiteral("no se guardó una operación Mover"));
+        undoAll();
+
+        // Con una unión giratoria entre una placa y un bloque: el arrastre cambia el ángulo de la unión.
+        addBoxAt(0.0, 0.0);
+        addBoxAt(100.0, 0.0);
+        waitIdle();
+        if (window_.document_.result().bodies.size() == 2) {
+            const auto faceFacing = [&](std::size_t body, double z) {
+                const geometry::Shape& shape = window_.document_.result().bodies[body].shape;
+                for (int i = 0; i < shape.faceCount(); ++i) {
+                    if (const auto plane = shape.facePlane(i); plane && plane->normal.z * z > 0.9) {
+                        return shape.faceRef(i);
+                    }
+                }
+                return geometry::ElementRef{};
+            };
+            auto joint = std::make_unique<document::JointFeature>();
+            joint->fixedFace = faceFacing(0, 1.0);
+            joint->movingFace = faceFacing(1, -1.0);
+            joint->type = document::JointType::Revolute;
+            const document::FeatureId jointId = window_.document_.nextId();
+            blocking(QStringLiteral("agregar la unión"),
+                     [&] { window_.commands_.push(std::make_unique<commands::AddFeature>(std::move(joint))); });
+            waitIdle();
+            const QString block = QString::fromStdString(window_.document_.result().bodies[1].key);
+            const geometry::Box top = window_.document_.result().bodies[1].shape.bounds();
+            blocking(QStringLiteral("arrastrar con la unión"), [&] {
+                emit window_.viewport_->bodyDragStarted(block, {top.max.x, top.min.y, top.max.z});
+                emit window_.viewport_->bodyDragged(block, {0.0, 6.0, 0.0}, false);
+                emit window_.viewport_->bodyDragFinished(block, true);
+            });
+            waitIdle();
+            const auto* edited = dynamic_cast<const document::JointFeature*>(window_.document_.findFeature(jointId));
+            expect(edited != nullptr && std::abs(edited->angle) > 0.01, QStringLiteral("el arrastre no giró la unión"));
+            // El bloque sigue centrado sobre la placa: giró, no se desplazó.
+            const geometry::Box after = window_.document_.result().bodies[1].shape.bounds();
+            expect(std::abs(0.5 * (after.min.x + after.max.x) - 5.0) < 1e-4, QStringLiteral("el bloque se salió de su eje al girar"));
+            undoAll();
+        } else {
+            undoAll();
+        }
+    });
+
     // Duplicar, fijar y soltar desde el navegador (Fase 21): lo mismo que hace el clic derecho, sin abrir el menú.
     step(QStringLiteral("Duplicar y fijar un cuerpo desde el navegador"), [&] {
         auto box = std::make_unique<document::BoxFeature>();

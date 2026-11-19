@@ -358,6 +358,16 @@ void MainWindow::createMenus()
     decorate(duplicateAction_, QStringLiteral("copy"),
              QStringLiteral("Copiar el cuerpo o el componente elegido (en el navegador o en la vista) al lado (Ctrl+D)"),
              QStringLiteral("Duplicar"));
+    dragAction_ = solidMenu->addAction(QStringLiteral("Arrastrar &piezas"), this, [this](bool on) {
+        viewport_->setBodyDragEnabled(on);
+        statusBar()->showMessage(on ? QStringLiteral("Arrastrar piezas: agarra un cuerpo y arrástralo (Ctrl pega a la rejilla; los fijos no se mueven; con una unión solo se mueve como ella permite) · G para salir")
+                                    : QStringLiteral("Arrastrar piezas apagado"),
+                                 6000);
+    });
+    dragAction_->setCheckable(true);
+    decorate(dragAction_, QStringLiteral("move"),
+             QStringLiteral("Mover piezas con el ratón: arrastra un cuerpo (Ctrl pega a la rejilla); con una unión, solo gira o desliza como ella permite (G)"),
+             QStringLiteral("Arrastrar"));
     alignAction_ = solidMenu->addAction(QStringLiteral("&Alinear"), this, [this] {
         startTool(std::make_unique<JointTool>(document_, *viewport_, std::nullopt, true));
     });
@@ -595,6 +605,7 @@ void MainWindow::createMenus()
     ribbon_->addGroup(solidTab_, QStringLiteral("ORGANIZAR"));
     ribbon_->addAction(solidTab_, organizeAction_);
     ribbon_->addAction(solidTab_, duplicateAction_);
+    ribbon_->addAction(solidTab_, dragAction_);
     ribbon_->addAction(solidTab_, alignAction_);
     ribbon_->addAction(solidTab_, jointAction_);
     ribbon_->addAction(solidTab_, linkAction_);
@@ -930,6 +941,7 @@ void MainWindow::assignShortcuts()
     key(combineAction_, QKeySequence(Qt::SHIFT | Qt::Key_U));
     key(jointAction_, QKeySequence(Qt::SHIFT | Qt::Key_J));
     key(duplicateAction_, QKeySequence(Qt::CTRL | Qt::Key_D));
+    key(dragAction_, QKeySequence(Qt::Key_G));
     key(alignAction_, QKeySequence(Qt::Key_A));  // las herramientas de sketch (también la A) solo están activas dentro de un sketch
     key(measureAction_, QKeySequence(Qt::Key_I));
     key(sectionAction_, QKeySequence(Qt::SHIFT | Qt::Key_S));

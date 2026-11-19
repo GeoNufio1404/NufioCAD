@@ -5,6 +5,9 @@
 #include <QPixmap>
 #include "ViewportImpl.hpp"
 
+#include <SelectMgr_ViewerSelector.hxx>
+#include <StdSelect_ViewerSelector3d.hxx>
+
 #include <mutex>
 
 namespace nuf::render {
@@ -535,13 +538,28 @@ std::vector<sketch::Annotation> Viewport::sketchAnnotations(const sketch::Sketch
 
 double Viewport::sketchGridStep() const { return impl_->gridStep(); }
 
+void Viewport::setBodyDragEnabled(bool on)
+{
+    impl_->bodyDragEnabled = on;
+    if (!on) {
+        impl_->bodyDragging = false;
+    }
+}
+
+bool Viewport::bodyDragEnabled() const { return impl_->bodyDragEnabled; }
+
+void Viewport::setBodyDragFilter(std::function<bool(const std::string& key)> filter)
+{
+    impl_->bodyDragFilter = std::move(filter);
+}
+
 Qt::MouseButtons Viewport::navigationButtons(Qt::MouseButtons buttons) const
 {
     if (impl_->navMode != NavigationMode::Default) {
         return buttons;
     }
     if (((impl_->sketchToolActive || impl_->sketchDragging) && isSketching()) || impl_->handleDragging ||
-        impl_->gizmoActive >= 0) {
+        impl_->gizmoActive >= 0 || impl_->bodyDragging) {
         buttons &= ~Qt::MouseButtons(Qt::LeftButton);
     }
     return buttons;
@@ -670,6 +688,27 @@ void Viewport::mousePressEvent(QMouseEvent* event)
             }
         }
     }
+    if (event->button() == Qt::LeftButton && !navigating && !isSketching() && impl_->bodyDragEnabled &&
+        impl_->gizmoActive < 0 && impl_->mode == Impl::Mode::Model) {
+        // ¿Se agarra un cuerpo para arrastrarlo (Fase 21)?
+        impl_->context->MoveTo(point.x(), point.y(), impl_->view, false);
+        if (impl_->context->HasDetected()) {
+            if (const auto* body = impl_->bodyOf(impl_->context->DetectedInteractive())) {
+                if (!impl_->bodyDragFilter || impl_->bodyDragFilter(body->key)) {
+                    double vx = 0, vy = 0, vz = 0;
+                    impl_->view->Proj(vx, vy, vz);
+                    impl_->dragNormal = gp_Dir(vx, vy, vz);
+                    impl_->dragGrab = impl_->context->MainSelector()->PickedPoint(1);
+                    impl_->dragKey = body->key;
+                    impl_->dragPress = event->position();
+                    impl_->dragMoved = false;
+                    impl_->bodyDragging = true;
+                    emit bodyDragStarted(QString::fromStdString(body->key),
+                                         {impl_->dragGrab.X(), impl_->dragGrab.Y(), impl_->dragGrab.Z()});
+                }
+            }
+        }
+    }
     if (event->button() == Qt::LeftButton && !navigating && !isSketching() && !impl_->handle.IsNull()) {
         // ¿Se agarra la flecha de distancia?
         impl_->context->MoveTo(point.x(), point.y(), impl_->view, false);
@@ -701,7 +740,10 @@ void Viewport::mouseReleaseEvent(QMouseEvent* event)
 {
     const qreal ratio = devicePixelRatioF();
     const Vec2i point(int(event->position().x() * ratio), int(event->position().y() * ratio));
-    if (event->button() == Qt::LeftButton && impl_->gizmoActive >= 0) {
+    if (event->button() == Qt::LeftButton && impl_->bodyDragging) {
+        impl_->bodyDragging = false;
+        emit bodyDragFinished(QString::fromStdString(impl_->dragKey), impl_->dragMoved);
+    } else if (event->button() == Qt::LeftButton && impl_->gizmoActive >= 0) {
         flushGizmoDrag();  // lo último que se movió llega antes de soltar
         const int axis = impl_->gizmoActive;
         impl_->gizmoActive = -1;
@@ -799,6 +841,19 @@ void Viewport::mouseMoveEvent(QMouseEvent* event)
                     connect(impl_->gizmoFlush, &QTimer::timeout, this, [this] { flushGizmoDrag(); });
                 }
                 impl_->gizmoFlush->start(int(kInterval - impl_->gizmoClock.elapsed()));
+            }
+        }
+        return;
+    }
+    if (impl_->bodyDragging) {
+        if ((event->position() - impl_->dragPress).manhattanLength() > 3.0) {
+            impl_->dragMoved = true;
+        }
+        if (impl_->dragMoved) {
+            if (const auto hit = impl_->dragPlanePoint(point)) {
+                emit bodyDragged(QString::fromStdString(impl_->dragKey),
+                                 {hit->X() - impl_->dragGrab.X(), hit->Y() - impl_->dragGrab.Y(), hit->Z() - impl_->dragGrab.Z()},
+                                 bool(event->modifiers() & Qt::ControlModifier));
             }
         }
         return;

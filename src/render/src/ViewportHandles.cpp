@@ -174,6 +174,20 @@ void Viewport::Impl::showGizmo(Viewport::GizmoKind kind, const sketch::Vec3& ori
     }
 }
 
+std::optional<gp_Pnt> Viewport::Impl::dragPlanePoint(const Vec2i& pixel) const
+{
+    double x = 0, y = 0, z = 0, dx = 0, dy = 0, dz = 0;
+    view->ConvertWithProj(pixel.x(), pixel.y(), x, y, z, dx, dy, dz);
+    const gp_Vec ray(dx, dy, dz);
+    const gp_Vec normal(dragNormal);
+    const double facing = ray.Dot(normal);
+    if (ray.Magnitude() < 1e-12 || std::abs(facing / ray.Magnitude()) < 0.05) {
+        return std::nullopt;
+    }
+    const double t = gp_Vec(gp_Pnt(x, y, z), dragGrab).Dot(normal) / facing;
+    return gp_Pnt(x, y, z).Translated(ray * t);
+}
+
 std::optional<double> Viewport::Impl::gizmoLineParameter(const Vec2i& pixel, const gp_Pnt& origin, int k) const
 {
     double x = 0, y = 0, z = 0, dx = 0, dy = 0, dz = 0;

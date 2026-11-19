@@ -7,6 +7,7 @@
 #include <QOpenGLWidget>
 
 #include <array>
+#include <functional>
 #include <QSurfaceFormat>
 #include <QString>
 
@@ -254,7 +255,19 @@ public:
     std::vector<sketch::Annotation> sketchAnnotations(const sketch::Sketch& sketch);
     double sketchGridStep() const;
 
+    // Arrastrar piezas (Fase 21): con el modo encendido, agarrar un cuerpo con el botón izquierdo y arrastrar no
+    // orbita la vista sino que avisa con bodyDragged (cuánto se arrastró sobre el plano de la pantalla, en mm); sobre
+    // el vacío, la vista se orbita como siempre. El filtro dice si ese cuerpo se puede arrastrar (los fijos, no).
+    void setBodyDragEnabled(bool on);
+    bool bodyDragEnabled() const;
+    void setBodyDragFilter(std::function<bool(const std::string& key)> filter);
+
 signals:
+    // Se agarró el cuerpo «key» en el punto «grab» (en mm), se arrastró «delta» desde allí y se soltó. La dirección de
+    // la vista va con el agarre, para quien necesite otro plano. «snap»: Ctrl pulsado (pegar a la rejilla).
+    void bodyDragStarted(const QString& key, const nuf::sketch::Vec3& grab);
+    void bodyDragged(const QString& key, const nuf::sketch::Vec3& delta, bool snap);
+    void bodyDragFinished(const QString& key, bool moved);
     // Texto breve para la barra de estado ("Cara seleccionada", "2 aristas"…).
     // Se está preparando en segundo plano el dibujo de un cuerpo pesado (una rosca): mientras tanto se
     // sigue viendo lo anterior.
