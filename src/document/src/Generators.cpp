@@ -2192,7 +2192,7 @@ void applyRecipe(Document& doc, const Recipe& recipe)
         if (std::ranges::find(before, body.key) != before.end()) {
             continue;
         }
-        info[body.key] = {next < recipe.bodyNames.size() ? recipe.bodyNames[next] : std::string(), component,
+        info[body.key] = {next < recipe.bodyNames.size() ? recipe.bodyNames[next] : std::string(), component, std::string(),
                           std::ranges::find(recipe.fixedBodies, int(next)) != recipe.fixedBodies.end()};
         ++next;
     }
