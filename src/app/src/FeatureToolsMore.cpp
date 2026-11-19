@@ -54,11 +54,24 @@ void SweepTool::createFields(QFormLayout* form)
         operation_->setCurrentIndex(operationIndex(before().bodies.empty() ? document::Operation::NewBody
                                                                            : document::Operation::Join));
     }
+    endScale_ = new ExpressionSpinBox();
+    endScale_->setRange(0.01, 100.0);
+    endScale_->setDecimals(2);
+    endScale_->setSingleStep(0.1);
+    endScale_->setValue(1.0);
+    endScale_->setKeyboardTracking(false);
+    endScale_->setToolTip(QStringLiteral("Cómo de grande queda el perfil al final de la trayectoria (1 = igual, 0,5 = a la mitad): un barrido que se afina o se ensancha"));
+    field("endScale", endScale_);
+    if (const auto* s = dynamic_cast<const document::SweepFeature*>(original_.get())) {
+        endScale_->setValue(s->spec.endScale);
+    }
     form->addRow(QStringLiteral("Orientación"), orientation_);
+    form->addRow(QStringLiteral("Escala al final"), endScale_);
     form->addRow(QStringLiteral("Operación"), operation_);
     for (QComboBox* box : {orientation_, operation_}) {
         connect(box, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
     }
+    connect(endScale_, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
 }
 
 void SweepTool::selectionChanged(const render::ModelSelection& selection)
@@ -92,6 +105,7 @@ std::unique_ptr<document::Feature> SweepTool::build() const
     f->pathSketch = pathSketch_;
     f->path = path_;
     f->spec.followPath = orientation_->currentIndex() == 0;
+    f->spec.endScale = endScale_->value();
     f->operation = operationAt(operation_->currentIndex());
     return f;
 }

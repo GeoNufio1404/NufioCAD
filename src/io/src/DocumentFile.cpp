@@ -582,7 +582,7 @@ FeatureRow rowOf(const Feature& f)
             path.push_back(id);
         }
         params = {{"profiles", toJson(s.profiles)}, {"pathSketch", s.pathSketch}, {"path", path},
-                  {"followPath", s.spec.followPath}, {"operation", nameOf(kOperations, s.operation)}};
+                  {"followPath", s.spec.followPath}, {"endScale", s.spec.endScale}, {"operation", nameOf(kOperations, s.operation)}};
         break;
     }
     case FeatureKind::Box: {
@@ -804,6 +804,7 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
             s->path.push_back(static_cast<sk::EntityId>(id.get<std::uint64_t>()));
         }
         s->spec.followPath = p.at("followPath").get<bool>();
+        s->spec.endScale = p.value("endScale", 1.0);
         s->operation = parseEnum(kOperations, text(p, "operation"), "operación");
         feature = std::move(s);
     } else if (row.type == "box") {

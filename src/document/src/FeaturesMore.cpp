@@ -54,6 +54,11 @@ std::vector<Feature::NumericField> EdgeFeature::numericFields()
     return fields;
 }
 
+std::vector<Feature::NumericField> SweepFeature::numericFields()
+{
+    return {{"endScale", "Escala al final", 1.0, [this] { return spec.endScale; }, [this](double v) { spec.endScale = v; }}};
+}
+
 std::vector<Feature::NumericField> SplitFeature::numericFields()
 {
     return {field("offset", "Posición del corte", offset)};

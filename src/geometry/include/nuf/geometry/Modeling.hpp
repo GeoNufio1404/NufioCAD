@@ -245,6 +245,7 @@ Shape worm(std::string_view tag, const sketch::Plane& plane, const WormSpec& spe
 
 struct SweepSpec {
     bool followPath = true;  // el perfil gira con la trayectoria; si no, queda paralelo a sí mismo
+    double endScale = 1.0;   // escala del perfil al final de la trayectoria (1 = sin cambio; 0,5 = termina a la mitad de tamaño)
 };
 
 // Barrido: el perfil (sus contornos) a lo largo de una trayectoria hecha con

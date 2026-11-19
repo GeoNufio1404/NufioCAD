@@ -350,6 +350,7 @@ public:
     std::unique_ptr<Feature> clone() const override { return std::make_unique<SweepFeature>(*this); }
     std::optional<std::string> compute(ModelState& state) const override;
     std::vector<FeatureId> dependencies() const override;
+    std::vector<NumericField> numericFields() override;
 };
 
 // Loft: un sólido por varios perfiles, en el orden de la lista.

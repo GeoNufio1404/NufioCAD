@@ -65,6 +65,7 @@
 #include <ShapeUpgrade_UnifySameDomain.hxx>
 #include <Standard_Failure.hxx>
 #include <Standard_Version.hxx>
+#include <Law_Linear.hxx>
 #include <TopExp.hxx>
 #include <TopExp_Explorer.hxx>
 #include <NCollection_IndexedDataMap.hxx>
@@ -2333,6 +2334,9 @@ Shape sweep(std::string_view tagView, const SketchRegion& profile, const sketch:
     if (pathEntities.empty()) {
         throw GeometryError("Elige la trayectoria del barrido");
     }
+    if (spec.endScale <= 0.01 || spec.endScale > 100.0) {
+        throw GeometryError("La escala al final del barrido debe estar entre 0,01 y 100");
+    }
     try {
         const gp_Ax3 pathAxes = toAx3(pathPlane);
         NCollection_List<TopoDS_Shape> edges;
@@ -2361,6 +2365,12 @@ Shape sweep(std::string_view tagView, const SketchRegion& profile, const sketch:
                     pipe.SetMode(gp_Ax2(toPnt(profile.plane.origin), toDir(profile.plane.normal)));
                 }
                 pipe.Add(wire, false, false);
+                if (std::abs(spec.endScale - 1.0) > 1e-9) {
+                    // La escala va de 1 al principio a «endScale» al final, linealmente a lo largo de la trayectoria.
+                    occ::handle<Law_Linear> law = new Law_Linear();
+                    law->Set(0.0, 1.0, 1.0, spec.endScale);
+                    pipe.SetLaw(wire, law, false, false);
+                }
                 buildCancellable(pipe);
                 if (!pipe.IsDone() || !pipe.MakeSolid()) {
                     throw GeometryError("No se pudo barrer el perfil (¿está en el inicio de la trayectoria y de frente a ella?)");

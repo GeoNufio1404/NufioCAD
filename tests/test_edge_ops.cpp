@@ -3250,3 +3250,22 @@ TEST_CASE("Dividir un cuerpo con un plano da dos cuerpos que suman el volumen, y
     REQUIRE_THAT(again->offset, Catch::Matchers::WithinAbs(5.0, 1e-9));
     REQUIRE(reopened.result().bodies.size() == 2);
 }
+
+TEST_CASE("Un barrido con escala al final se afina: un tronco de pirámide por la sección y el largo", "[sweep]")
+{
+    Document doc;
+    const FeatureId id = addSweepDocument(doc, {{{0, 0}, {0, 30}}});
+    auto changed = std::unique_ptr<Feature>(doc.findFeature(id)->clone());
+    static_cast<SweepFeature&>(*changed).spec.endScale = 0.5;
+    doc.replaceFeature(id, std::move(changed));
+    REQUIRE(doc.status(id).health == Health::Ok);
+    const geometry::Shape& bar = doc.result().bodies.front().shape;
+    REQUIRE(bar.isValid());
+    // Lado de 4 al principio y de 2 al final (escala lineal): V = h·(A + √(A·B) + B)/3 con A = 16 y B = 4
+    REQUIRE_THAT(bar.volume(), WithinRel(30.0 * (16.0 + std::sqrt(16.0 * 4.0) + 4.0) / 3.0, 0.02));
+    // Una escala imposible da error claro
+    auto bad = std::unique_ptr<Feature>(doc.findFeature(id)->clone());
+    static_cast<SweepFeature&>(*bad).spec.endScale = 0.0;
+    doc.replaceFeature(id, std::move(bad));
+    REQUIRE(doc.status(id).health == Health::Error);
+}

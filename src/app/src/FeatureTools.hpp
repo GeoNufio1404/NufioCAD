@@ -596,6 +596,7 @@ private:
     std::vector<document::ProfileRef> profiles_;
     document::FeatureId pathSketch_ = 0;
     std::vector<sketch::EntityId> path_;
+    QDoubleSpinBox* endScale_ = nullptr;
     QComboBox* orientation_ = nullptr;
     QComboBox* operation_ = nullptr;
 };
