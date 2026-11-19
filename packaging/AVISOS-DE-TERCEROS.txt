@@ -1,0 +1,50 @@
+NufioCAD — avisos de licencias de terceros
+===========================================
+
+NufioCAD usa las bibliotecas libres que se listan abajo. Este archivo viaja con el instalador y está también en el
+repositorio (packaging/AVISOS-DE-TERCEROS.txt). El texto completo de cada licencia está en la carpeta «licencias» de la
+instalación y en las páginas de cada proyecto.
+
+IMPORTANTE (lectura de la licencia del propio NufioCAD): al preparar esta versión, el repositorio no declara todavía una
+licencia para el código de NufioCAD. Quien publique el programa debe elegirla y añadir el archivo LICENSE (ver
+docs/distribucion.md, «Antes de publicar»).
+
+
+1. Qt 6 (Widgets, OpenGLWidgets, Svg) — LGPL v3
+   https://www.qt.io — Copyright © The Qt Company Ltd. y colaboradores.
+   NufioCAD usa Qt como bibliotecas dinámicas (las DLL de la carpeta bin, que se pueden sustituir por otra compilación de
+   la misma versión de Qt). El código fuente de Qt está en https://download.qt.io/official_releases/qt/ y en
+   https://code.qt.io. La LGPL v3 se puede leer en https://www.gnu.org/licenses/lgpl-3.0.html.
+
+2. Open CASCADE Technology (OCCT) — LGPL v2.1 con la «Open CASCADE exception»
+   https://dev.opencascade.org — Copyright © Open CASCADE SAS.
+   Modelado de sólidos, booleanas, mallado e importación y exportación de STEP. Se enlaza de forma dinámica (las DLL TK*
+   de la carpeta bin). Código fuente: https://github.com/Open-Cascade-SAS/OCCT.
+
+3. PlaneGCS — LGPL v2.1 o posterior
+   Solver de restricciones geométricas 2D del sketcher de FreeCAD (https://github.com/FreeCAD/FreeCAD, carpeta
+   src/Mod/Sketcher/App/planegcs), con los cambios que se indican en third_party/planegcs/README.md.
+   IMPORTANTE: PlaneGCS está enlazado ESTÁTICAMENTE dentro de NufioCAD.exe. Como pide la LGPL, se ofrece su código fuente
+   (third_party/planegcs/ del repositorio https://github.com/GeoNufio1404/NufioCAD) y el de NufioCAD que permite volver a
+   compilar el programa con una versión modificada de PlaneGCS (todo el repositorio, con las instrucciones de
+   docs/desarrollo.md). La licencia completa está en licencias/PlaneGCS-LICENSE.txt.
+
+4. Eigen 3 — MPL 2.0
+   https://eigen.tuxfamily.org — usado por PlaneGCS y por el núcleo (solo cabeceras, sin DLL).
+
+5. SQLite — dominio público
+   https://www.sqlite.org — formato de archivo .nuf.
+
+6. nlohmann/json — MIT
+   https://github.com/nlohmann/json — Copyright © 2013-2024 Niels Lohmann. Lectura y escritura de JSON (solo cabeceras).
+
+7. Iconos de Lucide — ISC
+   https://lucide.dev — Copyright © Lucide Contributors (y, en parte, Copyright © Cole Bemis 2013-2022, MIT).
+
+8. zlib, libpng, FreeType, Brotli y bzip2 — licencias libres permisivas (zlib/libpng, FreeType License o GPLv2, MIT, bzip2)
+   Dependencias de Qt y de OpenCASCADE que viajan en la carpeta bin.
+
+Catch2 (BSL-1.0) solo se usa para las pruebas del código fuente y no viaja en el instalador.
+
+
+Si crees que falta algún aviso o hay algún error, escríbelo en https://github.com/GeoNufio1404/NufioCAD/issues.

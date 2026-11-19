@@ -50,6 +50,9 @@ if(NUF_BUILD_APP)
     add_subdirectory(src/app)
 endif()
 
+# Empaquetado (instalador de Windows, .deb/.rpm de Linux): cmake/Packaging.cmake
+include(cmake/Packaging.cmake)
+
 # ---------------------------------------------------------------------------
 # Pruebas
 # ---------------------------------------------------------------------------

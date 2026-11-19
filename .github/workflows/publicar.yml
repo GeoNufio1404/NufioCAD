@@ -1,0 +1,176 @@
+name: Publicar
+
+# Fase 19 (D1, D3, D4): construye el instalador de Windows (NSIS y ZIP) y el AppImage de Linux al empujar una etiqueta vX.Y.Z,
+# los firma si hay certificado, calcula los SHA-256 y crea la versión en GitHub (en borrador: se revisa y se publica a mano).
+# También se puede lanzar a mano (workflow_dispatch) para probar el empaquetado sin publicar.
+# SIN EJECUTAR TODAVÍA en GitHub (se escribió el 19 nov. 2026): la primera vez, lanzarlo a mano y mirar el resultado.
+# Pasos y secretos: docs/distribucion.md.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    name: Windows (instalador y ZIP)
+    runs-on: windows-2022
+    env:
+      # Los secretos no se pueden mirar en un «if»: se pasan a variables.
+      WINDOWS_CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+      WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Qt 6.8.3
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          cache: true
+
+      - name: Compilador de Visual Studio en el PATH
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      # OpenCASCADE se compila con vcpkg (más de una hora la primera vez): la caché de binarios lo deja en minutos después.
+      - name: Caché de vcpkg
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\vcpkg\archives
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: vcpkg-${{ runner.os }}-
+
+      - name: NSIS (para el instalador)
+        run: choco install nsis --no-progress -y
+
+      - name: Configurar
+        env:
+          VCPKG_ROOT: ${{ env.VCPKG_INSTALLATION_ROOT }}
+          QT_ROOT: ${{ env.QT_ROOT_DIR }}
+        run: cmake --preset windows-release
+
+      - name: Compilar
+        run: cmake --build build/windows-release
+
+      - name: Pruebas del núcleo
+        run: build\windows-release\tests\nuf_tests.exe
+
+      - name: Preparar el certificado
+        if: ${{ env.WINDOWS_CERT_PFX_BASE64 != '' }}
+        shell: pwsh
+        run: |
+          $ruta = Join-Path $env:RUNNER_TEMP "nufiocad.pfx"
+          [IO.File]::WriteAllBytes($ruta, [Convert]::FromBase64String($env:WINDOWS_CERT_PFX_BASE64))
+          "WINDOWS_CERT_PFX=$ruta" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          "NUF_FIRMAR=1" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      - name: Empaquetar (instalador NSIS y ZIP)
+        working-directory: build/windows-release
+        run: cpack -G "NSIS;ZIP"
+
+      - name: Firmar el instalador
+        if: ${{ env.WINDOWS_CERT_PFX_BASE64 != '' }}
+        shell: pwsh
+        run: ./packaging/windows/firmar.ps1 -Ruta (Get-ChildItem build/windows-release/NufioCAD-*-win64.exe).FullName
+
+      - name: SHA-256
+        shell: pwsh
+        run: |
+          Set-Location build/windows-release
+          Get-FileHash NufioCAD-*-win64.exe, NufioCAD-*-win64.zip -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } | Out-File -Encoding ascii SHA256SUMS-windows.txt
+          Get-Content SHA256SUMS-windows.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            build/windows-release/NufioCAD-*-win64.exe
+            build/windows-release/NufioCAD-*-win64.zip
+            build/windows-release/SHA256SUMS-windows.txt
+
+  linux:
+    name: Linux (AppImage, .deb y .rpm)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Instalar dependencias
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build rpm file desktop-file-utils libfuse2t64 \
+            libocct-foundation-dev libocct-modeling-data-dev \
+            libocct-modeling-algorithms-dev libocct-visualization-dev \
+            libocct-data-exchange-dev libocct-ocaf-dev libocct-draw-dev \
+            occt-misc libtbb-dev \
+            qt6-base-dev libqt6svg6-dev libgl-dev libglu1-mesa-dev \
+            libsqlite3-dev nlohmann-json3-dev libeigen3-dev catch2
+
+      - name: Configurar y compilar
+        run: |
+          cmake --preset linux-release
+          cmake --build --preset linux-release
+
+      - name: Pruebas del núcleo
+        run: ctest --preset linux-release
+
+      - name: Empaquetar (.tar.gz, .deb y .rpm)
+        working-directory: build/linux-release
+        run: cpack
+
+      - name: AppImage
+        run: packaging/linux/crear-appimage.sh build/linux-release
+
+      - name: SHA-256
+        run: |
+          mkdir -p salida
+          cp build/linux-release/NufioCAD-*.deb build/linux-release/NufioCAD-*.rpm build/linux-release/NufioCAD-*.tar.gz NufioCAD-*.AppImage salida/ || true
+          cd salida && sha256sum * > SHA256SUMS-linux.txt && cat SHA256SUMS-linux.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: salida/*
+
+  version:
+    name: Crear la versión (borrador)
+    needs: [windows, linux]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: descargas
+          merge-multiple: true
+
+      - name: Juntar los SHA-256
+        run: |
+          cd descargas
+          cat SHA256SUMS-windows.txt SHA256SUMS-linux.txt > SHA256SUMS.txt
+          {
+            echo "## Descargas"
+            echo
+            echo "Los SHA-256 de cada archivo (también en SHA256SUMS.txt), para comprobar la descarga:"
+            echo
+            echo '```'
+            cat SHA256SUMS.txt
+            echo '```'
+            echo
+            echo "En las primeras descargas Windows SmartScreen puede avisar de que el programa es poco habitual: es normal hasta que"
+            echo "el certificado gana reputación (ver docs/distribucion.md)."
+          } > notas.md
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          body_path: descargas/notas.md
+          files: |
+            descargas/NufioCAD-*
+            descargas/SHA256SUMS.txt

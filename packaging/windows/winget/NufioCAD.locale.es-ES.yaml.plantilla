@@ -1,0 +1,16 @@
+PackageIdentifier: NufioCAD.NufioCAD
+PackageVersion: <VERSION>
+PackageLocale: es-ES
+Publisher: NufioCAD
+PublisherUrl: https://github.com/GeoNufio1404/NufioCAD
+PackageName: NufioCAD
+PackageUrl: https://github.com/GeoNufio1404/NufioCAD
+License: <LICENCIA>
+ShortDescription: CAD paramétrico de escritorio para diseñar piezas e imprimirlas en 3D
+Description: Sketcher 2D con restricciones, modelado de sólidos con historial, generadores de piezas (engranajes, cajas, letreros), importación y exportación de STEP, STL, OBJ y 3MF.
+Tags:
+  - cad
+  - 3d-printing
+  - parametric
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

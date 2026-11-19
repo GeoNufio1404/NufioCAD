@@ -46,3 +46,5 @@ docs/
 - Diagramas en [Mermaid](https://mermaid.js.org) dentro de los `.md` (no imágenes sueltas), para que se puedan editar.
 - Cada bloque de la hoja de ruta termina con su línea **«Pendiente de …»**; cada prueba manual tiene un ID único.
 - Las rutas de código se citan relativas a `src/` (`document/src/Document.cpp`) o a la raíz del repositorio.
+
+- [`distribucion.md`](distribucion.md) — instalador, firma de código y cómo publicar una versión.

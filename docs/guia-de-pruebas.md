@@ -654,6 +654,13 @@ Código: **GEN**.
 | MOD.13 | Exportar › Calidad de malla **Personalizada…** | Salen dos casillas (desviación y giro máximos); al bajar la desviación sube el número de triángulos; se acuerdan |
 | MOD.14 | Guarda un diseño con la vista girada y con zoom, ciérralo y ábrelo | Se abre mirando igual que cuando lo guardaste (sin «encuadrar todo»); un diseño anterior se abre encuadrado como siempre |
 | MOD.15 | Importa un STEP, cámbialo en tu programa de CAD y usa Archivo › **Actualizar importación desde su archivo…** | El sólido se sustituye por el nuevo, lo que hiciste encima se rehace solo y se puede deshacer; si el archivo ya no está en la ruta, te pregunta dónde está |
+| DIS.1 | En Windows: `cmake --install build/windows-release --prefix C:\temp\nufiocad` y abre `C:\temp\nufiocad\bin\NufioCAD.exe` | El programa arranca con ventana (si no, falta una DLL en `bin\`), con las herramientas, el visor y los diálogos como siempre |
+| DIS.2 | `cd build/windows-release` y `cpack -G ZIP`; descomprime el ZIP en otra carpeta y ábrelo | Funciona sin instalar nada más (sin Qt ni vcpkg en el PATH: prueba con un PC limpio si puedes); lleva `AVISOS-DE-TERCEROS.txt` |
+| DIS.3 | Con NSIS instalado (`choco install nsis`): `cpack -G NSIS` e instala el `.exe` resultante | Instala en Archivos de programa, crea el acceso del menú Inicio y del escritorio, y la página de licencia muestra los avisos de terceros |
+| DIS.4 | Tras instalar: doble clic en un archivo `.nuf` | Se abre en NufioCAD; el icono de los `.nuf` es el de la aplicación |
+| DIS.5 | Desinstala desde Configuración › Aplicaciones | Se quita todo, y los `.nuf` dejan de estar asociados |
+| DIS.6 | Lanza el flujo **Publicar** a mano en GitHub (Actions › Publicar › Run workflow) | Termina bien en Windows y en Linux y deja los instaladores y los SHA-256 como artefactos (nunca se ha ejecutado: arregla lo que falle) |
+| DIS.7 | En Fedora o Ubuntu: `packaging/linux/crear-appimage.sh` y ejecuta el AppImage; instala el `.deb` o el `.rpm` | Arrancan, con su icono en el menú y la asociación de `.nuf` |
 | GEN.9 | **Rosca interior**: caja, agujero de Ø 6.47 con la herramienta Agujero, y rosca M8 con operación «Cortar» | El agujero queda roscado |
 
 #### 3.6.3 Barrido y loft
