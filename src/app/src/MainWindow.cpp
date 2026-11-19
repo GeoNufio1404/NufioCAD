@@ -998,6 +998,9 @@ void MainWindow::activateFeature(document::FeatureId id)
     case document::FeatureKind::Mirror:
         startTool(std::make_unique<MirrorTool>(document_, *viewport_, id));
         break;
+    case document::FeatureKind::Split:
+        startTool(std::make_unique<SplitTool>(document_, *viewport_, id));
+        break;
     case document::FeatureKind::Pattern:
         startTool(std::make_unique<PatternTool>(document_, *viewport_, id));
         break;

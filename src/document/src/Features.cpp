@@ -230,6 +230,7 @@ std::string newBodyName(ModelState& state, const Feature& feature)
     case FeatureKind::Move: label = "Copia"; break;
     case FeatureKind::Pattern: label = "Patrón"; break;
     case FeatureKind::Mirror: label = "Espejo"; break;
+    case FeatureKind::Split: label = "Parte"; break;
     case FeatureKind::Combine: label = "Unión"; break;
     case FeatureKind::Gear: {
         label = "Engranaje";
@@ -541,7 +542,8 @@ std::optional<std::string> ShellFeature::compute(ModelState& state) const
         throw FeatureError("Las caras elegidas ya no existen");
     }
     try {
-        state.bodies[*bodyIndex].shape = geometry::shell(tag(), state.bodies[*bodyIndex].shape, indices, thickness, outward);
+        state.bodies[*bodyIndex].shape = closed ? geometry::shellClosed(tag(), state.bodies[*bodyIndex].shape, thickness)
+                                                : geometry::shell(tag(), state.bodies[*bodyIndex].shape, indices, thickness, outward);
     } catch (const geometry::GeometryError& e) {
         throw FeatureError(e.what());
     }
@@ -573,22 +575,74 @@ std::optional<std::string> MirrorFeature::compute(ModelState& state) const
     std::optional<std::string> warning;
     const sketch::Plane mirrorPlane =
         resolvePlane(state, plane, "del plano de simetría", "se usa su última posición", warning);
-    geometry::Shape mirrored;
-    try {
-        mirrored = geometry::mirror(tag(), source->shape, mirrorPlane);
-        if (auto extra = applyOperation(state, *this, operation, mirrored)) {
-            warning = warning ? *warning + " " + *extra : *extra;
+    // Todos los cuerpos a reflejar (el principal y los demás), tal como estaban antes de empezar: reflejar uno con «Unir» cambia
+    // la lista de cuerpos, así que se toman las formas de antemano.
+    std::vector<std::pair<std::string, geometry::Shape>> sources = {{body, source->shape}};
+    int missing = 0;
+    for (const std::string& key : alsoBodies) {
+        const auto other = std::ranges::find_if(state.bodies, [&](const Body& b) { return b.key == key; });
+        if (other == state.bodies.end()) {
+            ++missing;
+        } else if (key != body) {
+            sources.emplace_back(key, other->shape);
         }
+    }
+    try {
+        std::size_t index = 0;
+        for (const auto& [key, shape] : sources) {
+            // Cada copia lleva su número en el nombre de las caras, para que no se repitan entre cuerpos.
+            const std::string name = index == 0 ? tag() : tag() + ":c" + std::to_string(index);
+            ++index;
+            const geometry::Shape mirrored = geometry::mirror(name, shape, mirrorPlane);
+            if (auto extra = applyOperation(state, *this, operation, mirrored)) {
+                warning = warning ? *warning + " " + *extra : *extra;
+            }
+        }
+    } catch (const geometry::GeometryError& e) {
+        throw FeatureError(e.what());
+    }
+    if (missing > 0) {
+        const std::string text = missing == 1 ? "Un cuerpo de la lista ya no existe." : "Algunos cuerpos de la lista ya no existen.";
+        warning = warning ? *warning + " " + text : text;
+    }
+    return warning;
+}
+
+std::optional<std::string> SplitFeature::compute(ModelState& state) const
+{
+    const auto source = std::ranges::find_if(state.bodies, [&](const Body& b) { return b.key == body; });
+    if (source == state.bodies.end()) {
+        throw FeatureError("El cuerpo que se iba a dividir ya no existe");
+    }
+    std::optional<std::string> warning;
+    sketch::Plane cut = resolvePlane(state, plane, "del plano de corte", "se usa su última posición", warning);
+    cut.origin = {cut.origin.x + cut.normal.x * offset, cut.origin.y + cut.normal.y * offset, cut.origin.z + cut.normal.z * offset};
+    try {
+        auto [front, back] = geometry::splitBody(tag(), source->shape, cut);
+        const std::size_t index = std::size_t(source - state.bodies.begin());
+        state.bodies[index].shape = std::move(front);
+        state.bodies.push_back({tag(), newBodyName(state, *this), std::move(back)});
     } catch (const geometry::GeometryError& e) {
         throw FeatureError(e.what());
     }
     return warning;
 }
 
+std::vector<FeatureId> SplitFeature::dependencies() const
+{
+    std::vector<FeatureId> ids;
+    addAll(ids, geometry::ElementRef{body + ":", 0});
+    addAttachmentDependencies(ids, plane);
+    return ids;
+}
+
 std::vector<FeatureId> MirrorFeature::dependencies() const
 {
     std::vector<FeatureId> ids;
     addAll(ids, geometry::ElementRef{body + ":", 0});  // la operación que creó el cuerpo
+    for (const std::string& other : alsoBodies) {
+        addAll(ids, geometry::ElementRef{other + ":", 0});
+    }
     addAttachmentDependencies(ids, plane);
     return ids;
 }

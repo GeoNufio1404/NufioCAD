@@ -46,7 +46,22 @@ ExportDialog::ExportDialog(const std::vector<document::Body>& bodies, const std:
     quality_->addItem(QStringLiteral("Baja (rápida, facetada)"));
     quality_->addItem(QStringLiteral("Media"));
     quality_->addItem(QStringLiteral("Alta (curvas suaves, archivo grande)"));
+    quality_->addItem(QStringLiteral("Personalizada…"));
     quality_->setCurrentIndex(1);
+    // Personalizada (O6): lo lejos que puede quedar la malla de la superficie real y el giro máximo entre triángulos vecinos.
+    customLinear_ = new QDoubleSpinBox(this);
+    customLinear_->setRange(0.001, 5.0);
+    customLinear_->setDecimals(3);
+    customLinear_->setSingleStep(0.01);
+    customLinear_->setSuffix(QStringLiteral(" mm"));
+    customLinear_->setValue(QSettings().value(QStringLiteral("export/customLinear"), 0.05).toDouble());
+    customLinear_->setToolTip(QStringLiteral("Cuánto puede apartarse la malla de la superficie real: menos, más fiel y más triángulos"));
+    customAngular_ = new QDoubleSpinBox(this);
+    customAngular_->setRange(1.0, 60.0);
+    customAngular_->setDecimals(1);
+    customAngular_->setSuffix(QStringLiteral("°"));
+    customAngular_->setValue(QSettings().value(QStringLiteral("export/customAngular"), 15.0).toDouble());
+    customAngular_->setToolTip(QStringLiteral("El giro máximo entre dos triángulos vecinos en una curva"));
 
     list_ = new QListWidget(this);
     list_->setMaximumHeight(130);
@@ -65,6 +80,15 @@ ExportDialog::ExportDialog(const std::vector<document::Body>& bodies, const std:
     auto* form = new QFormLayout();
     form->addRow(QStringLiteral("Formato:"), format_);
     form->addRow(QStringLiteral("Calidad de malla:"), quality_);
+    form->addRow(QStringLiteral("  Desviación máxima:"), customLinear_);
+    form->addRow(QStringLiteral("  Giro máximo:"), customAngular_);
+    const auto showCustom = [this, form] {
+        const bool custom = quality_->currentIndex() == 3;
+        form->setRowVisible(customLinear_, custom);
+        form->setRowVisible(customAngular_, custom);
+    };
+    showCustom();
+    connect(quality_, &QComboBox::currentIndexChanged, this, showCustom);
     form->addRow(QStringLiteral("Cuerpos:"), list_);
     form->addRow(QString(), onePerBody_);
 
@@ -157,6 +181,17 @@ ExportDialog::ExportDialog(const std::vector<document::Body>& bodies, const std:
     }
     connect(format_, &QComboBox::currentIndexChanged, this, &ExportDialog::updateSummary);
     connect(quality_, &QComboBox::currentIndexChanged, this, &ExportDialog::updateSummary);
+    for (QDoubleSpinBox* box : {customLinear_, customAngular_}) {
+        connect(box, &QDoubleSpinBox::valueChanged, this, [this] {
+            if (quality_->currentIndex() == 3) {
+                QSettings customSettings;
+                customSettings.setValue(QStringLiteral("export/customLinear"), customLinear_->value());
+                customSettings.setValue(QStringLiteral("export/customAngular"), customAngular_->value());
+                triangles_.clear();  // los conteos de antes eran con otra malla
+                updateSummary();
+            }
+        });
+    }
     connect(list_, &QListWidget::itemChanged, this, &ExportDialog::updateSummary);
     updateSummary();
     fitDialogToScreen(this, QStringLiteral("export"));
@@ -174,6 +209,8 @@ geometry::MeshQuality ExportDialog::quality() const
         return geometry::MeshQuality::low();
     case 2:
         return geometry::MeshQuality::high();
+    case 3:
+        return {customLinear_->value(), customAngular_->value() * 3.14159265358979323846 / 180.0};
     default:
         return geometry::MeshQuality::medium();
     }

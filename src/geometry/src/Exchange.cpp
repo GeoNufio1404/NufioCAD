@@ -13,6 +13,8 @@
 #include <Poly_Triangulation.hxx>
 #include <STEPControl_StepModelType.hxx>
 #include <STEPControl_Reader.hxx>
+#include <NCollection_Sequence.hxx>
+#include <TCollection_AsciiString.hxx>
 #include <Standard_Failure.hxx>
 #include <STEPControl_Writer.hxx>
 #include <Standard_Version.hxx>
@@ -174,6 +176,35 @@ double meshVolume(const std::vector<Shape>& shapes, const MeshQuality& quality)
         volume += (t.a[0] * n[0] + t.a[1] * n[1] + t.a[2] * n[2]) / 6.0;
     });
     return volume;
+}
+
+OverhangReport analyzeOverhang(const Shape& shape, const MeshQuality& quality, double maxAngleDegrees)
+{
+    OverhangReport report;
+    if (shape.isNull()) {
+        return report;
+    }
+    const double bedZ = shape.bounds().min.z;
+    // Una cara se apoya en la cama si está pegada a la Z mínima; las demás miran hacia abajo «de más» si su normal baja de
+    // −sen(ángulo): con 45°, la normal tiene que ser más vertical que −0,707.
+    const double limit = -std::sin(maxAngleDegrees * 3.14159265358979323846 / 180.0);
+    forEachTriangle({shape}, quality, [&](const Triangle& t) {
+        const Point ab{t.b[0] - t.a[0], t.b[1] - t.a[1], t.b[2] - t.a[2]};
+        const Point ac{t.c[0] - t.a[0], t.c[1] - t.a[1], t.c[2] - t.a[2]};
+        const Point n = cross(ab, ac);
+        const double twice = std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+        if (twice < 1e-12) {
+            return;
+        }
+        const double area = 0.5 * twice;
+        report.totalArea += area;
+        const double nz = n[2] / twice;
+        const double top = std::max({t.a[2], t.b[2], t.c[2]});
+        if (nz < limit && top > bedZ + 1e-3) {
+            report.overhangArea += area;
+        }
+    });
+    return report;
 }
 
 MeshReport analyzeMesh(const Shape& shape, const MeshQuality& quality)
@@ -547,6 +578,22 @@ StepImport readStep(const std::filesystem::path& path)
     }
 
     StepImport result;
+    // Las unidades del archivo: el lector las convierte a milímetros (xstep.cascade.unit); si no eran milímetros, se dice (O6).
+    {
+        NCollection_Sequence<TCollection_AsciiString> lengthUnits;
+        NCollection_Sequence<TCollection_AsciiString> angleUnits;
+        NCollection_Sequence<TCollection_AsciiString> solidAngleUnits;
+        reader.FileUnits(lengthUnits, angleUnits, solidAngleUnits);
+        if (!lengthUnits.IsEmpty()) {
+            std::string unit = lengthUnits.First().ToCString();
+            std::transform(unit.begin(), unit.end(), unit.begin(), [](unsigned char c) { return char(std::toupper(c)); });
+            if (unit != "MM" && unit != "MILLIMETRE" && unit != "MILLIMETER" && !unit.empty()) {
+                const bool inches = unit.find("INCH") != std::string::npos;
+                result.warnings.push_back(std::string("El archivo estaba en ") + (inches ? "pulgadas" : "«" + unit + "»") +
+                                          ": se convirtió a milímetros al importarlo.");
+            }
+        }
+    }
     ShapeFix_Shape fixer(whole);
     fixer.Perform();
     if (!fixer.Shape().IsNull()) {

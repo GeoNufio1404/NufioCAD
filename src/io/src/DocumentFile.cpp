@@ -513,12 +513,31 @@ FeatureRow rowOf(const Feature& f)
         const auto& e = static_cast<const EdgeFeature&>(f);
         row.type = f.kind() == FeatureKind::Fillet ? "fillet" : "chamfer";
         params = {{"edges", toJson(e.edges)}, {"size", e.size}};
+        if (f.kind() == FeatureKind::Fillet && e.variable) {
+            params["variable"] = true;
+            params["size2"] = e.size2;
+        }
+        if (f.kind() == FeatureKind::Chamfer) {
+            params["style"] = e.style == geometry::ChamferStyle::TwoDistances ? "two" : e.style == geometry::ChamferStyle::DistanceAngle ? "angle" : "equal";
+            params["size2"] = e.size2;
+            params["angle"] = e.angle;
+            params["flip"] = e.flip;
+        }
         break;
     }
     case FeatureKind::Mirror: {
         const auto& m = static_cast<const MirrorFeature&>(f);
         row.type = "mirror";
         params = {{"body", m.body}, {"plane", toJson(m.plane)}, {"operation", nameOf(kOperations, m.operation)}};
+        if (!m.alsoBodies.empty()) {
+            params["alsoBodies"] = m.alsoBodies;
+        }
+        break;
+    }
+    case FeatureKind::Split: {
+        const auto& sp = static_cast<const SplitFeature&>(f);
+        row.type = "split";
+        params = {{"body", sp.body}, {"plane", toJson(sp.plane)}, {"offset", sp.offset}};
         break;
     }
     case FeatureKind::ConstructionPlane: {
@@ -563,7 +582,7 @@ FeatureRow rowOf(const Feature& f)
             path.push_back(id);
         }
         params = {{"profiles", toJson(s.profiles)}, {"pathSketch", s.pathSketch}, {"path", path},
-                  {"followPath", s.spec.followPath}, {"operation", nameOf(kOperations, s.operation)}};
+                  {"followPath", s.spec.followPath}, {"endScale", s.spec.endScale}, {"operation", nameOf(kOperations, s.operation)}};
         break;
     }
     case FeatureKind::Box: {
@@ -622,6 +641,9 @@ FeatureRow rowOf(const Feature& f)
         params = {{"body", pt.body}, {"layout", nameOf(kPatternLayouts, pt.layout)}, {"axis", pt.axis},
                   {"axisRef", pt.axisRef}, {"count", pt.count}, {"spacing", pt.spacing}, {"angle", pt.angle},
                   {"operation", nameOf(kOperations, pt.operation)}};
+        if (!pt.alsoBodies.empty()) {
+            params["alsoBodies"] = pt.alsoBodies;
+        }
         break;
     }
     case FeatureKind::Hole: {
@@ -635,13 +657,16 @@ FeatureRow rowOf(const Feature& f)
     case FeatureKind::Shell: {
         const auto& s = static_cast<const ShellFeature&>(f);
         row.type = "shell";
-        params = {{"faces", toJson(s.faces)}, {"thickness", s.thickness}, {"outward", s.outward}};
+        params = {{"faces", toJson(s.faces)}, {"thickness", s.thickness}, {"outward", s.outward}, {"closed", s.closed}};
         break;
     }
     case FeatureKind::Import: {
         const auto& i = static_cast<const ImportFeature&>(f);
         row.type = "import";
         params = {{"source", i.source}, {"notes", i.notes}, {"blob", blobKey(f.id())}};
+        if (!i.sourcePath.empty()) {
+            params["sourcePath"] = i.sourcePath;
+        }
         break;
     }
     }
@@ -696,12 +721,34 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
             e->edges.push_back(elementRef(edge));
         }
         e->size = number(p, "size");
+        e->variable = p.value("variable", false);
+        // Los archivos anteriores solo tienen chaflán con una distancia.
+        {
+            const std::string style = p.value("style", std::string("equal"));
+            e->style = style == "two" ? geometry::ChamferStyle::TwoDistances
+                       : style == "angle" ? geometry::ChamferStyle::DistanceAngle
+                                          : geometry::ChamferStyle::Equal;
+            e->size2 = p.value("size2", e->size);
+            e->angle = p.value("angle", 0.7853981633974483);
+            e->flip = p.value("flip", false);
+        }
         feature = std::move(e);
+    } else if (row.type == "split") {
+        auto sp = std::make_unique<SplitFeature>();
+        sp->body = text(p, "body");
+        sp->plane = attachmentOf(p.at("plane"));
+        sp->offset = number(p, "offset");
+        feature = std::move(sp);
     } else if (row.type == "mirror") {
         auto m = std::make_unique<MirrorFeature>();
         m->body = text(p, "body");
         m->plane = attachmentOf(p.at("plane"));
         m->operation = parseEnum(kOperations, text(p, "operation"), "operación");
+        if (p.contains("alsoBodies")) {
+            for (const Json& other : p.at("alsoBodies")) {
+                m->alsoBodies.push_back(other.get<std::string>());
+            }
+        }
         feature = std::move(m);
     } else if (row.type == "plane") {
         auto cp = std::make_unique<ConstructionPlaneFeature>();
@@ -763,6 +810,7 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
             s->path.push_back(static_cast<sk::EntityId>(id.get<std::uint64_t>()));
         }
         s->spec.followPath = p.at("followPath").get<bool>();
+        s->spec.endScale = p.value("endScale", 1.0);
         s->operation = parseEnum(kOperations, text(p, "operation"), "operación");
         feature = std::move(s);
     } else if (row.type == "box") {
@@ -853,6 +901,11 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         pt->spacing = number(p, "spacing");
         pt->angle = number(p, "angle");
         pt->operation = parseEnum(kOperations, text(p, "operation"), "operación");
+        if (p.contains("alsoBodies")) {
+            for (const Json& other : p.at("alsoBodies")) {
+                pt->alsoBodies.push_back(other.get<std::string>());
+            }
+        }
         feature = std::move(pt);
     } else if (row.type == "hole") {
         auto h = std::make_unique<HoleFeature>();
@@ -873,10 +926,12 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         }
         s->thickness = number(p, "thickness");
         s->outward = p.at("outward").get<bool>();
+        s->closed = p.value("closed", false);  // los anteriores: vaciado con caras abiertas
         feature = std::move(s);
     } else if (row.type == "import") {
         auto i = std::make_unique<ImportFeature>();
         i->source = text(p, "source");
+        i->sourcePath = p.value("sourcePath", std::string());
         for (const Json& note : p.at("notes")) {
             i->notes.push_back(note.get<std::string>());
         }
@@ -916,7 +971,7 @@ Json toJson(const ViewState& v)
         sketches[std::to_string(id)] = visible;
     }
     return {{"hiddenBodies", v.hiddenBodies}, {"sketches", sketches}, {"origin", v.originVisible},
-            {"ground", v.groundVisible}, {"displayUnit", v.displayUnit}};
+            {"ground", v.groundVisible}, {"displayUnit", v.displayUnit}, {"camera", v.camera}};
 }
 
 ViewState viewOf(const Json& j)
@@ -931,6 +986,14 @@ ViewState viewOf(const Json& j)
     v.originVisible = j.at("origin").get<bool>();
     v.groundVisible = j.at("ground").get<bool>();
     v.displayUnit = j.value("displayUnit", std::string());
+    if (j.contains("camera") && j.at("camera").is_array()) {
+        for (const Json& value : j.at("camera")) {
+            v.camera.push_back(value.get<double>());
+        }
+        if (v.camera.size() != 11) {
+            v.camera.clear();
+        }
+    }
     return v;
 }
 

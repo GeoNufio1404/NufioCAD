@@ -150,6 +150,7 @@ private:
     void updateStartScreen();
     void showRecents();
     bool importStepFile(const std::filesystem::path& path);
+    void reimportStep();
 
     // Operaciones sólidas.
     void startTool(std::unique_ptr<FeatureTool> tool);
@@ -203,6 +204,7 @@ private:
     QAction* shellAction_ = nullptr;
     QAction* holeAction_ = nullptr;
     QAction* mirrorAction_ = nullptr;
+    QAction* splitAction_ = nullptr;
     QAction* patternAction_ = nullptr;
     QAction* planeAction_ = nullptr;
     QAction* axisAction_ = nullptr;
@@ -226,6 +228,12 @@ private:
     QComboBox* sectionPlane_ = nullptr;
     QDoubleSpinBox* sectionOffset_ = nullptr;
     QCheckBox* sectionFlip_ = nullptr;
+    // Sección por un plano de construcción o por una cara plana (O5): el plano elegido y la lista de planos de construcción.
+    std::vector<double> savedCamera_;  // la cámara con que se guardó el diseño abierto (vacía: encuadrar)
+    QString lastMeasureText_;  // el resultado de Medir en texto plano, para Ctrl+C (O5)
+    sketch::Plane sectionCustom_;
+    bool hasSectionCustom_ = false;
+    std::vector<document::FeatureId> sectionPlaneIds_;
     QLabel* busyBadge_ = nullptr;     // «Calculando…», sobre la vista
     // Menú radial con clic derecho sobre la vista (U6) y atajos de una tecla para todo.
     void openRadialMenu(const QPoint& at);
@@ -262,6 +270,7 @@ private:
     QAction* exportAction_ = nullptr;
     QAction* printAction_ = nullptr;
     QAction* importAction_ = nullptr;
+    QAction* reimportAction_ = nullptr;
     QMenu* recentMenu_ = nullptr;
     std::unique_ptr<Recovery> recovery_;
     StartScreen* startScreen_ = nullptr;

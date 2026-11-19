@@ -102,10 +102,30 @@ bool touches(const Shape& a, const Shape& b);
 // conservan su nombre. Lanzan GeometryError si el kernel no puede (radio
 // demasiado grande, aristas que no se pueden redondear…).
 Shape fillet(std::string_view tag, const Shape& body, const std::vector<int>& edges, double radius);
+// Chaflán de varias medidas: «distance» es la distancia sobre la cara de referencia (la primera de las dos que comparten
+// la arista; con «flip», la otra) y, según el tipo, la otra distancia sobre la cara vecina o el ángulo con que el chaflán se
+// aparta de esa cara de referencia (rad, entre 0 y 90°).
+// Redondeo de radio variable (O2): en cada arista elegida el radio va de «start» en su primer vértice a «end» en el último.
+Shape filletVariable(std::string_view tag, const Shape& body, const std::vector<int>& edges, double start, double end);
+
+enum class ChamferStyle { Equal, TwoDistances, DistanceAngle };
+struct ChamferSpec {
+    ChamferStyle style = ChamferStyle::Equal;
+    double distance = 1.0;
+    double distance2 = 1.0;
+    double angle = 0.7853981633974483;
+    bool flip = false;
+};
+Shape chamfer(std::string_view tag, const Shape& body, const std::vector<int>& edges, const ChamferSpec& spec);
+
 Shape chamfer(std::string_view tag, const Shape& body, const std::vector<int>& edges, double distance);
 
 // Copia del cuerpo reflejada sobre el plano. Las caras se llaman
 // «tag:espejo:<nombre de la cara original>».
+// Divide un cuerpo con un plano en dos: el de la parte hacia donde apunta la normal del plano y el de la otra. Si el plano no
+// lo atraviesa lanza GeometryError. Las caras del corte se llaman «tag:corte» y «tag:corte:2».
+std::pair<Shape, Shape> splitBody(std::string_view tag, const Shape& body, const sketch::Plane& plane);
+
 Shape mirror(std::string_view tag, const Shape& body, const sketch::Plane& plane);
 
 struct PatternSpec {
@@ -225,6 +245,7 @@ Shape worm(std::string_view tag, const sketch::Plane& plane, const WormSpec& spe
 
 struct SweepSpec {
     bool followPath = true;  // el perfil gira con la trayectoria; si no, queda paralelo a sí mismo
+    double endScale = 1.0;   // escala del perfil al final de la trayectoria (1 = sin cambio; 0,5 = termina a la mitad de tamaño)
 };
 
 // Barrido: el perfil (sus contornos) a lo largo de una trayectoria hecha con
@@ -277,5 +298,9 @@ Shape holeTool(std::string_view tag, const sketch::Plane& plane, const std::vect
 // llaman «tag:interior:<cara de origen>»; las demás, incluida la que queda como
 // borde de la abertura, conservan su nombre.
 Shape shell(std::string_view tag, const Shape& body, const std::vector<int>& removedFaces, double thickness, bool outward);
+
+// Vaciado cerrado (O3): sin abrir ninguna cara, el cuerpo queda con un hueco por dentro (una cavidad cerrada) y paredes de
+// «thickness» mm. Las caras del hueco se llaman «tag:interior:<cara de origen>». Solo hacia dentro.
+Shape shellClosed(std::string_view tag, const Shape& body, double thickness);
 
 } // namespace nuf::geometry

@@ -62,6 +62,8 @@ private:
     const std::vector<document::Body>& bodies_;
     QComboBox* format_ = nullptr;
     QComboBox* quality_ = nullptr;
+    QDoubleSpinBox* customLinear_ = nullptr;   // calidad personalizada: desviación lineal (mm)
+    QDoubleSpinBox* customAngular_ = nullptr;  // y angular (grados)
     QListWidget* list_ = nullptr;
     QCheckBox* onePerBody_ = nullptr;
     QLabel* summary_ = nullptr;

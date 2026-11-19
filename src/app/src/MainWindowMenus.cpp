@@ -184,6 +184,8 @@ void MainWindow::createMenus()
     file->addSeparator();
     importAction_ = addFile(QStringLiteral("&Importar STEP…"), QKeySequence(Qt::CTRL | Qt::Key_I),
                             QStringLiteral("file-open"), &MainWindow::importStep);
+    reimportAction_ = addFile(QStringLiteral("Actualizar &importación desde su archivo…"), QKeySequence(), QStringLiteral("file-open"),
+                              &MainWindow::reimportStep);
     exportAction_ = addFile(QStringLiteral("&Exportar…"), QKeySequence(), QStringLiteral("file-export"),
                             &MainWindow::exportBodies);
     exportAction_->setEnabled(false);
@@ -286,6 +288,11 @@ void MainWindow::createMenus()
     });
     decorate(mirrorAction_, QStringLiteral("mirror-solid"),
              QStringLiteral("Reflejar un cuerpo sobre un plano de origen o una cara plana"));
+    splitAction_ = solidMenu->addAction(QStringLiteral("&Dividir cuerpo"), this, [this] {
+        startTool(std::make_unique<SplitTool>(document_, *viewport_, std::nullopt));
+    });
+    decorate(splitAction_, QStringLiteral("section-solid"),
+             QStringLiteral("Partir un cuerpo en dos con un plano (de origen, de construcción o una cara plana)"), QStringLiteral("Dividir"));
     patternAction_ = solidMenu->addAction(QStringLiteral("&Patrón"), this, [this] {
         startTool(std::make_unique<PatternTool>(document_, *viewport_, std::nullopt));
     });
@@ -557,6 +564,7 @@ void MainWindow::createMenus()
     ribbon_->addAction(solidTab_, shellAction_);
     ribbon_->addAction(solidTab_, holeAction_);
     ribbon_->addAction(solidTab_, mirrorAction_);
+    ribbon_->addAction(solidTab_, splitAction_);
     ribbon_->addAction(solidTab_, patternAction_);
     ribbon_->addAction(solidTab_, moveAction_);
     ribbon_->addAction(solidTab_, combineAction_);

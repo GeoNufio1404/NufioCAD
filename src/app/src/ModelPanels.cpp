@@ -46,6 +46,8 @@ QString glyph(document::FeatureKind kind)
         return QStringLiteral("◎");
     case document::FeatureKind::Mirror:
         return QStringLiteral("⇋");
+    case document::FeatureKind::Split:
+        return QStringLiteral("⫽");
     case document::FeatureKind::Pattern:
         return QStringLiteral("▦");
     case document::FeatureKind::ConstructionPlane:

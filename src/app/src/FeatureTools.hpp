@@ -305,6 +305,11 @@ private:
     Style style_;
     std::vector<geometry::ElementRef> edges_;
     QDoubleSpinBox* size_ = nullptr;
+    QCheckBox* variable_ = nullptr;      // redondeo: radio variable
+    QComboBox* chamferKind_ = nullptr;  // chaflán: igual, dos distancias, distancia y ángulo
+    QDoubleSpinBox* size2_ = nullptr;
+    QDoubleSpinBox* angle_ = nullptr;
+    QCheckBox* flip_ = nullptr;
 };
 
 // Vaciado: elige las caras que quedan abiertas y el espesor de las paredes.
@@ -328,6 +333,7 @@ protected:
 private:
     std::vector<geometry::ElementRef> faces_;
     QDoubleSpinBox* thickness_ = nullptr;
+    QCheckBox* closed_ = nullptr;
     QComboBox* direction_ = nullptr;
 };
 
@@ -387,8 +393,34 @@ private:
     geometry::ElementRef face_;
     std::vector<document::FeatureId> planeIds_;  // los planos de construcción del desplegable (tras los 4 fijos)
     QComboBox* bodyBox_ = nullptr;
+    QListWidget* others_ = nullptr;  // los demás cuerpos que se reflejan a la vez
     QComboBox* plane_ = nullptr;
     QComboBox* operation_ = nullptr;
+};
+
+// Dividir un cuerpo con un plano (O4).
+class SplitTool final : public FeatureTool {
+    Q_OBJECT
+
+public:
+    SplitTool(document::Document& document, render::Viewport& viewport, std::optional<document::FeatureId> editing);
+
+    std::unique_ptr<document::Feature> build() const override;
+
+protected:
+    QString title() const override { return QStringLiteral("Dividir cuerpo"); }
+    void createFields(QFormLayout* form) override;
+    void selectionChanged(const render::ModelSelection& selection) override;
+    QString inputsText() const override;
+    bool removesMaterial() const override { return false; }
+
+private:
+    std::string body_;
+    geometry::ElementRef face_;
+    std::vector<document::FeatureId> planeIds_;
+    QComboBox* bodyBox_ = nullptr;
+    QComboBox* plane_ = nullptr;
+    QDoubleSpinBox* offset_ = nullptr;
 };
 
 // Plano de construcción: parte de un plano de origen, una cara u otro plano,
@@ -564,6 +596,7 @@ private:
     std::vector<document::ProfileRef> profiles_;
     document::FeatureId pathSketch_ = 0;
     std::vector<sketch::EntityId> path_;
+    QDoubleSpinBox* endScale_ = nullptr;
     QComboBox* orientation_ = nullptr;
     QComboBox* operation_ = nullptr;
 };
@@ -771,6 +804,7 @@ private:
     std::string body_;
     std::vector<document::FeatureId> axisIds_;  // ejes de construcción del desplegable (tras X, Y, Z)
     QFormLayout* form_ = nullptr;
+    QListWidget* others_ = nullptr;  // los demás cuerpos que se repiten a la vez
     QComboBox* bodyBox_ = nullptr;
     QComboBox* layout_ = nullptr;
     QComboBox* axis_ = nullptr;

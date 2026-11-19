@@ -1,6 +1,7 @@
 #include <nuf/geometry/Modeling.hpp>
 #include <nuf/sketch/Profiles.hpp>
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -602,4 +603,96 @@ TEST_CASE("Las 5 regiones de un círculo inscrito en un cuadrado se extruyen", "
     }
     REQUIRE_THAT(total, WithinRel(400.0, 1e-6));
     REQUIRE_THAT(extrude("f1", allProfiles(s), distance(1)).volume(), WithinRel(400.0, 1e-6));
+}
+
+TEST_CASE("Chaflán con dos distancias, con distancia y ángulo, y las aristas de una cara", "[chamfer][edges]")
+{
+    using namespace nuf;
+    const auto plane = sketch::Plane::fromPointAndNormal({0, 0, 0}, {0, 0, 1});
+    const geometry::Shape box = geometry::box("b", plane, 20.0, 20.0, 20.0, false, 0.0);
+    REQUIRE(box.isValid());
+    const double volume = box.volume();
+    // Una arista recta de 20 mm (la primera que salga)
+    int edge = -1;
+    for (int i = 0; i < box.edgeCount() && edge < 0; ++i) {
+        if (const auto line = box.edgeLine(i); line.has_value()) {
+            edge = i;
+        }
+    }
+    REQUIRE(edge >= 0);
+    // Dos distancias: un triángulo de catetos 2 y 4 a lo largo de 20 mm
+    geometry::ChamferSpec spec;
+    spec.style = geometry::ChamferStyle::TwoDistances;
+    spec.distance = 2.0;
+    spec.distance2 = 4.0;
+    const geometry::Shape asym = geometry::chamfer("c", box, {edge}, spec);
+    REQUIRE(asym.isValid());
+    CHECK(volume - asym.volume() == Catch::Approx(0.5 * 2.0 * 4.0 * 20.0).epsilon(1e-6));
+    // Medir desde la otra cara cambia la orientación del chaflán, no lo que se quita
+    spec.flip = true;
+    const geometry::Shape flipped = geometry::chamfer("c", box, {edge}, spec);
+    CHECK(volume - flipped.volume() == Catch::Approx(80.0).epsilon(1e-6));
+    CHECK(flipped.faceCount() == asym.faceCount());
+    // Distancia 3 a 45°: catetos 3 y 3
+    geometry::ChamferSpec angled;
+    angled.style = geometry::ChamferStyle::DistanceAngle;
+    angled.distance = 3.0;
+    angled.angle = std::numbers::pi / 4.0;
+    CHECK(volume - geometry::chamfer("c", box, {edge}, angled).volume() == Catch::Approx(0.5 * 3.0 * 3.0 * 20.0).epsilon(1e-6));
+    // Distancia 3 a 60°: el otro cateto vale 3·tan(60°)
+    angled.angle = std::numbers::pi / 3.0;
+    const double removed = volume - geometry::chamfer("c", box, {edge}, angled).volume();
+    const double other = 3.0 * std::tan(std::numbers::pi / 3.0);
+    CHECK((removed == Catch::Approx(0.5 * 3.0 * other * 20.0).epsilon(1e-4) || removed == Catch::Approx(0.5 * 3.0 * (3.0 / std::tan(std::numbers::pi / 3.0)) * 20.0).epsilon(1e-4)));
+    // Datos que no valen
+    spec.distance2 = 0.0;
+    CHECK_THROWS_AS(geometry::chamfer("c", box, {edge}, spec), geometry::GeometryError);
+    angled.angle = std::numbers::pi / 2.0;
+    CHECK_THROWS_AS(geometry::chamfer("c", box, {edge}, angled), geometry::GeometryError);
+    // Cada cara de la caja tiene cuatro aristas, y todas distintas entre caras vecinas
+    for (int face = 0; face < box.faceCount(); ++face) {
+        CHECK(box.faceEdges(face).size() == 4);
+    }
+    CHECK(box.faceEdges(-1).empty());
+    // Achaflanar de una vez las cuatro aristas de una cara
+    CHECK(volume - geometry::chamfer("c", box, box.faceEdges(0), 1.0).volume() > 0.0);
+}
+
+TEST_CASE("Vaciado cerrado: una caja de 20 queda con una cavidad de 16 y paredes de 2", "[shell]")
+{
+    using namespace nuf;
+    const auto plane = sketch::Plane::fromPointAndNormal({0, 0, 0}, {0, 0, 1});
+    const geometry::Shape box = geometry::box("b", plane, 20.0, 20.0, 20.0, false, 0.0);
+    const geometry::Shape hollow = geometry::shellClosed("s", box, 2.0);
+    REQUIRE(hollow.isValid());
+    CHECK(hollow.volume() == Catch::Approx(8000.0 - 16.0 * 16.0 * 16.0).epsilon(1e-6));
+    CHECK(hollow.faceCount() == 12);  // las seis de fuera y las seis de la cavidad
+    CHECK(hollow.bounds().max.x == Catch::Approx(20.0).margin(1e-2));
+    // Con un espesor imposible no inventa nada
+    CHECK_THROWS_AS(geometry::shellClosed("s", box, 12.0), geometry::GeometryError);
+    CHECK_THROWS_AS(geometry::shellClosed("s", box, 0.0), geometry::GeometryError);
+    // El vaciado normal sigue pidiendo una cara
+    CHECK_THROWS_AS(geometry::shell("s", box, {}, 2.0, false), geometry::GeometryError);
+}
+
+TEST_CASE("Redondeo de radio variable y voladizos", "[fillet][overhang]")
+{
+    using namespace nuf;
+    const auto plane = sketch::Plane::fromPointAndNormal({0, 0, 0}, {0, 0, 1});
+    const geometry::Shape box = geometry::box("b", plane, 20.0, 20.0, 20.0, false, 0.0);
+    int edge = -1;
+    for (int i = 0; i < box.edgeCount() && edge < 0; ++i) {
+        if (box.edgeLine(i).has_value()) {
+            edge = i;
+        }
+    }
+    REQUIRE(edge >= 0);
+    const double constant = box.volume() - geometry::fillet("f", box, {edge}, 3.0).volume();
+    const double small = box.volume() - geometry::fillet("f", box, {edge}, 1.0).volume();
+    const geometry::Shape tapered = geometry::filletVariable("f", box, {edge}, 1.0, 3.0);
+    REQUIRE(tapered.isValid());
+    const double removed = box.volume() - tapered.volume();
+    CHECK(removed > small);
+    CHECK(removed < constant);
+    CHECK_THROWS_AS(geometry::filletVariable("f", box, {edge}, 0.0, 3.0), geometry::GeometryError);
 }

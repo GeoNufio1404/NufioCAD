@@ -65,6 +65,7 @@
 #include <ShapeUpgrade_UnifySameDomain.hxx>
 #include <Standard_Failure.hxx>
 #include <Standard_Version.hxx>
+#include <Law_Linear.hxx>
 #include <TopExp.hxx>
 #include <TopExp_Explorer.hxx>
 #include <NCollection_IndexedDataMap.hxx>
@@ -907,9 +908,11 @@ bool touches(const Shape& a, const Shape& b)
 // Redondeo y chaflán comparten todo salvo la herramienta del kernel.
 namespace {
 
+// «add» pone una arista en la operación (por defecto, con una sola medida).
 template <typename Maker>
 Shape edgeOperation(std::string_view tag, const std::string& label, const Shape& body, const std::vector<int>& edges,
-                    double size, const std::string& failure)
+                    double size, const std::string& failure,
+                    const std::function<void(Maker&, const TopoDS_Edge&)>& add = {})
 {
     if (body.isNull()) {
         throw GeometryError("No hay cuerpo sobre el que trabajar");
@@ -923,7 +926,11 @@ Shape edgeOperation(std::string_view tag, const std::string& label, const Shape&
     try {
         Maker maker(occtShape(body));
         for (int edge : edges) {
-            maker.Add(size, edgeAt(body, edge));
+            if (add) {
+                add(maker, edgeAt(body, edge));
+            } else {
+                maker.Add(size, edgeAt(body, edge));
+            }
         }
         buildCancellable(maker);
         if (!maker.IsDone() || maker.Shape().IsNull()) {
@@ -974,6 +981,83 @@ Shape chamfer(std::string_view tag, const Shape& body, const std::vector<int>& e
 {
     return edgeOperation<BRepFilletAPI_MakeChamfer>(tag, "chaflan", body, edges, distance,
                                                      "No se pudo achaflanar: prueba con una distancia menor");
+}
+
+Shape filletVariable(std::string_view tag, const Shape& body, const std::vector<int>& edges, double start, double end)
+{
+    if (start <= kTiny || end <= kTiny) {
+        throw GeometryError("Los radios del redondeo deben ser mayores que cero");
+    }
+    const std::function<void(BRepFilletAPI_MakeFillet&, const TopoDS_Edge&)> add = [&](BRepFilletAPI_MakeFillet& maker, const TopoDS_Edge& edge) {
+        maker.Add(start, end, edge);
+    };
+    return edgeOperation<BRepFilletAPI_MakeFillet>(tag, "redondeo", body, edges, std::max(start, end),
+                                                   "No se pudo redondear: prueba con radios menores", add);
+}
+
+Shape chamfer(std::string_view tag, const Shape& body, const std::vector<int>& edges, const ChamferSpec& spec)
+{
+    if (spec.style == ChamferStyle::Equal) {
+        return chamfer(tag, body, edges, spec.distance);
+    }
+    if (spec.distance <= kTiny || (spec.style == ChamferStyle::TwoDistances && spec.distance2 <= kTiny)) {
+        throw GeometryError("Las distancias del chaflán deben ser mayores que cero");
+    }
+    if (spec.style == ChamferStyle::DistanceAngle && (spec.angle <= 1e-3 || spec.angle >= std::numbers::pi / 2.0 - 1e-3)) {
+        throw GeometryError("El ángulo del chaflán debe estar entre 0° y 90°");
+    }
+    if (body.isNull()) {
+        throw GeometryError("No hay cuerpo sobre el que trabajar");
+    }
+    // La cara de referencia de cada arista: la primera de las dos que la comparten (o la segunda con «flip»).
+    NCollection_IndexedDataMap<TopoDS_Shape, NCollection_List<TopoDS_Shape>, TopTools_ShapeMapHasher> ancestors;
+    TopExp::MapShapesAndAncestors(occtShape(body), TopAbs_EDGE, TopAbs_FACE, ancestors);
+    const std::function<void(BRepFilletAPI_MakeChamfer&, const TopoDS_Edge&)> add = [&](BRepFilletAPI_MakeChamfer& maker,
+                                                                                     const TopoDS_Edge& edge) {
+        const int found = ancestors.FindIndex(edge);
+        if (found == 0) {
+            throw GeometryError("Una arista no pertenece a ninguna cara");
+        }
+        const NCollection_List<TopoDS_Shape>& faces = ancestors.FindFromIndex(found);
+        std::vector<TopoDS_Face> around;
+        for (const TopoDS_Shape& face : faces) {
+            around.push_back(TopoDS::Face(face));
+        }
+        if (around.empty()) {
+            throw GeometryError("Una arista no pertenece a ninguna cara");
+        }
+        const TopoDS_Face& reference = around[spec.flip && around.size() > 1 ? 1 : 0];
+        if (spec.style == ChamferStyle::TwoDistances) {
+            maker.Add(spec.distance, spec.distance2, edge, reference);
+        } else {
+            maker.AddDA(spec.distance, spec.angle, edge, reference);
+        }
+    };
+    return edgeOperation<BRepFilletAPI_MakeChamfer>(tag, "chaflan", body, edges, spec.distance,
+                                                     "No se pudo achaflanar: prueba con distancias menores", add);
+}
+
+std::pair<Shape, Shape> splitBody(std::string_view tag, const Shape& body, const sketch::Plane& plane)
+{
+    if (body.isNull()) {
+        throw GeometryError("No hay cuerpo que dividir");
+    }
+    const Box b = body.bounds();
+    const double reach = 2.0 * std::hypot(std::hypot(b.max.x - b.min.x, b.max.y - b.min.y), b.max.z - b.min.z) + 10.0;
+    // Dos bloques enormes, uno a cada lado del plano (el segundo con la normal invertida).
+    sketch::Plane front = plane;
+    sketch::Plane back = plane;
+    back.normal = {-plane.normal.x, -plane.normal.y, -plane.normal.z};
+    back.yAxis = {-plane.yAxis.x, -plane.yAxis.y, -plane.yAxis.z};
+    const Shape blockFront = box(std::string(tag) + ":lado", front, reach, reach, reach, true, 0.0);
+    const Shape blockBack = box(std::string(tag) + ":lado2", back, reach, reach, reach, true, 0.0);
+    Shape first = boolean(BooleanOp::Common, body, blockFront);
+    Shape second = boolean(BooleanOp::Common, body, blockBack);
+    if (first.isNull() || second.isNull() || first.solidCount() == 0 || second.solidCount() == 0 || first.volume() < kTiny ||
+        second.volume() < kTiny) {
+        throw GeometryError("El plano no atraviesa el cuerpo: no hay nada que dividir");
+    }
+    return {std::move(first), std::move(second)};
 }
 
 Shape mirror(std::string_view tag, const Shape& body, const sketch::Plane& plane)
@@ -2250,6 +2334,9 @@ Shape sweep(std::string_view tagView, const SketchRegion& profile, const sketch:
     if (pathEntities.empty()) {
         throw GeometryError("Elige la trayectoria del barrido");
     }
+    if (spec.endScale <= 0.01 || spec.endScale > 100.0) {
+        throw GeometryError("La escala al final del barrido debe estar entre 0,01 y 100");
+    }
     try {
         const gp_Ax3 pathAxes = toAx3(pathPlane);
         NCollection_List<TopoDS_Shape> edges;
@@ -2278,6 +2365,12 @@ Shape sweep(std::string_view tagView, const SketchRegion& profile, const sketch:
                     pipe.SetMode(gp_Ax2(toPnt(profile.plane.origin), toDir(profile.plane.normal)));
                 }
                 pipe.Add(wire, false, false);
+                if (std::abs(spec.endScale - 1.0) > 1e-9) {
+                    // La escala va de 1 al principio a «endScale» al final, linealmente a lo largo de la trayectoria.
+                    occ::handle<Law_Linear> law = new Law_Linear();
+                    law->Set(0.0, 1.0, 1.0, spec.endScale);
+                    pipe.SetLaw(wire, law, false, false);
+                }
                 buildCancellable(pipe);
                 if (!pipe.IsDone() || !pipe.MakeSolid()) {
                     throw GeometryError("No se pudo barrer el perfil (¿está en el inicio de la trayectoria y de frente a ella?)");
@@ -2512,12 +2605,16 @@ Shape holeTool(std::string_view tag, const sketch::Plane& plane, const std::vect
     }
 }
 
-Shape shell(std::string_view tag, const Shape& body, const std::vector<int>& removedFaces, double thickness, bool outward)
+namespace {
+
+// El vaciado de verdad; con «allowClosed» y sin caras que quitar deja una cavidad cerrada.
+Shape shellImpl(std::string_view tag, const Shape& body, const std::vector<int>& removedFaces, double thickness, bool outward,
+                bool allowClosed)
 {
     if (body.isNull()) {
         throw GeometryError("No hay cuerpo sobre el que trabajar");
     }
-    if (removedFaces.empty()) {
+    if (removedFaces.empty() && !allowClosed) {
         throw GeometryError("Elige al menos una cara para dejar abierta");
     }
     if (thickness <= kTiny) {
@@ -2565,7 +2662,63 @@ Shape shell(std::string_view tag, const Shape& body, const std::vector<int>& rem
             throw GeometryError(failure);
         }
         // Con un espesor imposible el kernel a veces devuelve el cuerpo intacto sin avisar.
-        if (result.faceCount() == body.faceCount() && std::abs(result.volume() - body.volume()) < 1e-9) {
+        if (removedFaces.empty() ? std::abs(result.volume() - body.volume()) < 1e-9
+                                 : result.faceCount() == body.faceCount() && std::abs(result.volume() - body.volume()) < 1e-9) {
+            throw GeometryError(failure);
+        }
+        return result;
+    } catch (const Standard_Failure& e) {
+        throw GeometryError(failure + " (" + kernelMessage(e) + ")");
+    }
+}
+
+} // namespace
+
+Shape shell(std::string_view tag, const Shape& body, const std::vector<int>& removedFaces, double thickness, bool outward)
+{
+    return shellImpl(tag, body, removedFaces, thickness, outward, false);
+}
+
+Shape shellClosed(std::string_view tag, const Shape& body, double thickness)
+{
+    // Sin caras que quitar, el kernel deja solo el sólido de dentro (el desplazado hacia dentro): el cuerpo vaciado es el
+    // cuerpo menos ese sólido, con su cavidad cerrada.
+    const Shape inner = shellImpl(tag, body, {}, thickness, false, true);
+    const std::string failure = "No se pudo vaciar: prueba con un espesor menor";
+    try {
+        BRepAlgoAPI_Cut cut(occtShape(body), occtShape(inner));
+        buildCancellable(cut);
+        if (!cut.IsDone() || cut.Shape().IsNull()) {
+            throw GeometryError(failure);
+        }
+        Namer namer(cut.Shape());
+        const Shape::Impl& outerIn = *body.impl();
+        for (int i = 1; i <= outerIn.faces.Extent(); ++i) {
+            const TopoDS_Shape& face = outerIn.faces(i);
+            const auto& modified = cut.Modified(face);
+            if (modified.IsEmpty() && !cut.IsDeleted(face)) {
+                namer.name(face, outerIn.faceNames[std::size_t(i - 1)]);
+            }
+            for (const TopoDS_Shape& image : modified) {
+                namer.name(image, outerIn.faceNames[std::size_t(i - 1)]);
+            }
+        }
+        // Las caras de la cavidad: las del sólido de dentro, que son las paredes interiores.
+        const Shape::Impl& innerIn = *inner.impl();
+        for (int i = 1; i <= innerIn.faces.Extent(); ++i) {
+            const TopoDS_Shape& face = innerIn.faces(i);
+            const auto& modified = cut.Modified(face);
+            const std::string name = std::string(tag) + ":interior:" + innerIn.faceNames[std::size_t(i - 1)];
+            if (modified.IsEmpty() && !cut.IsDeleted(face)) {
+                namer.name(face, name);
+            }
+            for (const TopoDS_Shape& image : modified) {
+                namer.name(image, name);
+            }
+        }
+        namer.nameUnnamed(std::string(tag) + ":interior");
+        Shape result = namer.finish(std::string(tag));
+        if (!result.isValid() || result.solidCount() == 0) {
             throw GeometryError(failure);
         }
         return result;

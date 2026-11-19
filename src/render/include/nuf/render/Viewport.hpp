@@ -5,6 +5,8 @@
 #include <nuf/sketch/Plane.hpp>
 
 #include <QOpenGLWidget>
+
+#include <array>
 #include <QSurfaceFormat>
 #include <QString>
 
@@ -81,6 +83,17 @@ public:
 
     // Encuadra todo el modelo.
     void fitAll();
+    // La cámara (O6): dónde mira y a qué escala. Se guarda en el diseño y se restaura al abrirlo.
+    struct CameraState {
+        bool valid = false;
+        std::array<double, 3> eye{};
+        std::array<double, 3> center{};
+        std::array<double, 3> up{};
+        double scale = 1.0;
+        bool orthographic = true;
+    };
+    CameraState cameraState() const;
+    void setCameraState(const CameraState& state);
     // Vista isométrica inicial, encuadrando el modelo.
     void resetView();
 

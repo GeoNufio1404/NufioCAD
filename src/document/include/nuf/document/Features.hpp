@@ -132,6 +132,12 @@ public:
     std::vector<NumericField> numericFields() override;
     std::vector<geometry::ElementRef> edges;
     double size = 1.0;  // radio o distancia, mm
+    // Solo el chaflán: igual por los dos lados, con dos distancias o con distancia y ángulo (O2).
+    geometry::ChamferStyle style = geometry::ChamferStyle::Equal;
+    double size2 = 1.0;                // la segunda distancia, mm (chaflán) o el radio del otro extremo (redondeo variable)
+    bool variable = false;             // redondeo de radio variable: de «size» a «size2» a lo largo de la arista
+    double angle = 0.7853981633974483; // rad, con la distancia y ángulo
+    bool flip = false;                 // la cara de referencia es la otra de las dos
 
     std::optional<std::string> compute(ModelState& state) const override;
     std::vector<FeatureId> dependencies() const override;
@@ -148,7 +154,7 @@ public:
 protected:
     geometry::Shape apply(std::string_view tag, const geometry::Shape& body, const std::vector<int>& indices) const override
     {
-        return geometry::fillet(tag, body, indices, size);
+        return variable ? geometry::filletVariable(tag, body, indices, size, size2) : geometry::fillet(tag, body, indices, size);
     }
 };
 
@@ -160,7 +166,13 @@ public:
 protected:
     geometry::Shape apply(std::string_view tag, const geometry::Shape& body, const std::vector<int>& indices) const override
     {
-        return geometry::chamfer(tag, body, indices, size);
+        geometry::ChamferSpec spec;
+        spec.style = style;
+        spec.distance = size;
+        spec.distance2 = size2;
+        spec.angle = angle;
+        spec.flip = flip;
+        return geometry::chamfer(tag, body, indices, spec);
     }
 };
 
@@ -171,6 +183,7 @@ public:
     std::vector<geometry::ElementRef> faces;  // las que se quitan
     double thickness = 1.0;                   // mm
     bool outward = false;                     // las paredes crecen hacia fuera
+    bool closed = false;                      // vaciado cerrado: hueco por dentro sin abrir caras (las elegidas solo señalan el cuerpo)
 
     FeatureKind kind() const override { return FeatureKind::Shell; }
     std::vector<NumericField> numericFields() override;
@@ -185,6 +198,7 @@ public:
 class MirrorFeature final : public Feature {
 public:
     std::string body;            // clave del cuerpo («f3»)
+    std::vector<std::string> alsoBodies;  // otros cuerpos que se reflejan a la vez (O1); cada uno da su copia
     SketchAttachment plane;      // dónde está el plano de simetría
     Operation operation = Operation::Join;
 
@@ -192,6 +206,21 @@ public:
     std::unique_ptr<Feature> clone() const override { return std::make_unique<MirrorFeature>(*this); }
     std::optional<std::string> compute(ModelState& state) const override;
     std::vector<FeatureId> dependencies() const override;
+};
+
+// Dividir un cuerpo (O4): un plano (de origen, de construcción o una cara plana), movido «offset» mm a lo largo de su normal,
+// lo parte en dos cuerpos: el original conserva el lado de la normal y el otro sale como cuerpo nuevo.
+class SplitFeature final : public Feature {
+public:
+    std::string body;        // clave del cuerpo
+    SketchAttachment plane;  // dónde está el plano de corte
+    double offset = 0.0;     // mm a lo largo de la normal del plano
+
+    FeatureKind kind() const override { return FeatureKind::Split; }
+    std::unique_ptr<Feature> clone() const override { return std::make_unique<SplitFeature>(*this); }
+    std::optional<std::string> compute(ModelState& state) const override;
+    std::vector<FeatureId> dependencies() const override;
+    std::vector<NumericField> numericFields() override;
 };
 
 // Plano de construcción: parte de un plano de origen, una cara plana u otro
@@ -321,6 +350,7 @@ public:
     std::unique_ptr<Feature> clone() const override { return std::make_unique<SweepFeature>(*this); }
     std::optional<std::string> compute(ModelState& state) const override;
     std::vector<FeatureId> dependencies() const override;
+    std::vector<NumericField> numericFields() override;
 };
 
 // Loft: un sólido por varios perfiles, en el orden de la lista.
@@ -407,6 +437,7 @@ enum class PatternLayout { Linear, Circular };
 class PatternFeature final : public Feature {
 public:
     std::string body;                          // clave del cuerpo («f3»)
+    std::vector<std::string> alsoBodies;       // otros cuerpos que se repiten a la vez (O1), cada uno con sus copias
     PatternLayout layout = PatternLayout::Linear;
     int axis = 0;                              // 0 = X, 1 = Y, 2 = Z (por el origen)
     FeatureId axisRef = 0;                     // si no es 0, un eje de construcción (en vez de axis)
@@ -445,6 +476,7 @@ public:
 class ImportFeature final : public Feature {
 public:
     std::string source;                       // nombre del archivo, para mostrar
+    std::string sourcePath;                   // la ruta completa donde estaba al importarlo (vacía en los diseños anteriores): para volver a leerlo
     std::shared_ptr<const std::string> brep;  // compartido: las copias no lo duplican
     std::vector<std::string> notes;           // avisos de la importación
 
