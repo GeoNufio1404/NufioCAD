@@ -641,7 +641,7 @@ FeatureRow rowOf(const Feature& f)
     case FeatureKind::Shell: {
         const auto& s = static_cast<const ShellFeature&>(f);
         row.type = "shell";
-        params = {{"faces", toJson(s.faces)}, {"thickness", s.thickness}, {"outward", s.outward}};
+        params = {{"faces", toJson(s.faces)}, {"thickness", s.thickness}, {"outward", s.outward}, {"closed", s.closed}};
         break;
     }
     case FeatureKind::Import: {
@@ -889,6 +889,7 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         }
         s->thickness = number(p, "thickness");
         s->outward = p.at("outward").get<bool>();
+        s->closed = p.value("closed", false);  // los anteriores: vaciado con caras abiertas
         feature = std::move(s);
     } else if (row.type == "import") {
         auto i = std::make_unique<ImportFeature>();

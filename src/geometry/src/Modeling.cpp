@@ -2560,12 +2560,16 @@ Shape holeTool(std::string_view tag, const sketch::Plane& plane, const std::vect
     }
 }
 
-Shape shell(std::string_view tag, const Shape& body, const std::vector<int>& removedFaces, double thickness, bool outward)
+namespace {
+
+// El vaciado de verdad; con «allowClosed» y sin caras que quitar deja una cavidad cerrada.
+Shape shellImpl(std::string_view tag, const Shape& body, const std::vector<int>& removedFaces, double thickness, bool outward,
+                bool allowClosed)
 {
     if (body.isNull()) {
         throw GeometryError("No hay cuerpo sobre el que trabajar");
     }
-    if (removedFaces.empty()) {
+    if (removedFaces.empty() && !allowClosed) {
         throw GeometryError("Elige al menos una cara para dejar abierta");
     }
     if (thickness <= kTiny) {
@@ -2613,7 +2617,63 @@ Shape shell(std::string_view tag, const Shape& body, const std::vector<int>& rem
             throw GeometryError(failure);
         }
         // Con un espesor imposible el kernel a veces devuelve el cuerpo intacto sin avisar.
-        if (result.faceCount() == body.faceCount() && std::abs(result.volume() - body.volume()) < 1e-9) {
+        if (removedFaces.empty() ? std::abs(result.volume() - body.volume()) < 1e-9
+                                 : result.faceCount() == body.faceCount() && std::abs(result.volume() - body.volume()) < 1e-9) {
+            throw GeometryError(failure);
+        }
+        return result;
+    } catch (const Standard_Failure& e) {
+        throw GeometryError(failure + " (" + kernelMessage(e) + ")");
+    }
+}
+
+} // namespace
+
+Shape shell(std::string_view tag, const Shape& body, const std::vector<int>& removedFaces, double thickness, bool outward)
+{
+    return shellImpl(tag, body, removedFaces, thickness, outward, false);
+}
+
+Shape shellClosed(std::string_view tag, const Shape& body, double thickness)
+{
+    // Sin caras que quitar, el kernel deja solo el sólido de dentro (el desplazado hacia dentro): el cuerpo vaciado es el
+    // cuerpo menos ese sólido, con su cavidad cerrada.
+    const Shape inner = shellImpl(tag, body, {}, thickness, false, true);
+    const std::string failure = "No se pudo vaciar: prueba con un espesor menor";
+    try {
+        BRepAlgoAPI_Cut cut(occtShape(body), occtShape(inner));
+        buildCancellable(cut);
+        if (!cut.IsDone() || cut.Shape().IsNull()) {
+            throw GeometryError(failure);
+        }
+        Namer namer(cut.Shape());
+        const Shape::Impl& outerIn = *body.impl();
+        for (int i = 1; i <= outerIn.faces.Extent(); ++i) {
+            const TopoDS_Shape& face = outerIn.faces(i);
+            const auto& modified = cut.Modified(face);
+            if (modified.IsEmpty() && !cut.IsDeleted(face)) {
+                namer.name(face, outerIn.faceNames[std::size_t(i - 1)]);
+            }
+            for (const TopoDS_Shape& image : modified) {
+                namer.name(image, outerIn.faceNames[std::size_t(i - 1)]);
+            }
+        }
+        // Las caras de la cavidad: las del sólido de dentro, que son las paredes interiores.
+        const Shape::Impl& innerIn = *inner.impl();
+        for (int i = 1; i <= innerIn.faces.Extent(); ++i) {
+            const TopoDS_Shape& face = innerIn.faces(i);
+            const auto& modified = cut.Modified(face);
+            const std::string name = std::string(tag) + ":interior:" + innerIn.faceNames[std::size_t(i - 1)];
+            if (modified.IsEmpty() && !cut.IsDeleted(face)) {
+                namer.name(face, name);
+            }
+            for (const TopoDS_Shape& image : modified) {
+                namer.name(image, name);
+            }
+        }
+        namer.nameUnnamed(std::string(tag) + ":interior");
+        Shape result = namer.finish(std::string(tag));
+        if (!result.isValid() || result.solidCount() == 0) {
             throw GeometryError(failure);
         }
         return result;

@@ -291,4 +291,8 @@ Shape holeTool(std::string_view tag, const sketch::Plane& plane, const std::vect
 // borde de la abertura, conservan su nombre.
 Shape shell(std::string_view tag, const Shape& body, const std::vector<int>& removedFaces, double thickness, bool outward);
 
+// Vaciado cerrado (O3): sin abrir ninguna cara, el cuerpo queda con un hueco por dentro (una cavidad cerrada) y paredes de
+// «thickness» mm. Las caras del hueco se llaman «tag:interior:<cara de origen>». Solo hacia dentro.
+Shape shellClosed(std::string_view tag, const Shape& body, double thickness);
+
 } // namespace nuf::geometry

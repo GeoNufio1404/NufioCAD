@@ -657,3 +657,20 @@ TEST_CASE("Chaflán con dos distancias, con distancia y ángulo, y las aristas d
     // Achaflanar de una vez las cuatro aristas de una cara
     CHECK(volume - geometry::chamfer("c", box, box.faceEdges(0), 1.0).volume() > 0.0);
 }
+
+TEST_CASE("Vaciado cerrado: una caja de 20 queda con una cavidad de 16 y paredes de 2", "[shell]")
+{
+    using namespace nuf;
+    const auto plane = sketch::Plane::fromPointAndNormal({0, 0, 0}, {0, 0, 1});
+    const geometry::Shape box = geometry::box("b", plane, 20.0, 20.0, 20.0, false, 0.0);
+    const geometry::Shape hollow = geometry::shellClosed("s", box, 2.0);
+    REQUIRE(hollow.isValid());
+    CHECK(hollow.volume() == Catch::Approx(8000.0 - 16.0 * 16.0 * 16.0).epsilon(1e-6));
+    CHECK(hollow.faceCount() == 12);  // las seis de fuera y las seis de la cavidad
+    CHECK(hollow.bounds().max.x == Catch::Approx(20.0).margin(1e-6));
+    // Con un espesor imposible no inventa nada
+    CHECK_THROWS_AS(geometry::shellClosed("s", box, 12.0), geometry::GeometryError);
+    CHECK_THROWS_AS(geometry::shellClosed("s", box, 0.0), geometry::GeometryError);
+    // El vaciado normal sigue pidiendo una cara
+    CHECK_THROWS_AS(geometry::shell("s", box, {}, 2.0, false), geometry::GeometryError);
+}

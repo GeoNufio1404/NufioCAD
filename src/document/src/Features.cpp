@@ -541,7 +541,8 @@ std::optional<std::string> ShellFeature::compute(ModelState& state) const
         throw FeatureError("Las caras elegidas ya no existen");
     }
     try {
-        state.bodies[*bodyIndex].shape = geometry::shell(tag(), state.bodies[*bodyIndex].shape, indices, thickness, outward);
+        state.bodies[*bodyIndex].shape = closed ? geometry::shellClosed(tag(), state.bodies[*bodyIndex].shape, thickness)
+                                                : geometry::shell(tag(), state.bodies[*bodyIndex].shape, indices, thickness, outward);
     } catch (const geometry::GeometryError& e) {
         throw FeatureError(e.what());
     }

@@ -774,12 +774,23 @@ void ShellTool::createFields(QFormLayout* form)
         thickness_->setValue(s->thickness);
         direction_->setCurrentIndex(s->outward ? 1 : 0);
     }
+    closed_ = new QCheckBox(QStringLiteral("Vaciado cerrado (hueco por dentro, sin abrir caras)"));
+    closed_->setToolTip(QStringLiteral("El cuerpo queda con una cavidad cerrada de paredes del espesor dado. Basta un clic en una cara para elegir el cuerpo. Solo hacia dentro"));
+    if (const auto* s = dynamic_cast<const document::ShellFeature*>(original_.get())) {
+        closed_->setChecked(s->closed);
+    }
     form->addRow(QStringLiteral("Espesor"), thickness_);
     form->addRow(QStringLiteral("Dirección"), direction_);
+    form->addRow(QString(), closed_);
     auto* clear = new QPushButton(QStringLiteral("Quitar selección"));
     form->addRow(QString(), clear);
     connect(thickness_, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
     connect(direction_, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
+    connect(closed_, &QCheckBox::toggled, this, [this, form] {
+        form->setRowVisible(direction_, !closed_->isChecked());
+        updatePreview();
+    });
+    form->setRowVisible(direction_, !closed_->isChecked());
     connect(clear, &QPushButton::clicked, this, [this] {
         faces_.clear();
         viewport_.clearModelSelection();
@@ -832,14 +843,19 @@ std::unique_ptr<document::Feature> ShellTool::build() const
     }
     f->faces = faces_;
     f->thickness = thickness_->value();
-    f->outward = direction_->currentIndex() == 1;
+    f->closed = closed_->isChecked();
+    f->outward = !f->closed && direction_->currentIndex() == 1;
     return f;
 }
 
 QString ShellTool::inputsText() const
 {
     if (faces_.empty()) {
-        return QStringLiteral("Elige las caras que quedan abiertas (varias con clics sucesivos)");
+        return closed_ != nullptr && closed_->isChecked() ? QStringLiteral("Haz clic en una cara del cuerpo que quieres vaciar por dentro")
+                                                          : QStringLiteral("Elige las caras que quedan abiertas (varias con clics sucesivos)");
+    }
+    if (closed_ != nullptr && closed_->isChecked()) {
+        return QStringLiteral("Cuerpo elegido: se vacía por dentro sin abrir ninguna cara");
     }
     return faces_.size() == 1 ? QStringLiteral("1 cara abierta") : QStringLiteral("%1 caras abiertas").arg(faces_.size());
 }

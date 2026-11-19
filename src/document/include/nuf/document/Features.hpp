@@ -182,6 +182,7 @@ public:
     std::vector<geometry::ElementRef> faces;  // las que se quitan
     double thickness = 1.0;                   // mm
     bool outward = false;                     // las paredes crecen hacia fuera
+    bool closed = false;                      // vaciado cerrado: hueco por dentro sin abrir caras (las elegidas solo señalan el cuerpo)
 
     FeatureKind kind() const override { return FeatureKind::Shell; }
     std::vector<NumericField> numericFields() override;

@@ -332,6 +332,7 @@ protected:
 private:
     std::vector<geometry::ElementRef> faces_;
     QDoubleSpinBox* thickness_ = nullptr;
+    QCheckBox* closed_ = nullptr;
     QComboBox* direction_ = nullptr;
 };
 
