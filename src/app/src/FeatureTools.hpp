@@ -305,6 +305,10 @@ private:
     Style style_;
     std::vector<geometry::ElementRef> edges_;
     QDoubleSpinBox* size_ = nullptr;
+    QComboBox* chamferKind_ = nullptr;  // chaflán: igual, dos distancias, distancia y ángulo
+    QDoubleSpinBox* size2_ = nullptr;
+    QDoubleSpinBox* angle_ = nullptr;
+    QCheckBox* flip_ = nullptr;
 };
 
 // Vaciado: elige las caras que quedan abiertas y el espesor de las paredes.

@@ -44,7 +44,12 @@ std::vector<Feature::NumericField> RevolveFeature::numericFields()
 
 std::vector<Feature::NumericField> EdgeFeature::numericFields()
 {
-    return {field("size", "Tamaño", size)};
+    std::vector<NumericField> fields = {field("size", "Tamaño", size)};
+    if (kind() == FeatureKind::Chamfer) {
+        fields.push_back(field("size2", "Segunda distancia", size2));
+        fields.push_back(field("angle", "Ángulo", angle, kRadiansPerDegree));
+    }
+    return fields;
 }
 
 std::vector<Feature::NumericField> ShellFeature::numericFields()

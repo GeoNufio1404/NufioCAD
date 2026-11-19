@@ -907,9 +907,11 @@ bool touches(const Shape& a, const Shape& b)
 // Redondeo y chaflán comparten todo salvo la herramienta del kernel.
 namespace {
 
+// «add» pone una arista en la operación (por defecto, con una sola medida).
 template <typename Maker>
 Shape edgeOperation(std::string_view tag, const std::string& label, const Shape& body, const std::vector<int>& edges,
-                    double size, const std::string& failure)
+                    double size, const std::string& failure,
+                    const std::function<void(Maker&, const TopoDS_Edge&)>& add = {})
 {
     if (body.isNull()) {
         throw GeometryError("No hay cuerpo sobre el que trabajar");
@@ -923,7 +925,11 @@ Shape edgeOperation(std::string_view tag, const std::string& label, const Shape&
     try {
         Maker maker(occtShape(body));
         for (int edge : edges) {
-            maker.Add(size, edgeAt(body, edge));
+            if (add) {
+                add(maker, edgeAt(body, edge));
+            } else {
+                maker.Add(size, edgeAt(body, edge));
+            }
         }
         buildCancellable(maker);
         if (!maker.IsDone() || maker.Shape().IsNull()) {
@@ -974,6 +980,48 @@ Shape chamfer(std::string_view tag, const Shape& body, const std::vector<int>& e
 {
     return edgeOperation<BRepFilletAPI_MakeChamfer>(tag, "chaflan", body, edges, distance,
                                                      "No se pudo achaflanar: prueba con una distancia menor");
+}
+
+Shape chamfer(std::string_view tag, const Shape& body, const std::vector<int>& edges, const ChamferSpec& spec)
+{
+    if (spec.style == ChamferStyle::Equal) {
+        return chamfer(tag, body, edges, spec.distance);
+    }
+    if (spec.distance <= kTiny || (spec.style == ChamferStyle::TwoDistances && spec.distance2 <= kTiny)) {
+        throw GeometryError("Las distancias del chaflán deben ser mayores que cero");
+    }
+    if (spec.style == ChamferStyle::DistanceAngle && (spec.angle <= 1e-3 || spec.angle >= std::numbers::pi / 2.0 - 1e-3)) {
+        throw GeometryError("El ángulo del chaflán debe estar entre 0° y 90°");
+    }
+    if (body.isNull()) {
+        throw GeometryError("No hay cuerpo sobre el que trabajar");
+    }
+    // La cara de referencia de cada arista: la primera de las dos que la comparten (o la segunda con «flip»).
+    NCollection_IndexedDataMap<TopoDS_Shape, NCollection_List<TopoDS_Shape>, TopTools_ShapeMapHasher> ancestors;
+    TopExp::MapShapesAndAncestors(occtShape(body), TopAbs_EDGE, TopAbs_FACE, ancestors);
+    const std::function<void(BRepFilletAPI_MakeChamfer&, const TopoDS_Edge&)> add = [&](BRepFilletAPI_MakeChamfer& maker,
+                                                                                     const TopoDS_Edge& edge) {
+        const int found = ancestors.FindIndex(edge);
+        if (found == 0) {
+            throw GeometryError("Una arista no pertenece a ninguna cara");
+        }
+        const NCollection_List<TopoDS_Shape>& faces = ancestors.FindFromIndex(found);
+        std::vector<TopoDS_Face> around;
+        for (const TopoDS_Shape& face : faces) {
+            around.push_back(TopoDS::Face(face));
+        }
+        if (around.empty()) {
+            throw GeometryError("Una arista no pertenece a ninguna cara");
+        }
+        const TopoDS_Face& reference = around[spec.flip && around.size() > 1 ? 1 : 0];
+        if (spec.style == ChamferStyle::TwoDistances) {
+            maker.Add(spec.distance, spec.distance2, edge, reference);
+        } else {
+            maker.AddDA(spec.distance, spec.angle, edge, reference);
+        }
+    };
+    return edgeOperation<BRepFilletAPI_MakeChamfer>(tag, "chaflan", body, edges, spec.distance,
+                                                     "No se pudo achaflanar: prueba con distancias menores", add);
 }
 
 Shape mirror(std::string_view tag, const Shape& body, const sketch::Plane& plane)

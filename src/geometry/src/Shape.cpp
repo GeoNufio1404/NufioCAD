@@ -192,6 +192,21 @@ ElementRef Shape::edgeRef(int index) const
     return impl_ ? refOf(impl_->edgeNames, impl_->edges, index, impl_->cacheMutex, impl_->edgeIndex) : ElementRef{};
 }
 
+std::vector<int> Shape::faceEdges(int index) const
+{
+    std::vector<int> result;
+    if (!impl_ || index < 0 || index >= impl_->faces.Extent()) {
+        return result;
+    }
+    for (TopExp_Explorer ex(impl_->faces(index + 1), TopAbs_EDGE); ex.More(); ex.Next()) {
+        const int found = impl_->edges.FindIndex(ex.Current());
+        if (found > 0 && std::ranges::find(result, found - 1) == result.end()) {
+            result.push_back(found - 1);
+        }
+    }
+    return result;
+}
+
 std::optional<int> Shape::findFace(const ElementRef& ref) const
 {
     return impl_ ? find(impl_->faceNames, impl_->faces, ref, impl_->cacheMutex, impl_->faceIndex) : std::nullopt;

@@ -102,6 +102,19 @@ bool touches(const Shape& a, const Shape& b);
 // conservan su nombre. Lanzan GeometryError si el kernel no puede (radio
 // demasiado grande, aristas que no se pueden redondear…).
 Shape fillet(std::string_view tag, const Shape& body, const std::vector<int>& edges, double radius);
+// Chaflán de varias medidas: «distance» es la distancia sobre la cara de referencia (la primera de las dos que comparten
+// la arista; con «flip», la otra) y, según el tipo, la otra distancia sobre la cara vecina o el ángulo con que el chaflán se
+// aparta de esa cara de referencia (rad, entre 0 y 90°).
+enum class ChamferStyle { Equal, TwoDistances, DistanceAngle };
+struct ChamferSpec {
+    ChamferStyle style = ChamferStyle::Equal;
+    double distance = 1.0;
+    double distance2 = 1.0;
+    double angle = 0.7853981633974483;
+    bool flip = false;
+};
+Shape chamfer(std::string_view tag, const Shape& body, const std::vector<int>& edges, const ChamferSpec& spec);
+
 Shape chamfer(std::string_view tag, const Shape& body, const std::vector<int>& edges, double distance);
 
 // Copia del cuerpo reflejada sobre el plano. Las caras se llaman

@@ -513,6 +513,12 @@ FeatureRow rowOf(const Feature& f)
         const auto& e = static_cast<const EdgeFeature&>(f);
         row.type = f.kind() == FeatureKind::Fillet ? "fillet" : "chamfer";
         params = {{"edges", toJson(e.edges)}, {"size", e.size}};
+        if (f.kind() == FeatureKind::Chamfer) {
+            params["style"] = e.style == geometry::ChamferStyle::TwoDistances ? "two" : e.style == geometry::ChamferStyle::DistanceAngle ? "angle" : "equal";
+            params["size2"] = e.size2;
+            params["angle"] = e.angle;
+            params["flip"] = e.flip;
+        }
         break;
     }
     case FeatureKind::Mirror: {
@@ -696,6 +702,16 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
             e->edges.push_back(elementRef(edge));
         }
         e->size = number(p, "size");
+        // Los archivos anteriores solo tienen chaflán con una distancia.
+        {
+            const std::string style = p.value("style", std::string("equal"));
+            e->style = style == "two" ? geometry::ChamferStyle::TwoDistances
+                       : style == "angle" ? geometry::ChamferStyle::DistanceAngle
+                                          : geometry::ChamferStyle::Equal;
+            e->size2 = p.value("size2", e->size);
+            e->angle = p.value("angle", 0.7853981633974483);
+            e->flip = p.value("flip", false);
+        }
         feature = std::move(e);
     } else if (row.type == "mirror") {
         auto m = std::make_unique<MirrorFeature>();

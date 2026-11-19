@@ -65,6 +65,9 @@ public:
     std::optional<int> findFace(const ElementRef& ref) const;
     std::optional<int> findEdge(const ElementRef& ref) const;
 
+    // Las aristas (índices) que rodean una cara.
+    std::vector<int> faceEdges(int index) const;
+
     // Plano de una cara plana, con la normal hacia fuera del sólido; el
     // origen y los ejes, como Plane::fromPointAndNormal.
     std::optional<sketch::Plane> facePlane(int index) const;

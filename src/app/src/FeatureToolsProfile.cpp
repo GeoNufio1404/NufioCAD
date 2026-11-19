@@ -612,6 +612,44 @@ void EdgeTool::createFields(QFormLayout* form)
     }
     form->addRow(style_ == Style::Fillet ? QStringLiteral("Radio") : QStringLiteral("Distancia"), size_);
     connect(size_, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
+    if (style_ == Style::Chamfer) {
+        // Chaflán con una distancia por los dos lados, con dos distancias o con distancia y ángulo (O2).
+        const auto* e = dynamic_cast<const document::EdgeFeature*>(original_.get());
+        auto* kind = combo({QStringLiteral("Igual por los dos lados"), QStringLiteral("Dos distancias"), QStringLiteral("Distancia y ángulo")});
+        chamferKind_ = kind;
+        size2_ = lengthBox(e != nullptr ? e->size2 : 1.0);
+        size2_->setMinimum(0.01);
+        field("size2", size2_);
+        angle_ = angleBox(e != nullptr ? e->angle / kDegree : 45.0, 89.0);
+        angle_->setMinimum(1.0);
+        field("angle", angle_);
+        flip_ = new QCheckBox(QStringLiteral("Medir desde la otra cara"));
+        flip_->setToolTip(QStringLiteral("La primera distancia va sobre una de las dos caras de la arista; esto la pasa a la otra"));
+        if (e != nullptr) {
+            kind->setCurrentIndex(e->style == geometry::ChamferStyle::TwoDistances ? 1 : e->style == geometry::ChamferStyle::DistanceAngle ? 2 : 0);
+            flip_->setChecked(e->flip);
+        }
+        form->insertRow(0, QStringLiteral("Tipo"), kind);
+        const auto distanceRow = form->rowCount();
+        (void)distanceRow;
+        form->addRow(QStringLiteral("Segunda distancia"), size2_);
+        form->addRow(QStringLiteral("Ángulo"), angle_);
+        form->addRow(QString(), flip_);
+        const auto showKind = [this, form] {
+            const int k = chamferKind_->currentIndex();
+            form->setRowVisible(size2_, k == 1);
+            form->setRowVisible(angle_, k == 2);
+            form->setRowVisible(flip_, k != 0);
+        };
+        showKind();
+        connect(kind, &QComboBox::currentIndexChanged, this, [this, showKind] {
+            showKind();
+            updatePreview();
+        });
+        connect(size2_, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
+        connect(angle_, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
+        connect(flip_, &QCheckBox::toggled, this, [this] { updatePreview(); });
+    }
     auto* clear = new QPushButton(QStringLiteral("Quitar selección"));
     form->addRow(QString(), clear);
     connect(clear, &QPushButton::clicked, this, [this] {
@@ -626,6 +664,29 @@ void EdgeTool::selectionChanged(const render::ModelSelection& selection)
     // La lista de aristas es de la herramienta, no del visor (que redibuja el
     // resultado en cada cambio y pierde su selección): cada clic en una arista
     // la agrega o la quita, y el visor se deja sin selección.
+    // Un clic en una cara elige (o quita, si ya estaban todas) todas sus aristas (O2).
+    for (const render::ModelSelection::Face& face : selection.faces) {
+        const auto hit = before().findFace(face.ref);
+        if (!hit) {
+            continue;
+        }
+        const geometry::Shape& shape = before().bodies[hit->body].shape;
+        std::vector<geometry::ElementRef> around;
+        for (const int edge : shape.faceEdges(hit->face)) {
+            around.push_back(shape.edgeRef(edge));
+        }
+        const bool allIn = !around.empty() && std::ranges::all_of(around, [&](const geometry::ElementRef& ref) {
+            return std::ranges::find(edges_, ref) != edges_.end();
+        });
+        for (const geometry::ElementRef& ref : around) {
+            const auto it = std::ranges::find(edges_, ref);
+            if (allIn && it != edges_.end()) {
+                edges_.erase(it);
+            } else if (!allIn && it == edges_.end()) {
+                edges_.push_back(ref);
+            }
+        }
+    }
     for (const render::ModelSelection::Edge& edge : selection.edges) {
         if (!before().findEdge(edge.ref)) {
             continue;  // una arista del resultado de la vista previa, no del cuerpo
@@ -658,6 +719,13 @@ std::unique_ptr<document::Feature> EdgeTool::build() const
     }
     f->edges = edges_;
     f->size = size_->value();
+    if (style_ == Style::Chamfer && chamferKind_ != nullptr) {
+        const int k = chamferKind_->currentIndex();
+        f->style = k == 1 ? geometry::ChamferStyle::TwoDistances : k == 2 ? geometry::ChamferStyle::DistanceAngle : geometry::ChamferStyle::Equal;
+        f->size2 = size2_->value();
+        f->angle = angle_->value() * kDegree;
+        f->flip = flip_->isChecked();
+    }
     return f;
 }
 
@@ -680,9 +748,9 @@ void EdgeTool::afterPreview(const document::ModelState& before)
 QString EdgeTool::inputsText() const
 {
     if (edges_.empty()) {
-        return QStringLiteral("Elige las aristas del cuerpo (varias con clics sucesivos)");
+        return QStringLiteral("Elige las aristas del cuerpo (varias con clics sucesivos) o una cara para elegir todas las suyas");
     }
-    return edges_.size() == 1 ? QStringLiteral("1 arista") : QStringLiteral("%1 aristas").arg(edges_.size());
+    return edges_.size() == 1 ? QStringLiteral("1 arista") : QStringLiteral("%1 aristas (un clic en una cara elige todas las suyas)").arg(edges_.size());
 }
 
 // --- Vaciado -----------------------------------------------------------------------

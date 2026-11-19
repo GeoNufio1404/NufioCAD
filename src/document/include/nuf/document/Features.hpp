@@ -132,6 +132,11 @@ public:
     std::vector<NumericField> numericFields() override;
     std::vector<geometry::ElementRef> edges;
     double size = 1.0;  // radio o distancia, mm
+    // Solo el chaflán: igual por los dos lados, con dos distancias o con distancia y ángulo (O2).
+    geometry::ChamferStyle style = geometry::ChamferStyle::Equal;
+    double size2 = 1.0;                // la segunda distancia, mm
+    double angle = 0.7853981633974483; // rad, con la distancia y ángulo
+    bool flip = false;                 // la cara de referencia es la otra de las dos
 
     std::optional<std::string> compute(ModelState& state) const override;
     std::vector<FeatureId> dependencies() const override;
@@ -160,7 +165,13 @@ public:
 protected:
     geometry::Shape apply(std::string_view tag, const geometry::Shape& body, const std::vector<int>& indices) const override
     {
-        return geometry::chamfer(tag, body, indices, size);
+        geometry::ChamferSpec spec;
+        spec.style = style;
+        spec.distance = size;
+        spec.distance2 = size2;
+        spec.angle = angle;
+        spec.flip = flip;
+        return geometry::chamfer(tag, body, indices, spec);
     }
 };
 
