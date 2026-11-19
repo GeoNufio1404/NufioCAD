@@ -68,6 +68,12 @@ public:
         shape.label = "Forma";
         shape.kind = K::Choice;
         shape.choices = {"Rectangular", "Redonda"};
+        GeneratorField channel;
+        channel.key = "canal";
+        channel.label = "Canal para tira LED";
+        channel.kind = K::Choice;
+        channel.choices = {"Sin canal", "Canal por dentro, junto a las paredes"};
+        channel.hint = "Un muro bajo que deja entre él y la pared un canal donde va pegada la tira LED";
         GeneratorField cableWall;
         cableWall.key = "pared_cable";
         cableWall.label = "Salida del cable";
@@ -87,7 +93,11 @@ public:
                 length("labio_pared", "Grosor del labio", 1.0, 0.4, 10.0),
                 length("holgura", "Holgura del labio", 0.1, 0.0, 2.0, "Aire entre el labio y la pared, por cada lado"),
                 length("cable", "Agujero del cable", 6.0, 0.0, 50.0, "0 = sin agujero"),
-                cableWall};
+                cableWall,
+                channel,
+                length("tira_ancho", "Ancho de la tira LED", 10.0, 3.0, 50.0, "El ancho del canal entre la pared y el muro (una tira de 8 mm: 10)", "canal", 1),
+                length("canal_alto", "Alto del muro del canal", 8.0, 2.0, 60.0, "Desde el fondo de la caja", "canal", 1),
+                length("canal_pared", "Grosor del muro del canal", 1.2, 0.4, 10.0, {}, "canal", 1)};
     }
 
     std::map<std::string, ArrowSpec> arrows() const override
@@ -215,6 +225,23 @@ public:
             }
             recipe.features.push_back(std::move(f));
         }
+        // 3b. El canal para la tira LED: un muro (un anillo) a «tira_ancho» de la pared, desde el fondo; la tira se pega en el
+        // fondo entre la pared y el muro y la luz sale por encima de él.
+        if (values.count("canal") != 0 && values.at("canal") >= 0.5) {
+            const double strip = v("tira_ancho"), wallThick = v("canal_pared");
+            const double inner = (round ? v("diametro") : std::min(v("ancho"), v("alto"))) - 2.0 * v("pared");
+            if (inner - 2.0 * strip - 2.0 * wallThick < 10.0) {
+                throw std::runtime_error("La tira LED es demasiado ancha para esa caja: no queda sitio para el muro del canal");
+            }
+            const std::string stripP = p("tira_ancho"), wallP = p("canal_pared"), highP = p("canal_alto");
+            param(stripP, strip);
+            param(wallP, wallThick);
+            param(highP, v("canal_alto"));
+            const std::string ringW = inW + " - 2*" + stripP, ringH = inH + " - 2*" + stripP;
+            recipe.features.push_back(shapeAt("Lightbox: muro del canal", Operation::Join, ringW, ringH, fondo + " - 0.01", highP + " + 0.01", "", ""));
+            recipe.features.push_back(shapeAt("Lightbox: hueco del muro", Operation::Cut, ringW + " - 2*" + wallP, ringH + " - 2*" + wallP,
+                                              fondo, highP + " + 1", "", ""));
+        }
         // 4. La tapa, un solo cuerpo: la placa del tamaño de la caja (marco y cara central juntos)...
         recipe.features.push_back(shapeAt("Lightbox: tapa", Operation::NewBody, W, H, "0", frente, beside, esquina));
         // 5. ...y el labio: un anillo que sale hacia atrás desde la cara interior de la tapa y entra en la caja. Se
@@ -239,8 +266,8 @@ public:
     std::string icon() const override { return "box-solid"; }
     std::string description() const override
     {
-        return "Caja rectangular abierta por arriba y su tapa, que cierra con un labio a presión o con tornillos "
-               "en las esquinas.";
+        return "Caja rectangular o redonda, abierta por arriba, y su tapa, que cierra con un labio a presión o con "
+               "tornillos en las esquinas; opcionalmente con bisagra, clips, ranuras de ventilación, divisiones y patas.";
     }
 
     std::vector<GeneratorField> fields() const override
@@ -265,8 +292,67 @@ public:
         closure.label = "Cierre";
         closure.kind = K::Choice;
         closure.choices = {"Labio a presión", "Tornillos en las esquinas"};
-        return {length("ancho", "Ancho (exterior)", 100.0, 20.0, 1000.0),
-                length("fondo", "Fondo (exterior)", 60.0, 20.0, 1000.0, "El otro lado de la planta"),
+        GeneratorField screwSize;
+        screwSize.key = "medida_tornillo";
+        screwSize.label = "Tornillo";
+        screwSize.kind = K::Choice;
+        screwSize.choices = {"Medidas a mano", "M2", "M2,5", "M3", "M4", "M5", "M6"};
+        screwSize.hint = "Pone el poste, el agujero para roscar y el de la tapa de ese tornillo";
+        screwSize.showKey = "cierre";
+        screwSize.showIndex = 1;
+        GeneratorField feet;
+        feet.key = "patas";
+        feet.label = "Patas";
+        feet.kind = K::Choice;
+        feet.choices = {"Sin patas", "4 patas redondas"};
+        GeneratorField dividers;
+        dividers.key = "divisiones";
+        dividers.label = "Divisiones interiores";
+        dividers.kind = K::Count;
+        dividers.value = 0.0;
+        dividers.min = 0.0;
+        dividers.max = 8.0;
+        dividers.hint = "Paredes que reparten la caja a lo ancho en compartimentos iguales";
+        GeneratorField slots;
+        slots.key = "ranuras";
+        slots.label = "Ranuras de ventilación";
+        slots.kind = K::Count;
+        slots.value = 0.0;
+        slots.min = 0.0;
+        slots.max = 20.0;
+        slots.hint = "Ranuras que atraviesan la tapa, repartidas por el centro";
+        GeneratorField shape;
+        shape.key = "forma";
+        shape.label = "Forma";
+        shape.kind = K::Choice;
+        shape.choices = {"Rectangular", "Redonda"};
+        GeneratorField hinge;
+        hinge.key = "bisagra";
+        hinge.label = "Bisagra";
+        hinge.kind = K::Choice;
+        hinge.choices = {"Sin bisagra (la tapa va aparte)", "Bisagra atrás (con pasador de filamento)"};
+        hinge.hint = "La tapa sale cerrada sobre la caja, unida por una bisagra de nudillos que se imprime en su sitio; el pasador es un trozo de filamento";
+        hinge.showKey = "forma";
+        hinge.showIndex = 0;
+        GeneratorField wallVents;
+        wallVents.key = "paredes_ranuras";
+        wallVents.label = "Paredes con ranuras";
+        wallVents.kind = K::Choice;
+        wallVents.choices = {"Las largas (delante y detrás)", "Las cortas (los lados)", "Las cuatro"};
+        wallVents.showKey = "forma";
+        wallVents.showIndex = 0;
+        GeneratorField clips;
+        clips.key = "clips";
+        clips.label = "Clips para cerrarla";
+        clips.kind = K::Choice;
+        clips.choices = {"Sin clips", "2 clips en los lados"};
+        clips.hint = "Dos lengüetas con gancho en la tapa que encajan en un resalte de la caja; el cierre por labio o por tornillos sigue funcionando";
+        clips.showKey = "forma";
+        clips.showIndex = 0;
+        return {shape,
+                length("ancho", "Ancho (exterior)", 100.0, 20.0, 1000.0, {}, "forma", 0),
+                length("fondo", "Fondo (exterior)", 60.0, 20.0, 1000.0, "El otro lado de la planta", "forma", 0),
+                length("diametro", "Diámetro (exterior)", 100.0, 20.0, 1000.0, {}, "forma", 1),
                 length("alto", "Alto de la caja", 40.0, 10.0, 500.0, "Sin la tapa"),
                 length("pared", "Pared", 2.0, 0.8, 20.0, "Un múltiplo del ancho de la boquilla"),
                 length("base", "Base", 2.0, 0.8, 20.0, "Grosor del fondo"),
@@ -279,7 +365,22 @@ public:
                        "cierre", 0),
                 length("poste", "Diámetro de los postes", 8.0, 4.0, 30.0, "Uno en cada esquina, por dentro", "cierre", 1),
                 length("tornillo", "Agujero del poste", 2.5, 1.0, 10.0, "Para roscar el tornillo (M3: 2,5)", "cierre", 1),
-                length("pasante", "Agujero de la tapa", 3.4, 1.0, 12.0, "Para que el tornillo pase (M3: 3,4)", "cierre", 1)};
+                length("pasante", "Agujero de la tapa", 3.4, 1.0, 12.0, "Para que el tornillo pase (M3: 3,4)", "cierre", 1),
+                screwSize,
+                dividers,
+                slots,
+                feet,
+                length("pata_diametro", "Diámetro de las patas", 10.0, 4.0, 40.0, {}, "patas", 1),
+                length("pata_alto", "Alto de las patas", 3.0, 1.0, 20.0, "Salen por debajo del fondo", "patas", 1),
+                length("ranuras_pared", "Ranuras por pared", 0.0, 0.0, 8.0, "0 = sin ranuras; cada una de 2 mm de alto, una sobre otra", "forma", 0),
+                wallVents,
+                hinge,
+                length("bisagra_diametro", "Diámetro de los nudillos", 7.0, 5.0, 20.0, {}, "bisagra", 1),
+                length("bisagra_largo", "Largo de la bisagra", 40.0, 15.0, 400.0, "Tres nudillos: dos de la caja y uno de la tapa", "bisagra", 1),
+                length("bisagra_pasador", "Pasador (filamento)", 1.75, 1.0, 6.0, "El agujero queda 0,3 mm más ancho", "bisagra", 1),
+                clips,
+                length("clip_ancho", "Ancho de los clips", 10.0, 4.0, 60.0, {}, "clips", 1),
+                length("clip_largo", "Largo de los clips", 8.0, 5.0, 30.0, "Lo que baja la lengüeta por fuera de la caja", "clips", 1)};
     }
 
     std::map<std::string, ArrowSpec> arrows() const override
@@ -307,11 +408,27 @@ public:
 
     Recipe make(const GeneratorValues& values, const std::string& suffix) const override
     {
-        const auto v = [&](const char* key) { return values.at(key); };
-        const bool screws = v("cierre") >= 0.5;
+        const bool screws = values.at("cierre") >= 0.5;
         const auto p = [&](const char* name) { return std::string(name) + suffix; };
-        const std::string ancho = p("ancho"), fondo = p("fondo"), alto = p("alto"), pared = p("pared"), base = p("base"),
-                          esquina = p("esquina"), tapa = p("tapa"), labio = p("labio"), labioPared = p("labio_pared"),
+        // La medida de tornillo del catálogo manda sobre las tres medidas sueltas (poste, agujero de roscar y agujero de
+        // paso, en mm); «medidas a mano» las deja como están. Los diseños anteriores no traen las preguntas nuevas.
+        GeneratorValues used = values;
+        if (const int size = values.count("medida_tornillo") != 0 ? int(values.at("medida_tornillo")) : 0; size >= 1 && size <= 6) {
+            struct Screw {
+                double post, pilot, clear;
+            };
+            static constexpr Screw kCatalog[] = {{6.0, 1.6, 2.4}, {7.0, 2.05, 2.9}, {8.0, 2.5, 3.4}, {10.0, 3.3, 4.5}, {12.0, 4.2, 5.5}, {14.0, 5.0, 6.6}};
+            used["poste"] = kCatalog[size - 1].post;
+            used["tornillo"] = kCatalog[size - 1].pilot;
+            used["pasante"] = kCatalog[size - 1].clear;
+        }
+        const auto v = [&](const char* key) { return used.at(key); };
+        const auto opt = [&](const char* key) { return values.count(key) != 0 ? values.at(key) : 0.0; };
+        const bool round = opt("forma") >= 0.5;
+        const bool hinge = !round && opt("bisagra") >= 0.5;
+        const bool clips = !round && opt("clips") >= 0.5;
+        const std::string ancho = p("ancho"), fondo = p("fondo"), diametro = p("diametro"), alto = p("alto"), pared = p("pared"),
+                          base = p("base"), esquina = p("esquina"), tapa = p("tapa"), labio = p("labio"), labioPared = p("labio_pared"),
                           holgura = p("holgura"), poste = p("poste"), tornillo = p("tornillo"), pasante = p("pasante");
 
         Recipe recipe;
@@ -320,12 +437,16 @@ public:
         const auto param = [&](const std::string& name, double value) {
             recipe.parameters.push_back({name, number(value)});
         };
-        param(ancho, v("ancho"));
-        param(fondo, v("fondo"));
+        if (round) {
+            param(diametro, v("diametro"));
+        } else {
+            param(ancho, v("ancho"));
+            param(fondo, v("fondo"));
+            param(esquina, v("esquina"));
+        }
         param(alto, v("alto"));
         param(pared, v("pared"));
         param(base, v("base"));
-        param(esquina, v("esquina"));
         param(tapa, v("tapa"));
         if (screws) {
             param(poste, v("poste"));
@@ -338,7 +459,8 @@ public:
         }
 
         const auto addBox = [&](const std::string& name, Operation operation, const std::string& w, const std::string& d,
-                                const std::string& z, const std::string& h, const std::string& x, const std::string& radius) {
+                                const std::string& z, const std::string& h, const std::string& x, const std::string& radius,
+                                const std::string& y = {}) {
             auto f = std::make_unique<BoxFeature>();
             f->setName(name);
             f->base.origin = OriginPlane::XY;
@@ -348,32 +470,69 @@ public:
             if (!x.empty()) {
                 f->expressions["x"] = x;
             }
+            if (!y.empty()) {
+                f->expressions["y"] = y;
+            }
             if (!radius.empty()) {
                 f->expressions["radius"] = radius;
             }
             return f;
         };
-        const auto addCylinder = [&](const std::string& name, Operation operation, const std::string& diameter,
+        const auto addCylinder = [&](const std::string& name, Operation operation, const std::string& diameterExpr,
                                      const std::string& x, const std::string& y, const std::string& z, const std::string& h) {
             auto f = std::make_unique<CylinderFeature>();
             f->setName(name);
             f->base.origin = OriginPlane::XY;
             f->operation = operation;
-            f->expressions = {{"diameter", diameter}, {"x", x}, {"y", y}, {"z", z}, {"height", h}};
+            f->expressions = {{"diameter", diameterExpr}, {"x", x}, {"y", y}, {"z", z}, {"height", h}};
             return f;
         };
-        const std::string inW = ancho + " - 2*" + pared;
-        const std::string inD = fondo + " - 2*" + pared;
-        const std::string beside = ancho + " + 10";
+        // Un cilindro con el eje a lo largo de X (la bisagra): va por el plano YZ, donde «x» es Y, «y» es Z y «z» es X.
+        const auto addBarrel = [&](const std::string& name, Operation operation, const std::string& diameterExpr, const std::string& y,
+                                   const std::string& z, const std::string& xStart, const std::string& length) {
+            auto f = std::make_unique<CylinderFeature>();
+            f->setName(name);
+            f->base.origin = OriginPlane::YZ;
+            f->operation = operation;
+            f->expressions = {{"diameter", diameterExpr}, {"x", y}, {"y", z}, {"z", xStart}, {"height", length}};
+            return f;
+        };
+        // La planta de una pieza: rectangular (ancho × fondo, con el radio de las esquinas) o redonda (un cilindro de ese
+        // diámetro). «w» es el ancho o el diámetro y «d» el fondo (el cilindro lo ignora).
+        const auto piece = [&](const std::string& name, Operation operation, const std::string& w, const std::string& d,
+                               const std::string& z, const std::string& h, const std::string& x, const std::string& radius) -> std::unique_ptr<Feature> {
+            if (!round) {
+                return addBox(name, operation, w, d, z, h, x, radius);
+            }
+            auto f = std::make_unique<CylinderFeature>();
+            f->setName(name);
+            f->base.origin = OriginPlane::XY;
+            f->operation = operation;
+            f->expressions = {{"diameter", w}, {"z", z}, {"height", h}};
+            if (!x.empty()) {
+                f->expressions["x"] = x;
+            }
+            return f;
+        };
+        const std::string W = round ? diametro : ancho;
+        const std::string D = round ? diametro : fondo;
+        const std::string inW = W + " - 2*" + pared;
+        const std::string inD = D + " - 2*" + pared;
+        const std::string beside = W + " + 10";
+        // La tapa: aparte, al lado y apoyada en la cama; con bisagra, cerrada sobre la caja (a 0,2 mm para que no se peguen).
+        const std::string lidX = hinge ? std::string() : beside;
+        const std::string lidZ = hinge ? alto + " + 0.2" : std::string("0");
+        const std::string lidXs = lidX.empty() ? std::string("0") : lidX;
 
         // 1. La caja y su hueco (abierta por arriba).
-        recipe.features.push_back(addBox("Caja: cuerpo", Operation::NewBody, ancho, fondo, "0", alto, "", esquina));
-        recipe.features.push_back(addBox("Caja: hueco", Operation::Cut, inW, inD, base, alto, "", ""));
+        recipe.features.push_back(piece("Caja: cuerpo", Operation::NewBody, W, D, "0", alto, "", esquina));
+        recipe.features.push_back(piece("Caja: hueco", Operation::Cut, inW, inD, base, alto, "", ""));
 
-        // Los postes de las cuatro esquinas, tangentes a la pared por dentro (con 0,5 mm metidos en ella para que
-        // se unan), con su agujero para roscar.
-        const std::string px = ancho + "/2 - " + pared + " - " + poste + "/2 + 0.5";
-        const std::string py = fondo + "/2 - " + pared + " - " + poste + "/2 + 0.5";
+        // Los postes de las cuatro esquinas, tangentes a la pared por dentro (con 0,5 mm metidos en ella para que se unan),
+        // con su agujero para roscar; en la caja redonda van sobre la circunferencia, a 45°.
+        const std::string px = round ? "(" + diametro + "/2 - " + pared + " - " + poste + "/2 + 0.5)*cos(45)"
+                                     : ancho + "/2 - " + pared + " - " + poste + "/2 + 0.5";
+        const std::string py = round ? px : fondo + "/2 - " + pared + " - " + poste + "/2 + 0.5";
         const std::string depth = "min(10; " + alto + " - " + base + " - 1)";  // el agujero, como mucho 10 mm
         const char* corners[4][2] = {{"", ""}, {"-", ""}, {"", "-"}, {"-", "-"}};
         if (screws) {
@@ -391,21 +550,180 @@ public:
             }
         }
 
-        // 2. La tapa, al lado (apoyada en la cama).
-        recipe.features.push_back(addBox("Tapa: placa", Operation::NewBody, ancho, fondo, "0", tapa, beside, esquina));
+        // Las divisiones (caja rectangular): paredes del grosor de la pared que reparten el interior a lo ancho; llegan 3 mm
+        // por debajo del borde (para no estorbar al labio de la tapa) y se hunden 0,5 mm en las paredes y en la base.
+        const int dividerCount = round ? 0 : int(opt("divisiones"));
+        if (dividerCount > 0) {
+            const std::string dividersP = p("divisiones");
+            param(dividersP, double(dividerCount));
+            for (int k = 1; k <= dividerCount; ++k) {
+                const std::string x = "-(" + inW + ")/2 + (" + inW + ")*" + std::to_string(k) + "/(" + dividersP + " + 1)";
+                recipe.features.push_back(addBox("Caja: división " + std::to_string(k), Operation::Join, pared, inD + " + 1", base + " - 0.5",
+                                                 alto + " - " + base + " - 3 + 0.5", x, ""));
+            }
+        }
+        // Las patas: cuatro discos bajo el fondo, hacia dentro de cada esquina (en la redonda, a 45°).
+        if (opt("patas") >= 0.5) {
+            const std::string legD = p("pata_diametro"), legH = p("pata_alto");
+            param(legD, v("pata_diametro"));
+            param(legH, v("pata_alto"));
+            const std::string lx = round ? "(" + diametro + "/2 - " + legD + "/2 - " + pared + ")*cos(45)"
+                                         : ancho + "/2 - " + legD + "/2 - " + pared;
+            const std::string ly = round ? lx : fondo + "/2 - " + legD + "/2 - " + pared;
+            for (int i = 0; i < 4; ++i) {
+                const std::string sx = corners[i][0], sy = corners[i][1];
+                recipe.features.push_back(addCylinder("Caja: pata " + std::to_string(i + 1), Operation::Join, legD, sx + "(" + lx + ")",
+                                                       sy + "(" + ly + ")", "-" + legH, legH + " + 0.5"));
+            }
+        }
+        // Las ranuras de ventilación en las paredes (caja rectangular): N ranuras de 2 mm una sobre otra, a media altura, que
+        // atraviesan la pared; en las largas miden la mitad del ancho y en las cortas la mitad del fondo.
+        const int wallSlots = round ? 0 : int(opt("ranuras_pared"));
+        if (wallSlots > 0) {
+            const std::string slotsP = p("ranuras_pared");
+            param(slotsP, double(wallSlots));
+            const int which = int(opt("paredes_ranuras"));  // 0 largas, 1 cortas, 2 las cuatro
+            const std::string mid = base + " + (" + alto + " - " + base + ")/2";
+            for (int k = 0; k < wallSlots; ++k) {
+                const std::string z = mid + " + (" + std::to_string(k) + " - (" + slotsP + " - 1)/2)*4 - 1";
+                if (which == 0 || which == 2) {
+                    for (int side = 0; side < 2; ++side) {
+                        const std::string sign = side == 0 ? "" : "-";
+                        recipe.features.push_back(addBox("Caja: ranura larga " + std::to_string(k + 1) + (side == 0 ? "a" : "b"), Operation::Cut,
+                                                         "(" + inW + ")*0.5", pared + " + 2", z, "2", "", "", sign + "(" + fondo + "/2 - " + pared + "/2)"));
+                    }
+                }
+                if (which == 1 || which == 2) {
+                    for (int side = 0; side < 2; ++side) {
+                        const std::string sign = side == 0 ? "" : "-";
+                        recipe.features.push_back(addBox("Caja: ranura corta " + std::to_string(k + 1) + (side == 0 ? "a" : "b"), Operation::Cut,
+                                                         pared + " + 2", "(" + inD + ")*0.5", z, "2", sign + "(" + ancho + "/2 - " + pared + "/2)", ""));
+                    }
+                }
+            }
+        }
+
+        // La bisagra de nudillos (caja rectangular), a lo largo del borde de atrás (+Y) y a la altura del borde de arriba: dos
+        // nudillos de la caja y uno de la tapa entre ellos, con 0,4 mm de aire; el agujero del pasador los cruza.
+        std::string hingeAxisZ;
+        std::string hingeAxisY;
+        std::string hingeHoleX0;
+        std::string hingeTotal;
+        if (hinge) {
+            const std::string hd = p("bisagra_diametro"), total = p("bisagra_largo"), pin = p("bisagra_pasador");
+            param(hd, v("bisagra_diametro"));
+            param(total, v("bisagra_largo"));
+            param(pin, v("bisagra_pasador"));
+            if (v("bisagra_largo") > v("ancho") - 6.0) {
+                throw std::runtime_error("La bisagra es demasiado larga para el ancho de la caja");
+            }
+            // El eje queda «diámetro/2» bajo el borde de arriba de la caja: así la parte de arriba de los nudillos de la caja llega
+            // justo al borde y no se mete en la tapa, que está 0,2 mm más arriba; la tapa los alcanza por un puente.
+            hingeAxisZ = alto + " - " + hd + "/2";
+            hingeTotal = total;
+            const std::string knuckle = "(" + total + " - 0.8)/3";           // el largo de cada nudillo
+            const std::string left = "-(" + total + ")/2";                     // X donde empieza el primero
+            hingeHoleX0 = left;
+            // El eje queda por fuera de la pared (a «diámetro/2 − 1» de su cara exterior) para que los nudillos no entren en la
+            // caja: solo se hunden 1 mm en la pared (y en la placa de la tapa) para unirse a ellas.
+            const std::string y = fondo + "/2 + " + hd + "/2 - 1";
+            hingeAxisY = y;
+            // Los dos nudillos de la caja (se unen a la pared de atrás, por debajo del borde).
+            recipe.features.push_back(addBarrel("Caja: nudillo 1", Operation::Join, hd, y, hingeAxisZ, left, knuckle));
+            recipe.features.push_back(addBarrel("Caja: nudillo 2", Operation::Join, hd, y, hingeAxisZ, "(" + total + ")/2 - " + knuckle, knuckle));
+            // El hueco en la pared para el nudillo de la tapa (algo más ancho que él, para que gire).
+            const std::string between = "(" + total + " - 2*" + knuckle + ") - 0.02";  // el hueco que dejan los dos nudillos
+            recipe.features.push_back(addBarrel("Caja: hueco del nudillo de la tapa", Operation::Cut, hd + " + 0.8", y, hingeAxisZ,
+                                                left + " + " + knuckle + " + 0.01", between));
+            // Y la pared se rebaja 2 mm en ese tramo, para que pase el puente que une el nudillo de la tapa con su placa.
+            recipe.features.push_back(addBox("Caja: hueco del puente de la tapa", Operation::Cut, between, "4.5", alto + " - 2", "3.5", "",
+                                             "", fondo + "/2 - 0.2"));
+        }
+
+        // 2. La tapa (al lado, apoyada en la cama; con bisagra, cerrada sobre la caja).
+        recipe.features.push_back(piece("Tapa: placa", Operation::NewBody, W, D, lidZ, tapa, lidX, esquina));
+        if (hinge) {
+            const std::string hd = p("bisagra_diametro"), total = p("bisagra_largo");
+            const std::string knuckle = "(" + total + " - 0.8)/3";
+            // El puente: baja de la placa hasta el nudillo, en el tramo de la tapa.
+            recipe.features.push_back(addBox("Tapa: puente de la bisagra", Operation::Join, "(" + total + " - 2*" + knuckle + ") - 0.8", "2",
+                                             alto + " - 1", "1.21", "", "", fondo + "/2"));
+            recipe.features.push_back(addBarrel("Tapa: nudillo", Operation::Join, hd, hingeAxisY, hingeAxisZ,
+                                                "-(" + total + ")/2 + " + knuckle + " + 0.4", "(" + total + ") - 2*" + knuckle + " - 0.8"));
+        }
+        // Las ranuras de ventilación de la tapa: cortes alargados (2 mm de ancho) repartidos por el centro.
+        const int slotCount = int(opt("ranuras"));
+        if (slotCount > 0) {
+            const std::string slotsP = p("ranuras");
+            param(slotsP, double(slotCount));
+            for (int k = 0; k < slotCount; ++k) {
+                const std::string x = lidXs + " + (" + inW + ")*0.6*(" + std::to_string(k) + " + 0.5)/" + slotsP + " - (" + inW + ")*0.3";
+                recipe.features.push_back(addBox("Tapa: ranura " + std::to_string(k + 1), Operation::Cut, "2", "(" + inD + ")*0.5", lidZ + " - 1",
+                                                 tapa + " + 2", x, ""));
+            }
+        }
         if (screws) {
             for (int i = 0; i < 4; ++i) {
                 const std::string sx = corners[i][0], sy = corners[i][1];
                 recipe.features.push_back(addCylinder("Tapa: agujero " + std::to_string(i + 1), Operation::Cut, pasante,
-                                                       beside + (sx.empty() ? " + " : " - ") + "(" + px + ")", sy + "(" + py + ")", "-1",
-                                                       tapa + " + 2"));
+                                                       lidXs + (sx.empty() ? " + " : " - ") + "(" + px + ")", sy + "(" + py + ")",
+                                                       lidZ + " - 1", tapa + " + 2"));
             }
         } else {
-            // El labio: un anillo que sale hacia arriba de la placa y entra en la caja con holgura.
+            // El labio: un anillo que sale de la placa hacia la caja (hacia arriba si la tapa va aparte, hacia abajo si va
+            // cerrada) y entra en ella con holgura.
             const std::string lipW = inW + " - 2*" + holgura, lipD = inD + " - 2*" + holgura;
-            recipe.features.push_back(addBox("Tapa: labio", Operation::Join, lipW, lipD, tapa + " - 0.01", labio + " + 0.01", beside, ""));
-            recipe.features.push_back(addBox("Tapa: hueco del labio", Operation::Cut, lipW + " - 2*" + labioPared,
-                                             lipD + " - 2*" + labioPared, tapa, labio + " + 1", beside, ""));
+            const std::string lipInW = lipW + " - 2*" + labioPared, lipInD = lipD + " - 2*" + labioPared;
+            if (hinge) {
+                recipe.features.push_back(piece("Tapa: labio", Operation::Join, lipW, lipD, lidZ + " - " + labio, labio + " + 0.01", lidX, ""));
+                recipe.features.push_back(piece("Tapa: hueco del labio", Operation::Cut, lipInW, lipInD, lidZ + " - " + labio + " - 1",
+                                                labio + " + 1", lidX, ""));
+            } else {
+                recipe.features.push_back(piece("Tapa: labio", Operation::Join, lipW, lipD, tapa + " - 0.01", labio + " + 0.01", lidX, ""));
+                recipe.features.push_back(piece("Tapa: hueco del labio", Operation::Cut, lipInW, lipInD, tapa, labio + " + 1", lidX, ""));
+            }
+        }
+
+        // 3. Los clips (caja rectangular): en cada lado corto (±X) un resalte en la caja y una lengüeta con gancho en la tapa que
+        // lo abraza. Medidas (mm): resalte de 1 de saliente y 1,5 de alto; la lengüeta a 1,4 de la pared y 1,2 de gruesa; el
+        // gancho entra 1,2 hacia la pared y sube 1,5. Con la tapa cerrada el gancho queda justo bajo el resalte.
+        if (clips) {
+            const std::string cw = p("clip_ancho"), cl = p("clip_largo");
+            param(cw, v("clip_ancho"));
+            param(cl, v("clip_largo"));
+            for (int side = 0; side < 2; ++side) {
+                const std::string sg = side == 0 ? "" : "-";
+                const std::string tag = side == 0 ? "a" : "b";
+                // El resalte, en la pared exterior, a «largo − 1,9» bajo el borde de arriba.
+                recipe.features.push_back(addBox("Caja: resalte del clip " + tag, Operation::Join, "1.5", cw + " + 2", alto + " + 0.2 - " + cl + " + 1.9", "1.5",
+                                                 sg + "(" + ancho + "/2 + 0.25)", ""));
+                // La lengüeta de la tapa: sube (o baja, con la tapa cerrada) desde la placa por fuera de la caja.
+                const std::string tabX = lidXs + (side == 0 ? " + " : " - ") + "(" + ancho + "/2 + 2)";
+                const std::string bridgeX = lidXs + (side == 0 ? " + " : " - ") + "(" + ancho + "/2 + 0.75)";
+                const std::string hookX = lidXs + (side == 0 ? " + " : " - ") + "(" + ancho + "/2 + 0.9)";
+                std::string tabZ, tabH, hookZ, bridgeZ;
+                if (hinge) {
+                    bridgeZ = lidZ;
+                    tabZ = lidZ + " - " + cl;
+                    tabH = cl + " + " + tapa;
+                    hookZ = lidZ + " - " + cl;
+                } else {
+                    bridgeZ = "0";
+                    tabZ = "0";
+                    tabH = cl + " + " + tapa;
+                    hookZ = tapa + " + " + cl + " - 1.5";
+                }
+                recipe.features.push_back(addBox("Tapa: puente del clip " + tag, Operation::Join, "2.5", cw, bridgeZ, tapa, bridgeX, ""));
+                recipe.features.push_back(addBox("Tapa: lengüeta del clip " + tag, Operation::Join, "1.2", cw, tabZ, tabH, tabX, ""));
+                recipe.features.push_back(addBox("Tapa: gancho del clip " + tag, Operation::Join, "1.4", cw, hookZ, "1.5", hookX, ""));
+            }
+        }
+
+        // El agujero del pasador de la bisagra cruza los tres nudillos (la tapa y la caja a la vez).
+        if (hinge) {
+            const std::string pin = p("bisagra_pasador");
+            recipe.features.push_back(addBarrel("Bisagra: agujero del pasador", Operation::Cut, pin + " + 0.3", hingeAxisY, hingeAxisZ,
+                                                hingeHoleX0 + " - 1", hingeTotal + " + 2"));
         }
         return recipe;
     }
@@ -457,6 +775,8 @@ public:
         text.label = "Texto";
         text.kind = K::Text;
         text.text = "Nufio";
+        text.multiline = true;
+        text.hint = "Varias líneas: pulsa Intro para empezar otra";
         GeneratorField font;
         font.key = "fuente";
         font.label = "Fuente";
@@ -471,6 +791,8 @@ public:
                 text,
                 font,
                 length("altura_texto", "Tamaño del texto", 20.0, 3.0, 300.0, "Tamaño de la fuente; las letras mayúsculas miden ~70 %"),
+                choice("alineacion", "Alineación", {"Centrado", "A la izquierda", "A la derecha"}),
+                length("interlinea", "Espacio entre líneas", 2.0, 0.0, 100.0, "Se suma a la altura del texto (solo con varias líneas)"),
                 mode,
                 length("margen", "Margen de la placa", 5.0, 1.0, 100.0, "Entre el texto y el borde"),
                 length("grosor", "Grosor de la placa", 3.0, 0.8, 50.0),
@@ -508,24 +830,76 @@ public:
         const std::string textKey = values.texts.count("texto") ? values.texts.at("texto") : std::string();
         const std::string family = values.texts.count("fuente") ? values.texts.at("fuente") : std::string();
 
-        // El contorno de las letras, centrado en el origen.
-        const std::vector<sketch::Geometry> outline = textOutline(textKey, v("altura_texto"), family);
-        if (outline.empty()) {
-            throw std::runtime_error("No se pudo crear el texto (¿está vacío o la fuente no existe?)");
+        // El contorno de las letras, línea por línea: la primera arriba y las demás debajo, a la distancia de una línea base a la
+        // siguiente (altura del texto por 1,1 más el espacio extra), alineadas a la izquierda, al centro o a la derecha.
+        // Los diseños anteriores no traen alineación ni espacio: se leen como centrado y 2 mm.
+        const int align = values.count("alineacion") != 0 ? int(values.at("alineacion")) : 0;
+        const double extraSpace = values.count("interlinea") != 0 ? values.at("interlinea") : 2.0;
+        const double pitch = v("altura_texto") * 1.1 + extraSpace;
+        std::vector<std::string> lines;
+        {
+            std::string current;
+            for (const char c : textKey) {
+                if (c == '\n') {
+                    lines.push_back(current);
+                    current.clear();
+                } else if (c != '\r') {
+                    current.push_back(c);
+                }
+            }
+            lines.push_back(current);
         }
-        double minX = 1e300, minY = 1e300, maxX = -1e300, maxY = -1e300;
-        for (const sketch::Geometry& g : outline) {
-            for (const sketch::Vec2& point : sketch::polyline(g)) {
-                minX = std::min(minX, point.x);
-                maxX = std::max(maxX, point.x);
-                minY = std::min(minY, point.y);
-                maxY = std::max(maxY, point.y);
+        struct TextLine {
+            std::vector<sketch::Geometry> outline;
+            double minX = 1e300, maxX = -1e300, minY = 1e300, maxY = -1e300;
+            double row = 0.0;
+        };
+        std::vector<TextLine> rows;
+        for (std::size_t i = 0; i < lines.size(); ++i) {
+            if (lines[i].find_first_not_of(" \t") == std::string::npos) {
+                continue;  // una línea en blanco solo deja su hueco
+            }
+            TextLine row;
+            row.outline = textOutline(lines[i], v("altura_texto"), family);
+            row.row = -double(i) * pitch;
+            for (const sketch::Geometry& g : row.outline) {
+                for (const sketch::Vec2& point : sketch::polyline(g)) {
+                    row.minX = std::min(row.minX, point.x);
+                    row.maxX = std::max(row.maxX, point.x);
+                    row.minY = std::min(row.minY, point.y);
+                    row.maxY = std::max(row.maxY, point.y);
+                }
+            }
+            if (!row.outline.empty()) {
+                rows.push_back(std::move(row));
             }
         }
-        const sketch::Vec2 shift{-(minX + maxX) / 2.0, -(minY + maxY) / 2.0};
+        if (rows.empty()) {
+            throw std::runtime_error("No se pudo crear el texto (¿está vacío o la fuente no existe?)");
+        }
+        double widest = 0.0;
+        for (const TextLine& row : rows) {
+            widest = std::max(widest, row.maxX - row.minX);
+        }
+        // Desplazamiento de cada línea (para alinearla) y caja de todo el texto.
+        std::vector<sketch::Vec2> offsets;
+        double minX = 1e300, minY = 1e300, maxX = -1e300, maxY = -1e300;
+        for (const TextLine& row : rows) {
+            const double width = row.maxX - row.minX;
+            const double dx = align == 1 ? -row.minX : align == 2 ? widest - width - row.minX : (widest - width) / 2.0 - row.minX;
+            offsets.push_back({dx, row.row});
+            minX = std::min(minX, row.minX + dx);
+            maxX = std::max(maxX, row.maxX + dx);
+            minY = std::min(minY, row.minY + row.row);
+            maxY = std::max(maxY, row.maxY + row.row);
+        }
+        const sketch::Vec2 center{-(minX + maxX) / 2.0, -(minY + maxY) / 2.0};
         sketch::Sketch lettering;
-        for (const sketch::EntityId id : sketch::importDrawing(lettering, {outline, {}}, shift)) {
-            lettering.entity(id)->locked = true;
+        for (std::size_t i = 0; i < rows.size(); ++i) {
+            const sketch::Vec2 shift{offsets[i].x + center.x, offsets[i].y + center.y};
+            for (const sketch::EntityId id : sketch::importDrawing(lettering, {rows[i].outline, {}}, shift)) {
+                lettering.entity(id)->locked = true;
+            }
         }
         // Las regiones que rellenan el hueco de una letra (el interior de una «O») no son letra: se descartan.
         const std::vector<sketch::Profile> found = sketch::findProfiles(lettering);

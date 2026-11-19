@@ -2584,6 +2584,57 @@ TEST_CASE("El generador de letreros pone las letras en relieve, grabadas o suelt
     document::setTextOutliner({});
 }
 
+TEST_CASE("El letrero admite varias líneas, alineadas a la izquierda, al centro o a la derecha", "[generator]")
+{
+    document::setTextOutliner(fakeLetters);
+    const document::Generator* generator = document::findGenerator("letrero");
+    REQUIRE(generator != nullptr);
+    // Dos líneas: «OOO» (34 de ancho) y «O» (10); 20 de alto de texto → de una línea base a la siguiente, 20·1,1 + 2 = 24.
+    const auto secondLine = [&](double alignment) {
+        document::GeneratorValues values = generator->defaults();
+        values["modo"] = 2.0;  // solo letras
+        values["alineacion"] = alignment;
+        values.texts["texto"] = "OOO\nO";
+        const document::Recipe recipe = generator->make(values, "");
+        const auto* letters = dynamic_cast<const SketchFeature*>(recipe.features[0].get());
+        REQUIRE(letters != nullptr);
+        double minX = 1e300, maxX = -1e300, minY = 1e300, maxY = -1e300, lowMin = 1e300, lowMax = -1e300;
+        for (const sketch::Entity& e : letters->sketch().entities()) {
+            for (const sketch::Vec2& p : sketch::polyline(e.geometry)) {
+                minX = std::min(minX, p.x);
+                maxX = std::max(maxX, p.x);
+                minY = std::min(minY, p.y);
+                maxY = std::max(maxY, p.y);
+                if (p.y < 0.0) {  // la segunda línea queda por debajo del centro
+                    lowMin = std::min(lowMin, p.x);
+                    lowMax = std::max(lowMax, p.x);
+                }
+            }
+        }
+        // El texto entero mide 34 × 38 (14 de la primera línea + 24 hasta la base de la segunda) y va centrado en el origen.
+        REQUIRE_THAT(maxX - minX, Catch::Matchers::WithinAbs(34.0, 1e-6));
+        REQUIRE_THAT(maxY - minY, Catch::Matchers::WithinAbs(38.0, 1e-6));
+        REQUIRE_THAT(minX + maxX, Catch::Matchers::WithinAbs(0.0, 1e-6));
+        return std::pair{lowMin, lowMax};
+    };
+    const auto centered = secondLine(0.0);
+    CHECK_THAT(centered.first, Catch::Matchers::WithinAbs(-5.0, 1e-6));
+    CHECK_THAT(centered.second, Catch::Matchers::WithinAbs(5.0, 1e-6));
+    const auto left = secondLine(1.0);
+    CHECK_THAT(left.first, Catch::Matchers::WithinAbs(-17.0, 1e-6));
+    CHECK_THAT(left.second, Catch::Matchers::WithinAbs(-7.0, 1e-6));
+    const auto right = secondLine(2.0);
+    CHECK_THAT(right.first, Catch::Matchers::WithinAbs(7.0, 1e-6));
+    CHECK_THAT(right.second, Catch::Matchers::WithinAbs(17.0, 1e-6));
+    // Un diseño anterior (sin alineación ni espacio entre líneas) sigue haciéndose, centrado
+    document::GeneratorValues old = generator->defaults();
+    old.erase("alineacion");
+    old.erase("interlinea");
+    old.texts["texto"] = "OO";
+    REQUIRE_NOTHROW(generator->make(old, ""));
+    document::setTextOutliner({});
+}
+
 TEST_CASE("El par de engranajes sale a la distancia correcta y con los dientes encajados", "[generator][gear]")
 {
     const document::Generator* generator = document::findGenerator("par-engranajes");

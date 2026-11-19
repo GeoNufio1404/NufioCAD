@@ -5,6 +5,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <array>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -248,4 +249,103 @@ TEST_CASE("Escribir un STEP de muestra", "[.][sample]")
     const char* target = std::getenv("NUF_SAMPLE_STEP");
     REQUIRE(target != nullptr);
     writeStep(std::filesystem::path(target), {extrudedRectangle(40, 25, 12)});
+}
+
+TEST_CASE("3MF: un ZIP con un objeto por cuerpo, nombres, materiales y volumen fiel", "[exchange][3mf]")
+{
+    const auto path = tempFile("dos.3mf");
+    writeThreeMf(path, {{extrudedRectangle(10, 20, 30), "Caja <1>", 0}, {cylinder(5, 8), "Tapa", 0x112233}}, MeshQuality::medium());
+    const std::string bytes = readAll(path);
+    std::filesystem::remove(path);
+
+    // Cabecera de ZIP, tres archivos y el directorio central al final
+    REQUIRE(bytes.size() > 100);
+    REQUIRE(bytes.compare(0, 4, std::string("PK\x03\x04", 4)) == 0);
+    REQUIRE(bytes.find("PK\x05\x06") != std::string::npos);
+    REQUIRE(bytes.find("[Content_Types].xml") != std::string::npos);
+    REQUIRE(bytes.find("_rels/.rels") != std::string::npos);
+    REQUIRE(bytes.find("3D/3dmodel.model") != std::string::npos);
+    const std::size_t model = bytes.find("<?xml", bytes.find("3D/3dmodel.model"));
+    REQUIRE(model != std::string::npos);
+    const std::string xml = bytes.substr(model);
+    REQUIRE(xml.find("name=\"Caja &lt;1&gt;\"") != std::string::npos);  // el nombre va escapado
+    REQUIRE(xml.find("displaycolor=\"#112233FF\"") != std::string::npos);
+    REQUIRE(xml.find("Filamento 1") != std::string::npos);
+    REQUIRE(xml.find("<item objectid=\"3\"/>") != std::string::npos);
+
+    // El volumen de cada objeto, calculado de sus vértices y triángulos
+    const auto number = [&](const std::string& tag, const std::string& attr, std::size_t& at) {
+        const std::size_t open = xml.find(tag, at);
+        REQUIRE(open != std::string::npos);
+        const std::size_t quote = xml.find(attr + "=\"", open) + attr.size() + 2;
+        at = open + 1;
+        return std::string(xml.substr(quote, xml.find('"', quote) - quote));
+    };
+    std::vector<double> volumes;
+    std::size_t objectAt = 0;
+    for (int k = 0; k < 2; ++k) {
+        const std::size_t begin = xml.find("<object ", objectAt);
+        const std::size_t end = xml.find("</object>", begin);
+        REQUIRE(begin != std::string::npos);
+        objectAt = end;
+        std::vector<std::array<double, 3>> v;
+        double volume = 0.0;
+        std::size_t at = begin;
+        while (true) {
+            const std::size_t next = xml.find("<vertex ", at);
+            if (next == std::string::npos || next > end) {
+                break;
+            }
+            std::size_t a = next;
+            const double x = std::stod(number("<vertex ", "x", a));
+            a = next;
+            const double y = std::stod(number("<vertex ", "y", a));
+            a = next;
+            const double z = std::stod(number("<vertex ", "z", a));
+            v.push_back({x, y, z});
+            at = next + 1;
+        }
+        at = begin;
+        while (true) {
+            const std::size_t next = xml.find("<triangle ", at);
+            if (next == std::string::npos || next > end) {
+                break;
+            }
+            std::size_t a = next;
+            const auto i = std::stoul(number("<triangle ", "v1", a));
+            a = next;
+            const auto j = std::stoul(number("<triangle ", "v2", a));
+            a = next;
+            const auto l = std::stoul(number("<triangle ", "v3", a));
+            REQUIRE(i < v.size());
+            REQUIRE(j < v.size());
+            REQUIRE(l < v.size());
+            const auto& p = v[i];
+            const auto& q = v[j];
+            const auto& r = v[l];
+            volume += (p[0] * (q[1] * r[2] - q[2] * r[1]) - p[1] * (q[0] * r[2] - q[2] * r[0]) + p[2] * (q[0] * r[1] - q[1] * r[0])) / 6.0;
+            at = next + 1;
+        }
+        volumes.push_back(volume);
+    }
+    REQUIRE_THAT(volumes[0], WithinRel(10.0 * 20.0 * 30.0, 1e-6));
+    REQUIRE_THAT(volumes[1], WithinRel(3.14159265358979 * 25.0 * 8.0, 0.01));
+    REQUIRE_THROWS_AS(writeThreeMf(tempFile("nada.3mf"), {}, MeshQuality::medium()), GeometryError);
+}
+
+TEST_CASE("Revisión de la malla: una caja y un cilindro salen cerrados, bien orientados y fieles", "[exchange][mesh]")
+{
+    for (const Shape& shape : {extrudedRectangle(10, 20, 30), cylinder(5, 8)}) {
+        const MeshReport report = analyzeMesh(shape, MeshQuality::medium());
+        CHECK(report.triangles >= 12);
+        CHECK(report.openEdges == 0);
+        CHECK(report.nonManifoldEdges == 0);
+        CHECK(report.flippedEdges == 0);
+        CHECK(report.degenerateTriangles == 0);
+        CHECK(report.volumeDeviation() < 0.01);
+    }
+    // Con calidad baja el cilindro se aparta más del volumen del sólido que con calidad alta
+    const Shape round = cylinder(5, 8);
+    CHECK(analyzeMesh(round, MeshQuality::low()).volumeDeviation() > analyzeMesh(round, MeshQuality::high()).volumeDeviation());
+    CHECK(analyzeMesh(Shape{}, MeshQuality::medium()).triangles == 0);
 }

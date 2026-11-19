@@ -30,6 +30,9 @@
 #include <QMimeData>
 #include <QPushButton>
 #include <QSettings>
+#include <QToolButton>
+#include <QCheckBox>
+#include <functional>
 #include <QStatusBar>
 #include <QUrl>
 
@@ -526,6 +529,126 @@ void MainWindow::offerRecovery()
     placeRecoveryBar();
     recoveryBar_->show();
     recoveryBar_->raise();
+}
+
+void MainWindow::updateStartCard()
+{
+    if (viewport_ == nullptr) {
+        return;
+    }
+    const bool wanted = !startCardDismissed_ && document_.featureCount() == 0 && !tool_ && !sketch_ &&
+                        QSettings().value(QStringLiteral("ui/startCard"), true).toBool();
+    if (!wanted) {
+        if (startCard_ != nullptr) {
+            startCard_->hide();
+        }
+        return;
+    }
+    if (startCard_ == nullptr) {
+        startCard_ = new QFrame(viewport_);
+        startCard_->setObjectName(QStringLiteral("startCard"));
+        startCard_->setStyleSheet(QStringLiteral(
+            "#startCard { background: palette(window); border: 1px solid palette(mid); border-radius: 8px; }"
+            "#startCard QToolButton { padding: 4px 8px; text-align: left; }"));
+        auto* column = new QVBoxLayout(startCard_);
+        column->setContentsMargins(14, 10, 14, 10);
+        column->setSpacing(4);
+        auto* header = new QHBoxLayout();
+        auto* title = new QLabel(QStringLiteral("Empieza un diseño"));
+        QFont bold = title->font();
+        bold.setBold(true);
+        bold.setPointSizeF(bold.pointSizeF() * 1.15);
+        title->setFont(bold);
+        auto* close = new QToolButton();
+        close->setText(QStringLiteral("×"));
+        close->setAutoRaise(true);
+        close->setToolTip(QStringLiteral("Cerrar esta tarjeta (vuelve a salir al abrir un diseño nuevo)"));
+        connect(close, &QToolButton::clicked, this, [this] {
+            startCardDismissed_ = true;
+            updateStartCard();
+        });
+        header->addWidget(title);
+        header->addStretch();
+        header->addWidget(close);
+        column->addLayout(header);
+        // Dos columnas: lo que se dibuja y se abre a la izquierda, las piezas de los formularios a la derecha.
+        auto* columns = new QHBoxLayout();
+        auto* left = new QVBoxLayout();
+        auto* right = new QVBoxLayout();
+        left->setSpacing(2);
+        right->setSpacing(2);
+        columns->addLayout(left, 1);
+        columns->addLayout(right, 1);
+        column->addLayout(columns);
+        const auto section = [&](QVBoxLayout* into, const QString& text) {
+            auto* label = new QLabel(text);
+            label->setForegroundRole(QPalette::PlaceholderText);
+            into->addSpacing(4);
+            into->addWidget(label);
+        };
+        const auto addButton = [&](QVBoxLayout* into, const QIcon& icon, const QString& text, const QString& tip,
+                                   std::function<void()> run) {
+            auto* b = new QToolButton();
+            b->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+            b->setIcon(icon);
+            b->setText(text);
+            b->setToolTip(tip);
+            b->setAutoRaise(true);
+            b->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+            connect(b, &QToolButton::clicked, this, [run = std::move(run)] { run(); });
+            into->addWidget(b);
+        };
+        const auto button = [&](QVBoxLayout* into, QAction* action, const QString& text = QString()) {
+            if (action != nullptr) {
+                addButton(into, action->icon(), text.isEmpty() ? action->text().remove(QLatin1Char('&')) : text, action->toolTip(),
+                          [action] { action->trigger(); });
+            }
+        };
+        section(left, QStringLiteral("Dibujar y modelar"));
+        button(left, createSketchAction_, QStringLiteral("Crear un sketch (S)"));
+        button(left, boxAction_, QStringLiteral("Una caja (B)"));
+        button(left, cylinderAction_, QStringLiteral("Un cilindro (Mayús+C)"));
+        button(left, gearAction_, QStringLiteral("Un engranaje (G)"));
+        button(left, threadAction_, QStringLiteral("Una rosca (Mayús+T)"));
+        section(left, QStringLiteral("Archivos"));
+        addButton(left, QIcon(), QStringLiteral("Abrir un diseño…"), QString(), [this] { openDocument(); });
+        button(left, importAction_, QStringLiteral("Importar un STEP…"));
+        left->addStretch();
+        section(right, QStringLiteral("Piezas hechas con un formulario"));
+        for (QAction* generator : generatorActions_) {
+            button(right, generator);
+        }
+        right->addStretch();
+        auto* never = new QCheckBox(QStringLiteral("No mostrar más esta tarjeta"));
+        connect(never, &QCheckBox::toggled, this, [this](bool on) {
+            QSettings().setValue(QStringLiteral("ui/startCard"), !on);
+            if (on) {
+                startCardDismissed_ = true;
+                updateStartCard();
+            }
+        });
+        column->addSpacing(6);
+        column->addWidget(never);
+    }
+    startCard_->setVisible(placeStartCard());
+    startCard_->raise();
+}
+
+bool MainWindow::placeStartCard()
+{
+    if (startCard_ == nullptr) {
+        return false;
+    }
+    startCard_->setMinimumWidth(0);
+    startCard_->setMaximumWidth(QWIDGETSIZE_MAX);
+    startCard_->adjustSize();
+    const int width = std::min(std::max(460, startCard_->sizeHint().width()), std::max(220, viewport_->width() - 24));
+    startCard_->setFixedWidth(width);
+    startCard_->adjustSize();
+    // Si la vista es pequeña no cabe entera: se oculta (el lienzo importa más que la tarjeta).
+    const bool fits = width <= viewport_->width() - 24 && startCard_->height() + 24 <= viewport_->height();
+    startCard_->move(std::max(12, (viewport_->width() - width) / 2), std::max(12, (viewport_->height() - startCard_->height()) / 2));
+    return fits;
 }
 
 void MainWindow::placeRecoveryBar()

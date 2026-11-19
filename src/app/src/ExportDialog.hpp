@@ -28,7 +28,7 @@ class ExportDialog final : public QDialog {
     Q_OBJECT
 
 public:
-    enum class Format { Stl, Obj, Step };
+    enum class Format { Stl, Obj, Step, ThreeMf };
     // Exportar a un archivo, o Imprimir: lo mismo pero siempre STL y, al aceptar, se abre en el slicer.
     enum class Mode { Export, Print };
 

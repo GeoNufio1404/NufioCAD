@@ -6,7 +6,9 @@
 
 #include <nuf/geometry/Shape.hpp>
 
+#include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -30,11 +32,37 @@ std::size_t countTriangles(const std::vector<Shape>& shapes, const MeshQuality& 
 // malla es fiel al sólido y está cerrada.
 double meshVolume(const std::vector<Shape>& shapes, const MeshQuality& quality);
 
+// Revisión de la malla que saldría con esa calidad (G4): si está cerrada, si algún borde lo comparten más de dos triángulos o
+// dos triángulos lo recorren en el mismo sentido (malla mal orientada), cuántos triángulos son degenerados (de área casi
+// nula) y cuánto se aparta su volumen del del sólido. Los vértices se sueldan a 1e-5 mm, como al escribir un 3MF.
+struct MeshReport {
+    std::size_t triangles = 0;
+    std::size_t openEdges = 0;          // bordes de un solo triángulo: la malla tiene un agujero
+    std::size_t nonManifoldEdges = 0;   // bordes de tres o más triángulos
+    std::size_t flippedEdges = 0;       // bordes recorridos dos veces en el mismo sentido (triángulos al revés)
+    std::size_t degenerateTriangles = 0;
+    double meshVolume = 0.0;            // mm³ (con signo)
+    double solidVolume = 0.0;           // mm³ del sólido exacto
+    // Fracción en que el volumen de la malla se aparta del del sólido (0,01 = 1 %).
+    double volumeDeviation() const { return solidVolume > 0.0 ? std::abs(meshVolume - solidVolume) / solidVolume : 0.0; }
+};
+MeshReport analyzeMesh(const Shape& shape, const MeshQuality& quality);
+
 // Todas las formas juntas en un solo archivo. Lanzan GeometryError si no hay
 // nada que exportar o no se puede escribir.
 void writeStl(const std::filesystem::path& path, const std::vector<Shape>& shapes, const MeshQuality& quality);
 void writeObj(const std::filesystem::path& path, const std::vector<Shape>& shapes, const MeshQuality& quality);
 void writeStep(const std::filesystem::path& path, const std::vector<Shape>& shapes);
+
+// 3MF (el formato que leen Bambu Studio, Orca Slicer y PrusaSlicer): un objeto por cuerpo, con su nombre y un material de
+// color («Filamento 1»…) para repartir cada cuerpo en un filamento. «rgb» = 0xRRGGBB; con 0 se toma uno de la paleta
+// según el orden del cuerpo. Los vértices se sueldan (la malla es indexada) y el archivo es un ZIP sin comprimir.
+struct ThreeMfPart {
+    Shape shape;
+    std::string name;
+    std::uint32_t rgb = 0;
+};
+void writeThreeMf(const std::filesystem::path& path, const std::vector<ThreeMfPart>& parts, const MeshQuality& quality);
 
 // Un STEP leído y reparado, listo para guardarse: solo los sólidos, en BREP
 // binario (así abrir el diseño no vuelve a analizar el STEP).

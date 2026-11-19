@@ -10,6 +10,7 @@ nuf_add_library(sketch SOURCES
     src/Profiles.cpp
     src/Sketch.cpp
     src/Snap.cpp
+    src/Svg.cpp
     src/ToolSupport.cpp
     src/Tools.cpp
     src/ShapeTools.cpp

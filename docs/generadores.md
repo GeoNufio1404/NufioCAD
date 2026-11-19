@@ -391,3 +391,19 @@ Un tornillo de 1 a 4 entradas y una rueda helicoidal que engrana con él, con lo
 ## Engranajes cónicos
 
 Un piñón (eje Z) y una corona (eje X) con los ejes a 90° y el vértice de los conos en común (a un radio primitivo de cada rueda del plano del extremo grande de la otra). El ángulo de cada cono sale de los dientes (tan = dientes de una / dientes de la otra). El **ancho de cara** se mide sobre el cono y no debe pasar de un tercio de la distancia al vértice. El diente es una aproximación (el perfil del extremo grande de una rueda recta, reducido hacia el vértice). En la herramienta suelta es el tipo **Cónico** del Engranaje, con «Dientes de la rueda pareja».
+
+## Letrero con varias líneas
+
+El texto del letrero es un cuadro de varias líneas (Intro empieza otra). Las líneas van una debajo de otra; la distancia de una línea base a la siguiente es el **tamaño del texto × 1,1 + «Espacio entre líneas»**. La **alineación** (centrado, a la izquierda, a la derecha) alinea las líneas entre sí; el conjunto queda centrado en la placa.
+
+## Lightbox: canal para tira LED
+
+Con «Canal para tira LED», un muro bajo (un anillo de «Grosor del muro del canal») se levanta desde el fondo a «Ancho de la tira» de las paredes: la tira se pega en el fondo, entre la pared y el muro. Avisa si la tira es tan ancha que no queda sitio.
+
+## Caja con tapa: divisiones, patas, ranuras y tornillos
+
+«Divisiones interiores» reparte la caja a lo ancho con paredes de su grosor (llegan 3 mm por debajo del borde); «Patas» añade cuatro discos bajo el fondo (la caja baja de Z = 0: el slicer la apoya sola); «Ranuras de ventilación» corta ranuras de 2 mm en el centro de la tapa; y «Tornillo» (M2 a M6) fija el poste, el agujero de roscar y el de paso de la tapa de ese tornillo.
+
+## Caja con tapa: redonda, bisagra, ranuras en las paredes y clips
+
+Todo es opcional. **Forma redonda:** un cilindro hueco con tapa redonda y los postes sobre la circunferencia (divisiones, bisagra, clips y ranuras de pared solo existen en la rectangular). **Bisagra:** tres nudillos a lo largo del borde de atrás (dos de la caja y uno de la tapa, con 0,4 mm de aire entre ellos) y un agujero para un pasador de filamento (el diámetro del pasador más 0,3 mm); la tapa sale **cerrada** sobre la caja, a 0,2 mm, y se imprime ahí mismo. **Ranuras de ventilación en las paredes:** N ranuras de 2 mm una sobre otra, a media altura, en las paredes largas, en las cortas o en las cuatro. **Clips:** en cada lado corto, un resalte de 1 mm en la caja y una lengüeta de la tapa con un gancho que queda justo bajo el resalte al cerrar (ancho y largo de la lengüeta ajustables); funciona con el cierre por labio o por tornillos.

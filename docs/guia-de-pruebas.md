@@ -635,6 +635,10 @@ Código: **GEN**.
 | GEN.6 | Sólido › **Rosca**; medida M8 × 1.25, largo `10` | Varilla roscada; el panel dice el diámetro menor (6.47 mm) |
 | GEN.7 | Cambiar «Medida» a M6; luego tocar el diámetro a mano | La medida pasa a «Personalizada» |
 | GEN.8 | «Rosca a izquierdas» | La hélice gira al otro lado |
+| GEN.9 | Caja con tapa › **Forma: Redonda** (diámetro 100) y, aparte, «Cierre: Tornillos» | La caja es un cilindro hueco con la tapa redonda al lado; con tornillos, los cuatro postes quedan sobre la circunferencia, a 45° |
+| GEN.10 | Caja con tapa rectangular › **Bisagra atrás** (nudillos de 7 mm, largo 40) | La tapa queda cerrada sobre la caja (0,2 mm por encima) y unida por tres nudillos al borde de atrás; cada cuerpo sigue siendo suyo (Navegador: Caja y Tapa); el agujero del pasador cruza los tres; mete un trozo de filamento y la tapa gira |
+| GEN.11 | Caja con tapa › «Ranuras por pared» 3 y «Paredes con ranuras: Las cuatro» | Salen tres ranuras de 2 mm una sobre otra, a media altura, en cada pared |
+| GEN.12 | Caja con tapa › **Clips para cerrarla**, solos y con bisagra | Dos resaltes en los lados cortos de la caja y dos lengüetas con gancho en la tapa; al cerrar la tapa los ganchos quedan justo bajo los resaltes (imprime y prueba que encajan con un clic) |
 | GEN.9 | **Rosca interior**: caja, agujero de Ø 6.47 con la herramienta Agujero, y rosca M8 con operación «Cortar» | El agujero queda roscado |
 
 #### 3.6.3 Barrido y loft
@@ -810,7 +814,7 @@ Código: **PAR**.
 | PAR.23 | Sólido › Engranaje: pon un ángulo de hélice de 20° y marca «Espina de pescado (doble hélice)» | La rueda sale con la hélice en V: la mitad de abajo gira hacia un lado y la de arriba hacia el otro, y las dos tapas quedan alineadas. Sin ángulo de hélice sale un aviso en español |
 | PAR.24 | Herramientas › Par de engranajes: hélice de 15° y «Dientes helicoidales» = Espina de pescado | Las dos ruedas salen en espina de pescado y engranan; guarda, reabre y la opción sigue marcada |
 | PAR.25 | Imprime una rueda en espina de pescado y haz girar el par a mano | Giran juntas sin empuje lateral (la rueda no se corre hacia un lado) |
-| PAR.26 | Herramienta Engranaje con 8 dientes: pulsa «Poner la recomendada para estos dientes» | La corrección sube (≈0,4) y el diente se ve más grueso y menos puntiagudo que con 0; guarda y reabre: conserva la corrección |
+| PAR.26 | Herramienta Engranaje con 8 dientes: pulsa «Usar la recomendada» | La corrección sube (≈0,4) y el diente se ve más grueso y menos puntiagudo que con 0; guarda y reabre: conserva la corrección |
 | PAR.27 | Generador «Par de engranajes» con 10 dientes en la rueda 1 y 30 en la 2 | La rueda 1 sale más gruesa de diente (corrección) y la 2 más delgada; los ejes siguen a la distancia de siempre y las ruedas giran sin chocar |
 | PAR.28 | Coloca un Engranaje de módulo 2 y, tocándolo, otro de módulo 3 | El panel del segundo muestra «⚠ No engranará bien con un engranaje cercano: el módulo…»; con el mismo módulo y presión desaparece el aviso |
 | PAR.29 | Herramientas › **Tornillo sin fin y rueda** con los valores de fábrica (módulo 2, 1 entrada, 30 dientes) | Salen dos cuerpos: la rueda (helicoidal) y el tornillo, con los ejes a 90°; el tornillo cruza por el lado, a media altura de la rueda; el resumen da «Reducción 30:1» y el ángulo de avance (5,7°) |
@@ -828,6 +832,14 @@ Código: **PAR**.
 | PAR.41 | Herramientas › **Engranaje interno** y **Cremallera**: pon un ángulo de hélice de 20° y «Espina de pescado» | Las dos piezas de cada generador salen con la hélice, del mismo sentido (en el interno y en la cremallera engranan con el mismo ángulo y signo), y encajan sin chocar. Con espina y sin ángulo, se pone 20° y avisa en naranja |
 | PAR.42 | Crea dos «Par de engranajes» seguidos y mira el Navegador | Salen **«Par de engranajes 1»** con «Engranaje 1» y «Engranaje 2» dentro, y **«Par de engranajes 2»** con los suyos; lo mismo con la Lightbox («Lightbox 1» con «Caja» y «Tapa»), la Caja con tapa, el Letrero, el Tornillo sin fin y rueda, etc. |
 | PAR.43 | Crea con las herramientas sueltas una Caja, un Cilindro, una Extrusión y un Engranaje | Los cuerpos se llaman «Caja 1», «Cilindro 1», «Extrusión 1», «Engranaje 1» (en lugar de «Cuerpo1», «Cuerpo2»…), y la segunda caja «Caja 2» |
+| GEN.1 | Sketch › **Importar DXF o SVG…** y elige un SVG con un logotipo hecho de trazados (con curvas) | El dibujo aparece en el primer cuadrante, con el tamaño en mm del archivo y el eje Y hacia arriba; las curvas son splines; el mensaje dice cuántas entidades y qué se omitió (texto, imágenes) |
+| GEN.2 | Con ese dibujo cerrado: Extruir | Sale el sólido con la forma del logotipo; un SVG con esquinas redondeadas o círculos sale con arcos y círculos reales |
+| GEN.3 | Crea una caja y un cilindro; Exportar › formato **3MF** y ábrelo en Bambu Studio u Orca Slicer | Salen dos objetos con sus nombres y un filamento de color cada uno, sin avisos de malla abierta; se puede asignar otro filamento a cada cuerpo |
+| GEN.4 | Herramientas › **Letrero o llavero**: escribe dos líneas (Intro) y cambia la alineación | El texto sale en dos líneas, centrado, a la izquierda o a la derecha según elijas; «Espacio entre líneas» las separa más; la vista previa se actualiza al escribir |
+| GEN.5 | Herramientas › **Lightbox** con «Canal para tira LED» y una tira de 10 mm | Aparece un muro bajo dentro de la caja, a 10 mm de las paredes, que deja un canal para la tira; con una tira demasiado ancha el formulario avisa |
+| GEN.6 | Herramientas › **Caja con tapa**: 2 divisiones, patas, 5 ranuras de ventilación y «Cierre: Tornillos» con M4 | Dos paredes parten la caja; cuatro patas salen por debajo; la tapa lleva 5 ranuras; los postes y agujeros son los de M4 (poste 10, roscar 3,3, tapa 4,5) |
+| GEN.7 | Abre el programa con un diseño nuevo y vacío | Sale la tarjeta **«Empieza un diseño»** sobre el lienzo con los comandos a un clic; desaparece al abrir una herramienta y vuelve si se cancela; «×» la cierra; con «No mostrar más» no vuelve a salir |
+| GEN.8 | Exportar un engranaje con calidad **Baja** y luego **Alta** | La revisión de abajo avisa con calidad baja de que la malla se aparta del volumen del sólido (más del 2 %) y con alta ya no |
 
 ### 4.5 Todos los generadores: reabrir, recordar y restablecer
 

@@ -31,6 +31,8 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <map>
+#include <cstdio>
 #include <fstream>
 #include <locale>
 #include <sstream>
@@ -174,6 +176,56 @@ double meshVolume(const std::vector<Shape>& shapes, const MeshQuality& quality)
     return volume;
 }
 
+MeshReport analyzeMesh(const Shape& shape, const MeshQuality& quality)
+{
+    MeshReport report;
+    if (shape.isNull()) {
+        return report;
+    }
+    std::map<std::array<long long, 3>, std::size_t> index;
+    const auto weld = [&](const Point& p) {
+        const std::array<long long, 3> key{std::llround(p[0] * 1e5), std::llround(p[1] * 1e5), std::llround(p[2] * 1e5)};
+        return index.emplace(key, index.size()).first->second;
+    };
+    // Cuántas veces se recorre cada arista en cada sentido.
+    std::map<std::pair<std::size_t, std::size_t>, int> directed;
+    forEachTriangle({shape}, quality, [&](const Triangle& t) {
+        ++report.triangles;
+        const Point n = cross(t.b, t.c);
+        report.meshVolume += (t.a[0] * n[0] + t.a[1] * n[1] + t.a[2] * n[2]) / 6.0;
+        const std::size_t v[3] = {weld(t.a), weld(t.b), weld(t.c)};
+        // Triángulo degenerado: dos vértices soldados juntos o área casi nula.
+        const Point ab{t.b[0] - t.a[0], t.b[1] - t.a[1], t.b[2] - t.a[2]};
+        const Point ac{t.c[0] - t.a[0], t.c[1] - t.a[1], t.c[2] - t.a[2]};
+        const Point cr = cross(ab, ac);
+        const double twice = std::sqrt(cr[0] * cr[0] + cr[1] * cr[1] + cr[2] * cr[2]);
+        if (v[0] == v[1] || v[1] == v[2] || v[0] == v[2] || twice < 1e-9) {
+            ++report.degenerateTriangles;
+            return;
+        }
+        for (int k = 0; k < 3; ++k) {
+            ++directed[{v[k], v[(k + 1) % 3]}];
+        }
+    });
+    report.solidVolume = shape.volume();
+    for (const auto& [edge, count] : directed) {
+        const auto opposite = directed.find({edge.second, edge.first});
+        const int back = opposite == directed.end() ? 0 : opposite->second;
+        if (count > 1) {
+            ++report.flippedEdges;  // el mismo sentido dos veces
+        }
+        if (edge.first < edge.second || opposite == directed.end()) {
+            const int total = count + back;
+            if (total == 1) {
+                ++report.openEdges;
+            } else if (total > 2) {
+                ++report.nonManifoldEdges;
+            }
+        }
+    }
+    return report;
+}
+
 void writeStl(const std::filesystem::path& path, const std::vector<Shape>& shapes, const MeshQuality& quality)
 {
     requireShapes(shapes);
@@ -247,6 +299,196 @@ void writeObj(const std::filesystem::path& path, const std::vector<Shape>& shape
         std::filesystem::remove(path, ignored);
         throw;
     }
+}
+
+namespace {
+
+// --- 3MF: un ZIP sin comprimir con tres archivos de texto --------------------------------------------------
+
+std::uint32_t crc32Of(const std::string& data)
+{
+    static const auto table = [] {
+        std::array<std::uint32_t, 256> t{};
+        for (std::uint32_t i = 0; i < 256; ++i) {
+            std::uint32_t c = i;
+            for (int k = 0; k < 8; ++k) {
+                c = (c & 1U) != 0 ? 0xEDB88320U ^ (c >> 1) : c >> 1;
+            }
+            t[i] = c;
+        }
+        return t;
+    }();
+    std::uint32_t crc = 0xFFFFFFFFU;
+    for (const char ch : data) {
+        crc = table[(crc ^ static_cast<unsigned char>(ch)) & 0xFFU] ^ (crc >> 8);
+    }
+    return crc ^ 0xFFFFFFFFU;
+}
+
+void put16(std::string& out, std::uint32_t v)
+{
+    out.push_back(char(v & 0xFF));
+    out.push_back(char((v >> 8) & 0xFF));
+}
+
+void put32(std::string& out, std::uint32_t v)
+{
+    put16(out, v & 0xFFFF);
+    put16(out, (v >> 16) & 0xFFFF);
+}
+
+std::string zipStored(const std::vector<std::pair<std::string, std::string>>& files)
+{
+    std::string out;
+    std::string directory;
+    for (const auto& [name, data] : files) {
+        const std::uint32_t crc = crc32Of(data);
+        const std::uint32_t offset = std::uint32_t(out.size());
+        // Cabecera local: versión 2.0, sin compresión, fecha 1980-01-01.
+        put32(out, 0x04034B50U);
+        put16(out, 20);
+        put16(out, 0x0800);  // nombres en UTF-8
+        put16(out, 0);
+        put16(out, 0);
+        put16(out, 0x0021);
+        put32(out, crc);
+        put32(out, std::uint32_t(data.size()));
+        put32(out, std::uint32_t(data.size()));
+        put16(out, std::uint32_t(name.size()));
+        put16(out, 0);
+        out += name;
+        out += data;
+        put32(directory, 0x02014B50U);
+        put16(directory, 20);
+        put16(directory, 20);
+        put16(directory, 0x0800);
+        put16(directory, 0);
+        put16(directory, 0);
+        put16(directory, 0x0021);
+        put32(directory, crc);
+        put32(directory, std::uint32_t(data.size()));
+        put32(directory, std::uint32_t(data.size()));
+        put16(directory, std::uint32_t(name.size()));
+        put16(directory, 0);
+        put16(directory, 0);
+        put16(directory, 0);
+        put16(directory, 0);
+        put32(directory, 0);
+        put32(directory, offset);
+        directory += name;
+    }
+    const std::uint32_t directoryOffset = std::uint32_t(out.size());
+    out += directory;
+    put32(out, 0x06054B50U);
+    put16(out, 0);
+    put16(out, 0);
+    put16(out, std::uint32_t(files.size()));
+    put16(out, std::uint32_t(files.size()));
+    put32(out, std::uint32_t(directory.size()));
+    put32(out, directoryOffset);
+    put16(out, 0);
+    return out;
+}
+
+std::string xmlEscape(const std::string& text)
+{
+    std::string out;
+    for (const char c : text) {
+        switch (c) {
+        case '&': out += "&amp;"; break;
+        case '<': out += "&lt;"; break;
+        case '>': out += "&gt;"; break;
+        case '"': out += "&quot;"; break;
+        default: out.push_back(c); break;
+        }
+    }
+    return out;
+}
+
+// Los colores de fábrica de los filamentos, en el orden de los cuerpos.
+constexpr std::uint32_t kPalette[] = {0xE0592A, 0x2F80ED, 0x27AE60, 0xF2C94C, 0x9B51E0, 0xEB5757, 0x56CCF2, 0x4F4F4F};
+
+} // namespace
+
+void writeThreeMf(const std::filesystem::path& path, const std::vector<ThreeMfPart>& parts, const MeshQuality& quality)
+{
+    std::vector<const ThreeMfPart*> used;
+    for (const ThreeMfPart& part : parts) {
+        if (!part.shape.isNull()) {
+            used.push_back(&part);
+        }
+    }
+    if (used.empty()) {
+        throw GeometryError("No hay ningún cuerpo que exportar");
+    }
+    std::ostringstream model;
+    model.imbue(std::locale::classic());
+    model.precision(8);
+    model << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+             "<model unit=\"millimeter\" xml:lang=\"es-ES\" xmlns=\"http://schemas.microsoft.com/3dmanufacturing/core/2015/02\">\n"
+             " <metadata name=\"Application\">NufioCAD</metadata>\n <resources>\n  <basematerials id=\"1\">\n";
+    for (std::size_t i = 0; i < used.size(); ++i) {
+        const std::uint32_t rgb = used[i]->rgb != 0 ? used[i]->rgb : kPalette[i % std::size(kPalette)];
+        char color[16];
+        std::snprintf(color, sizeof color, "#%06XFF", rgb & 0xFFFFFFU);
+        model << "   <base name=\"Filamento " << i + 1 << "\" displaycolor=\"" << color << "\"/>\n";
+    }
+    model << "  </basematerials>\n";
+    for (std::size_t i = 0; i < used.size(); ++i) {
+        // Se sueldan los vértices (los que caen en el mismo sitio a 1e-5 mm) para que la malla sea indexada y cerrada.
+        std::map<std::array<long long, 3>, std::size_t> index;
+        std::vector<Point> vertices;
+        std::vector<std::array<std::size_t, 3>> triangles;
+        const auto weld = [&](const Point& p) {
+            const std::array<long long, 3> key{std::llround(p[0] * 1e5), std::llround(p[1] * 1e5), std::llround(p[2] * 1e5)};
+            const auto [it, added] = index.emplace(key, vertices.size());
+            if (added) {
+                vertices.push_back(p);
+            }
+            return it->second;
+        };
+        forEachTriangle({used[i]->shape}, quality, [&](const Triangle& t) {
+            const std::size_t a = weld(t.a), b = weld(t.b), c = weld(t.c);
+            if (a != b && b != c && a != c) {
+                triangles.push_back({a, b, c});
+            }
+        });
+        if (triangles.empty()) {
+            throw GeometryError("No se pudo mallar el cuerpo «" + used[i]->name + "»");
+        }
+        model << "  <object id=\"" << i + 2 << "\" type=\"model\" pid=\"1\" pindex=\"" << i << "\" name=\"" << xmlEscape(used[i]->name)
+              << "\">\n   <mesh>\n    <vertices>\n";
+        for (const Point& p : vertices) {
+            model << "     <vertex x=\"" << p[0] << "\" y=\"" << p[1] << "\" z=\"" << p[2] << "\"/>\n";
+        }
+        model << "    </vertices>\n    <triangles>\n";
+        for (const auto& tri : triangles) {
+            model << "     <triangle v1=\"" << tri[0] << "\" v2=\"" << tri[1] << "\" v3=\"" << tri[2] << "\"/>\n";
+        }
+        model << "    </triangles>\n   </mesh>\n  </object>\n";
+    }
+    model << " </resources>\n <build>\n";
+    for (std::size_t i = 0; i < used.size(); ++i) {
+        model << "  <item objectid=\"" << i + 2 << "\"/>\n";
+    }
+    model << " </build>\n</model>\n";
+
+    const std::string types =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">\n"
+        " <Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>\n"
+        " <Default Extension=\"model\" ContentType=\"application/vnd.ms-package.3dmanufacturing-3dmodel+xml\"/>\n"
+        "</Types>\n";
+    const std::string rels =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">\n"
+        " <Relationship Target=\"/3D/3dmodel.model\" Id=\"rel0\" "
+        "Type=\"http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel\"/>\n"
+        "</Relationships>\n";
+    const std::string archive = zipStored({{"[Content_Types].xml", types}, {"_rels/.rels", rels}, {"3D/3dmodel.model", model.str()}});
+    std::ofstream out = openForWriting(path);
+    out.write(archive.data(), std::streamsize(archive.size()));
+    finish(out, path);
 }
 
 void writeStep(const std::filesystem::path& path, const std::vector<Shape>& shapes)

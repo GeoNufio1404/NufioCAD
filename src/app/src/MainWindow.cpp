@@ -367,6 +367,9 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
     }
     if (watched == viewport_ && event->type() == QEvent::Resize) {
         placeRecoveryBar();
+        if (startCard_ != nullptr && !startCardDismissed_) {
+            updateStartCard();
+        }
     }
     // Clic derecho sobre la vista (sin arrastrar) abre el menú radial; fuera de un comando, o dentro de un sketch.
     if (watched == viewport_ && (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonRelease)) {
@@ -775,6 +778,7 @@ void MainWindow::openSession(const sketch::Plane& plane, const QString& descript
 {
     viewport_->clearModelSelection();
     sketch_ = std::make_unique<SketchSession>(*viewport_, plane, std::move(initial));
+    updateStartCard();
     connect(sketch_.get(), &SketchSession::toolChanged, this, [this](SketchSession::Tool tool) {
         for (const auto& [kind, action] : toolActions_) {
             action->setChecked(kind == tool);
@@ -803,6 +807,7 @@ void MainWindow::finishSketch()
     sketch::Sketch finished = sketch_->sketch();
     const sketch::Plane plane = sketch_->plane();
     sketch_.reset();
+    updateStartCard();
     const std::optional<document::FeatureId> editing = std::exchange(editingSketch_, std::nullopt);
     timeline_->setEditing(std::nullopt);
     sketchStatusLabel_->clear();
@@ -840,6 +845,7 @@ void MainWindow::startTool(std::unique_ptr<FeatureTool> tool)
         return;
     }
     tool_ = std::move(tool);
+    updateStartCard();
     connect(tool_.get(), &FeatureTool::accepted, this, [this] { finishTool(true); });
     connect(tool_.get(), &FeatureTool::cancelled, this, [this] { finishTool(false); });
     connect(tool_.get(), &FeatureTool::message, this, [this](const QString& text) { statusBar()->showMessage(text, 6000); });
@@ -941,6 +947,7 @@ void MainWindow::finishTool(bool accepted)
     propertiesDock_->setFloating(false);
     propertiesDock_->hide();  // como los diálogos de Fusion: solo mientras hay un comando
     tool_.release()->deleteLater();
+    updateStartCard();
     timeline_->setEditing(std::nullopt);
     statusBar()->clearMessage();
     viewport_->clearModelSelection();

@@ -465,9 +465,24 @@ int InterfaceCheck::captureInventory(const QString& folder)
     const QRect available = screen->availableGeometry();
     window_.move(available.topLeft());  // la posición inicial de la ventana no debe contar como «fuera de la pantalla»
     settle(500);
+    // Con el tamaño pedido igual al de la pantalla, la ventana con su barra de título y sus bordes se sale por abajo (en una
+    // pantalla de 1280×720 con barra de tareas la ventana maximizada mide 1280×641 de contenido): se ajusta al hueco real,
+    // que es lo que vería quien maximiza la ventana en esa pantalla.
+    {
+        const QSize chrome = window_.frameGeometry().size() - window_.size();
+        const QSize fitted = available.size() - chrome;
+        if (window_.width() > fitted.width() || window_.height() > fitted.height()) {
+            window_.resize(std::min(window_.width(), fitted.width()), std::min(window_.height(), fitted.height()));
+            window_.adaptToSize();
+            window_.move(available.topLeft());
+            settle(500);
+        }
+    }
     out << "Pantalla: " << screen->geometry().width() << "x" << screen->geometry().height() << " lógicos, disponibles "
         << available.width() << "x" << available.height() << ", escala " << screen->devicePixelRatio() << ", DPI lógico "
         << screen->logicalDotsPerInch() << "\n";
+    out << "Posición de la ventana: " << window_.x() << "," << window_.y() << " (con marco " << window_.frameGeometry().x() << ","
+        << window_.frameGeometry().y() << " " << window_.frameGeometry().width() << "x" << window_.frameGeometry().height() << ")\n";
     out << "Ventana principal: " << window_.width() << "x" << window_.height() << ", mínimo que pide su contenido "
         << window_.minimumSizeHint().width() << "x" << window_.minimumSizeHint().height() << "\n";
     // Qué barras y paneles ocupan alto (para saber de dónde sale el mínimo de la ventana).
@@ -625,6 +640,24 @@ int InterfaceCheck::run()
     step(QStringLiteral("La ventana empieza vacía"), [&] {
         expect(window_.document_.featureCount() == 0, QStringLiteral("el diseño no está vacío"));
         expect(window_.tool_ == nullptr, QStringLiteral("hay una herramienta abierta"));
+    });
+
+    // Fase 17 (G4): la tarjeta de inicio sale sobre el lienzo vacío y se quita al empezar a trabajar.
+    step(QStringLiteral("Tarjeta de inicio sobre el lienzo vacío"), [&] {
+        window_.updateStartCard();
+        expect(window_.startCard_ != nullptr && window_.startCard_->isVisible(), QStringLiteral("no sale la tarjeta de inicio"));
+        if (window_.startCard_ != nullptr) {
+            expect(window_.startCard_->findChildren<QToolButton*>().size() >= 8, QStringLiteral("la tarjeta tiene pocos botones"));
+            expect(window_.startCard_->geometry().right() <= window_.viewport_->width(), QStringLiteral("la tarjeta se sale de la vista"));
+        }
+        blocking(QStringLiteral("abrir Caja"), [&] { window_.boxAction_->trigger(); });
+        expect(window_.startCard_ == nullptr || !window_.startCard_->isVisible(), QStringLiteral("la tarjeta sigue con una herramienta abierta"));
+        if (QPushButton* cancel = button(QStringLiteral("Cancelar"))) {
+            cancel->click();
+        }
+        waitFor([this] { return window_.tool_ == nullptr; }, 10000);
+        waitIdle();
+        expect(window_.startCard_ != nullptr && window_.startCard_->isVisible(), QStringLiteral("la tarjeta no volvió con el lienzo vacío"));
     });
 
     // Fase 15: menú radial con clic derecho (U6) y valor principal junto al cursor (U7).
@@ -1696,14 +1729,15 @@ int InterfaceCheck::run()
         const std::vector<std::pair<QString, ExportDialog::Format>> formats = {
             {QStringLiteral("exportar.stl"), ExportDialog::Format::Stl},
             {QStringLiteral("exportar.obj"), ExportDialog::Format::Obj},
-            {QStringLiteral("exportar.step"), ExportDialog::Format::Step}};
+            {QStringLiteral("exportar.step"), ExportDialog::Format::Step},
+            {QStringLiteral("exportar.3mf"), ExportDialog::Format::ThreeMf}};
         for (const auto& [name, format] : formats) {
             const QString file = QDir(scratch).filePath(name);
             QFile::remove(file);
             QElapsedTimer total;
             total.start();
             timed(QStringLiteral("lanzar la exportación a %1").arg(name), [&] {
-                window_.startExport({MainWindow::ExportJob{file, shapes}}, format, quality);
+                window_.startExport({MainWindow::ExportJob{file, shapes, {}}}, format, quality);
             });
             expect(window_.exportRun_.running(), QStringLiteral("la exportación a %1 no quedó en segundo plano").arg(name));
             waitIdle();
