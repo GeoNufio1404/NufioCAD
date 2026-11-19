@@ -553,6 +553,7 @@ void MainWindow::refreshModel()
     if (!viewport_ || !timeline_ || !navigator_ || !modelStatusLabel_) {
         return;
     }
+    updateStartCard();
     const std::size_t upTo = shownUpTo();
     const document::ModelState& state = document_.stateBefore(upTo);
     updateExportAction();

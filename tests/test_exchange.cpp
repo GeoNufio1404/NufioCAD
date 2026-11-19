@@ -332,3 +332,20 @@ TEST_CASE("3MF: un ZIP con un objeto por cuerpo, nombres, materiales y volumen f
     REQUIRE_THAT(volumes[1], WithinRel(3.14159265358979 * 25.0 * 8.0, 0.01));
     REQUIRE_THROWS_AS(writeThreeMf(tempFile("nada.3mf"), {}, MeshQuality::medium()), GeometryError);
 }
+
+TEST_CASE("Revisión de la malla: una caja y un cilindro salen cerrados, bien orientados y fieles", "[exchange][mesh]")
+{
+    for (const Shape& shape : {extrudedRectangle(10, 20, 30), cylinder(5, 8)}) {
+        const MeshReport report = analyzeMesh(shape, MeshQuality::medium());
+        CHECK(report.triangles >= 12);
+        CHECK(report.openEdges == 0);
+        CHECK(report.nonManifoldEdges == 0);
+        CHECK(report.flippedEdges == 0);
+        CHECK(report.degenerateTriangles == 0);
+        CHECK(report.volumeDeviation() < 0.01);
+    }
+    // Con calidad baja el cilindro se aparta más del volumen del sólido que con calidad alta
+    const Shape round = cylinder(5, 8);
+    CHECK(analyzeMesh(round, MeshQuality::low()).volumeDeviation() > analyzeMesh(round, MeshQuality::high()).volumeDeviation());
+    CHECK(analyzeMesh(Shape{}, MeshQuality::medium()).triangles == 0);
+}

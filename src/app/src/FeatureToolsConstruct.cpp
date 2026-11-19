@@ -518,7 +518,7 @@ void GearTool::createFields(QFormLayout* form)
     });
     form->addRow(QStringLiteral("Aro (interno) o base (cremallera)"), rim_);
     form->addRow(QStringLiteral("Corrección de perfil (x)"), shift_);
-    auto* recommend = new QPushButton(QStringLiteral("Poner la recomendada para estos dientes"));
+    auto* recommend = new QPushButton(QStringLiteral("Usar la recomendada"));
     recommend->setToolTip(QStringLiteral("Con menos de 17 dientes (a 20°) el diente sale socavado o puntiagudo: calcula la corrección que lo evita"));
     form->addRow(QString(), recommend);
     connect(recommend, &QPushButton::clicked, this, [this] {

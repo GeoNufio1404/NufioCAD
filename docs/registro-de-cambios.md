@@ -78,6 +78,15 @@ Dos campos nuevos del engranaje, ambos en 0 por defecto (los diseños anteriores
 ---
 
 
+## Fase 17: generadores y salida — 19 nov. 2026
+
+- **SVG como sketch** (`nuf/sketch/Svg.hpp`): lector sin dependencias (trazados, formas básicas, transformaciones, unidades) que da el mismo resultado que un DXF; la acción de Sketch lee DXF o SVG según la extensión.
+- **3MF** (`writeThreeMf`): ZIP sin comprimir con un objeto por cuerpo, nombre y material de color por filamento; el diálogo de Exportar lo ofrece.
+- **Letrero:** texto de varias líneas (`GeneratorField::multiline`, un `QPlainTextEdit`), alineación y espacio entre líneas.
+- **Lightbox y Caja con tapa:** canal para tira LED; divisiones, patas, ranuras de ventilación y catálogo de tornillos M2 a M6.
+- **Tarjeta de inicio** sobre el lienzo vacío y **revisión de la malla** (`analyzeMesh`) en el diálogo de Exportar.
+- **Cómo volver atrás:** no fusionar `feature/fase-17-generadores`.
+
 ## Espina de pescado en corona y cremallera, y nombres de cuerpos y componentes — 19 nov. 2026
 
 - **Corona y cremallera helicoidales y en espina de pescado:** la corona (tipo Interno) admite ángulo de hélice y espina de pescado (los lofts de las secciones giradas, con la tapa de aro y la pared exterior cosidas); la cremallera admite inclinación de los dientes y «V» (secciones corridas a lo largo de la barra). Con la corona y el piñón del mismo sentido, y con la cremallera con el mismo ángulo y signo que su rueda, engranan sin chocar (probado con la booleana). Los generadores Engranaje interno y Cremallera traen «Ángulo de hélice» y «Dientes helicoidales».

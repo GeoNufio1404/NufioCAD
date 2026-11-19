@@ -22,6 +22,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <cstdio>
 #include <memory>
 
 namespace nuf::app {
@@ -249,10 +250,39 @@ void ExportDialog::runReview()
     };
     auto review = std::make_shared<Review>();
     const geometry::PrintSettings settings = printSettings();
+    const geometry::MeshQuality meshQuality = quality();
     reviewRun_.start(
-        [review, chosen = std::move(chosen), settings] {
+        [review, chosen = std::move(chosen), settings, meshQuality] {
             try {
                 review->issues = geometry::checkPrintable(chosen, settings);
+                // La malla que saldría con la calidad elegida: cerrada, bien orientada y fiel al sólido.
+                for (const auto& [name, shape] : chosen) {
+                    const geometry::MeshReport mesh = geometry::analyzeMesh(shape, meshQuality);
+                    using Level = geometry::PrintIssue::Level;
+                    const std::string label = "«" + name + "»: ";
+                    if (mesh.openEdges > 0) {
+                        review->issues.push_back({Level::Error, label + "la malla queda abierta (" + std::to_string(mesh.openEdges) +
+                                                                    " bordes sin pareja): el slicer puede decir que no es estanca"});
+                    }
+                    if (mesh.nonManifoldEdges > 0) {
+                        review->issues.push_back({Level::Warning, label + "la malla tiene " + std::to_string(mesh.nonManifoldEdges) +
+                                                                      " bordes compartidos por más de dos triángulos"});
+                    }
+                    if (mesh.flippedEdges > 0) {
+                        review->issues.push_back({Level::Warning, label + "hay triángulos orientados al revés (" +
+                                                                      std::to_string(mesh.flippedEdges) + " bordes)"});
+                    }
+                    if (mesh.degenerateTriangles > 0) {
+                        review->issues.push_back({Level::Info, label + std::to_string(mesh.degenerateTriangles) +
+                                                                   " triángulos casi sin área (el slicer los ignora)"});
+                    }
+                    if (mesh.volumeDeviation() > 0.02) {
+                        char percent[16];
+                        std::snprintf(percent, sizeof percent, "%.1f", 100.0 * mesh.volumeDeviation());
+                        review->issues.push_back({Level::Warning, label + "con esta calidad la malla se aparta un " + percent +
+                                                                      " % del volumen del sólido: sube la calidad para curvas más fieles"});
+                    }
+                }
             } catch (const std::exception& e) {
                 review->failure = e.what();
             } catch (...) {

@@ -176,6 +176,56 @@ double meshVolume(const std::vector<Shape>& shapes, const MeshQuality& quality)
     return volume;
 }
 
+MeshReport analyzeMesh(const Shape& shape, const MeshQuality& quality)
+{
+    MeshReport report;
+    if (shape.isNull()) {
+        return report;
+    }
+    std::map<std::array<long long, 3>, std::size_t> index;
+    const auto weld = [&](const Point& p) {
+        const std::array<long long, 3> key{std::llround(p[0] * 1e5), std::llround(p[1] * 1e5), std::llround(p[2] * 1e5)};
+        return index.emplace(key, index.size()).first->second;
+    };
+    // Cuántas veces se recorre cada arista en cada sentido.
+    std::map<std::pair<std::size_t, std::size_t>, int> directed;
+    forEachTriangle({shape}, quality, [&](const Triangle& t) {
+        ++report.triangles;
+        const Point n = cross(t.b, t.c);
+        report.meshVolume += (t.a[0] * n[0] + t.a[1] * n[1] + t.a[2] * n[2]) / 6.0;
+        const std::size_t v[3] = {weld(t.a), weld(t.b), weld(t.c)};
+        // Triángulo degenerado: dos vértices soldados juntos o área casi nula.
+        const Point ab{t.b[0] - t.a[0], t.b[1] - t.a[1], t.b[2] - t.a[2]};
+        const Point ac{t.c[0] - t.a[0], t.c[1] - t.a[1], t.c[2] - t.a[2]};
+        const Point cr = cross(ab, ac);
+        const double twice = std::sqrt(cr[0] * cr[0] + cr[1] * cr[1] + cr[2] * cr[2]);
+        if (v[0] == v[1] || v[1] == v[2] || v[0] == v[2] || twice < 1e-9) {
+            ++report.degenerateTriangles;
+            return;
+        }
+        for (int k = 0; k < 3; ++k) {
+            ++directed[{v[k], v[(k + 1) % 3]}];
+        }
+    });
+    report.solidVolume = shape.volume();
+    for (const auto& [edge, count] : directed) {
+        const auto opposite = directed.find({edge.second, edge.first});
+        const int back = opposite == directed.end() ? 0 : opposite->second;
+        if (count > 1) {
+            ++report.flippedEdges;  // el mismo sentido dos veces
+        }
+        if (edge.first < edge.second || opposite == directed.end()) {
+            const int total = count + back;
+            if (total == 1) {
+                ++report.openEdges;
+            } else if (total > 2) {
+                ++report.nonManifoldEdges;
+            }
+        }
+    }
+    return report;
+}
+
 void writeStl(const std::filesystem::path& path, const std::vector<Shape>& shapes, const MeshQuality& quality)
 {
     requireShapes(shapes);

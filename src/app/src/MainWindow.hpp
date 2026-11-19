@@ -245,6 +245,12 @@ private:
     QFrame* sketchPalette_ = nullptr;
     QFrame* recoveryBar_ = nullptr;   // aviso de la copia de recuperación (U2), sobre la vista, arriba y al centro
     void placeRecoveryBar();
+    // Tarjeta «Empieza un diseño» sobre el lienzo vacío (G4): los comandos para arrancar, a un clic. Sale con el diseño sin
+    // operaciones y sin herramienta ni sketch abiertos; se cierra con «×» (esa sesión) o con «No mostrar más».
+    QFrame* startCard_ = nullptr;
+    bool startCardDismissed_ = false;
+    void updateStartCard();
+    bool placeStartCard();  // la coloca; false si no cabe en la vista
     BusySpinner* badgeSpinner_ = nullptr;   // el spinner del distintivo
     StatusBanner* statusBanner_ = nullptr;  // la barra de estado, con el spinner a la izquierda
     BusySpinner* statusSpinner_ = nullptr;  // el de la barra de estado (lo tiene el banner)

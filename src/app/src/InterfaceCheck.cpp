@@ -627,6 +627,24 @@ int InterfaceCheck::run()
         expect(window_.tool_ == nullptr, QStringLiteral("hay una herramienta abierta"));
     });
 
+    // Fase 17 (G4): la tarjeta de inicio sale sobre el lienzo vacío y se quita al empezar a trabajar.
+    step(QStringLiteral("Tarjeta de inicio sobre el lienzo vacío"), [&] {
+        window_.updateStartCard();
+        expect(window_.startCard_ != nullptr && window_.startCard_->isVisible(), QStringLiteral("no sale la tarjeta de inicio"));
+        if (window_.startCard_ != nullptr) {
+            expect(window_.startCard_->findChildren<QToolButton*>().size() >= 8, QStringLiteral("la tarjeta tiene pocos botones"));
+            expect(window_.startCard_->geometry().right() <= window_.viewport_->width(), QStringLiteral("la tarjeta se sale de la vista"));
+        }
+        blocking(QStringLiteral("abrir Caja"), [&] { window_.boxAction_->trigger(); });
+        expect(window_.startCard_ == nullptr || !window_.startCard_->isVisible(), QStringLiteral("la tarjeta sigue con una herramienta abierta"));
+        if (QPushButton* cancel = button(QStringLiteral("Cancelar"))) {
+            cancel->click();
+        }
+        waitFor([this] { return window_.tool_ == nullptr; }, 10000);
+        waitIdle();
+        expect(window_.startCard_ != nullptr && window_.startCard_->isVisible(), QStringLiteral("la tarjeta no volvió con el lienzo vacío"));
+    });
+
     // Fase 15: menú radial con clic derecho (U6) y valor principal junto al cursor (U7).
     step(QStringLiteral("Menú radial con clic derecho en la vista"), [&] {
         const QPointF at(300.0, 300.0);
@@ -1704,7 +1722,7 @@ int InterfaceCheck::run()
             QElapsedTimer total;
             total.start();
             timed(QStringLiteral("lanzar la exportación a %1").arg(name), [&] {
-                window_.startExport({MainWindow::ExportJob{file, shapes}}, format, quality);
+                window_.startExport({MainWindow::ExportJob{file, shapes, {}}}, format, quality);
             });
             expect(window_.exportRun_.running(), QStringLiteral("la exportación a %1 no quedó en segundo plano").arg(name));
             waitIdle();
