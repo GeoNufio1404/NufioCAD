@@ -78,6 +78,12 @@ Dos campos nuevos del engranaje, ambos en 0 por defecto (los diseños anteriores
 ---
 
 
+## Pendientes de fases ya hechas — tanda 1 (20 nov. 2026)
+
+- **O5:** el ángulo de voladizo de la revisión de impresión se elige en el diálogo (**Voladizo máximo**, `PrintSettings::overhangAngle`) y se acuerda.
+- **O6:** color propio por cuerpo (`BodyInfo::color`, `Body::color`): columna Color en «Cuerpos y componentes», se dibuja en la vista y se guarda en el archivo (los archivos anteriores abren sin color).
+- **Cómo volver atrás:** no fusionar `feature/pendientes-fases`.
+
 ## Fase 19: distribución — 19 nov. 2026
 
 - **Instalador y paquetes** (`cmake/Packaging.cmake`, reglas de instalación de `src/app/CMakeLists.txt`): Windows con NSIS y ZIP (DLL de Qt, OpenCASCADE y vcpkg, plugins con `windeployqt`, asociación de `.nuf`, avisos de licencias); Linux con `.tar.gz`, `.deb`, `.rpm` y AppImage (`packaging/linux/crear-appimage.sh`).
