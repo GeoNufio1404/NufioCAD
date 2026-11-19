@@ -1,4 +1,5 @@
 #include "ViewportImpl.hpp"
+#include <cstdlib>
 
 // Cuerpos del modelo, mallado en segundo plano, sección, vista previa de herramientas y selección.
 // Métodos de Viewport::Impl; el estado y las declaraciones están en ViewportImpl.hpp.
@@ -254,7 +255,7 @@ void Viewport::Impl::showBodies(const std::vector<document::Body>& list)
     std::vector<Handle(AIS_Shape)> created;
     for (const document::Body& body : list) {
         const auto old = std::ranges::find_if(bodies, [&](const ShownBody& b) {
-            return b.key == body.key && b.shape.impl() == body.shape.impl();
+            return b.key == body.key && b.shape.impl() == body.shape.impl() && b.color == body.color;
         });
         if (old != bodies.end()) {
             next.push_back(*old);
@@ -264,6 +265,10 @@ void Viewport::Impl::showBodies(const std::vector<document::Body>& list)
         Handle(AIS_Shape) ais = new AIS_Shape(geometry::occtShape(body.shape));
         ais->SetMaterial(Graphic3d_MaterialAspect(Graphic3d_NameOfMaterial_Plastified));
         ais->SetColor(rgb(0xB7, 0xBE, 0xC7));
+        if (body.color.size() == 7 && body.color[0] == '#') {
+            const unsigned value = unsigned(std::strtoul(body.color.c_str() + 1, nullptr, 16));
+            ais->SetColor(rgb(int((value >> 16) & 0xFF), int((value >> 8) & 0xFF), int(value & 0xFF)));
+        }
         if (body.key.rfind("gen:", 0) == 0) {
             // La vista previa de un generador (todavía no está en el diseño): azul translúcido, como la de lo que
             // una herramienta quita o añade, para no confundirla con lo que ya existe.
@@ -289,7 +294,7 @@ void Viewport::Impl::showBodies(const std::vector<document::Body>& list)
             ais->AddClipPlane(clipSection);
         }
         context->Display(ais, AIS_Shaded, AIS_Shape::SelectionMode(TopAbs_FACE), false);
-        next.push_back({body.key, body.shape, ais});
+        next.push_back({body.key, body.shape, ais, body.color});
         created.push_back(ais);
     }
     for (const ShownBody& gone : bodies) {

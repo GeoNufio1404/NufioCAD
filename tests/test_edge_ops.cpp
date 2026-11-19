@@ -1404,6 +1404,29 @@ TEST_CASE("Los cuerpos pueden llevar nombre propio y componente, con deshacer y 
     REQUIRE(doc.componentOf("f2") == "Carcasa");
 }
 
+TEST_CASE("El color de un cuerpo se aplica, se guarda, se abre y se quita", "[bodies][io]")
+{
+    Document doc = boxDocument();
+    REQUIRE(doc.result().bodies[0].color.empty());
+    doc.setBodyInfo({{"f2", {"", "", "#FF8000"}}});
+    REQUIRE(doc.result().bodies[0].color == "#FF8000");
+    REQUIRE(doc.result().bodies[0].name == "Extrusión 1");  // sin nombre propio sigue con el de fábrica
+
+    const auto path = std::filesystem::temp_directory_path() / "nuf_color.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    REQUIRE(reopened.bodyInfo() == doc.bodyInfo());
+    REQUIRE(reopened.result().bodies[0].color == "#FF8000");
+
+    // Quitarlo vuelve al color de siempre
+    doc.setBodyInfo({});
+    REQUIRE(doc.result().bodies[0].color.empty());
+}
+
 namespace {
 
 // Una segunda caja (copia de la primera, lejos) y una unión entre la cara superior de la primera y la

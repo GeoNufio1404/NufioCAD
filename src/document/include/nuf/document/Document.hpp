@@ -27,6 +27,7 @@ struct Parameter {
 struct BodyInfo {
     std::string name;
     std::string component;
+    std::string color;  // «#rrggbb»; vacío: el color de siempre
     bool operator==(const BodyInfo&) const = default;
 };
 

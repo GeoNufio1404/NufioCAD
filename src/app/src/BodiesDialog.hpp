@@ -24,6 +24,8 @@ public:
 private:
     std::map<std::string, document::BodyInfo> original_;
     std::vector<std::string> keys_;  // una por fila
+    std::vector<std::string> colors_;  // «#rrggbb» por fila; vacío: el de siempre
+    void paintColorCell(int row);
     QTableWidget* table_ = nullptr;
 };
 

@@ -1051,6 +1051,9 @@ SavePlan prepareSave(const Document& document, const ViewState& view, const std:
         Json bodies = Json::object();
         for (const auto& [key, info] : document.bodyInfo()) {
             bodies[key] = {{"name", info.name}, {"component", info.component}};
+            if (!info.color.empty()) {
+                bodies[key]["color"] = info.color;
+            }
         }
         plan->bodies = bodies.dump();
     }
@@ -1151,7 +1154,8 @@ void loadDocument(const std::filesystem::path& path, Document& document, ViewSta
         if (const auto bodies = file.meta("cuerpos")) {
             const Json parsed = Json::parse(*bodies);  // con nombre: items() de un temporal queda colgando
             for (const auto& [key, value] : parsed.items()) {
-                bodyInfo[key] = {value.at("name").get<std::string>(), value.at("component").get<std::string>()};
+                bodyInfo[key] = {value.at("name").get<std::string>(), value.at("component").get<std::string>(),
+                                 value.contains("color") ? value.at("color").get<std::string>() : std::string()};
             }
         }
         for (auto& [pname, expression] : file.readParameters()) {

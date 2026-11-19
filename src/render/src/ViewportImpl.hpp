@@ -86,6 +86,7 @@ public:
         std::string key;
         geometry::Shape shape;
         Handle(AIS_Shape) ais;
+        std::string color;  // el del usuario («#rrggbb») con el que se creó
     };
 
     // --- Mallado en segundo plano ---------------------------------------------
