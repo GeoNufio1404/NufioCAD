@@ -1,3 +1,4 @@
+#include <nuf/geometry/Exchange.hpp>
 #include <nuf/geometry/Modeling.hpp>
 #include <nuf/sketch/Profiles.hpp>
 
@@ -695,4 +696,37 @@ TEST_CASE("Redondeo de radio variable y voladizos", "[fillet][overhang]")
     CHECK(removed > small);
     CHECK(removed < constant);
     CHECK_THROWS_AS(geometry::filletVariable("f", box, {edge}, 0.0, 3.0), geometry::GeometryError);
+}
+
+TEST_CASE("El ángulo de voladizo se puede cambiar: una cara a 63° se avisa a 45° y no a 70°", "[overhang]")
+{
+    using namespace nuf;
+    const auto plane = sketch::Plane::fromPointAndNormal({0, 0, 0}, {0, 0, 1});
+    const geometry::Shape box = geometry::box("b", plane, 20.0, 20.0, 20.0, false, 0.0);
+    // Las cuatro aristas de abajo (las que están en la Z mínima)
+    std::vector<int> bottom;
+    for (int i = 0; i < box.edgeCount(); ++i) {
+        const auto line = box.edgeLine(i);
+        if (line && std::abs(line->first.z - box.bounds().min.z) < 1e-6 && std::abs(line->second.z - box.bounds().min.z) < 1e-6) {
+            bottom.push_back(i);
+        }
+    }
+    REQUIRE(bottom.size() == 4);
+    // 6 mm hacia dentro por 3 mm hacia arriba: la cara queda a ~63° de la vertical, y se prueba con las dos orientaciones
+    geometry::Shape wedge;
+    for (const bool flip : {false, true}) {
+        geometry::ChamferSpec spec;
+        spec.style = geometry::ChamferStyle::TwoDistances;
+        spec.distance = 3.0;
+        spec.distance2 = 6.0;
+        spec.flip = flip;
+        wedge = geometry::chamfer("c", box, bottom, spec);
+        const double a45 = geometry::analyzeOverhang(wedge, geometry::MeshQuality::medium(), 45.0).overhangArea;
+        const double a70 = geometry::analyzeOverhang(wedge, geometry::MeshQuality::medium(), 70.0).overhangArea;
+        if (a45 > 0.0) {
+            CHECK(a70 == 0.0);
+            return;
+        }
+    }
+    FAIL("ninguna orientación del chaflán dio una cara a 63°");
 }

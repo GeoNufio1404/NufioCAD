@@ -108,6 +108,13 @@ ExportDialog::ExportDialog(const std::vector<document::Body>& bodies, const std:
     bedX_ = spin("print/bedX", 256.0, 10.0, 2000.0, QStringLiteral(" mm"));
     bedY_ = spin("print/bedY", 256.0, 10.0, 2000.0, QStringLiteral(" mm"));
     bedZ_ = spin("print/bedZ", 256.0, 10.0, 2000.0, QStringLiteral(" mm"));
+    overhang_ = new QDoubleSpinBox(this);
+    overhang_->setRange(10.0, 85.0);
+    overhang_->setDecimals(0);
+    overhang_->setSuffix(QStringLiteral(" °"));
+    overhang_->setValue(settings.value(QStringLiteral("print/overhang"), 45.0).toDouble());
+    overhang_->setKeyboardTracking(false);
+    overhang_->setToolTip(QStringLiteral("Desde qué inclinación una cara que mira hacia abajo necesita soportes (45° es lo habitual; algunas impresoras aguantan más)."));
     auto* printerBox = new QGroupBox(QStringLiteral("Mi impresora"), this);
     auto* printerForm = new QFormLayout(printerBox);
     printerForm->addRow(QStringLiteral("Boquilla:"), nozzle_);
@@ -116,6 +123,7 @@ ExportDialog::ExportDialog(const std::vector<document::Body>& bodies, const std:
     bed->addWidget(bedY_);
     bed->addWidget(bedZ_);
     printerForm->addRow(QStringLiteral("Cama X × Y × Z:"), bed);
+    printerForm->addRow(QStringLiteral("Voladizo máximo:"), overhang_);
     slicer_ = new QLineEdit(settings.value(QStringLiteral("print/slicer")).toString(), this);
     slicer_->setPlaceholderText(QStringLiteral("Programa de laminado (Bambu Studio, Orca…)"));
     auto* choose = new QPushButton(QStringLiteral("Elegir…"), this);
@@ -153,7 +161,7 @@ ExportDialog::ExportDialog(const std::vector<document::Body>& bodies, const std:
     reviewTimer_->setSingleShot(true);
     reviewTimer_->setInterval(250);
     connect(reviewTimer_, &QTimer::timeout, this, &ExportDialog::runReview);
-    for (QDoubleSpinBox* box : {nozzle_, bedX_, bedY_, bedZ_}) {
+    for (QDoubleSpinBox* box : {nozzle_, bedX_, bedY_, bedZ_, overhang_}) {
         connect(box, &QDoubleSpinBox::valueChanged, this, [this] {
             savePrinterSettings();
             reviewTimer_->start();
@@ -259,6 +267,7 @@ geometry::PrintSettings ExportDialog::printSettings() const
     settings.bedX = bedX_->value();
     settings.bedY = bedY_->value();
     settings.bedZ = bedZ_->value();
+    settings.overhangAngle = overhang_->value();
     return settings;
 }
 
@@ -269,6 +278,7 @@ void ExportDialog::savePrinterSettings() const
     settings.setValue(QStringLiteral("print/bedX"), bedX_->value());
     settings.setValue(QStringLiteral("print/bedY"), bedY_->value());
     settings.setValue(QStringLiteral("print/bedZ"), bedZ_->value());
+    settings.setValue(QStringLiteral("print/overhang"), overhang_->value());
 }
 
 void ExportDialog::runReview()

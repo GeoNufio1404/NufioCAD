@@ -18,6 +18,7 @@ struct PrintSettings {
     double bedX = 256.0;   // cama
     double bedY = 256.0;
     double bedZ = 256.0;   // altura máxima
+    double overhangAngle = 45.0;  // ángulo (desde la vertical hacia fuera) a partir del cual una cara colgada pide soportes
 };
 
 struct PrintIssue {
