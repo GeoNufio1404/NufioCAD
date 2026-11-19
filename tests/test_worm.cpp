@@ -311,3 +311,77 @@ TEST_CASE("Los cuerpos y componentes se numeran según lo que se hizo", "[bodies
         CHECK(info(5).name == "Tapa");
     }
 }
+
+TEST_CASE("El Lightbox con canal LED y la caja con divisiones, patas, ranuras y tornillos del catálogo", "[generator][box]")
+{
+    const auto bodies = [](const char* id, const document::GeneratorValues& values) {
+        const document::Generator* generator = document::findGenerator(id);
+        REQUIRE(generator != nullptr);
+        auto doc = std::make_unique<document::Document>();
+        document::applyRecipe(*doc, generator->make(values, ""));
+        for (std::size_t i = 0; i < doc->featureCount(); ++i) {
+            INFO(doc->feature(i).name());
+            REQUIRE(doc->status(doc->feature(i).id()).health != document::Health::Error);
+        }
+        return doc;
+    };
+    {
+        // Lightbox: el canal añade un muro de 1,2 mm de grosor a 10 mm de la pared (por dentro: 171 × 127)
+        const document::Generator* generator = document::findGenerator("lightbox");
+        document::GeneratorValues plain = generator->defaults();
+        plain["cable"] = 0.0;
+        const auto without = bodies("lightbox", plain);
+        document::GeneratorValues channel = plain;
+        channel["canal"] = 1.0;
+        const auto with = bodies("lightbox", channel);
+        const double ringArea = (151.0 * 107.0) - (148.6 * 104.6);  // el anillo del muro (interior − 2 · 10 de tira)
+        const double added = with->result().bodies[0].shape.volume() - without->result().bodies[0].shape.volume();
+        CHECK(added == Catch::Approx(ringArea * 8.0).epsilon(0.02));
+        // Una tira demasiado ancha para la caja avisa
+        channel["tira_ancho"] = 50.0;
+        channel["ancho"] = 100.0;
+        channel["alto"] = 80.0;
+        CHECK_THROWS(generator->make(channel, ""));
+    }
+    {
+        const document::Generator* generator = document::findGenerator("caja-con-tapa");
+        document::GeneratorValues plain = generator->defaults();
+        const auto base = bodies("caja-con-tapa", plain);
+        const double boxVolume = base->result().bodies[0].shape.volume();
+        const double lidVolume = base->result().bodies[1].shape.volume();
+        // Dos divisiones: dos paredes de 2 mm por (60 − 2·2) de fondo y (40 − 2 − 3) de alto, menos lo que ya estaba
+        document::GeneratorValues split = plain;
+        split["divisiones"] = 2.0;
+        const auto divided = bodies("caja-con-tapa", split);
+        CHECK(divided->result().bodies[0].shape.volume() - boxVolume == Catch::Approx(2.0 * 2.0 * 56.0 * 35.0).epsilon(0.02));
+        // Cuatro patas de 10 × 3 mm: la caja baja hasta z = −3
+        document::GeneratorValues legs = plain;
+        legs["patas"] = 1.0;
+        const auto feet = bodies("caja-con-tapa", legs);
+        CHECK(feet->result().bodies[0].shape.bounds().min.z == Catch::Approx(-3.0).margin(1e-6));
+        // Cinco ranuras de 2 × 28 en la tapa de 2 mm de grueso quitan 5 · 2 · 28 · 2
+        document::GeneratorValues vented = plain;
+        vented["ranuras"] = 5.0;
+        const auto slotted = bodies("caja-con-tapa", vented);
+        CHECK(lidVolume - slotted->result().bodies[1].shape.volume() == Catch::Approx(5.0 * 2.0 * 28.0 * 2.0).epsilon(0.02));
+        // Tornillo M4 del catálogo: poste de 10 y agujero de paso de 4,5 en la tapa
+        document::GeneratorValues m4 = plain;
+        m4["cierre"] = 1.0;
+        m4["medida_tornillo"] = 4.0;
+        const document::Recipe recipe = generator->make(m4, "");
+        bool poste = false, pasante = false;
+        for (const document::Parameter& parameter : recipe.parameters) {
+            poste = poste || (parameter.name == "poste" && parameter.expression == "10");
+            pasante = pasante || (parameter.name == "pasante" && parameter.expression == "4.5");
+        }
+        CHECK(poste);
+        CHECK(pasante);
+        // Un diseño anterior (sin las preguntas nuevas) se sigue haciendo igual
+        document::GeneratorValues old = plain;
+        for (const char* key : {"medida_tornillo", "divisiones", "ranuras", "patas", "pata_diametro", "pata_alto"}) {
+            old.erase(key);
+        }
+        const auto same = bodies("caja-con-tapa", old);
+        CHECK(same->result().bodies[0].shape.volume() == Catch::Approx(boxVolume));
+    }
+}

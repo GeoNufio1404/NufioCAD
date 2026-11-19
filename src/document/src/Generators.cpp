@@ -68,6 +68,12 @@ public:
         shape.label = "Forma";
         shape.kind = K::Choice;
         shape.choices = {"Rectangular", "Redonda"};
+        GeneratorField channel;
+        channel.key = "canal";
+        channel.label = "Canal para tira LED";
+        channel.kind = K::Choice;
+        channel.choices = {"Sin canal", "Canal por dentro, junto a las paredes"};
+        channel.hint = "Un muro bajo que deja entre él y la pared un canal donde va pegada la tira LED";
         GeneratorField cableWall;
         cableWall.key = "pared_cable";
         cableWall.label = "Salida del cable";
@@ -87,7 +93,11 @@ public:
                 length("labio_pared", "Grosor del labio", 1.0, 0.4, 10.0),
                 length("holgura", "Holgura del labio", 0.1, 0.0, 2.0, "Aire entre el labio y la pared, por cada lado"),
                 length("cable", "Agujero del cable", 6.0, 0.0, 50.0, "0 = sin agujero"),
-                cableWall};
+                cableWall,
+                channel,
+                length("tira_ancho", "Ancho de la tira LED", 10.0, 3.0, 50.0, "El ancho del canal entre la pared y el muro (una tira de 8 mm: 10)", "canal", 1),
+                length("canal_alto", "Alto del muro del canal", 8.0, 2.0, 60.0, "Desde el fondo de la caja", "canal", 1),
+                length("canal_pared", "Grosor del muro del canal", 1.2, 0.4, 10.0, {}, "canal", 1)};
     }
 
     std::map<std::string, ArrowSpec> arrows() const override
@@ -215,6 +225,23 @@ public:
             }
             recipe.features.push_back(std::move(f));
         }
+        // 3b. El canal para la tira LED: un muro (un anillo) a «tira_ancho» de la pared, desde el fondo; la tira se pega en el
+        // fondo entre la pared y el muro y la luz sale por encima de él.
+        if (values.count("canal") != 0 && values.at("canal") >= 0.5) {
+            const double strip = v("tira_ancho"), wallThick = v("canal_pared");
+            const double inner = (round ? v("diametro") : std::min(v("ancho"), v("alto"))) - 2.0 * v("pared");
+            if (inner - 2.0 * strip - 2.0 * wallThick < 10.0) {
+                throw std::runtime_error("La tira LED es demasiado ancha para esa caja: no queda sitio para el muro del canal");
+            }
+            const std::string stripP = p("tira_ancho"), wallP = p("canal_pared"), highP = p("canal_alto");
+            param(stripP, strip);
+            param(wallP, wallThick);
+            param(highP, v("canal_alto"));
+            const std::string ringW = inW + " - 2*" + stripP, ringH = inH + " - 2*" + stripP;
+            recipe.features.push_back(shapeAt("Lightbox: muro del canal", Operation::Join, ringW, ringH, fondo + " - 0.01", highP + " + 0.01", "", ""));
+            recipe.features.push_back(shapeAt("Lightbox: hueco del muro", Operation::Cut, ringW + " - 2*" + wallP, ringH + " - 2*" + wallP,
+                                              fondo, highP + " + 1", "", ""));
+        }
         // 4. La tapa, un solo cuerpo: la placa del tamaño de la caja (marco y cara central juntos)...
         recipe.features.push_back(shapeAt("Lightbox: tapa", Operation::NewBody, W, H, "0", frente, beside, esquina));
         // 5. ...y el labio: un anillo que sale hacia atrás desde la cara interior de la tapa y entra en la caja. Se
@@ -265,6 +292,35 @@ public:
         closure.label = "Cierre";
         closure.kind = K::Choice;
         closure.choices = {"Labio a presión", "Tornillos en las esquinas"};
+        GeneratorField screwSize;
+        screwSize.key = "medida_tornillo";
+        screwSize.label = "Tornillo";
+        screwSize.kind = K::Choice;
+        screwSize.choices = {"Medidas a mano", "M2", "M2,5", "M3", "M4", "M5", "M6"};
+        screwSize.hint = "Pone el poste, el agujero para roscar y el de la tapa de ese tornillo";
+        screwSize.showKey = "cierre";
+        screwSize.showIndex = 1;
+        GeneratorField feet;
+        feet.key = "patas";
+        feet.label = "Patas";
+        feet.kind = K::Choice;
+        feet.choices = {"Sin patas", "4 patas redondas"};
+        GeneratorField dividers;
+        dividers.key = "divisiones";
+        dividers.label = "Divisiones interiores";
+        dividers.kind = K::Count;
+        dividers.value = 0.0;
+        dividers.min = 0.0;
+        dividers.max = 8.0;
+        dividers.hint = "Paredes que reparten la caja a lo ancho en compartimentos iguales";
+        GeneratorField slots;
+        slots.key = "ranuras";
+        slots.label = "Ranuras de ventilación";
+        slots.kind = K::Count;
+        slots.value = 0.0;
+        slots.min = 0.0;
+        slots.max = 20.0;
+        slots.hint = "Ranuras que atraviesan la tapa, repartidas por el centro";
         return {length("ancho", "Ancho (exterior)", 100.0, 20.0, 1000.0),
                 length("fondo", "Fondo (exterior)", 60.0, 20.0, 1000.0, "El otro lado de la planta"),
                 length("alto", "Alto de la caja", 40.0, 10.0, 500.0, "Sin la tapa"),
@@ -279,7 +335,13 @@ public:
                        "cierre", 0),
                 length("poste", "Diámetro de los postes", 8.0, 4.0, 30.0, "Uno en cada esquina, por dentro", "cierre", 1),
                 length("tornillo", "Agujero del poste", 2.5, 1.0, 10.0, "Para roscar el tornillo (M3: 2,5)", "cierre", 1),
-                length("pasante", "Agujero de la tapa", 3.4, 1.0, 12.0, "Para que el tornillo pase (M3: 3,4)", "cierre", 1)};
+                length("pasante", "Agujero de la tapa", 3.4, 1.0, 12.0, "Para que el tornillo pase (M3: 3,4)", "cierre", 1),
+                screwSize,
+                dividers,
+                slots,
+                feet,
+                length("pata_diametro", "Diámetro de las patas", 10.0, 4.0, 40.0, {}, "patas", 1),
+                length("pata_alto", "Alto de las patas", 3.0, 1.0, 20.0, "Salen por debajo del fondo", "patas", 1)};
     }
 
     std::map<std::string, ArrowSpec> arrows() const override
@@ -307,9 +369,22 @@ public:
 
     Recipe make(const GeneratorValues& values, const std::string& suffix) const override
     {
-        const auto v = [&](const char* key) { return values.at(key); };
-        const bool screws = v("cierre") >= 0.5;
+        const bool screws = values.at("cierre") >= 0.5;
         const auto p = [&](const char* name) { return std::string(name) + suffix; };
+        // La medida de tornillo del catálogo manda sobre las tres medidas sueltas (poste, agujero de roscar y agujero de
+        // paso, en mm); «medidas a mano» las deja como están. Los diseños anteriores no traen estas preguntas.
+        GeneratorValues used = values;
+        if (const int size = values.count("medida_tornillo") != 0 ? int(values.at("medida_tornillo")) : 0; size >= 1 && size <= 6) {
+            struct Screw {
+                double post, pilot, clear;
+            };
+            static constexpr Screw kCatalog[] = {{6.0, 1.6, 2.4}, {7.0, 2.05, 2.9}, {8.0, 2.5, 3.4}, {10.0, 3.3, 4.5}, {12.0, 4.2, 5.5}, {14.0, 5.0, 6.6}};
+            used["poste"] = kCatalog[size - 1].post;
+            used["tornillo"] = kCatalog[size - 1].pilot;
+            used["pasante"] = kCatalog[size - 1].clear;
+        }
+        const auto v = [&](const char* key) { return used.at(key); };
+        const auto opt = [&](const char* key) { return values.count(key) != 0 ? values.at(key) : 0.0; };
         const std::string ancho = p("ancho"), fondo = p("fondo"), alto = p("alto"), pared = p("pared"), base = p("base"),
                           esquina = p("esquina"), tapa = p("tapa"), labio = p("labio"), labioPared = p("labio_pared"),
                           holgura = p("holgura"), poste = p("poste"), tornillo = p("tornillo"), pasante = p("pasante");
@@ -391,8 +466,44 @@ public:
             }
         }
 
+        // Las divisiones: paredes del grosor de la pared que reparten el interior a lo ancho; llegan 3 mm por debajo del borde
+        // (para no estorbar al labio de la tapa) y se hunden 0,5 mm en las paredes y en la base para quedar unidas.
+        const int dividerCount = int(opt("divisiones"));
+        if (dividerCount > 0) {
+            const std::string dividersP = p("divisiones");
+            param(dividersP, double(dividerCount));
+            for (int k = 1; k <= dividerCount; ++k) {
+                const std::string x = "-(" + inW + ")/2 + (" + inW + ")*" + std::to_string(k) + "/(" + dividersP + " + 1)";
+                recipe.features.push_back(addBox("Caja: división " + std::to_string(k), Operation::Join, pared, inD + " + 1", base + " - 0.5",
+                                                 alto + " - " + base + " - 3 + 0.5", x, ""));
+            }
+        }
+        // Las patas: cuatro discos bajo el fondo, hacia dentro de cada esquina.
+        if (opt("patas") >= 0.5) {
+            const std::string legD = p("pata_diametro"), legH = p("pata_alto");
+            param(legD, v("pata_diametro"));
+            param(legH, v("pata_alto"));
+            const std::string lx = ancho + "/2 - " + legD + "/2 - " + pared, ly = fondo + "/2 - " + legD + "/2 - " + pared;
+            for (int i = 0; i < 4; ++i) {
+                const std::string sx = corners[i][0], sy = corners[i][1];
+                recipe.features.push_back(addCylinder("Caja: pata " + std::to_string(i + 1), Operation::Join, legD, sx + "(" + lx + ")",
+                                                       sy + "(" + ly + ")", "-" + legH, legH + " + 0.5"));
+            }
+        }
+
         // 2. La tapa, al lado (apoyada en la cama).
         recipe.features.push_back(addBox("Tapa: placa", Operation::NewBody, ancho, fondo, "0", tapa, beside, esquina));
+        // Las ranuras de ventilación: cortes alargados (2 mm de ancho) repartidos por el centro de la tapa.
+        const int slotCount = int(opt("ranuras"));
+        if (slotCount > 0) {
+            const std::string slotsP = p("ranuras");
+            param(slotsP, double(slotCount));
+            for (int k = 0; k < slotCount; ++k) {
+                const std::string x = beside + " + (" + inW + ")*0.6*(" + std::to_string(k) + " + 0.5)/" + slotsP + " - (" + inW + ")*0.3";
+                recipe.features.push_back(addBox("Tapa: ranura " + std::to_string(k + 1), Operation::Cut, "2", "(" + inD + ")*0.5", "-1",
+                                                 tapa + " + 2", x, ""));
+            }
+        }
         if (screws) {
             for (int i = 0; i < 4; ++i) {
                 const std::string sx = corners[i][0], sy = corners[i][1];
