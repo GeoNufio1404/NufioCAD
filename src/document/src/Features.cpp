@@ -230,6 +230,7 @@ std::string newBodyName(ModelState& state, const Feature& feature)
     case FeatureKind::Move: label = "Copia"; break;
     case FeatureKind::Pattern: label = "Patrón"; break;
     case FeatureKind::Mirror: label = "Espejo"; break;
+    case FeatureKind::Split: label = "Parte"; break;
     case FeatureKind::Combine: label = "Unión"; break;
     case FeatureKind::Gear: {
         label = "Engranaje";
@@ -605,6 +606,34 @@ std::optional<std::string> MirrorFeature::compute(ModelState& state) const
         warning = warning ? *warning + " " + text : text;
     }
     return warning;
+}
+
+std::optional<std::string> SplitFeature::compute(ModelState& state) const
+{
+    const auto source = std::ranges::find_if(state.bodies, [&](const Body& b) { return b.key == body; });
+    if (source == state.bodies.end()) {
+        throw FeatureError("El cuerpo que se iba a dividir ya no existe");
+    }
+    std::optional<std::string> warning;
+    sketch::Plane cut = resolvePlane(state, plane, "del plano de corte", "se usa su última posición", warning);
+    cut.origin = {cut.origin.x + cut.normal.x * offset, cut.origin.y + cut.normal.y * offset, cut.origin.z + cut.normal.z * offset};
+    try {
+        auto [front, back] = geometry::splitBody(tag(), source->shape, cut);
+        const std::size_t index = std::size_t(source - state.bodies.begin());
+        state.bodies[index].shape = std::move(front);
+        state.bodies.push_back({tag(), newBodyName(state, *this), std::move(back)});
+    } catch (const geometry::GeometryError& e) {
+        throw FeatureError(e.what());
+    }
+    return warning;
+}
+
+std::vector<FeatureId> SplitFeature::dependencies() const
+{
+    std::vector<FeatureId> ids;
+    addAll(ids, geometry::ElementRef{body + ":", 0});
+    addAttachmentDependencies(ids, plane);
+    return ids;
 }
 
 std::vector<FeatureId> MirrorFeature::dependencies() const

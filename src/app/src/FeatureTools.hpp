@@ -398,6 +398,31 @@ private:
     QComboBox* operation_ = nullptr;
 };
 
+// Dividir un cuerpo con un plano (O4).
+class SplitTool final : public FeatureTool {
+    Q_OBJECT
+
+public:
+    SplitTool(document::Document& document, render::Viewport& viewport, std::optional<document::FeatureId> editing);
+
+    std::unique_ptr<document::Feature> build() const override;
+
+protected:
+    QString title() const override { return QStringLiteral("Dividir cuerpo"); }
+    void createFields(QFormLayout* form) override;
+    void selectionChanged(const render::ModelSelection& selection) override;
+    QString inputsText() const override;
+    bool removesMaterial() const override { return false; }
+
+private:
+    std::string body_;
+    geometry::ElementRef face_;
+    std::vector<document::FeatureId> planeIds_;
+    QComboBox* bodyBox_ = nullptr;
+    QComboBox* plane_ = nullptr;
+    QDoubleSpinBox* offset_ = nullptr;
+};
+
 // Plano de construcción: parte de un plano de origen, una cara u otro plano,
 // con un desfase y un giro.
 class PlaneTool final : public FeatureTool {

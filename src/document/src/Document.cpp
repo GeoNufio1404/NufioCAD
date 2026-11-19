@@ -37,6 +37,8 @@ std::string kindLabel(FeatureKind kind)
         return "Agujero";
     case FeatureKind::Mirror:
         return "Espejo";
+    case FeatureKind::Split:
+        return "División";
     case FeatureKind::Pattern:
         return "Patrón";
     case FeatureKind::ConstructionPlane:

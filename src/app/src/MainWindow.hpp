@@ -203,6 +203,7 @@ private:
     QAction* shellAction_ = nullptr;
     QAction* holeAction_ = nullptr;
     QAction* mirrorAction_ = nullptr;
+    QAction* splitAction_ = nullptr;
     QAction* patternAction_ = nullptr;
     QAction* planeAction_ = nullptr;
     QAction* axisAction_ = nullptr;

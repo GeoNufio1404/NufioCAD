@@ -1036,6 +1036,29 @@ Shape chamfer(std::string_view tag, const Shape& body, const std::vector<int>& e
                                                      "No se pudo achaflanar: prueba con distancias menores", add);
 }
 
+std::pair<Shape, Shape> splitBody(std::string_view tag, const Shape& body, const sketch::Plane& plane)
+{
+    if (body.isNull()) {
+        throw GeometryError("No hay cuerpo que dividir");
+    }
+    const Box b = body.bounds();
+    const double reach = 2.0 * std::hypot(std::hypot(b.max.x - b.min.x, b.max.y - b.min.y), b.max.z - b.min.z) + 10.0;
+    // Dos bloques enormes, uno a cada lado del plano (el segundo con la normal invertida).
+    sketch::Plane front = plane;
+    sketch::Plane back = plane;
+    back.normal = {-plane.normal.x, -plane.normal.y, -plane.normal.z};
+    back.yAxis = {-plane.yAxis.x, -plane.yAxis.y, -plane.yAxis.z};
+    const Shape blockFront = box(std::string(tag) + ":lado", front, reach, reach, reach, true, 0.0);
+    const Shape blockBack = box(std::string(tag) + ":lado2", back, reach, reach, reach, true, 0.0);
+    Shape first = boolean(BooleanOp::Common, body, blockFront);
+    Shape second = boolean(BooleanOp::Common, body, blockBack);
+    if (first.isNull() || second.isNull() || first.solidCount() == 0 || second.solidCount() == 0 || first.volume() < kTiny ||
+        second.volume() < kTiny) {
+        throw GeometryError("El plano no atraviesa el cuerpo: no hay nada que dividir");
+    }
+    return {std::move(first), std::move(second)};
+}
+
 Shape mirror(std::string_view tag, const Shape& body, const sketch::Plane& plane)
 {
     if (body.isNull()) {

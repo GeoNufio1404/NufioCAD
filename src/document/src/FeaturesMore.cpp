@@ -54,6 +54,11 @@ std::vector<Feature::NumericField> EdgeFeature::numericFields()
     return fields;
 }
 
+std::vector<Feature::NumericField> SplitFeature::numericFields()
+{
+    return {field("offset", "Posición del corte", offset)};
+}
+
 std::vector<Feature::NumericField> ShellFeature::numericFields()
 {
     return {field("thickness", "Espesor", thickness)};

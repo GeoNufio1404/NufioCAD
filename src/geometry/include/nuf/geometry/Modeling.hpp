@@ -122,6 +122,10 @@ Shape chamfer(std::string_view tag, const Shape& body, const std::vector<int>& e
 
 // Copia del cuerpo reflejada sobre el plano. Las caras se llaman
 // «tag:espejo:<nombre de la cara original>».
+// Divide un cuerpo con un plano en dos: el de la parte hacia donde apunta la normal del plano y el de la otra. Si el plano no
+// lo atraviesa lanza GeometryError. Las caras del corte se llaman «tag:corte» y «tag:corte:2».
+std::pair<Shape, Shape> splitBody(std::string_view tag, const Shape& body, const sketch::Plane& plane);
+
 Shape mirror(std::string_view tag, const Shape& body, const sketch::Plane& plane);
 
 struct PatternSpec {

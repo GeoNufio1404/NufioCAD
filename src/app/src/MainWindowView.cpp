@@ -107,7 +107,7 @@ bool MainWindow::sketchVisible(document::FeatureId id, std::size_t upTo) const
 void MainWindow::updateExportAction()
 {
     updateStartScreen();
-    for (QAction* action : {filletAction_, chamferAction_, shellAction_, holeAction_, mirrorAction_, patternAction_, moveAction_, combineAction_, organizeAction_, jointAction_}) {
+    for (QAction* action : {filletAction_, chamferAction_, shellAction_, holeAction_, mirrorAction_, splitAction_, patternAction_, moveAction_, combineAction_, organizeAction_, jointAction_}) {
         if (action != nullptr) {
             action->setEnabled(!sketch_ && !tool_ && !viewport_->isPickingSketchPlane() && !document_.result().bodies.empty());
         }

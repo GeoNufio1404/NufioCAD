@@ -208,6 +208,21 @@ public:
     std::vector<FeatureId> dependencies() const override;
 };
 
+// Dividir un cuerpo (O4): un plano (de origen, de construcción o una cara plana), movido «offset» mm a lo largo de su normal,
+// lo parte en dos cuerpos: el original conserva el lado de la normal y el otro sale como cuerpo nuevo.
+class SplitFeature final : public Feature {
+public:
+    std::string body;        // clave del cuerpo
+    SketchAttachment plane;  // dónde está el plano de corte
+    double offset = 0.0;     // mm a lo largo de la normal del plano
+
+    FeatureKind kind() const override { return FeatureKind::Split; }
+    std::unique_ptr<Feature> clone() const override { return std::make_unique<SplitFeature>(*this); }
+    std::optional<std::string> compute(ModelState& state) const override;
+    std::vector<FeatureId> dependencies() const override;
+    std::vector<NumericField> numericFields() override;
+};
+
 // Plano de construcción: parte de un plano de origen, una cara plana u otro
 // plano de construcción, se gira un ángulo alrededor de uno de sus ejes y se
 // desplaza a lo largo de su normal. No cambia ningún cuerpo: solo da un plano

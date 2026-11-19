@@ -3213,3 +3213,40 @@ TEST_CASE("El espejo refleja varios cuerpos a la vez y se guarda", "[mirror][io]
     REQUIRE(again->alsoBodies == std::vector<std::string>{"f3"});
     REQUIRE(reopened.result().bodies.size() == doc.result().bodies.size());
 }
+
+TEST_CASE("Dividir un cuerpo con un plano da dos cuerpos que suman el volumen, y se guarda", "[split][io]")
+{
+    Document doc = boxDocument();  // una caja de 20 × 10 × 10 (kBox)
+    const double whole = doc.result().bodies.front().shape.volume();
+    auto split = std::make_unique<SplitFeature>();
+    split->body = "f2";
+    split->plane.origin = OriginPlane::YZ;  // x = 0 + offset
+    split->offset = 5.0;
+    const FeatureId id = doc.addFeature(std::move(split));
+    REQUIRE(doc.status(id).health == Health::Ok);
+    REQUIRE(doc.result().bodies.size() == 2);
+    const double a = doc.result().bodies[0].shape.volume();
+    const double b = doc.result().bodies[1].shape.volume();
+    REQUIRE_THAT(a + b, WithinRel(whole, 1e-6));
+    // Cortado a x = 5: una parte mide 5 de ancho y la otra el resto (la caja va de 0 a 20 en X)
+    REQUIRE_THAT(std::min(a, b), WithinRel(whole * 5.0 / 20.0, 1e-6));
+    REQUIRE(doc.result().bodies[1].name.rfind("Parte", 0) == 0);
+    // Un plano que no atraviesa el cuerpo da error claro
+    auto outside = std::make_unique<SplitFeature>();
+    outside->body = "f2";
+    outside->plane.origin = OriginPlane::YZ;
+    outside->offset = 500.0;
+    REQUIRE(doc.status(doc.addFeature(std::move(outside))).health == Health::Error);
+
+    const auto path = std::filesystem::temp_directory_path() / "nuf_dividir.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    const auto* again = dynamic_cast<const SplitFeature*>(reopened.findFeature(id));
+    REQUIRE(again != nullptr);
+    REQUIRE_THAT(again->offset, Catch::Matchers::WithinAbs(5.0, 1e-9));
+    REQUIRE(reopened.result().bodies.size() == 2);
+}
