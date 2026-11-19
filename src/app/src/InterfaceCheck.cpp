@@ -1696,7 +1696,8 @@ int InterfaceCheck::run()
         const std::vector<std::pair<QString, ExportDialog::Format>> formats = {
             {QStringLiteral("exportar.stl"), ExportDialog::Format::Stl},
             {QStringLiteral("exportar.obj"), ExportDialog::Format::Obj},
-            {QStringLiteral("exportar.step"), ExportDialog::Format::Step}};
+            {QStringLiteral("exportar.step"), ExportDialog::Format::Step},
+            {QStringLiteral("exportar.3mf"), ExportDialog::Format::ThreeMf}};
         for (const auto& [name, format] : formats) {
             const QString file = QDir(scratch).filePath(name);
             QFile::remove(file);

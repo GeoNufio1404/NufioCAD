@@ -7,6 +7,7 @@
 #include <nuf/geometry/Shape.hpp>
 
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -35,6 +36,16 @@ double meshVolume(const std::vector<Shape>& shapes, const MeshQuality& quality);
 void writeStl(const std::filesystem::path& path, const std::vector<Shape>& shapes, const MeshQuality& quality);
 void writeObj(const std::filesystem::path& path, const std::vector<Shape>& shapes, const MeshQuality& quality);
 void writeStep(const std::filesystem::path& path, const std::vector<Shape>& shapes);
+
+// 3MF (el formato que leen Bambu Studio, Orca Slicer y PrusaSlicer): un objeto por cuerpo, con su nombre y un material de
+// color («Filamento 1»…) para repartir cada cuerpo en un filamento. «rgb» = 0xRRGGBB; con 0 se toma uno de la paleta
+// según el orden del cuerpo. Los vértices se sueldan (la malla es indexada) y el archivo es un ZIP sin comprimir.
+struct ThreeMfPart {
+    Shape shape;
+    std::string name;
+    std::uint32_t rgb = 0;
+};
+void writeThreeMf(const std::filesystem::path& path, const std::vector<ThreeMfPart>& parts, const MeshQuality& quality);
 
 // Un STEP leído y reparado, listo para guardarse: solo los sólidos, en BREP
 // binario (así abrir el diseño no vuelve a analizar el STEP).

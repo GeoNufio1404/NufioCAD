@@ -133,6 +133,7 @@ private:
     struct ExportJob {
         QString path;
         std::vector<geometry::Shape> shapes;
+        std::vector<std::string> names;  // el nombre de cada cuerpo (el 3MF los guarda)
     };
     void startExport(std::vector<ExportJob> jobs, ExportDialog::Format format, geometry::MeshQuality quality);
     void toggleMeasure(bool on);

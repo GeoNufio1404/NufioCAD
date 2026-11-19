@@ -39,6 +39,7 @@ ExportDialog::ExportDialog(const std::vector<document::Body>& bodies, const std:
     format_->addItem(QStringLiteral("STL — malla para imprimir (.stl)"), int(Format::Stl));
     format_->addItem(QStringLiteral("OBJ — malla (.obj)"), int(Format::Obj));
     format_->addItem(QStringLiteral("STEP — sólido exacto (.step)"), int(Format::Step));
+    format_->addItem(QStringLiteral("3MF — varios cuerpos con color por filamento (.3mf)"), int(Format::ThreeMf));
 
     quality_ = new QComboBox(this);
     quality_->addItem(QStringLiteral("Baja (rápida, facetada)"));
@@ -207,6 +208,8 @@ QString ExportDialog::extension(Format format)
         return QStringLiteral("obj");
     case Format::Step:
         return QStringLiteral("step");
+    case Format::ThreeMf:
+        return QStringLiteral("3mf");
     }
     return {};
 }

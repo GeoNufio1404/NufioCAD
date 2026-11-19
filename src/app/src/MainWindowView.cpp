@@ -448,7 +448,7 @@ void MainWindow::exportBodies()
         }
         for (std::size_t index : chosen) {
             const QString name = QString::fromStdString(bodies[index].name);
-            jobs.push_back({QDir(folder).filePath(name + QLatin1Char('.') + extension), {bodies[index].shape}});
+            jobs.push_back({QDir(folder).filePath(name + QLatin1Char('.') + extension), {bodies[index].shape}, {bodies[index].name}});
         }
     } else {
         QString path = QFileDialog::getSaveFileName(this, QStringLiteral("Exportar"), suggested + QLatin1Char('.') + extension,
@@ -460,10 +460,12 @@ void MainWindow::exportBodies()
             path += QLatin1Char('.') + extension;
         }
         std::vector<geometry::Shape> shapes;
+        std::vector<std::string> names;
         for (std::size_t index : chosen) {
             shapes.push_back(bodies[index].shape);
+            names.push_back(bodies[index].name);
         }
-        jobs.push_back({path, std::move(shapes)});
+        jobs.push_back({path, std::move(shapes), std::move(names)});
     }
 
     // «Un archivo por cuerpo» no pregunta cada nombre: avisa antes de pisar.
@@ -516,6 +518,14 @@ void MainWindow::startExport(std::vector<ExportJob> jobs, ExportDialog::Format f
                     case ExportDialog::Format::Step:
                         geometry::writeStep(out, job.shapes);
                         break;
+                    case ExportDialog::Format::ThreeMf: {
+                        std::vector<geometry::ThreeMfPart> parts;
+                        for (std::size_t i = 0; i < job.shapes.size(); ++i) {
+                            parts.push_back({job.shapes[i], i < job.names.size() ? job.names[i] : "Cuerpo " + std::to_string(i + 1), 0});
+                        }
+                        geometry::writeThreeMf(out, parts, quality);
+                        break;
+                    }
                     }
                 }
             } catch (const std::exception& e) {
