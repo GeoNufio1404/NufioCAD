@@ -87,6 +87,7 @@
 #include <gp_Pln.hxx>
 
 #include <algorithm>
+#include <cstdio>
 #include <functional>
 #include <cmath>
 #include <numbers>
@@ -1100,6 +1101,67 @@ std::pair<Shape, Shape> splitBody(std::string_view tag, const Shape& body, const
         throw GeometryError("El plano no atraviesa el cuerpo: no hay nada que dividir");
     }
     return {std::move(first), std::move(second)};
+}
+
+std::pair<Shape, Shape> splitBodyByFace(std::string_view tagView, const Shape& body, const Shape& toolBody, int toolFace)
+{
+    const std::string tag(tagView);
+    if (body.isNull() || toolBody.isNull()) {
+        throw GeometryError("No hay cuerpo que dividir");
+    }
+    if (toolFace < 0 || toolFace >= toolBody.faceCount()) {
+        throw GeometryError("Ya no existe la cara con que se iba a dividir");
+    }
+    try {
+        NCollection_List<TopoDS_Shape> objects;
+        NCollection_List<TopoDS_Shape> tools;
+        objects.Append(occtShape(body));
+        tools.Append(toolBody.impl()->faces(toolFace + 1));
+        BRepAlgoAPI_Splitter splitter;
+        splitter.SetArguments(objects);
+        splitter.SetTools(tools);
+        splitter.Build();
+        if (!splitter.IsDone() || splitter.HasErrors()) {
+            throw GeometryError("No se pudo dividir el cuerpo con esa cara");
+        }
+        std::vector<TopoDS_Shape> solids;
+        for (TopExp_Explorer ex(splitter.Shape(), TopAbs_SOLID); ex.More(); ex.Next()) {
+            // Sin dividir, el resultado puede traer el mismo sólido más de una vez: no cuenta como trozo nuevo.
+            if (std::ranges::none_of(solids, [&](const TopoDS_Shape& known) { return known.IsSame(ex.Current()); })) {
+                solids.push_back(ex.Current());
+            }
+        }
+        if (solids.size() < 2) {
+            throw GeometryError("La cara no atraviesa el cuerpo de lado a lado: no hay nada que dividir");
+        }
+        const Shape::Impl& toolIn = *toolBody.impl();
+        const auto make = [&](const std::vector<TopoDS_Shape>& pieces, const std::string& label) {
+            TopoDS_Shape shape;
+            if (pieces.size() == 1) {
+                shape = pieces.front();
+            } else {
+                BRep_Builder builder;
+                TopoDS_Compound compound;
+                builder.MakeCompound(compound);
+                for (const TopoDS_Shape& piece : pieces) {
+                    builder.Add(compound, piece);
+                }
+                shape = compound;
+            }
+            Namer namer(shape);
+            namer.inherit(body, *splitter.History());
+            for (const TopoDS_Shape& image : splitter.Modified(toolIn.faces(toolFace + 1))) {
+                namer.name(image, label);
+            }
+            namer.nameUnnamed(label);
+            return namer.finish(tag);
+        };
+        Shape first = make({solids.front()}, tag + ":corte");
+        Shape second = make(std::vector<TopoDS_Shape>(solids.begin() + 1, solids.end()), tag + ":corte2");
+        return {std::move(first), std::move(second)};
+    } catch (const Standard_Failure& e) {
+        throw kernelFailure("dividir el cuerpo", "elige una cara que atraviese el cuerpo de lado a lado", e);
+    }
 }
 
 Shape mirror(std::string_view tag, const Shape& body, const sketch::Plane& plane)

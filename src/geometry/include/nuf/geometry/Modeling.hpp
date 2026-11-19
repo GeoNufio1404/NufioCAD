@@ -136,6 +136,10 @@ Shape chamfer(std::string_view tag, const Shape& body, const std::vector<int>& e
 // lo atraviesa lanza GeometryError. Las caras del corte se llaman «tag:corte» y «tag:corte:2».
 std::pair<Shape, Shape> splitBody(std::string_view tag, const Shape& body, const sketch::Plane& plane);
 
+// Igual, pero con una cara cualquiera (también curva) de otro cuerpo como superficie de corte. La cara tiene que atravesar el
+// cuerpo de lado a lado; si no, lanza GeometryError. Con más de dos trozos, el segundo reúne todos menos el primero.
+std::pair<Shape, Shape> splitBodyByFace(std::string_view tag, const Shape& body, const Shape& toolBody, int toolFace);
+
 Shape mirror(std::string_view tag, const Shape& body, const sketch::Plane& plane);
 
 struct PatternSpec {

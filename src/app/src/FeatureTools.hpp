@@ -427,6 +427,8 @@ protected:
 private:
     std::string body_;
     geometry::ElementRef face_;
+    geometry::ElementRef toolFace_;  // la cara (curva o plana) de otro cuerpo que hace el corte
+    int curvedIndex_ = -1;           // el lugar de «Cara de otro cuerpo» en la lista de planos
     std::vector<document::FeatureId> planeIds_;
     QComboBox* bodyBox_ = nullptr;
     QComboBox* plane_ = nullptr;

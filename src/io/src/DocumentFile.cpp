@@ -546,6 +546,10 @@ FeatureRow rowOf(const Feature& f)
         const auto& sp = static_cast<const SplitFeature&>(f);
         row.type = "split";
         params = {{"body", sp.body}, {"plane", toJson(sp.plane)}, {"offset", sp.offset}};
+        if (sp.byFace) {
+            params["byFace"] = true;
+            params["toolFace"] = toJson(sp.toolFace);
+        }
         break;
     }
     case FeatureKind::ConstructionPlane: {
@@ -795,6 +799,10 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         sp->body = text(p, "body");
         sp->plane = attachmentOf(p.at("plane"));
         sp->offset = number(p, "offset");
+        sp->byFace = p.value("byFace", false);
+        if (sp->byFace) {
+            sp->toolFace = elementRef(p.at("toolFace"));
+        }
         feature = std::move(sp);
     } else if (row.type == "mirror") {
         auto m = std::make_unique<MirrorFeature>();

@@ -647,6 +647,24 @@ std::optional<std::string> SplitFeature::compute(ModelState& state) const
     if (source == state.bodies.end()) {
         throw FeatureError("El cuerpo que se iba a dividir ya no existe");
     }
+    if (byFace) {
+        const auto hit = state.findFace(toolFace);
+        if (!hit) {
+            throw FeatureError("Ya no existe la cara con que se iba a dividir");
+        }
+        const std::size_t index = std::size_t(source - state.bodies.begin());
+        if (hit->body == index) {
+            throw FeatureError("Elige una cara de otro cuerpo para dividir (un cuerpo no se divide con su propia cara)");
+        }
+        try {
+            auto [front, back] = geometry::splitBodyByFace(tag(), source->shape, state.bodies[hit->body].shape, hit->face);
+            state.bodies[index].shape = std::move(front);
+            state.bodies.push_back({tag(), newBodyName(state, *this), std::move(back)});
+        } catch (const geometry::GeometryError& e) {
+            throw FeatureError(e.what());
+        }
+        return std::nullopt;
+    }
     std::optional<std::string> warning;
     sketch::Plane cut = resolvePlane(state, plane, "del plano de corte", "se usa su última posición", warning);
     cut.origin = {cut.origin.x + cut.normal.x * offset, cut.origin.y + cut.normal.y * offset, cut.origin.z + cut.normal.z * offset};
@@ -665,6 +683,10 @@ std::vector<FeatureId> SplitFeature::dependencies() const
 {
     std::vector<FeatureId> ids;
     addAll(ids, geometry::ElementRef{body + ":", 0});
+    if (byFace) {
+        addAll(ids, toolFace);
+        return ids;
+    }
     addAttachmentDependencies(ids, plane);
     return ids;
 }

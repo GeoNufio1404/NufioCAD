@@ -217,6 +217,9 @@ public:
     std::string body;        // clave del cuerpo
     SketchAttachment plane;  // dónde está el plano de corte
     double offset = 0.0;     // mm a lo largo de la normal del plano
+    // Con «byFace»: el corte lo hace esa cara (de otro cuerpo, plana o curva) en vez de un plano.
+    bool byFace = false;
+    geometry::ElementRef toolFace;
 
     FeatureKind kind() const override { return FeatureKind::Split; }
     std::unique_ptr<Feature> clone() const override { return std::make_unique<SplitFeature>(*this); }
