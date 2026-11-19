@@ -47,6 +47,7 @@ Un CAD paramétrico de escritorio para **Windows y Linux**, **offline y con arch
 | 18 — Ampliaciones de modelado | 📋 Planificada (O1–O6) |
 | 19 — Distribución y firma de código | 📋 Planificada (D1, D3–D7); D2 (Release en Windows) ya hecho |
 | 20 — Interfaz responsiva | ✅ Completa (R1–R7, 18 nov. 2026); falta probar en pantallas reales y en Linux |
+| 21 — Ensamblar y mover piezas al estilo Fusion 360 | 📋 Planificada (A1–A9, pedido del 19 nov. 2026); va antes de la 14 |
 
 **Fuera de las fases:** Windows y Linux (Fedora 44 y Ubuntu 24.04 del CI) compilan y pasan las pruebas; documentación reorganizada el 16 nov. 2026 (índice en [`README.md`](README.md)); auditorías de código en [`auditorias/`](auditorias/).
 
@@ -73,15 +74,16 @@ flowchart LR
     F16 --> F17["17 · Generadores<br/>y salida"]
     F17 --> F18["18 · Ampliaciones<br/>de modelado"]
     F18 --> F19["19 · Distribución<br/>y firma"]
-    F19 --> F14["14 · Pruebas y<br/>publicar v0.2.0"]
+    F19 --> F21["21 · Ensamblar y<br/>mover piezas"]
+    F21 --> F14["14 · Pruebas y<br/>publicar v0.2.0"]
     F20["20 · Interfaz responsiva<br/>✅ hecha"] -.-> F15
 ```
 
-**Por qué este orden (decidido el 18 nov. 2026):** las fases se hacen por número, de la 12 a la última (la 12 se cerró primero y la 20, pedida aparte, ya está hecha), y **la Fase 14 va al final**: las pruebas manuales (P1), la medición en Linux (P3) y la publicación de la v0.2.0 (P4) cierran todo lo anterior, así se prueba una sola vez lo hecho en todas las fases. Orden: 15 (usabilidad) → 16 (engranajes que faltan) → 17 (generadores y salida) → 18 (ampliaciones de modelado; cada punto es independiente) → 19 (distribución y firma) → 14 (pruebas y v0.2.0). Si alguien más va a probar NufioCAD antes, el instalador (D1) puede adelantarse. Lo que se haga mientras tanto se va dejando con su guía de pruebas, para que P1 tenga todo listo.
+**Por qué este orden (decidido el 18 nov. 2026):** las fases se hacen por número, de la 12 a la última (la 12 se cerró primero y la 20, pedida aparte, ya está hecha), y **la Fase 14 va al final**: las pruebas manuales (P1), la medición en Linux (P3) y la publicación de la v0.2.0 (P4) cierran todo lo anterior, así se prueba una sola vez lo hecho en todas las fases. Orden: 15 (usabilidad) → 16 (engranajes que faltan) → 17 (generadores y salida) → 18 (ampliaciones de modelado; cada punto es independiente) → 19 (distribución y firma) → 21 (ensamblar y mover piezas, pedida el 19 nov. 2026) → 14 (pruebas y v0.2.0). Si alguien más va a probar NufioCAD antes, el instalador (D1) puede adelantarse. Lo que se haga mientras tanto se va dejando con su guía de pruebas, para que P1 tenga todo listo.
 
 Cada fase se hace en ramas `feature/…` desde `develop`, una por punto o por grupo pequeño, con su prueba manual antes de fusionar.
 
-### Fase 14 — Cerrar lo hecho y publicar la v0.2.0 (va al final, tras la Fase 19)
+### Fase 14 — Cerrar lo hecho y publicar la v0.2.0 (va al final, tras las Fases 19 y 21)
 
 **Por qué va primero:** `develop` lleva las Fases 11, 12 y 13 (y la parte nueva de la 10) sin prueba manual, y `main` sigue en la v0.1.0. Antes de ampliar se prueba lo hecho, se corrige lo que salga y se publica una versión estable sobre la que construir.
 - [ ] **P1 — Pruebas manuales** de [`guia-de-pruebas.md`](guia-de-pruebas.md), todas las filas sin marcar. Primero lo más reciente y lo que más riesgo tiene: 5.4–5.9 (vigilante y fluidez: `VIG`, `FLU`), 4.6 (familias y largo de la cremallera: `CRE`), 2.2–2.5 (figuras abiertas, inferencias, cotas, restricciones), 1.2–1.6 (ayudas, temas, unidades, cálculo en segundo plano, vista previa, errores), 3.3–3.4 (flechas, mover y girar), 4.1–4.5 (generadores) y después lo que quede de las secciones 1–3. Lo que falle se anota en el «Pendiente de…» de su bloque y se arregla aquí.
@@ -158,6 +160,29 @@ Todas las operaciones de esta lista **ya existen en su forma básica** (Fases 5,
 - [ ] **O4** — Barrido y loft: hoy el barrido solo elige si el perfil sigue la trayectoria y el loft si es recto o suave; faltan curvas guía, torsión y condiciones de tangencia. Mover: el gizmo ya está, falta arrastrar libre sobre un plano. Faltan también dividir un cuerpo con un plano o una cara, componentes con origen propio y la unión cilíndrica (hay rígida, giratoria y deslizante).
 - [ ] **O5** — Medir y Sección: Medir muestra el valor en el panel; falta dibujar la línea de la medida y copiar el valor. La sección solo usa los planos XY, XZ y YZ; falta cortar por una cara o un plano de construcción. La revisión para imprimir no avisa de voladizos ni de soportes.
 - [ ] **O6** — STEP y archivos: hoy se importa la geometría en mm. Falta leer pulgadas, colores, nombres y ensamblajes (XDE), volver a importar un STEP que cambió, guardar la cámara en el diseño y una calidad de malla «Personalizada» al exportar.
+
+### Fase 21 — Ensamblar y mover piezas al estilo Fusion 360 (pedido del usuario, 19 nov. 2026)
+
+**Por qué:** colocar piezas con coordenadas (hoy, Mover cuerpo con sus flechas, anillos y cuadros) es lento e impreciso para montar un conjunto, por ejemplo un tren de engranajes. Fusion 360 tiene tres maneras de hacerlo: **arrastrar** las piezas en el visor (con una pieza **fijada** para que el resto no salga volando), **Alinear** (`A`: de un centro o una cara a otro, al instante) y **Uniones** (`J`: encajan dos piezas y dicen cómo se mueven: giratoria, deslizante…), más los **enlaces de movimiento** que hacen girar un engranaje cuando gira otro. Esta fase lleva esas tres maneras a NufioCAD.
+
+**Lo que ya hay (comprobado en el código el 19 nov. 2026):**
+- **Mover cuerpo** (Sólido › Mover cuerpo, `Mayús+G`): flechas y anillos arrastrables, sombra azul, varios cuerpos a la vez, pegado a la rejilla con `Ctrl` y la casilla **«Crear una copia (deja el original)»**, que es el **clonar** de hoy (de un cuerpo cada vez). Fase 8a.
+- **Componentes** (Sólido › Cuerpos y componentes): agrupan cuerpos con un nombre y se muestran u ocultan juntos; los generadores ya crean el suyo numerado («Par de engranajes 1»). **No** tienen origen propio ni se mueven como una unidad. Fase 8b.
+- **Unión** (Sólido › Unión, `Mayús+J`): solo entre dos **caras planas**, centro con centro; tipos rígida, giratoria y deslizante con valores fijos. Coloca una vez: no deja girar ni deslizar arrastrando. Fase 8c.
+- **Sección** (`Mayús+S`) por los planos XY, XZ e YZ.
+
+**Lo que falta, de lo más pequeño a lo más grande:**
+- [ ] **A1 — Clonar en un clic:** clic derecho sobre un cuerpo o un componente en el Navegador (y en la vista) › **Duplicar** (`Ctrl+D`), y `Ctrl+C` / `Ctrl+V`: crea la copia al lado (o en el sitio) como una operación Mover con copia. Copiar **varios cuerpos o un componente entero** de una vez (hoy la copia es de uno solo). **Tamaño: pequeño.**
+- [ ] **A2 — Fijar (Ground):** marcar un cuerpo o componente como fijo (chincheta en el Navegador, se guarda en el archivo). Arrastrar, Alinear y las uniones nunca lo mueven: mueven siempre la otra pieza. **Tamaño: pequeño.**
+- [ ] **A3 — Componentes que se mueven como una unidad:** un componente con su propio origen; moverlo o girarlo mueve todos sus cuerpos; **«Crear componente a partir de cuerpos»** con clic derecho en el Navegador; elegir un componente entero desde el Navegador para Mover. **Tamaño: mediano.**
+- [ ] **A4 — Alinear (`A`):** elegir en la pieza que se mueve un punto, el centro de una arista circular, el eje de un cilindro o una cara, y después el destino en otra pieza: la pieza salta y queda centrada, con las normales enfrentadas o alineadas; botones para voltear y girar de 90 en 90°. Queda en el historial (como un Mover), con vista previa. **Tamaño: mediano.**
+- [ ] **A5 — Arrastrar libre en el visor:** clic y arrastrar un cuerpo o componente (no fijo) sin abrir Mover: se desliza sobre el plano de la vista o del suelo, con `Ctrl` se pega a la rejilla, y al soltar se guarda la posición («Capturar posición»: una operación Mover). Con una unión puesta, arrastrar solo deja moverse como permite la unión (ver A7). **Tamaño: mediano.**
+- [ ] **A6 — Uniones completas:** el origen de la unión ya no solo en caras planas: **centro de una arista circular, eje de una cara cilíndrica, punto de un sketch o vértice** (lo que se usa para poner un engranaje en su eje o un planeta en un punto a 120°). Tipos nuevos: **cilíndrica, pasador y ranura, planar y esférica**. **Límites** de giro y de desplazamiento. Resaltar en la vista los dos orígenes elegidos. **Tamaño: grande.**
+- [ ] **A7 — Mover según la unión y animar:** con una unión giratoria, arrastrar la pieza solo la hace girar sobre su eje (sin salirse); con deslizante, solo la desliza. **Capturar posición** guarda el ángulo o la distancia. **Animar** una unión (gira sola de un extremo al otro de sus límites). **Tamaño: grande.**
+- [ ] **A8 — Enlace de movimiento (Motion Link) e interferencias:** ligar dos o más uniones con una relación (por ejemplo, el sol 360° y el planeta −360·z sol/z planeta: el signo menos invierte el sentido); al girar una giran las demás, y los generadores de engranajes ya traen sus enlaces puestos. **Inspeccionar › Interferencias:** los cuerpos que se pisan, con el volumen común en rojo, también **a lo largo del giro** (hoy las pruebas de engrane miran solo la posición inicial). Sección por cualquier plano o cara (O5 de la Fase 18). **Tamaño: grande.**
+- [ ] **A9 — Generador de tren planetario:** sol, N planetas repartidos (3 a 120° por defecto) y corona, con las condiciones de montaje (z corona = z sol + 2·z planeta; (z sol + z corona)/N entero, o avisa), la fase de los dientes de cada planeta ya calculada, componentes («Tren planetario 1» con Sol, Planeta 1…, Corona), corona fijada y uniones y enlaces puestos (si A6–A8 están hechos), y espina de pescado opcional. Es el «spinner planetario» que se arma a mano en Fusion. **Tamaño: mediano** (la geometría ya existe: engranaje exterior e interno).
+- **Orden propuesto:** A1 → A2 → A3 → A4 → A5 → A9 (sin uniones al principio) → A6 → A7 → A8. A1 y A2 se pueden adelantar si hacen falta antes.
+- **Pruebas:** cada punto con su prueba automática (posiciones exactas tras Alinear, que una pieza fija no se mueve, giros enlazados en la proporción pedida, interferencia nula en todo el giro de un par de engranajes) y su sección en la guía de pruebas.
 
 ### Fase 19 — Distribución y firma de código (plan del 16 nov. 2026)
 
