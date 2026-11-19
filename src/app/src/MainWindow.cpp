@@ -1042,7 +1042,8 @@ void MainWindow::activateFeature(document::FeatureId id)
         startTool(std::make_unique<JointTool>(document_, *viewport_, id, true));
         break;
     case document::FeatureKind::MotionLink:
-        break;  // su herramienta se añade más adelante en la Fase 21
+        startTool(std::make_unique<MotionLinkTool>(document_, *viewport_, id));
+        break;
     case document::FeatureKind::Import:
         break;  // no tiene parámetros que editar
     }

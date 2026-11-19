@@ -30,6 +30,7 @@ class QLabel;
 class QListWidget;
 class QPushButton;
 class QSpinBox;
+class QTableWidget;
 class QWidget;
 
 namespace nuf::render {
@@ -780,6 +781,35 @@ private:
     double animationFrom_ = 0.0;
     double animationLow_ = 0.0;
     double animationHigh_ = 0.0;
+    double animationPhase_ = 0.0;
+};
+
+// Enlace de movimiento (Fase 21): varias uniones que se mueven a la vez en una proporción.
+class MotionLinkTool final : public FeatureTool {
+    Q_OBJECT
+
+public:
+    MotionLinkTool(document::Document& document, render::Viewport& viewport, std::optional<document::FeatureId> editing);
+
+    std::unique_ptr<document::Feature> build() const override;
+    void stopPreview() override;
+    void accept() override;
+
+protected:
+    QString title() const override { return QStringLiteral("Enlace de movimiento"); }
+    void createFields(QFormLayout* form) override;
+    void selectionChanged(const render::ModelSelection& selection) override;
+    QString inputsText() const override;
+    bool removesMaterial() const override { return false; }
+
+private:
+    void stopAnimation();
+
+    QTableWidget* table_ = nullptr;
+    QDoubleSpinBox* position_ = nullptr;
+    QPushButton* animate_ = nullptr;
+    QTimer* animationTimer_ = nullptr;
+    double animationFrom_ = 0.0;
     double animationPhase_ = 0.0;
 };
 

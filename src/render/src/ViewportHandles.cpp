@@ -285,7 +285,7 @@ void Viewport::Impl::hideGhost()
     }
 }
 
-void Viewport::Impl::showGhost(const std::vector<geometry::Shape>& list)
+void Viewport::Impl::showGhost(const std::vector<geometry::Shape>& list, bool alert)
 {
     hideGhost();
     BRep_Builder builder;
@@ -310,8 +310,8 @@ void Viewport::Impl::showGhost(const std::vector<geometry::Shape>& list)
         return;
     }
     ghost = new AIS_Shape(shape);
-    ghost->SetColor(rgb(0x6C, 0xA6, 0xFF));
-    ghost->SetTransparency(0.55);
+    ghost->SetColor(alert ? rgb(0xE5, 0x39, 0x35) : rgb(0x6C, 0xA6, 0xFF));
+    ghost->SetTransparency(alert ? 0.15 : 0.55);
     ghost->Attributes()->SetFaceBoundaryDraw(false);
     context->Display(ghost, AIS_Shaded, -1, false);
 }

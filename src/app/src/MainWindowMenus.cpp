@@ -364,6 +364,12 @@ void MainWindow::createMenus()
     decorate(alignAction_, QStringLiteral("align-solid"),
              QStringLiteral("Colocar una pieza sobre otra de una vez: centro con centro, eje con eje o cara con cara (A)"),
              QStringLiteral("Alinear"));
+    linkAction_ = solidMenu->addAction(QStringLiteral("Enlace de &movimiento"), this, [this] {
+        startTool(std::make_unique<MotionLinkTool>(document_, *viewport_, std::nullopt));
+    });
+    decorate(linkAction_, QStringLiteral("link-solid"),
+             QStringLiteral("Hacer que varias uniones se muevan a la vez en una proporción (un engranaje gira y el otro lo sigue)"),
+             QStringLiteral("Enlace"));
     jointAction_ = solidMenu->addAction(QStringLiteral("&Unión"), this, [this] {
         startTool(std::make_unique<JointTool>(document_, *viewport_, std::nullopt));
     });
@@ -375,6 +381,13 @@ void MainWindow::createMenus()
     decorate(measureAction_, QStringLiteral("measure-solid"),
              QStringLiteral("Medir caras y aristas: área, longitud, radio, distancia y ángulo (Mayús o clic para añadir otra)"),
              QStringLiteral("Medir"));
+    interferenceAction_ = solidMenu->addAction(QStringLiteral("&Interferencias…"), this, [this] {
+        InterferenceDialog dialog(document_, *viewport_, hiddenBodies_, this);
+        dialog.exec();
+    });
+    decorate(interferenceAction_, QStringLiteral("interference-solid"),
+             QStringLiteral("Ver qué cuerpos se pisan y cuánto, ahora y a lo largo del giro de un enlace de movimiento"),
+             QStringLiteral("Interferencias"));
     sectionAction_ = solidMenu->addAction(QStringLiteral("&Sección"), this, [this](bool on) { toggleSection(on); });
     sectionAction_->setCheckable(true);
     decorate(sectionAction_, QStringLiteral("section-solid"),
@@ -584,6 +597,7 @@ void MainWindow::createMenus()
     ribbon_->addAction(solidTab_, duplicateAction_);
     ribbon_->addAction(solidTab_, alignAction_);
     ribbon_->addAction(solidTab_, jointAction_);
+    ribbon_->addAction(solidTab_, linkAction_);
     ribbon_->addGroup(solidTab_, QStringLiteral("CONSTRUIR"));
     ribbon_->addAction(solidTab_, planeAction_);
     ribbon_->addAction(solidTab_, axisAction_);
@@ -594,6 +608,7 @@ void MainWindow::createMenus()
     ribbon_->addGroup(solidTab_, QStringLiteral("INSPECCIONAR"));
     ribbon_->addAction(solidTab_, measureAction_);
     ribbon_->addAction(solidTab_, sectionAction_);
+    ribbon_->addAction(solidTab_, interferenceAction_);
     toolsTab_ = ribbon_->addTab(QStringLiteral("HERRAMIENTAS"));
     // Un grupo por familia: las cajas y lightbox juntas, los letreros aparte y los engranajes en el suyo.
     QString shownGroup;

@@ -355,9 +355,9 @@ void Viewport::isolateGizmo(int axis)
     update();
 }
 
-void Viewport::showGhost(const std::vector<geometry::Shape>& bodies)
+void Viewport::showGhost(const std::vector<geometry::Shape>& bodies, bool alert)
 {
-    impl_->showGhost(bodies);
+    impl_->showGhost(bodies, alert);
     impl_->view->Invalidate();
     update();
 }

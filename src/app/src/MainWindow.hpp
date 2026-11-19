@@ -161,6 +161,8 @@ private:
     void setBodiesFixed(const std::vector<std::string>& keys, bool fix);
     void groupBodies(const std::vector<std::string>& keys);
     QAction* duplicateAction_ = nullptr;
+    QAction* interferenceAction_ = nullptr;
+    QAction* linkAction_ = nullptr;
     std::vector<std::string> bodyClipboard_;  // Ctrl+C / Ctrl+V de cuerpos
     // El modelo se recalcula en segundo plano: lo que necesita el resultado nuevo espera (avisa y devuelve true).
     bool modelBusy();

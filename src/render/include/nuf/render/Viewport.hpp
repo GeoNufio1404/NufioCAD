@@ -186,7 +186,8 @@ public:
     void isolateGizmo(int axis);
     // Una copia translúcida del cuerpo, que se coloca con setGhostMotion sin recalcular nada: gira alrededor de
     // los ejes X, Y y Z (en ese orden) por «pivot» y luego se desplaza.
-    void showGhost(const std::vector<geometry::Shape>& bodies);
+    // Con «alert», la sombra sale roja y casi opaca (para señalar un problema: lo que se pisan dos cuerpos).
+    void showGhost(const std::vector<geometry::Shape>& bodies, bool alert = false);
     void setGhostMotion(const sketch::Vec3& pivot, const sketch::Vec3& rotation, const sketch::Vec3& translation);
     void hideGhost();
     // El arco de lo que se lleva girado en un arrastre (de «start» a «angle» rad alrededor del eje por «center»): una

@@ -18,6 +18,9 @@
 #include <QListWidget>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QHeaderView>
+#include <QSignalBlocker>
+#include <QTableWidget>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -1259,6 +1262,164 @@ void JointTool::accept()
 {
     stopAnimation();  // lo que se acepta son los valores de antes de animar
     FeatureTool::accept();
+}
+
+// --- Enlace de movimiento ----------------------------------------------------------------------
+// Ata varias uniones (giratorias o deslizantes) para que se muevan a la vez en una proporción: el engranaje que gira
+// y el que lo sigue, o el piñón y la cremallera.
+
+MotionLinkTool::MotionLinkTool(document::Document& document, render::Viewport& viewport,
+                               std::optional<document::FeatureId> editing)
+    : FeatureTool(document, viewport, editing)
+{
+}
+
+void MotionLinkTool::createFields(QFormLayout* form)
+{
+    const auto* original = dynamic_cast<const document::MotionLinkFeature*>(original_.get());
+    auto* help = new QLabel(QStringLiteral(
+        "Marca las uniones que se mueven juntas. <b>Razón</b>: cuánto se mueve cada una por cada giro de la que tiene "
+        "razón 1; con signo menos gira al revés (para dos engranajes: −dientes del primero ÷ dientes del segundo)."));
+    help->setWordWrap(true);
+    form->addRow(help);
+    table_ = new QTableWidget(0, 2);
+    table_->setHorizontalHeaderLabels({QStringLiteral("Unión"), QStringLiteral("Razón")});
+    table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    table_->verticalHeader()->setVisible(false);
+    table_->setMinimumHeight(130);
+    table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    for (const auto& [id, joint] : before().joints) {
+        const document::Feature* feature = document_.findFeature(id);
+        if (feature == nullptr) {
+            continue;
+        }
+        // «Unión 3 — Engranaje 2»: el nombre de la unión y de los cuerpos que mueve.
+        QStringList moved;
+        for (const std::string& key : joint.moved) {
+            for (const document::Body& body : before().bodies) {
+                if (body.key == key) {
+                    moved << QString::fromStdString(body.name);
+                }
+            }
+        }
+        const int row = table_->rowCount();
+        table_->insertRow(row);
+        auto* item = new QTableWidgetItem(QStringLiteral("%1 — %2").arg(QString::fromStdString(feature->name()), moved.join(QStringLiteral(", "))));
+        item->setData(Qt::UserRole, QVariant::fromValue<qulonglong>(id));
+        item->setFlags((item->flags() | Qt::ItemIsUserCheckable) & ~Qt::ItemIsEditable);
+        double ratio = 1.0;
+        bool checked = false;
+        if (original != nullptr) {
+            for (const auto& member : original->members) {
+                if (member.joint == id) {
+                    checked = true;
+                    ratio = member.ratio;
+                }
+            }
+        }
+        item->setCheckState(checked ? Qt::Checked : Qt::Unchecked);
+        table_->setItem(row, 0, item);
+        auto* box = new QDoubleSpinBox();
+        box->setRange(-10000.0, 10000.0);
+        box->setDecimals(4);
+        box->setValue(ratio);
+        box->setKeyboardTracking(false);
+        table_->setCellWidget(row, 1, box);
+        connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
+    }
+    connect(table_, &QTableWidget::itemChanged, this, [this] { updatePreview(); });
+    form->addRow(table_);
+    position_ = angleBox(original != nullptr ? original->position / kDegree : 0.0, 3600.0);
+    field("position", position_);
+    form->addRow(QStringLiteral("Posición (giro de la razón 1)"), position_);
+    animate_ = new QPushButton(QStringLiteral("▶ Animar"));
+    animate_->setCheckable(true);
+    animate_->setToolTip(QStringLiteral("Gira el enlace entero para ver cómo se mueven las piezas (y si se pisan: Interferencias)"));
+    form->addRow(QString(), animate_);
+    connect(position_, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
+    connect(animate_, &QPushButton::toggled, this, [this](bool on) {
+        if (on) {
+            animationFrom_ = position_->value();
+            animationPhase_ = 0.0;
+            if (animationTimer_ == nullptr) {
+                animationTimer_ = new QTimer(this);
+                animationTimer_->setInterval(60);
+                connect(animationTimer_, &QTimer::timeout, this, [this] {
+                    if (previewing()) {
+                        return;  // un cuadro por cálculo
+                    }
+                    animationPhase_ = std::fmod(animationPhase_ + 0.02, 1.0);
+                    position_->setValue(animationFrom_ + 360.0 * animationPhase_);
+                });
+            }
+            animationTimer_->start();
+        } else {
+            stopAnimation();
+        }
+    });
+}
+
+void MotionLinkTool::stopAnimation()
+{
+    if (animationTimer_ != nullptr && animationTimer_->isActive()) {
+        animationTimer_->stop();
+        position_->setValue(animationFrom_);
+    }
+    if (animate_ != nullptr && animate_->isChecked()) {
+        const QSignalBlocker block(animate_);
+        animate_->setChecked(false);
+    }
+}
+
+void MotionLinkTool::stopPreview()
+{
+    stopAnimation();
+    FeatureTool::stopPreview();
+}
+
+void MotionLinkTool::accept()
+{
+    stopAnimation();
+    FeatureTool::accept();
+}
+
+void MotionLinkTool::selectionChanged(const render::ModelSelection& selection)
+{
+    // Las uniones se eligen en la lista; un clic en la vista no hace nada.
+    if (!selection.empty()) {
+        viewport_.clearModelSelection();
+    }
+}
+
+std::unique_ptr<document::Feature> MotionLinkTool::build() const
+{
+    auto f = std::make_unique<document::MotionLinkFeature>();
+    if (original_) {
+        f->setName(original_->name());
+    }
+    for (int row = 0; row < table_->rowCount(); ++row) {
+        if (table_->item(row, 0)->checkState() != Qt::Checked) {
+            continue;
+        }
+        const auto* box = qobject_cast<QDoubleSpinBox*>(table_->cellWidget(row, 1));
+        f->members.push_back({table_->item(row, 0)->data(Qt::UserRole).toULongLong(), box != nullptr ? box->value() : 1.0});
+    }
+    f->position = position_->value() * kDegree;
+    return f->members.size() >= 2 ? std::unique_ptr<document::Feature>(std::move(f)) : nullptr;
+}
+
+QString MotionLinkTool::inputsText() const
+{
+    if (before().joints.empty()) {
+        return QStringLiteral("No hay uniones que enlazar: crea antes uniones giratorias o deslizantes con Unión");
+    }
+    int checked = 0;
+    if (table_ != nullptr) {
+        for (int row = 0; row < table_->rowCount(); ++row) {
+            checked += table_->item(row, 0)->checkState() == Qt::Checked ? 1 : 0;
+        }
+    }
+    return checked < 2 ? QStringLiteral("Marca al menos dos uniones en la lista") : QStringLiteral("%1 uniones enlazadas").arg(checked);
 }
 
 // --- Rosca ----------------------------------------------------------------------------

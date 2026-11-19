@@ -228,7 +228,7 @@ public:
 
     void hideGhost();
 
-    void showGhost(const std::vector<geometry::Shape>& list);
+    void showGhost(const std::vector<geometry::Shape>& list, bool alert = false);
 
     void setGhostMotion(const sketch::Vec3& pivot, const sketch::Vec3& rotation, const sketch::Vec3& translation);
 

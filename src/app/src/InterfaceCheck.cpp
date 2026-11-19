@@ -13,6 +13,7 @@
 #include "SketchSession.hpp"
 #include "Ribbon.hpp"
 #include "FieldMarks.hpp"
+#include "InterferenceDialog.hpp"
 #include "ModelPanels.hpp"
 #include "RadialMenu.hpp"
 #include "ValueInput.hpp"
@@ -28,6 +29,7 @@
 #include <nuf/sketch/Annotations.hpp>
 
 #include <QAction>
+#include <QTableWidget>
 #include <QApplication>
 #include <QCoreApplication>
 #include <QDateTime>
@@ -1450,6 +1452,83 @@ int InterfaceCheck::run()
             expect(joint != nullptr && joint->type == document::JointType::Revolute,
                    QStringLiteral("al aceptar como Giratoria no quedó una unión giratoria"));
         }
+        if (window_.tool_ != nullptr) {
+            if (QPushButton* cancel = button(QStringLiteral("Cancelar"))) {
+                cancel->click();
+            }
+            waitFor([this] { return window_.tool_ == nullptr; }, 10000);
+        }
+        undoAll();
+    });
+
+    // Enlace de movimiento e interferencias (Fase 21): dos uniones giratorias se atan con razón 1 y −2; la herramienta
+    // las lista, se acepta, y el diálogo de interferencias abre y revisa sin problemas.
+    step(QStringLiteral("Enlace de movimiento e interferencias"), [&] {
+        const auto addBoxAt = [&](double x, double z) {
+            auto box = std::make_unique<document::BoxFeature>();
+            box->base.origin = document::OriginPlane::XY;
+            box->x = x;
+            box->z = z;
+            blocking(QStringLiteral("agregar una caja"),
+                     [&] { window_.commands_.push(std::make_unique<commands::AddFeature>(std::move(box))); });
+        };
+        addBoxAt(0.0, 0.0);
+        addBoxAt(100.0, 0.0);
+        addBoxAt(300.0, 0.0);
+        addBoxAt(400.0, 0.0);
+        waitIdle();
+        expect(window_.document_.result().bodies.size() == 4, QStringLiteral("no hay cuatro cuerpos"));
+        if (window_.document_.result().bodies.size() != 4) {
+            undoAll();
+            return;
+        }
+        const auto faceFacing = [&](std::size_t body, double z) {
+            const geometry::Shape& shape = window_.document_.result().bodies[body].shape;
+            for (int i = 0; i < shape.faceCount(); ++i) {
+                if (const auto plane = shape.facePlane(i); plane && plane->normal.z * z > 0.9) {
+                    return shape.faceRef(i);
+                }
+            }
+            return geometry::ElementRef{};
+        };
+        std::vector<document::FeatureId> joints;
+        for (const std::size_t plate : {std::size_t(0), std::size_t(2)}) {
+            auto joint = std::make_unique<document::JointFeature>();
+            joint->fixedFace = faceFacing(plate, 1.0);
+            joint->movingFace = faceFacing(plate + 1, -1.0);
+            joint->type = document::JointType::Revolute;
+            joints.push_back(window_.document_.nextId());
+            blocking(QStringLiteral("agregar una unión"),
+                     [&] { window_.commands_.push(std::make_unique<commands::AddFeature>(std::move(joint))); });
+        }
+        waitIdle();
+        auto link = std::make_unique<document::MotionLinkFeature>();
+        link->members = {{joints[0], 1.0}, {joints[1], -2.0}};
+        link->position = 0.5;
+        const document::FeatureId linkId = window_.document_.nextId();
+        blocking(QStringLiteral("agregar el enlace"),
+                 [&] { window_.commands_.push(std::make_unique<commands::AddFeature>(std::move(link))); });
+        waitIdle();
+        expect(window_.document_.status(linkId).health == document::Health::Ok, QStringLiteral("el enlace dio error: %1")
+                   .arg(QString::fromStdString(window_.document_.status(linkId).message)));
+        blocking(QStringLiteral("abrir la herramienta Enlace"), [&] { window_.activateFeature(linkId); });
+        waitIdle();
+        expect(window_.tool_ != nullptr, QStringLiteral("no se abrió la herramienta Enlace"));
+        auto* table = window_.propertiesDock_->widget() != nullptr ? window_.propertiesDock_->widget()->findChild<QTableWidget*>() : nullptr;
+        expect(table != nullptr && table->rowCount() == 2, QStringLiteral("la lista de uniones no tiene las 2 uniones"));
+        if (window_.tool_ != nullptr) {
+            if (QPushButton* ok = button(QStringLiteral("Aceptar")); ok != nullptr && ok->isEnabled()) {
+                blocking(QStringLiteral("aceptar"), [&] { ok->click(); });
+            }
+            waitFor([this] { return window_.tool_ == nullptr; }, 10000);
+            waitIdle();
+        }
+        // El diálogo de interferencias abre, mira la posición de ahora y el giro del enlace sin fallar.
+        blocking(QStringLiteral("abrir Interferencias"), [&] {
+            InterferenceDialog dialog(window_.document_, *window_.viewport_, {}, &window_);
+            dialog.show();
+            QApplication::processEvents();
+        });
         if (window_.tool_ != nullptr) {
             if (QPushButton* cancel = button(QStringLiteral("Cancelar"))) {
                 cancel->click();
