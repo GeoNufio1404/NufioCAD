@@ -361,7 +361,7 @@ std::optional<std::string> MoveFeature::compute(ModelState& state) const
             results.push_back(geometry::moveBody(tag(), item->shape, translation, rotationAxis, angle, copy, rotation, center));
         }
         if (copy) {
-            state.bodies.push_back({tag(), "Cuerpo" + std::to_string(++state.bodiesCreated), std::move(results.front())});
+            state.bodies.push_back({tag(), newBodyName(state, *this), std::move(results.front())});
         } else {
             for (std::size_t i = 0; i < sources.size(); ++i) {
                 sources[i]->shape = std::move(results[i]);
@@ -584,7 +584,7 @@ std::optional<std::string> PatternFeature::compute(ModelState& state) const
         // De dos en dos, en árbol (no todas juntas, para que si se solapan entre sí cada par lo resuelva el kernel,
         // ni una a una a un resultado cada vez mayor: con 50 copias eso era lo que más tardaba).
         if (operation == Operation::NewBody) {
-            state.bodies.push_back({tag(), "Cuerpo" + std::to_string(++state.bodiesCreated), geometry::fuseBalanced(copies)});
+            state.bodies.push_back({tag(), newBodyName(state, *this), geometry::fuseBalanced(copies)});
         } else {
             std::vector<geometry::Shape> parts;
             parts.push_back(source->shape);
@@ -675,7 +675,7 @@ std::optional<std::string> ImportFeature::compute(ModelState& state) const
     }
     for (std::size_t i = 0; i < shapes.size(); ++i) {
         const std::string key = shapes.size() == 1 ? tag() : tag() + ":c" + std::to_string(i + 1);
-        state.bodies.push_back({key, "Cuerpo" + std::to_string(++state.bodiesCreated), shapes[i]});
+        state.bodies.push_back({key, newBodyName(state, *this), shapes[i]});
     }
     return joinWarnings(warnings);
 }

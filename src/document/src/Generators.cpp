@@ -788,7 +788,7 @@ public:
 
         Recipe recipe;
         recipe.component = "Par de engranajes";
-        recipe.bodyNames = {"Rueda 1", "Rueda 2"};
+        recipe.bodyNames = {"Engranaje 1", "Engranaje 2"};
         const auto param = [&](const std::string& name, const std::string& expression) {
             recipe.parameters.push_back({name, expression});
         };
@@ -1089,7 +1089,7 @@ public:
         const RackSize rack = rackSize(values);
 
         Recipe recipe;
-        recipe.component = "Cremallera";
+        recipe.component = "Cremallera y rueda";
         recipe.bodyNames = {"Rueda", "Cremallera"};
         const std::string helice = p("helice");
         recipe.parameters.push_back({helice, number(values.count("helice") != 0 ? values.at("helice") : 0.0)});
@@ -1223,8 +1223,8 @@ public:
                           giro = p("giro_rueda"), xrueda = p("x_rueda");
 
         Recipe recipe;
-        recipe.component = "Tornillo sin fin";
-        recipe.bodyNames = {"Rueda", "Tornillo"};
+        recipe.component = "Tornillo sin fin y rueda";
+        recipe.bodyNames = {"Rueda", "Tornillo sin fin"};
         const auto param = [&](const std::string& name, const std::string& expression) {
             recipe.parameters.push_back({name, expression});
         };
@@ -1532,6 +1532,21 @@ std::vector<FeatureId> generatedGroup(const Document& doc, FeatureId lead)
     return ids;
 }
 
+std::string numberedComponent(const std::map<std::string, BodyInfo>& info, const std::string& base)
+{
+    if (base.empty()) {
+        return {};
+    }
+    for (int n = 1; n < 10000; ++n) {
+        const std::string name = base + " " + std::to_string(n);
+        const bool used = std::ranges::any_of(info, [&](const auto& entry) { return entry.second.component == name; });
+        if (!used) {
+            return name;
+        }
+    }
+    return base;
+}
+
 void applyRecipe(Document& doc, const Recipe& recipe)
 {
     std::vector<Parameter> parameters = doc.parameters();
@@ -1551,12 +1566,13 @@ void applyRecipe(Document& doc, const Recipe& recipe)
         }
     }
     std::map<std::string, BodyInfo> info = doc.bodyInfo();
+    const std::string component = numberedComponent(info, recipe.component);
     std::size_t next = 0;
     for (const Body& body : doc.result().bodies) {
         if (std::ranges::find(before, body.key) != before.end()) {
             continue;
         }
-        info[body.key] = {next < recipe.bodyNames.size() ? recipe.bodyNames[next] : std::string(), recipe.component};
+        info[body.key] = {next < recipe.bodyNames.size() ? recipe.bodyNames[next] : std::string(), component};
         ++next;
     }
     doc.setBodyInfo(info);

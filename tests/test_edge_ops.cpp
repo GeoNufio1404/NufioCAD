@@ -1372,8 +1372,8 @@ TEST_CASE("Los cuerpos pueden llevar nombre propio y componente, con deshacer y 
 {
     Document doc = boxDocument();
     addMove(doc, {0, 20, 0}, 0.0, true);  // Cuerpo2
-    REQUIRE(doc.result().bodies[0].name == "Cuerpo1");
-    REQUIRE(doc.result().bodies[1].name == "Cuerpo2");
+    REQUIRE(doc.result().bodies[0].name == "Extrusión 1");
+    REQUIRE(doc.result().bodies[1].name == "Copia 1");
 
     const std::map<std::string, BodyInfo> info{{"f2", {"Base", "Carcasa"}}, {"f3", {"Tapa", "Carcasa"}}};
     doc.setBodyInfo(info);
@@ -1400,7 +1400,7 @@ TEST_CASE("Los cuerpos pueden llevar nombre propio y componente, con deshacer y 
 
     // Quitar el nombre devuelve el de fábrica.
     doc.setBodyInfo({{"f2", {"", "Carcasa"}}});
-    REQUIRE(doc.result().bodies[0].name == "Cuerpo1");
+    REQUIRE(doc.result().bodies[0].name == "Extrusión 1");
     REQUIRE(doc.componentOf("f2") == "Carcasa");
 }
 
@@ -2319,7 +2319,7 @@ TEST_CASE("El generador de lightbox hace una caja y una tapa de un solo cuerpo l
     const char* names[] = {"Caja", "Tapa"};
     for (std::size_t i = 0; i < 2; ++i) {
         REQUIRE(doc.bodyInfo().at(doc.result().bodies[i].key).name == names[i]);
-        REQUIRE(doc.bodyInfo().at(doc.result().bodies[i].key).component == "Lightbox");
+        REQUIRE(doc.bodyInfo().at(doc.result().bodies[i].key).component == "Lightbox 1");
     }
 
     // Como la de MakerLab: caja de 175 × 131 × 37 con paredes y fondo de 2 mm y esquinas de radio 2 por fuera;
@@ -2533,7 +2533,7 @@ TEST_CASE("El generador de letreros pone las letras en relieve, grabadas o suelt
     REQUIRE_THAT(single.result().bodies[0].shape.volume(), Catch::Matchers::WithinAbs(plateArea * 3.0 + letterArea * 1.2, 1e-2));
     REQUIRE(single.result().bodies[0].shape.bounds().max.z == Catch::Approx(4.2).margin(1e-6));
     REQUIRE(single.bodyInfo().at(single.result().bodies[0].key).name == "Placa");
-    REQUIRE(single.bodyInfo().at(single.result().bodies[0].key).component == "Letrero");
+    REQUIRE(single.bodyInfo().at(single.result().bodies[0].key).component == "Letrero 1");
     Document singleKey;
     make(1.0, 3.0, singleKey);  // el llavero con anilla y agujero, también en un cuerpo
     REQUIRE(singleKey.result().bodies.size() == 1);
@@ -2548,7 +2548,7 @@ TEST_CASE("El generador de letreros pone las letras en relieve, grabadas o suelt
     REQUIRE(relief.result().bodies[1].shape.bounds().min.z == Catch::Approx(3.0).margin(1e-6));  // sobre la placa
     REQUIRE(relief.result().bodies[1].shape.bounds().max.z == Catch::Approx(4.2).margin(1e-6));
     REQUIRE(relief.bodyInfo().at(relief.result().bodies[1].key).name == "Texto");
-    REQUIRE(relief.bodyInfo().at(relief.result().bodies[0].key).component == "Letrero");
+    REQUIRE(relief.bodyInfo().at(relief.result().bodies[0].key).component == "Letrero 1");
     // Letras centradas en la placa.
     const geometry::Box text = relief.result().bodies[1].shape.bounds();
     REQUIRE_THAT(0.5 * (text.min.x + text.max.x), Catch::Matchers::WithinAbs(0.0, 1e-6));
@@ -2570,7 +2570,7 @@ TEST_CASE("El generador de letreros pone las letras en relieve, grabadas o suelt
     REQUIRE(keychain.result().bodies.size() == 2);
     REQUIRE(keychain.result().bodies[0].shape.volume() > plateArea * 3.0 + 100.0);
     REQUIRE(keychain.result().bodies[0].shape.bounds().min.x < -16.0 - 9.0);  // la anilla asoma por la izquierda
-    REQUIRE(keychain.bodyInfo().at(keychain.result().bodies[0].key).component == "Llavero");
+    REQUIRE(keychain.bodyInfo().at(keychain.result().bodies[0].key).component == "Llavero 1");
 
     // Todo se recalcula al cambiar un parámetro (el grosor de la placa) y se deshace de una vez.
     auto params = relief.parameters();
@@ -2598,7 +2598,7 @@ TEST_CASE("El par de engranajes sale a la distancia correcta y con los dientes e
         INFO(doc.feature(i).name());
         REQUIRE(doc.status(doc.feature(i).id()).health != Health::Error);
     }
-    REQUIRE(doc.bodyInfo().at(doc.result().bodies[1].key).name == "Rueda 2");
+    REQUIRE(doc.bodyInfo().at(doc.result().bodies[1].key).name == "Engranaje 2");
     // Módulo 2, 12 y 24 dientes: distancia entre ejes 2·(12 + 24)/2 = 36 más 0,15 de juego.
     const geometry::Box second = doc.result().bodies[1].shape.bounds();
     REQUIRE_THAT(0.5 * (second.min.x + second.max.x), Catch::Matchers::WithinAbs(36.15, 0.05));
@@ -2749,7 +2749,7 @@ TEST_CASE("Reabrir un generador cambia sus operaciones en su sitio y se puede de
         REQUIRE(doc.status(doc.feature(i).id()).health != Health::Error);
     }
     REQUIRE(doc.bodyInfo().at(doc.result().bodies[0].key).name == "Caja");
-    REQUIRE(doc.bodyInfo().at(doc.result().bodies[0].key).component == "Lightbox");
+    REQUIRE(doc.bodyInfo().at(doc.result().bodies[0].key).component == "Lightbox 1");
     const std::size_t grown = doc.featureCount();
 
     // Se guarda y se vuelve a abrir con lo necesario para reabrirlo.

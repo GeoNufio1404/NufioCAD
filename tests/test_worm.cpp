@@ -287,3 +287,27 @@ TEST_CASE("Los generadores de corona y de cremallera admiten hélice y espina de
         }
     }
 }
+
+TEST_CASE("Los cuerpos y componentes se numeran según lo que se hizo", "[bodies][generator]")
+{
+    document::Document doc;
+    const document::Generator* pair = document::findGenerator("par-engranajes");
+    const document::Generator* box = document::findGenerator("caja-con-tapa");
+    REQUIRE(pair != nullptr);
+    document::applyRecipe(doc, pair->make(pair->defaults(), ""));
+    document::GeneratorValues second = pair->defaults();
+    document::applyRecipe(doc, pair->make(second, document::freeSuffix(doc, *pair, second)));
+    REQUIRE(doc.result().bodies.size() == 4);
+    const auto info = [&](std::size_t i) { return doc.bodyInfo().at(doc.result().bodies[i].key); };
+    CHECK(info(0).component == "Par de engranajes 1");
+    CHECK(info(1).component == "Par de engranajes 1");
+    CHECK(info(2).component == "Par de engranajes 2");
+    CHECK(info(0).name == "Engranaje 1");
+    CHECK(info(3).name == "Engranaje 2");
+    if (box != nullptr) {
+        document::applyRecipe(doc, box->make(box->defaults(), document::freeSuffix(doc, *box, box->defaults())));
+        CHECK(info(4).component == "Caja con tapa 1");
+        CHECK(info(4).name == "Caja");
+        CHECK(info(5).name == "Tapa");
+    }
+}

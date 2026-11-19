@@ -214,6 +214,41 @@ std::optional<sketch::Profile> resolveProfile(const std::vector<sketch::Profile>
 
 // --- Aplicar a los cuerpos ---------------------------------------------------
 
+std::string newBodyName(ModelState& state, const Feature& feature)
+{
+    ++state.bodiesCreated;
+    std::string label;
+    switch (feature.kind()) {
+    case FeatureKind::Extrude: label = "Extrusión"; break;
+    case FeatureKind::Revolve: label = "Revolución"; break;
+    case FeatureKind::Import: label = "Importado"; break;
+    case FeatureKind::Box: label = "Caja"; break;
+    case FeatureKind::Cylinder: label = "Cilindro"; break;
+    case FeatureKind::Thread: label = "Rosca"; break;
+    case FeatureKind::Sweep: label = "Barrido"; break;
+    case FeatureKind::Loft: label = "Loft"; break;
+    case FeatureKind::Move: label = "Copia"; break;
+    case FeatureKind::Pattern: label = "Patrón"; break;
+    case FeatureKind::Mirror: label = "Espejo"; break;
+    case FeatureKind::Combine: label = "Unión"; break;
+    case FeatureKind::Gear: {
+        label = "Engranaje";
+        if (const auto* gear = dynamic_cast<const GearFeature*>(&feature)) {
+            switch (gear->spec.type) {
+            case geometry::GearType::Internal: label = "Corona"; break;
+            case geometry::GearType::Rack: label = "Cremallera"; break;
+            case geometry::GearType::Worm: label = "Tornillo sin fin"; break;
+            case geometry::GearType::Bevel: label = "Engranaje cónico"; break;
+            case geometry::GearType::External: break;
+            }
+        }
+        break;
+    }
+    default: label = "Cuerpo"; break;
+    }
+    return label + " " + std::to_string(++state.bodyNameCounts[label]);
+}
+
 std::optional<std::string> applyOperation(ModelState& state, const Feature& feature, Operation operation,
                                           const geometry::Shape& tool)
 {
@@ -221,7 +256,7 @@ std::optional<std::string> applyOperation(ModelState& state, const Feature& feat
         throw FeatureError("La operación no produce ningún sólido");
     }
     const auto newBody = [&] {
-        state.bodies.push_back({feature.tag(), "Cuerpo" + std::to_string(++state.bodiesCreated), tool});
+        state.bodies.push_back({feature.tag(), newBodyName(state, feature), tool});
     };
     std::vector<std::size_t> touched;
     if (operation != Operation::NewBody) {

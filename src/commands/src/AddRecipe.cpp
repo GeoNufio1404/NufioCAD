@@ -54,12 +54,13 @@ void AddRecipe::execute(document::Document& doc)
     }
 
     std::map<std::string, document::BodyInfo> info = doc.bodyInfo();
+    const std::string component = document::numberedComponent(info, recipe_.component);
     std::size_t next = 0;
     for (const document::Body& body : doc.result().bodies) {
         if (std::ranges::find(before, body.key) != before.end()) {
             continue;
         }
-        info[body.key] = {next < recipe_.bodyNames.size() ? recipe_.bodyNames[next] : std::string(), recipe_.component};
+        info[body.key] = {next < recipe_.bodyNames.size() ? recipe_.bodyNames[next] : std::string(), component};
         ++next;
     }
     doc.setBodyInfo(info);
