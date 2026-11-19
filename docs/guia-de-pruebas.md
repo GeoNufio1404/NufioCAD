@@ -811,6 +811,8 @@ Código: **PAR**.
 | PAR.24 | Herramientas › Par de engranajes: hélice de 15° y «Dientes helicoidales» = Espina de pescado | Las dos ruedas salen en espina de pescado y engranan; guarda, reabre y la opción sigue marcada |
 | PAR.25 | Imprime una rueda en espina de pescado y haz girar el par a mano | Giran juntas sin empuje lateral (la rueda no se corre hacia un lado) |
 | PAR.26 | Herramienta Engranaje con 8 dientes: pulsa «Poner la recomendada para estos dientes» | La corrección sube (≈0,4) y el diente se ve más grueso y menos puntiagudo que con 0; guarda y reabre: conserva la corrección |
+| PAR.27 | Generador «Par de engranajes» con 10 dientes en la rueda 1 y 30 en la 2 | La rueda 1 sale más gruesa de diente (corrección) y la 2 más delgada; los ejes siguen a la distancia de siempre y las ruedas giran sin chocar |
+| PAR.28 | Coloca un Engranaje de módulo 2 y, tocándolo, otro de módulo 3 | El panel del segundo muestra «⚠ No engranará bien con un engranaje cercano: el módulo…»; con el mismo módulo y presión desaparece el aviso |
 
 ### 4.5 Todos los generadores: reabrir, recordar y restablecer
 

@@ -590,11 +590,46 @@ std::optional<FeatureTool::Arc> GearTool::dimensionArc(const std::string& key) c
 
 QString GearTool::inputsText() const
 {
-    return QStringLiteral("%1 dientes, módulo %2: Ø primitivo %3%4")
-        .arg(int(std::lround(teeth_->value())))
-        .arg(Units::instance().format(module_->value()))
-        .arg(Units::instance().formatWithUnit(module_->value() * std::lround(teeth_->value())),
-             placementOnFace(placement_) ? QStringLiteral(" · en la cara elegida") : QString());
+    QString text = QStringLiteral("%1 dientes, módulo %2: Ø primitivo %3%4")
+                       .arg(int(std::lround(teeth_->value())))
+                       .arg(Units::instance().format(module_->value()))
+                       .arg(Units::instance().formatWithUnit(module_->value() * std::lround(teeth_->value())),
+                            placementOnFace(placement_) ? QStringLiteral(" · en la cara elegida") : QString());
+    // Aviso de compatibilidad (E7): si hay otro engranaje exterior tocando a este (mismo plano de colocación), tienen que
+    // compartir módulo y ángulo de presión, y las hélices deben ser de igual ángulo y sentido contrario.
+    if (type_->currentIndex() == 0) {
+        const double rp = module_->value() * teeth_->value() / 2.0;
+        for (std::size_t i = 0; i < document_.featureCount(); ++i) {
+            const auto* other = dynamic_cast<const document::GearFeature*>(&document_.feature(i));
+            if (i == index_ || other == nullptr || other->spec.type != geometry::GearType::External ||
+                other->base.origin != placementAttachment(placement_).origin) {
+                continue;
+            }
+            const double distance = std::hypot(other->x - placement_.x->value(), other->y - placement_.y->value());
+            const double otherRp = other->spec.module * other->spec.teeth / 2.0;
+            if (distance > rp + otherRp + 1.5 * module_->value() || distance < std::abs(rp - otherRp)) {
+                continue;
+            }
+            QStringList problems;
+            if (std::abs(other->spec.module - module_->value()) > 1e-6) {
+                problems << QStringLiteral("el módulo (%1) no es el de «%2»").arg(Units::instance().format(module_->value()),
+                                                                                  QString::fromStdString(other->name()));
+            }
+            if (std::abs(other->spec.pressureAngle - pressure_->value() * kDegree) > 1e-4) {
+                problems << QStringLiteral("el ángulo de presión no es el de «%1»").arg(QString::fromStdString(other->name()));
+            }
+            const double helix = helix_->value() * kDegree;
+            if (std::abs(other->spec.helixAngle + helix) > 1e-4) {
+                problems << QStringLiteral("la hélice no es la contraria (mismo ángulo, sentido opuesto) a la de «%1»")
+                                .arg(QString::fromStdString(other->name()));
+            }
+            if (!problems.isEmpty()) {
+                text += QStringLiteral("\n⚠ No engranará bien con un engranaje cercano: ") + problems.join(QStringLiteral("; "));
+                break;
+            }
+        }
+    }
+    return text;
 }
 
 // --- Caja y cilindro --------------------------------------------------------------------

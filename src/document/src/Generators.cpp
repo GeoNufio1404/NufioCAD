@@ -2,6 +2,7 @@
 
 #include <nuf/document/Features.hpp>
 #include <nuf/geometry/DisplayUnits.hpp>
+#include <nuf/geometry/Modeling.hpp>
 #include <nuf/sketch/Dxf.hpp>
 #include <nuf/sketch/Profiles.hpp>
 
@@ -783,7 +784,7 @@ public:
         const auto p = [&](const char* name) { return std::string(name) + suffix; };
         const std::string modulo = p("modulo"), z1 = p("dientes_1"), z2 = p("dientes_2"), presion = p("presion"),
                           ancho = p("ancho_rueda"), helice = p("helice"), bore1 = p("agujero_1"), bore2 = p("agujero_2"),
-                          juego = p("juego"), giro = p("giro_rueda_2");
+                          juego = p("juego"), giro = p("giro_rueda_2"), correccion = p("correccion");
 
         Recipe recipe;
         recipe.component = "Par de engranajes";
@@ -800,6 +801,15 @@ public:
         param(bore1, number(values.at("agujero_1")));
         param(bore2, number(values.at("agujero_2")));
         param(juego, number(values.at("juego")));
+        // Con pocos dientes la rueda 1 lleva corrección de perfil y la 2 la opuesta: así los ejes siguen a la misma
+        // distancia. Solo si la rueda 2 aguanta perder cabeza (25 dientes o más).
+        {
+            const double kPi = 3.14159265358979323846;
+            const double shift = values.at("dientes_2") >= 25.0
+                                     ? geometry::recommendedProfileShift(int(values.at("dientes_1")), values.at("presion") * kPi / 180.0)
+                                     : 0.0;
+            param(correccion, number(shift));
+        }
         addTuningParameters(recipe, values, suffix);
         // El giro de la rueda 2 (en grados): con un diente de la rueda 1 apuntando a la 2, la 2 debe tener un hueco
         // apuntando a la 1, es decir, 180° − medio paso angular, reducido a un paso (360°/dientes).
@@ -813,7 +823,7 @@ public:
             f->setName(name);
             f->base.origin = OriginPlane::XY;
             f->expressions = {{"module", modulo}, {"teeth", teeth}, {"pressureAngle", presion}, {"thickness", ancho},
-                              {"bore", bore}, {"helixAngle", sign + helice}};
+                              {"bore", bore}, {"helixAngle", sign + helice}, {"profileShift", sign + correccion}};
             applyTuning(*f, suffix);
             f->spec.herringbone = tuningValue(values, "espina") > 0.5;  // los diseños anteriores no la traen: una hélice
             return f;
