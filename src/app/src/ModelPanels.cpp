@@ -72,6 +72,10 @@ QString glyph(document::FeatureKind kind)
         return QStringLiteral("⊕");
     case document::FeatureKind::Joint:
         return QStringLiteral("⚓");
+    case document::FeatureKind::Align:
+        return QStringLiteral("⊞");
+    case document::FeatureKind::MotionLink:
+        return QStringLiteral("⛓");
     }
     return QStringLiteral("?");
 }
