@@ -437,6 +437,7 @@ enum class PatternLayout { Linear, Circular };
 class PatternFeature final : public Feature {
 public:
     std::string body;                          // clave del cuerpo («f3»)
+    std::vector<std::string> alsoBodies;       // otros cuerpos que se repiten a la vez (O1), cada uno con sus copias
     PatternLayout layout = PatternLayout::Linear;
     int axis = 0;                              // 0 = X, 1 = Y, 2 = Z (por el origen)
     FeatureId axisRef = 0;                     // si no es 0, un eje de construcción (en vez de axis)

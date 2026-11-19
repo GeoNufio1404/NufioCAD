@@ -184,9 +184,9 @@ ExportDialog::ExportDialog(const std::vector<document::Body>& bodies, const std:
     for (QDoubleSpinBox* box : {customLinear_, customAngular_}) {
         connect(box, &QDoubleSpinBox::valueChanged, this, [this] {
             if (quality_->currentIndex() == 3) {
-                QSettings settings;
-                settings.setValue(QStringLiteral("export/customLinear"), customLinear_->value());
-                settings.setValue(QStringLiteral("export/customAngular"), customAngular_->value());
+                QSettings customSettings;
+                customSettings.setValue(QStringLiteral("export/customLinear"), customLinear_->value());
+                customSettings.setValue(QStringLiteral("export/customAngular"), customAngular_->value());
                 triangles_.clear();  // los conteos de antes eran con otra malla
                 updateSummary();
             }

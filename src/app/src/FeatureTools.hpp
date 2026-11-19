@@ -804,6 +804,7 @@ private:
     std::string body_;
     std::vector<document::FeatureId> axisIds_;  // ejes de construcción del desplegable (tras X, Y, Z)
     QFormLayout* form_ = nullptr;
+    QListWidget* others_ = nullptr;  // los demás cuerpos que se repiten a la vez
     QComboBox* bodyBox_ = nullptr;
     QComboBox* layout_ = nullptr;
     QComboBox* axis_ = nullptr;

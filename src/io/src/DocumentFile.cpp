@@ -641,6 +641,9 @@ FeatureRow rowOf(const Feature& f)
         params = {{"body", pt.body}, {"layout", nameOf(kPatternLayouts, pt.layout)}, {"axis", pt.axis},
                   {"axisRef", pt.axisRef}, {"count", pt.count}, {"spacing", pt.spacing}, {"angle", pt.angle},
                   {"operation", nameOf(kOperations, pt.operation)}};
+        if (!pt.alsoBodies.empty()) {
+            params["alsoBodies"] = pt.alsoBodies;
+        }
         break;
     }
     case FeatureKind::Hole: {
@@ -898,6 +901,11 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         pt->spacing = number(p, "spacing");
         pt->angle = number(p, "angle");
         pt->operation = parseEnum(kOperations, text(p, "operation"), "operación");
+        if (p.contains("alsoBodies")) {
+            for (const Json& other : p.at("alsoBodies")) {
+                pt->alsoBodies.push_back(other.get<std::string>());
+            }
+        }
         feature = std::move(pt);
     } else if (row.type == "hole") {
         auto h = std::make_unique<HoleFeature>();

@@ -1201,7 +1201,19 @@ void PatternTool::createFields(QFormLayout* form)
         angle_->setValue(p->angle / kDegree);
         operation_->setCurrentIndex(p->operation == document::Operation::NewBody ? 1 : 0);
     }
+    // Otros cuerpos que se repiten a la vez (O1): una casilla por cada uno.
+    others_ = new QListWidget();
+    others_->setMaximumHeight(90);
+    for (const document::Body& b : before().bodies) {
+        auto* item = new QListWidgetItem(QString::fromStdString(b.name), others_);
+        item->setData(Qt::UserRole, QString::fromStdString(b.key));
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+        const auto* p = dynamic_cast<const document::PatternFeature*>(original_.get());
+        item->setCheckState(p != nullptr && std::ranges::find(p->alsoBodies, b.key) != p->alsoBodies.end() ? Qt::Checked : Qt::Unchecked);
+    }
+    connect(others_, &QListWidget::itemChanged, this, [this] { updatePreview(); });
     form->addRow(QStringLiteral("Cuerpo"), bodyBox_);
+    form->addRow(QStringLiteral("Repetir también"), others_);
     form->addRow(QStringLiteral("Tipo"), layout_);
     form->addRow(QStringLiteral("Eje"), axis_);
     form->addRow(QStringLiteral("Cantidad"), count_);
@@ -1243,6 +1255,12 @@ std::unique_ptr<document::Feature> PatternTool::build() const
         f->setName(original_->name());
     }
     f->body = body_;
+    for (int i = 0; others_ != nullptr && i < others_->count(); ++i) {
+        const std::string key = others_->item(i)->data(Qt::UserRole).toString().toStdString();
+        if (others_->item(i)->checkState() == Qt::Checked && key != body_) {
+            f->alsoBodies.push_back(key);
+        }
+    }
     f->layout = layout_->currentIndex() == 1 ? document::PatternLayout::Circular : document::PatternLayout::Linear;
     if (axis_->currentIndex() >= 3) {
         f->axisRef = axisIds_[std::size_t(axis_->currentIndex() - 3)];

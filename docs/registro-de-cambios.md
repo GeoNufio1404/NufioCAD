@@ -84,6 +84,7 @@ Dos campos nuevos del engranaje, ambos en 0 por defecto (los diseños anteriores
 - **Vaciado cerrado** (`shellClosed`): cavidad cerrada del espesor pedido, sin abrir caras.
 - **Sección** por una cara plana o un plano de construcción; **Ctrl+C** copia la medida.
 - **Espejo de varios cuerpos** a la vez (`MirrorFeature::alsoBodies`).
+- **Segunda tanda (19 nov. 2026):** redondeo de radio variable (`filletVariable`), voladizos en la revisión de impresión (`analyzeOverhang`) y línea de la medida, **Dividir cuerpo** (`SplitFeature`, `splitBody`), escala al final del barrido, patrón de varios cuerpos, cámara guardada en el diseño, calidad de malla personalizada, actualizar una importación desde su archivo (`ImportFeature::sourcePath`) y aviso de las unidades del STEP.
 - **Cómo volver atrás:** no fusionar `feature/fase-18-modelado`.
 
 ## Fase 17: generadores y salida — 19 nov. 2026

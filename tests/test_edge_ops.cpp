@@ -3269,3 +3269,46 @@ TEST_CASE("Un barrido con escala al final se afina: un tronco de pirámide por l
     doc.replaceFeature(id, std::move(bad));
     REQUIRE(doc.status(id).health == Health::Error);
 }
+
+TEST_CASE("Un patrón repite varios cuerpos a la vez, cada uno con sus copias", "[pattern][io]")
+{
+    Document doc = boxDocument();
+    addMove(doc, {0, 40, 0}, 0.0, true);  // un segundo cuerpo (f3)
+    REQUIRE(doc.result().bodies.size() == 2);
+    auto p = std::make_unique<PatternFeature>();
+    p->body = "f2";
+    p->alsoBodies = {"f3"};
+    p->layout = PatternLayout::Linear;
+    p->axis = 0;
+    p->count = 3;
+    p->spacing = 30.0;
+    p->operation = Operation::Join;
+    const FeatureId id = doc.addFeature(std::move(p));
+    REQUIRE(doc.status(id).health == Health::Ok);
+    REQUIRE(doc.result().bodies.size() == 2);  // cada uno se queda con sus tres piezas, unidas
+    for (const auto& b : doc.result().bodies) {
+        REQUIRE_THAT(b.shape.volume(), WithinRel(3.0 * kBox, 1e-6));
+    }
+    // Con «Cuerpo nuevo», un cuerpo nuevo por cada uno
+    Document fresh = boxDocument();
+    addMove(fresh, {0, 40, 0}, 0.0, true);
+    auto q = std::make_unique<PatternFeature>();
+    q->body = "f2";
+    q->alsoBodies = {"f3"};
+    q->count = 2;
+    q->spacing = 30.0;
+    q->operation = Operation::NewBody;
+    REQUIRE(fresh.status(fresh.addFeature(std::move(q))).health == Health::Ok);
+    REQUIRE(fresh.result().bodies.size() == 4);
+
+    const auto path = std::filesystem::temp_directory_path() / "nuf_patron_varios.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    const auto* again = dynamic_cast<const PatternFeature*>(reopened.findFeature(id));
+    REQUIRE(again != nullptr);
+    REQUIRE(again->alsoBodies == std::vector<std::string>{"f3"});
+}

@@ -596,20 +596,41 @@ std::optional<std::string> PatternFeature::compute(ModelState& state) const
     spec.spacing = spacing;
     spec.angle = angle;
     spec.count = count;
+    // El cuerpo y los demás de la lista (los que ya no existen se avisan); cada uno se repite con sus copias.
+    std::vector<std::string> keys = {body};
+    int missing = 0;
+    for (const std::string& key : alsoBodies) {
+        if (std::ranges::none_of(state.bodies, [&](const Body& b) { return b.key == key; })) {
+            ++missing;
+        } else if (key != body) {
+            keys.push_back(key);
+        }
+    }
     try {
-        const std::vector<geometry::Shape> copies = geometry::pattern(tag(), source->shape, spec);
-        // De dos en dos, en árbol (no todas juntas, para que si se solapan entre sí cada par lo resuelva el kernel,
-        // ni una a una a un resultado cada vez mayor: con 50 copias eso era lo que más tardaba).
-        if (operation == Operation::NewBody) {
-            state.bodies.push_back({tag(), newBodyName(state, *this), geometry::fuseBalanced(copies)});
-        } else {
-            std::vector<geometry::Shape> parts;
-            parts.push_back(source->shape);
-            parts.insert(parts.end(), copies.begin(), copies.end());
-            source->shape = geometry::fuseBalanced(std::move(parts));
+        std::size_t index = 0;
+        for (const std::string& key : keys) {
+            const auto found = std::ranges::find_if(state.bodies, [&](const Body& b) { return b.key == key; });
+            // Cada cuerpo lleva su número en el nombre de las caras, para que no se repitan.
+            const std::string name = index == 0 ? tag() : tag() + ":c" + std::to_string(index);
+            ++index;
+            const geometry::Shape original = found->shape;
+            const std::vector<geometry::Shape> copies = geometry::pattern(name, original, spec);
+            // De dos en dos, en árbol (no todas juntas, para que si se solapan entre sí cada par lo resuelva el kernel,
+            // ni una a una a un resultado cada vez mayor: con 50 copias eso era lo que más tardaba).
+            if (operation == Operation::NewBody) {
+                state.bodies.push_back({index == 1 ? tag() : name, newBodyName(state, *this), geometry::fuseBalanced(copies)});
+            } else {
+                std::vector<geometry::Shape> parts;
+                parts.push_back(original);
+                parts.insert(parts.end(), copies.begin(), copies.end());
+                std::ranges::find_if(state.bodies, [&](const Body& b) { return b.key == key; })->shape = geometry::fuseBalanced(std::move(parts));
+            }
         }
     } catch (const geometry::GeometryError& e) {
         throw FeatureError(e.what());
+    }
+    if (missing > 0) {
+        return missing == 1 ? "Un cuerpo de la lista ya no existe." : "Algunos cuerpos de la lista ya no existen.";
     }
     return std::nullopt;
 }
@@ -618,6 +639,9 @@ std::vector<FeatureId> PatternFeature::dependencies() const
 {
     std::vector<FeatureId> ids;
     addAll(ids, geometry::ElementRef{body + ":", 0});  // la operación que creó el cuerpo
+    for (const std::string& other : alsoBodies) {
+        addAll(ids, geometry::ElementRef{other + ":", 0});
+    }
     if (axisRef != 0) {
         ids.push_back(axisRef);
     }
