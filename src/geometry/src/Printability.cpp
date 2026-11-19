@@ -114,13 +114,13 @@ std::vector<PrintIssue> checkPrintable(const std::vector<std::pair<std::string, 
         }
         // Voladizos: caras que miran hacia abajo más de 45° sin apoyarse en la cama; se avisa si pasan de 5 mm² (lo menor es ruido).
         if (shape.faceCount() <= kMaxFacesForWalls && shape.isValid()) {
-            const OverhangReport overhang = analyzeOverhang(shape, MeshQuality::low(), 45.0);
+            const OverhangReport overhang = analyzeOverhang(shape, MeshQuality::low(), settings.overhangAngle);
             if (overhang.overhangArea > 5.0) {
                 std::ostringstream text;
                 text.imbue(std::locale::classic());
                 text.setf(std::ios::fixed);
                 text.precision(0);
-                text << "«" << name << "» tiene unos " << overhang.overhangArea / 100.0 << " cm² de voladizo (caras que miran hacia abajo más de 45°): "
+                text << "«" << name << "» tiene unos " << overhang.overhangArea / 100.0 << " cm² de voladizo (caras que miran hacia abajo más de " << settings.overhangAngle << "°): "
                      << "necesitará soportes o girar la pieza";
                 add(Level::Warning, text.str());
             }

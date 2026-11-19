@@ -10,6 +10,8 @@
 #include <BRep_Tool.hxx>
 #include <Bnd_Box.hxx>
 #include <GProp_GProps.hxx>
+#include <GeomAbs_CurveType.hxx>
+#include <GeomAbs_SurfaceType.hxx>
 #include <TopExp.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopoDS.hxx>
@@ -233,6 +235,74 @@ std::optional<sketch::Plane> Shape::facePlane(int index) const
         normal.Reverse();
     }
     return sketch::Plane::fromPointAndNormal(toVec3(pln.Location().XYZ()), toVec3(normal.XYZ()));
+}
+
+namespace {
+
+Frame makeFrame(const sketch::Vec3& origin, const sketch::Vec3& direction, Frame::Kind kind)
+{
+    Frame frame;
+    frame.origin = origin;
+    const double len = std::sqrt(direction.x * direction.x + direction.y * direction.y + direction.z * direction.z);
+    frame.direction = {direction.x / len, direction.y / len, direction.z / len};
+    // Un eje X perpendicular (el mismo criterio que Plane::fromPointAndNormal).
+    frame.xAxis = sketch::Plane::fromPointAndNormal({}, frame.direction).xAxis;
+    frame.kind = kind;
+    return frame;
+}
+
+} // namespace
+
+std::optional<Frame> Shape::faceFrame(int index) const
+{
+    if (index < 0 || index >= faceCount()) {
+        return std::nullopt;
+    }
+    const BRepAdaptor_Surface surface(faceAt(*this, index));
+    const sketch::Vec3 center = faceCenter(index);
+    switch (surface.GetType()) {
+    case GeomAbs_Plane: {
+        const auto plane = facePlane(index);
+        if (!plane) {
+            return std::nullopt;
+        }
+        Frame frame = makeFrame(center, plane->normal, Frame::Kind::PlaneFace);
+        frame.xAxis = plane->xAxis;
+        return frame;
+    }
+    case GeomAbs_Cylinder:
+    case GeomAbs_Cone: {
+        const gp_Ax1 axis = surface.GetType() == GeomAbs_Cylinder ? surface.Cylinder().Axis() : surface.Cone().Axis();
+        // El punto del eje más cercano al centro de la cara.
+        const gp_Vec along(axis.Direction().XYZ());
+        const double t = gp_Vec(axis.Location(), gp_Pnt(center.x, center.y, center.z)).Dot(along);
+        const gp_Pnt onAxis = axis.Location().Translated(along * t);
+        return makeFrame(toVec3(onAxis.XYZ()), toVec3(axis.Direction().XYZ()), Frame::Kind::Axis);
+    }
+    case GeomAbs_Sphere: {
+        const gp_Sphere sphere = surface.Sphere();
+        return makeFrame(toVec3(sphere.Location().XYZ()), toVec3(sphere.Position().Direction().XYZ()), Frame::Kind::Point);
+    }
+    default:
+        return std::nullopt;
+    }
+}
+
+std::optional<Frame> Shape::edgeFrame(int index) const
+{
+    if (index < 0 || index >= edgeCount()) {
+        return std::nullopt;
+    }
+    const BRepAdaptor_Curve curve(edgeAt(*this, index));
+    if (curve.GetType() == GeomAbs_Circle) {
+        const gp_Circ circle = curve.Circle();
+        return makeFrame(toVec3(circle.Location().XYZ()), toVec3(circle.Axis().Direction().XYZ()), Frame::Kind::Axis);
+    }
+    if (curve.GetType() == GeomAbs_Line) {
+        const gp_Pnt mid = curve.Value(0.5 * (curve.FirstParameter() + curve.LastParameter()));
+        return makeFrame(toVec3(mid.XYZ()), toVec3(curve.Line().Direction().XYZ()), Frame::Kind::Axis);
+    }
+    return std::nullopt;
 }
 
 Box Shape::faceBounds(int index) const

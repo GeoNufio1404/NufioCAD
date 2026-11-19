@@ -73,6 +73,7 @@ private:
     QDoubleSpinBox* bedX_ = nullptr;
     QDoubleSpinBox* bedY_ = nullptr;
     QDoubleSpinBox* bedZ_ = nullptr;
+    QDoubleSpinBox* overhang_ = nullptr;
     QTimer* reviewTimer_ = nullptr;
     QLineEdit* slicer_ = nullptr;
     Mode mode_ = Mode::Export;
