@@ -466,6 +466,8 @@ private:
     QDoubleSpinBox* backlash_ = nullptr;
     QDoubleSpinBox* baseChamfer_ = nullptr;
     QDoubleSpinBox* shift_ = nullptr;
+    QDoubleSpinBox* wormDiameter_ = nullptr;
+    QCheckBox* leftHanded_ = nullptr;
     QComboBox* type_ = nullptr;
     QComboBox* operation_ = nullptr;
 };
