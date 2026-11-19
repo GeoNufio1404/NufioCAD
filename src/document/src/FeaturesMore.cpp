@@ -72,10 +72,26 @@ std::vector<Feature::NumericField> ShellFeature::numericFields()
 
 std::vector<Feature::NumericField> HoleFeature::numericFields()
 {
-    return {field("diameter", "Diámetro", spec.diameter), field("depth", "Profundidad", spec.depth),
-            field("headDiameter", "Diámetro de la cabeza", spec.headDiameter),
-            field("headDepth", "Profundidad de la cabeza", spec.headDepth),
-            field("headAngle", "Ángulo del cono", spec.headAngle, kRadiansPerDegree)};
+    std::vector<NumericField> fields = {field("diameter", "Diámetro", spec.diameter), field("depth", "Profundidad", spec.depth),
+                                        field("headDiameter", "Diámetro de la cabeza", spec.headDiameter),
+                                        field("headDepth", "Profundidad de la cabeza", spec.headDepth),
+                                        field("headAngle", "Ángulo del cono", spec.headAngle, kRadiansPerDegree)};
+    if (onFace) {
+        fields.push_back(field("x", "Posición X", x));
+        fields.push_back(field("y", "Posición Y", y));
+    }
+    return fields;
+}
+
+std::vector<FeatureId> HoleFeature::dependencies() const
+{
+    std::vector<FeatureId> ids;
+    if (onFace) {
+        addAttachmentDependencies(ids, base);
+    } else {
+        ids.push_back(sketch);
+    }
+    return ids;
 }
 
 std::vector<Feature::NumericField> PatternFeature::numericFields()
@@ -949,6 +965,15 @@ std::vector<FeatureId> PatternFeature::dependencies() const
 
 geometry::Shape HoleFeature::tool(const ModelState& state) const
 {
+    if (onFace) {
+        std::optional<std::string> ignored;
+        const sketch::Plane plane = resolvePlane(state, base, "del agujero", "se usa su última posición", ignored);
+        try {
+            return geometry::holeTool(tag(), plane, {sketch::Vec2{x, y}}, spec, flip, state.shapes());
+        } catch (const geometry::GeometryError& e) {
+            throw FeatureError(e.what());
+        }
+    }
     const auto out = state.sketches.find(sketch);
     if (out == state.sketches.end()) {
         throw FeatureError("Falta el sketch que marca los agujeros");

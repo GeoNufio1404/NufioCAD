@@ -162,6 +162,9 @@ public:
     void clearToolPreview();
 
     ModelSelection modelSelection() const;
+    // El punto 3D (mm) donde cayó el último clic que cambió la selección, si hubo uno bajo el cursor: sirve para poner
+    // un agujero o una rosca justo donde se hizo clic en una cara.
+    std::optional<sketch::Vec3> lastPickPoint() const;
     void clearModelSelection();
     // Selecciona esas regiones de sketches terminados (al editar una operación).
     void selectProfiles(const std::vector<ModelSelection::Profile>& profiles);

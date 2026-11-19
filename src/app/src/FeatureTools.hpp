@@ -113,6 +113,8 @@ protected:
         std::vector<document::FeatureId> planeIds;
         geometry::ElementRef face;
     };
+    // Con true, al elegir una cara la posición queda donde se hizo clic (y no en su centro): agujeros y roscas.
+    bool placeAtClick_ = false;
     void createPlacement(QFormLayout* form, Placement& placement, const document::SketchAttachment* original, double x,
                          double y);
     // Toma la cara plana de la selección, si la hay; true si cambió algo.
@@ -360,7 +362,11 @@ protected:
 private:
     void updateVisibility();
 
+    bool faceMode() const { return sketchBox_ != nullptr && sketchBox_->currentData().toULongLong() == 0; }
+
+    bool faceWanted_ = false;  // al editar: el agujero estaba puesto con un clic en una cara
     document::FeatureId sketch_ = 0;
+    Placement placement_;  // el modo «clic en una cara»: la cara y el punto donde se hizo clic
     QComboBox* sketchBox_ = nullptr;
     QComboBox* kind_ = nullptr;
     QDoubleSpinBox* diameter_ = nullptr;

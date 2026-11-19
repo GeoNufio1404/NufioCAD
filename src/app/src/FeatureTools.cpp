@@ -314,7 +314,16 @@ bool FeatureTool::placementSelection(Placement& p, const render::ModelSelection&
             p.base->addItem(QStringLiteral("Cara elegida"));
         }
         // Se pone en el centro de la cara; la posición se puede cambiar después.
-        const sketch::Vec2 center = plane->toLocal(shape.faceCenter(hit->face));
+        sketch::Vec2 center = plane->toLocal(shape.faceCenter(hit->face));
+        if (placeAtClick_) {
+            // Donde cayó el clic, si fue sobre esta cara (a menos de 0,01 mm de su plano).
+            if (const auto pick = viewport_.lastPickPoint()) {
+                const sketch::Vec3 d{pick->x - plane->origin.x, pick->y - plane->origin.y, pick->z - plane->origin.z};
+                if (std::abs(d.x * plane->normal.x + d.y * plane->normal.y + d.z * plane->normal.z) < 0.01) {
+                    center = plane->toLocal(*pick);
+                }
+            }
+        }
         updating_ = true;
         p.base->setCurrentIndex(p.base->count() - 1);
         p.x->setValue(center.x);

@@ -684,6 +684,12 @@ FeatureRow rowOf(const Feature& f)
         params = {{"sketch", h.sketch}, {"kind", nameOf(kHoleKinds, h.spec.kind)}, {"diameter", h.spec.diameter},
                   {"depth", h.spec.depth}, {"throughAll", h.spec.throughAll}, {"headDiameter", h.spec.headDiameter},
                   {"headDepth", h.spec.headDepth}, {"headAngle", h.spec.headAngle}, {"flip", h.flip}};
+        if (h.onFace) {
+            params["onFace"] = true;
+            params["base"] = toJson(h.base);
+            params["x"] = h.x;
+            params["y"] = h.y;
+        }
         break;
     }
     case FeatureKind::Shell: {
@@ -975,6 +981,12 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
     } else if (row.type == "hole") {
         auto h = std::make_unique<HoleFeature>();
         h->sketch = unsignedValue(p, "sketch");
+        h->onFace = p.value("onFace", false);
+        if (h->onFace) {
+            h->base = attachmentOf(p.at("base"));
+            h->x = p.value("x", 0.0);
+            h->y = p.value("y", 0.0);
+        }
         h->spec.kind = parseEnum(kHoleKinds, text(p, "kind"), "tipo de agujero");
         h->spec.diameter = number(p, "diameter");
         h->spec.depth = number(p, "depth");

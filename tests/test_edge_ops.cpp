@@ -341,6 +341,50 @@ TEST_CASE("Un agujero simple resta un cilindro de la profundidad pedida", "[hole
     REQUIRE_THAT(two.result().bodies.front().shape.volume(), WithinRel(kBox - 2 * kPi * 4.0 * 3.0, 1e-6));
 }
 
+TEST_CASE("Un agujero puesto con un clic en una cara entra en el material, se guarda y sigue a la pieza", "[hole][io]")
+{
+    Document doc = boxDocument();
+    const geometry::Shape& box = doc.result().bodies.front().shape;
+    // La cara de arriba (normal hacia +Z, z = 5) y el punto donde se hizo clic: (10, 5, 5)
+    SketchAttachment at;
+    at.origin = std::nullopt;
+    sketch::Plane facePlane = sketch::Plane::xy();
+    for (int i = 0; i < box.faceCount(); ++i) {
+        if (const auto plane = box.facePlane(i); plane && plane->normal.z > 0.9) {
+            at.face = box.faceRef(i);
+            facePlane = *plane;
+        }
+    }
+    REQUIRE(!at.face.empty());
+    const sketch::Vec2 click = facePlane.toLocal({10, 5, 5});
+
+    auto hole = std::make_unique<HoleFeature>();
+    hole->onFace = true;
+    hole->base = at;
+    hole->x = click.x;
+    hole->y = click.y;
+    hole->spec.diameter = 4;
+    hole->spec.depth = 3;
+    const FeatureId id = doc.addFeature(std::move(hole));
+    REQUIRE(doc.status(id).health == Health::Ok);
+    REQUIRE_THAT(doc.result().bodies.front().shape.volume(), WithinRel(kBox - kPi * 4.0 * 3.0, 1e-6));
+
+    // Ida y vuelta por el archivo
+    const auto path = std::filesystem::temp_directory_path() / "nuf_agujero_cara.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    REQUIRE(reopened.status(id).health == Health::Ok);
+    REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(kBox - kPi * 4.0 * 3.0, 1e-6));
+    const auto* loaded = dynamic_cast<const HoleFeature*>(reopened.findFeature(id));
+    REQUIRE(loaded != nullptr);
+    CHECK(loaded->onFace);
+    CHECK(loaded->x == Catch::Approx(click.x));
+}
+
 TEST_CASE("Abocardado y avellanado quitan más que un agujero simple", "[hole]")
 {
     geometry::HoleSpec spec;

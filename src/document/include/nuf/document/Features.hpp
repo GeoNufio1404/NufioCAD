@@ -517,7 +517,13 @@ public:
 // restan del cuerpo hacia dentro del material, desde el plano del sketch.
 class HoleFeature final : public Feature {
 public:
-    FeatureId sketch = 0;
+    FeatureId sketch = 0;   // el sketch que marca los agujeros; 0 si el agujero se puso con un clic en una cara
+    // Con «onFace»: un solo agujero puesto con un clic en una cara (o plano): «base» la identifica y (x, y) es el punto en
+    // su plano (mm, desde su origen). La cara se busca por nombre, así que el agujero sigue a la pieza si se edita antes.
+    bool onFace = false;
+    SketchAttachment base;
+    double x = 0.0;
+    double y = 0.0;
     geometry::HoleSpec spec;
     bool flip = false;  // al otro lado del plano
 
@@ -525,7 +531,7 @@ public:
     std::vector<NumericField> numericFields() override;
     std::unique_ptr<Feature> clone() const override { return std::make_unique<HoleFeature>(*this); }
     std::optional<std::string> compute(ModelState& state) const override;
-    std::vector<FeatureId> dependencies() const override { return {sketch}; }
+    std::vector<FeatureId> dependencies() const override;
     // Solo el sólido que se resta (para la vista previa).
     geometry::Shape tool(const ModelState& state) const;
 };
