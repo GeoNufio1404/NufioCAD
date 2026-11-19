@@ -813,6 +813,13 @@ Código: **PAR**.
 | PAR.26 | Herramienta Engranaje con 8 dientes: pulsa «Poner la recomendada para estos dientes» | La corrección sube (≈0,4) y el diente se ve más grueso y menos puntiagudo que con 0; guarda y reabre: conserva la corrección |
 | PAR.27 | Generador «Par de engranajes» con 10 dientes en la rueda 1 y 30 en la 2 | La rueda 1 sale más gruesa de diente (corrección) y la 2 más delgada; los ejes siguen a la distancia de siempre y las ruedas giran sin chocar |
 | PAR.28 | Coloca un Engranaje de módulo 2 y, tocándolo, otro de módulo 3 | El panel del segundo muestra «⚠ No engranará bien con un engranaje cercano: el módulo…»; con el mismo módulo y presión desaparece el aviso |
+| PAR.29 | Herramientas › **Tornillo sin fin y rueda** con los valores de fábrica (módulo 2, 1 entrada, 30 dientes) | Salen dos cuerpos: la rueda (helicoidal) y el tornillo, con los ejes a 90°; el tornillo cruza por el lado, a media altura de la rueda; el resumen da «Reducción 30:1» y el ángulo de avance (5,7°) |
+| PAR.30 | Gira a mano el tornillo en un visor o con «Mover y girar» (o imprímelos) | Los filetes caen en los huecos de la rueda sin chocar; al cambiar a «A izquierdas» la rueda también cambia de sentido y siguen encajando |
+| PAR.31 | Pon 3 entradas y diámetro 14 | El avance sube (≈23°), la reducción baja a 10:1 y el resumen ya no dice «autobloqueante» |
+| PAR.32 | Herramientas › **Engranajes cónicos** con 15 y 30 dientes | Salen el piñón (eje vertical) y la corona (de lado) tocándose en un punto; los conos comparten el vértice; los dientes encajan sin chocar |
+| PAR.33 | Pon «Ancho de cara» 60 en los cónicos | La herramienta avisa de que el ancho de cara es demasiado grande y da el máximo recomendado |
+| PAR.34 | Sólido › Engranaje: abre la lista «Tipo» y recorre las cinco opciones | Cada tipo enseña solo sus campos (Tornillo sin fin: Entradas, Largo, Diámetro, Hélice a izquierdas; Cónico: Dientes de la rueda pareja y Ancho de cara; Cremallera e Interno: Aro o base) |
+| PAR.35 | Engranaje exterior con ángulo de hélice 20° y la casilla «Espina de pescado»: pon un surco central de 1 | Aparece un surco anular en el medio, del ancho pedido, que llega hasta la raíz de los dientes y no parte la rueda |
 
 ### 4.5 Todos los generadores: reabrir, recordar y restablecer
 

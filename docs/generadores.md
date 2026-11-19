@@ -14,7 +14,7 @@ La pestaña **HERRAMIENTAS** y el menú Herramientas agrupan los generadores por
 |---|---|
 | **Cajas** | Lightbox, Caja con tapa |
 | **Letreros** | Letrero o llavero |
-| **Engranajes** | Par de engranajes, Engranaje interno, Cremallera |
+| **Engranajes** | Par de engranajes, Engranaje interno, Cremallera, Tornillo sin fin y rueda, Engranajes cónicos |
 
 Un generador nuevo elige su familia (o crea una); las familias van seguidas en la lista.
 
@@ -383,3 +383,11 @@ un componente. Se registra en `generators()` y aparece solo en la cinta y en el 
 
 Ver la hoja de ruta. Lo más cercano: el canal para la tira LED, poner tu SVG sobre la cara central (relieve o corte) y los demás
 generadores (caja con tapa, letreros, par de engranajes).
+
+## Tornillo sin fin y rueda
+
+Un tornillo de 1 a 4 entradas y una rueda helicoidal que engrana con él, con los ejes cruzados a 90°. El **módulo** es el axial del tornillo y el transversal de la rueda; el **diámetro primitivo del tornillo** (de 8 a 12 módulos) fija el ángulo de avance (arctan(entradas × módulo / diámetro)), que es también el ángulo de hélice de la rueda. La distancia entre ejes es (Ø tornillo + Ø rueda)/2 más el juego, y la rueda sale girada para que un hueco caiga sobre un filete. Con un avance menor de 5° el tornillo suele no dejarse mover por la rueda (autobloqueo). La rueda es cilíndrica, sin garganta: el contacto es puntual. En la herramienta suelta es el tipo **Tornillo sin fin** del Engranaje.
+
+## Engranajes cónicos
+
+Un piñón (eje Z) y una corona (eje X) con los ejes a 90° y el vértice de los conos en común (a un radio primitivo de cada rueda del plano del extremo grande de la otra). El ángulo de cada cono sale de los dientes (tan = dientes de una / dientes de la otra). El **ancho de cara** se mide sobre el cono y no debe pasar de un tercio de la distancia al vértice. El diente es una aproximación (el perfil del extremo grande de una rueda recta, reducido hacia el vértice). En la herramienta suelta es el tipo **Cónico** del Engranaje, con «Dientes de la rueda pareja».

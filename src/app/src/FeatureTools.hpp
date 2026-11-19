@@ -467,6 +467,8 @@ private:
     QDoubleSpinBox* baseChamfer_ = nullptr;
     QDoubleSpinBox* shift_ = nullptr;
     QDoubleSpinBox* wormDiameter_ = nullptr;
+    QDoubleSpinBox* mateTeeth_ = nullptr;
+    QDoubleSpinBox* groove_ = nullptr;
     QCheckBox* leftHanded_ = nullptr;
     QComboBox* type_ = nullptr;
     QComboBox* operation_ = nullptr;

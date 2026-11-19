@@ -1222,15 +1222,44 @@ Shape rackGear(const std::string& tag, const sketch::Plane& plane, const GearSpe
 
 namespace {
 
-Shape gearSolid(std::string_view tagView, const sketch::Plane& plane, const GearSpec& spec)
+Shape gearSolid(std::string_view tagView, const sketch::Plane& plane, const GearSpec& input)
 {
     const std::string tag(tagView);
-    if (spec.type == GearType::Rack) {
-        return rackGear(tag, plane, spec);
+    if (input.type == GearType::Rack) {
+        return rackGear(tag, plane, input);
     }
-    const bool internal = spec.type == GearType::Internal;
+    GearSpec spec = input;
     constexpr double kPi = std::numbers::pi;
     constexpr double kDeg = kPi / 180.0;
+    // Cónico (E5): un diente recto de involuta en el extremo grande (con la cabeza y la raíz reducidas por el coseno del
+    // ángulo del cono) y el mismo contorno reducido hacia el vértice del cono: un loft entre los dos extremos, que son
+    // homotéticos respecto al vértice, así que los flancos son rectas que pasan por él (dientes cónicos rectos).
+    const bool bevel = spec.type == GearType::Bevel;
+    double apexHeight = 0.0;   // distancia con signo desde la cara grande hasta el vértice, a lo largo de la normal
+    if (bevel) {
+        if (spec.mateTeeth < 6 || spec.mateTeeth > 300) {
+            throw GeometryError("Los dientes de la rueda pareja deben estar entre 6 y 300");
+        }
+        if (std::abs(spec.helixAngle) > kTiny || spec.herringbone) {
+            throw GeometryError("Los engranajes cónicos se hacen con dientes rectos");
+        }
+        const double coneAngle = std::atan2(double(spec.teeth), double(spec.mateTeeth));  // eje a 90°
+        const double coneDistance = spec.module * std::hypot(double(spec.teeth), double(spec.mateTeeth)) / 2.0;
+        const double face = std::abs(spec.thickness);
+        if (face <= kTiny) {
+            throw GeometryError("El ancho de cara del engranaje cónico debe ser distinto de cero");
+        }
+        if (face > 0.5 * coneDistance) {
+            throw GeometryError("El ancho de cara es demasiado grande: no debe pasar de un tercio de la distancia al vértice del cono (" +
+                                std::to_string(coneDistance / 3.0) + " mm aquí); a partir de la mitad el diente se vuelve puntiagudo");
+        }
+        const double sign = spec.thickness > 0.0 ? 1.0 : -1.0;
+        apexHeight = sign * coneDistance * std::cos(coneAngle);
+        spec.heightScale = std::cos(coneAngle);
+        spec.thickness = sign * face * std::cos(coneAngle);  // largo axial
+        spec.type = GearType::External;
+    }
+    const bool internal = spec.type == GearType::Internal;
     if (spec.teeth < 6 || spec.teeth > 300) {
         throw GeometryError("El número de dientes debe estar entre 6 y 300");
     }
@@ -1257,8 +1286,8 @@ Shape gearSolid(std::string_view tagView, const sketch::Plane& plane, const Gear
     if (internal && std::abs(spec.profileShift) > kTiny) {
         throw GeometryError("El engranaje interno no admite corrección de perfil");
     }
-    const double ra = rp + ((internal ? 1.25 : 1.0) + shift) * spec.module;
-    const double rf = rp - ((internal ? 1.0 : 1.25) - shift) * spec.module;
+    const double ra = rp + ((internal ? 1.25 : 1.0) + shift) * spec.module * spec.heightScale;
+    const double rf = rp - ((internal ? 1.0 : 1.25) - shift) * spec.module * spec.heightScale;
     if (spec.herringbone && (internal || std::abs(spec.helixAngle) < kTiny)) {
         throw GeometryError("La espina de pescado necesita un ángulo de hélice (y solo se hace en ruedas exteriores)");
     }
@@ -1364,7 +1393,7 @@ Shape gearSolid(std::string_view tagView, const sketch::Plane& plane, const Gear
         const double twist = spec.thickness * std::tan(spec.helixAngle) / rp;  // giro total de la hélice
         const gp_Vec along = gp_Vec(normal).Multiplied(spec.thickness);
 
-        if (std::abs(twist) < 1e-9) {
+        if (!bevel && std::abs(twist) < 1e-9) {
             TopoDS_Edge outerEdge;
             if (internal) {
                 outerEdge = BRepBuilderAPI_MakeEdge(gp_Circ(frame, ra + spec.rim)).Edge();
@@ -1415,12 +1444,18 @@ Shape gearSolid(std::string_view tagView, const sketch::Plane& plane, const Gear
         // Espina de pescado (E1): dos mitades con la hélice contraria (la primera gira hasta la mitad del ancho y la
         // segunda deshace el giro); se hacen como dos lofts que comparten el contorno de la mitad y se cosen juntos.
         const bool herringbone = spec.herringbone;
-        const int sections = std::clamp(int(std::ceil(std::abs(herringbone ? twist / 2.0 : twist) / (15.0 * kDeg))) + 1, 3, 24);
+        const int sections = bevel ? 1 : std::clamp(int(std::ceil(std::abs(herringbone ? twist / 2.0 : twist) / (15.0 * kDeg))) + 1, 3, 24);
         const auto sectionWire = [&](double height, double angle) {
             gp_Trsf turn;
             turn.SetRotation(gp_Ax1(origin, normal), angle);
             gp_Trsf slide;
-            slide.SetTranslation(gp_Vec(normal).Multiplied(height));
+            if (bevel) {
+                // Homotecia respecto al vértice del cono: lleva la cara grande al plano de esa altura.
+                const gp_Pnt apex(origin.XYZ() + normal.XYZ() * apexHeight);
+                slide.SetScale(apex, (apexHeight - height) / apexHeight);
+            } else {
+                slide.SetTranslation(gp_Vec(normal).Multiplied(height));
+            }
             BRepBuilderAPI_Transform moved(outline.Wire(), slide * turn, true);
             return TopoDS::Wire(moved.Shape());
         };
@@ -1658,7 +1693,28 @@ Shape gear(std::string_view tagView, const sketch::Plane& plane, const GearSpec&
         // Las caras laterales de la hélice son superficies libres: el kernel no las achaflanó en la prueba (0,15 mm).
         throw GeometryError("El chaflán de la base solo se hace con dientes rectos (sin ángulo de hélice)");
     }
+    if (spec.herringboneGroove < 0.0 || (spec.herringboneGroove > kTiny && !spec.herringbone)) {
+        throw GeometryError("El surco central solo existe en la espina de pescado, y no puede ser negativo");
+    }
     Shape solid = gearSolid(tagView, plane, spec);
+    if (spec.herringboneGroove > kTiny) {
+        const double width = spec.herringboneGroove;
+        if (width >= 0.5 * std::abs(spec.thickness)) {
+            throw GeometryError("El surco central es demasiado ancho para el ancho del engranaje");
+        }
+        // Una corona (de la altura del surco, a media altura) desde la raíz de los dientes hacia fuera.
+        const double rp = spec.module * spec.teeth / 2.0;
+        const double outer = rp + (1.0 + spec.profileShift) * spec.module + 1.0;
+        const double root = rp - (1.25 - spec.profileShift) * spec.module;
+        sketch::Plane mid = plane;
+        const double sign = spec.thickness > 0.0 ? 1.0 : -1.0;
+        mid.origin = {plane.origin.x + plane.normal.x * (spec.thickness / 2.0 - sign * width / 2.0),
+                      plane.origin.y + plane.normal.y * (spec.thickness / 2.0 - sign * width / 2.0),
+                      plane.origin.z + plane.normal.z * (spec.thickness / 2.0 - sign * width / 2.0)};
+        const Shape disc = cylinder("surco", mid, 2.0 * outer, sign * width);
+        const Shape core = cylinder("nucleo", mid, 2.0 * root, sign * width);
+        solid = boolean(BooleanOp::Cut, solid, boolean(BooleanOp::Cut, disc, core));
+    }
     if (spec.baseChamfer <= kTiny) {
         return solid;
     }

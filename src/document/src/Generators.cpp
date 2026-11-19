@@ -1253,6 +1253,102 @@ public:
     }
 };
 
+// --- Engranajes cónicos (E5) -------------------------------------------------------------------
+// Dos ruedas cónicas rectas con los ejes a 90°: el piñón (eje Z) y la corona (eje X), con el vértice común de los dos conos
+// a un radio primitivo de cada uno. Mismo módulo (el del extremo grande) y ángulo de presión; los dientes son una
+// aproximación: el perfil del extremo grande es el de una rueda recta de esos dientes con la cabeza y la raíz reducidas
+// por el coseno del ángulo del cono, y el resto sale de reducirlo hacia el vértice (los flancos son rectas que pasan por él).
+
+class BevelPair final : public Generator {
+public:
+    std::string category() const override { return "Engranajes"; }
+    std::string id() const override { return "engranajes-conicos"; }
+    std::string title() const override { return "Engranajes cónicos"; }
+    std::string icon() const override { return "gear-solid"; }
+    std::string description() const override
+    {
+        return "Dos ruedas cónicas rectas con los ejes a 90° (el piñón arriba y la corona de lado), con el vértice de los conos "
+               "en común y una rueda girada para que los dientes encajen. Cambian la dirección del giro y la velocidad.";
+    }
+
+    std::vector<GeneratorField> fields() const override
+    {
+        using K = GeneratorField::Kind;
+        return withGroups({gearField(K::Length, "modulo", "Módulo", 2.0, 0.3, 20.0, "El del extremo grande: igual en las dos ruedas"),
+                gearField(K::Count, "dientes_1", "Dientes del piñón", 15.0, 6.0, 300.0, "Su eje es el vertical (Z)"),
+                gearField(K::Count, "dientes_2", "Dientes de la corona", 30.0, 6.0, 300.0, "Su eje es el X"),
+                gearField(K::Angle, "presion", "Ángulo de presión", 20.0, 5.0, 35.0, "Igual en las dos ruedas (20° es lo normal)"),
+                gearField(K::Length, "ancho_cara", "Ancho de cara", 8.0, 1.0, 200.0,
+                          "Medido sobre el cono; no debe pasar de un tercio de la distancia al vértice"),
+                gearField(K::Length, "agujero_1", "Agujero del piñón", 5.0, 0.0, 100.0, "0 = macizo"),
+                gearField(K::Length, "agujero_2", "Agujero de la corona", 5.0, 0.0, 100.0, "0 = macizo"),
+                tuningFields()[0]});
+    }
+
+    std::string summary(const GeneratorValues& values) const override
+    {
+        constexpr double kPi = 3.14159265358979323846;
+        const double m = values.at("modulo"), z1 = values.at("dientes_1"), z2 = values.at("dientes_2");
+        const double cone = std::hypot(z1, z2) * m / 2.0;
+        char text[320];
+        std::snprintf(text, sizeof text,
+                      "Relación %g:%g · conos de %.1f° y %.1f° · distancia al vértice %s (ancho de cara hasta %s) · Ø primitivos %s y %s",
+                      z1, z2, std::atan2(z1, z2) * 180.0 / kPi, std::atan2(z2, z1) * 180.0 / kPi,
+                      geometry::display::length(cone).c_str(), geometry::display::length(cone / 3.0).c_str(),
+                      geometry::display::length(m * z1).c_str(), geometry::display::length(m * z2).c_str());
+        return text;
+    }
+
+    std::map<std::string, ArrowSpec> arrows() const override
+    {
+        return {};
+    }
+
+    Recipe make(const GeneratorValues& values, const std::string& suffix) const override
+    {
+        const auto p = [&](const char* name) { return std::string(name) + suffix; };
+        const std::string modulo = p("modulo"), z1 = p("dientes_1"), z2 = p("dientes_2"), presion = p("presion"),
+                          cara = p("ancho_cara"), bore1 = p("agujero_1"), bore2 = p("agujero_2"), giro1 = p("giro_1"),
+                          giro2 = p("giro_2");
+
+        Recipe recipe;
+        recipe.component = "Engranajes cónicos";
+        recipe.bodyNames = {"Piñón", "Corona"};
+        const auto param = [&](const std::string& name, const std::string& expression) {
+            recipe.parameters.push_back({name, expression});
+        };
+        param(modulo, number(values.at("modulo")));
+        param(z1, number(values.at("dientes_1")));
+        param(z2, number(values.at("dientes_2")));
+        param(presion, number(values.at("presion")));
+        param(cara, number(values.at("ancho_cara")));
+        param(bore1, number(values.at("agujero_1")));
+        param(bore2, number(values.at("agujero_2")));
+        addTuningParameters(recipe, values, suffix);
+        // Las ruedas se tocan en el origen. El piñón (plano XY, eje a x = su radio primitivo) tiene un diente apuntando a ese
+        // punto (180°); la corona (plano YZ, eje a z = su radio primitivo) tiene un hueco apuntando a él (270°).
+        const std::string step1 = "360/" + z1, step2 = "360/" + z2;
+        param(giro1, "180 - floor(180/(" + step1 + "))*(" + step1 + ")");
+        const std::string start2 = "(270 - 180/" + z2 + ")";
+        param(giro2, start2 + " - floor(" + start2 + "/(" + step2 + "))*(" + step2 + ")");
+
+        const auto wheel = [&](const char* name, OriginPlane plane, const std::string& teeth, const std::string& mate,
+                               const std::string& bore, const std::string& x, const std::string& y, const std::string& turn) {
+            auto f = std::make_unique<GearFeature>();
+            f->setName(name);
+            f->base.origin = plane;
+            f->spec.type = geometry::GearType::Bevel;
+            f->expressions = {{"module", modulo}, {"teeth", teeth}, {"mateTeeth", mate}, {"pressureAngle", presion},
+                              {"thickness", cara}, {"bore", bore}, {"x", x}, {"y", y}, {"rotation", turn}};
+            f->expressions["backlash"] = "adelgazar" + suffix;
+            return f;
+        };
+        recipe.features.push_back(wheel("Engranaje: piñón cónico", OriginPlane::XY, z1, z2, bore1, modulo + "*" + z1 + "/2", "0", giro1));
+        recipe.features.push_back(wheel("Engranaje: corona cónica", OriginPlane::YZ, z2, z1, bore2, "0", modulo + "*" + z2 + "/2", giro2));
+        return recipe;
+    }
+};
+
 } // namespace
 
 GeneratorValues Generator::defaults() const
@@ -1304,8 +1400,9 @@ const std::vector<const Generator*>& generators()
     static const InternalGear internalGear;
     static const RackAndPinion rackAndPinion;
     static const WormAndWheel wormAndWheel;
+    static const BevelPair bevelPair;
     static const std::vector<const Generator*> all = {&lightbox, &boxWithLid, &sign, &gearPair, &internalGear,
-                                                      &rackAndPinion, &wormAndWheel};
+                                                      &rackAndPinion, &wormAndWheel, &bevelPair};
     return all;
 }
 

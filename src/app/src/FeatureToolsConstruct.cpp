@@ -445,15 +445,29 @@ void GearTool::createFields(QFormLayout* form)
     wormDiameter_->setMinimum(1.0);
     field("wormDiameter", wormDiameter_);
     leftHanded_ = new QCheckBox(QStringLiteral("Hélice a izquierdas"));
+    groove_ = lengthBox(0.0);
+    groove_->setMinimum(0.0);
+    groove_->setToolTip(QStringLiteral("Ancho de un surco en el centro de la espina de pescado, hasta la raíz de los dientes (0 = sin surco)"));
+    field("herringboneGroove", groove_);
+    mateTeeth_ = new ExpressionSpinBox();
+    mateTeeth_->setRange(6, 300);
+    mateTeeth_->setDecimals(0);
+    mateTeeth_->setValue(20);
+    mateTeeth_->setKeyboardTracking(false);
+    mateTeeth_->setToolTip(QStringLiteral("Los dientes de la rueda que engrana con esta (ejes a 90°): de ellos sale el ángulo del cono"));
+    field("mateTeeth", mateTeeth_);
     type_ = combo({QStringLiteral("Exterior"), QStringLiteral("Interno (corona)"), QStringLiteral("Cremallera"),
-                   QStringLiteral("Tornillo sin fin")});
+                   QStringLiteral("Tornillo sin fin"), QStringLiteral("Cónico (ejes a 90°)")});
     operation_ = combo({QStringLiteral("Cuerpo nuevo"), QStringLiteral("Unir"), QStringLiteral("Cortar")});
     if (original != nullptr) {
         type_->setCurrentIndex(original->spec.type == geometry::GearType::Internal ? 1
                                : original->spec.type == geometry::GearType::Rack   ? 2
                                : original->spec.type == geometry::GearType::Worm   ? 3
+                               : original->spec.type == geometry::GearType::Bevel  ? 4
                                                                                    : 0);
         wormDiameter_->setValue(original->spec.wormDiameter);
+        mateTeeth_->setValue(original->spec.mateTeeth);
+        groove_->setValue(original->spec.herringboneGroove);
         leftHanded_->setChecked(original->spec.leftHanded);
         rim_->setValue(original->spec.rim);
         backlash_->setValue(original->spec.backlash);
@@ -478,11 +492,16 @@ void GearTool::createFields(QFormLayout* form)
     form->addRow(QStringLiteral("Ancho (±)"), thickness_);
     form->addRow(QStringLiteral("Agujero central"), bore_);
     form->addRow(QStringLiteral("Ángulo de hélice"), helix_);
+    form->addRow(QStringLiteral("Surco central (espina de pescado)"), groove_);
+    form->addRow(QStringLiteral("Dientes de la rueda pareja"), mateTeeth_);
     form->addRow(QStringLiteral("Diámetro primitivo del tornillo"), wormDiameter_);
     form->addRow(QString(), leftHanded_);
     connect(leftHanded_, &QCheckBox::toggled, this, [this] { updatePreview(); });
     form->addRow(QString(), herringbone_);
-    connect(herringbone_, &QCheckBox::toggled, this, [this] { updatePreview(); });
+    connect(herringbone_, &QCheckBox::toggled, this, [this, form] {
+        form->setRowVisible(groove_, type_->currentIndex() == 0 && herringbone_->isChecked());
+        updatePreview();
+    });
     form->addRow(QStringLiteral("Aro (interno) o base (cremallera)"), rim_);
     form->addRow(QStringLiteral("Corrección de perfil (x)"), shift_);
     auto* recommend = new QPushButton(QStringLiteral("Poner la recomendada para estos dientes"));
@@ -501,25 +520,28 @@ void GearTool::createFields(QFormLayout* form)
     });
     // Selector de tipo (E6): el panel enseña solo los campos del tipo elegido.
     const auto showType = [this, form, recommend] {
-        const int type = type_->currentIndex();  // 0 exterior, 1 interno, 2 cremallera, 3 tornillo sin fin
+        const int type = type_->currentIndex();  // 0 exterior, 1 interno, 2 cremallera, 3 tornillo sin fin, 4 cónico
         const bool worm = type == 3;
+        const bool bevel = type == 4;
         const auto row = [form](QWidget* widget, bool visible) { form->setRowVisible(widget, visible); };
         row(rotation_, !worm);
-        row(bore_, type == 0);
+        row(bore_, type == 0 || bevel);
+        row(mateTeeth_, bevel);
+        row(groove_, type == 0 && herringbone_->isChecked());
         row(helix_, type == 0);
         row(herringbone_, type == 0);
         row(shift_, type == 0);
         row(recommend, type == 0);
         row(rim_, type == 1 || type == 2);
         row(backlash_, !worm);
-        row(baseChamfer_, !worm);
+        row(baseChamfer_, !worm && !bevel);
         row(wormDiameter_, worm);
         row(leftHanded_, worm);
         if (auto* label = qobject_cast<QLabel*>(form->labelForField(teeth_))) {
             label->setText(worm ? QStringLiteral("Entradas (1 a 4)") : QStringLiteral("Dientes"));
         }
         if (auto* label = qobject_cast<QLabel*>(form->labelForField(thickness_))) {
-            label->setText(worm ? QStringLiteral("Largo (±)") : QStringLiteral("Ancho (±)"));
+            label->setText(worm ? QStringLiteral("Largo (±)") : bevel ? QStringLiteral("Ancho de cara (±)") : QStringLiteral("Ancho (±)"));
         }
         if (auto* label = qobject_cast<QLabel*>(form->labelForField(pressure_))) {
             label->setText(worm ? QStringLiteral("Ángulo de presión (axial)") : QStringLiteral("Ángulo de presión"));
@@ -531,7 +553,7 @@ void GearTool::createFields(QFormLayout* form)
         updatePreview();
     });
     for (QDoubleSpinBox* box : {teeth_, rotation_, module_, pressure_, thickness_, bore_, helix_, rim_, backlash_, baseChamfer_, shift_,
-                                wormDiameter_}) {
+                                wormDiameter_, mateTeeth_, groove_}) {
         connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
     }
 }
@@ -576,10 +598,13 @@ std::unique_ptr<document::Feature> GearTool::build() const
     f->spec.baseChamfer = baseChamfer_->value();
     f->spec.profileShift = shift_->value();
     f->spec.wormDiameter = wormDiameter_->value();
+    f->spec.mateTeeth = int(std::lround(mateTeeth_->value()));
+    f->spec.herringboneGroove = herringbone_->isChecked() ? groove_->value() : 0.0;
     f->spec.leftHanded = leftHanded_->isChecked();
     f->spec.type = type_->currentIndex() == 1   ? geometry::GearType::Internal
                    : type_->currentIndex() == 2 ? geometry::GearType::Rack
                    : type_->currentIndex() == 3 ? geometry::GearType::Worm
+                   : type_->currentIndex() == 4 ? geometry::GearType::Bevel
                                                 : geometry::GearType::External;
     const int op = operation_->currentIndex();
     f->operation = op == 1 ? document::Operation::Join : op == 2 ? document::Operation::Cut : document::Operation::NewBody;
@@ -649,6 +674,17 @@ QString GearTool::inputsText() const
             .arg(Units::instance().format(module_->value()))
             .arg(Units::instance().formatWithUnit(wormDiameter_->value()))
             .arg(lead / kDegree, 0, 'f', 1);
+    }
+    if (type_->currentIndex() == 4) {
+        const double cone = std::atan2(teeth_->value(), mateTeeth_->value()) / kDegree;
+        const double distance = module_->value() * std::hypot(teeth_->value(), mateTeeth_->value()) / 2.0;
+        return QStringLiteral("Cónico de %1 dientes (pareja de %2), módulo %3: cono de %4°, distancia al vértice %5 (ancho de cara hasta %6). "
+                              "Los ejes de las dos ruedas se cruzan a 90° en el vértice")
+            .arg(int(std::lround(teeth_->value())))
+            .arg(int(std::lround(mateTeeth_->value())))
+            .arg(Units::instance().format(module_->value()))
+            .arg(cone, 0, 'f', 1)
+            .arg(Units::instance().formatWithUnit(distance), Units::instance().formatWithUnit(distance / 3.0));
     }
     QString text = QStringLiteral("%1 dientes, módulo %2: Ø primitivo %3%4")
                        .arg(int(std::lround(teeth_->value())))

@@ -1,5 +1,6 @@
 // Tornillo sin fin y su rueda (E4).
 #include <nuf/document/Document.hpp>
+#include <nuf/document/Features.hpp>
 #include <nuf/document/Generators.hpp>
 #include <nuf/geometry/Modeling.hpp>
 
@@ -127,4 +128,71 @@ TEST_CASE("El tornillo sin fin y su rueda engranan sin chocar, con cualquier sen
     document::Document doc;
     document::applyRecipe(doc, generator->make(close, ""));
     CHECK(geometry::boolean(geometry::BooleanOp::Common, doc.result().bodies[0].shape, doc.result().bodies[1].shape).volume() > 3.0);
+}
+
+TEST_CASE("Un engranaje cónico es un sólido válido con el largo axial que sale del ángulo del cono, y valida sus datos", "[bevel]")
+{
+    const auto plane = sketch::Plane::fromPointAndNormal({0, 0, 0}, {0, 0, 1});
+    geometry::GearSpec spec;
+    spec.type = geometry::GearType::Bevel;
+    spec.module = 2.0;
+    spec.teeth = 15;
+    spec.mateTeeth = 30;
+    spec.thickness = 8.0;
+    spec.bore = 5.0;
+    const auto bevel = geometry::gear("b", plane, spec);
+    REQUIRE(bevel.isValid());
+    const double coneAngle = std::atan2(15.0, 30.0);
+    CHECK(bevel.bounds().max.z == Catch::Approx(8.0 * std::cos(coneAngle)).margin(1e-6));
+    // El extremo grande es el de una rueda recta de esos dientes y ese módulo (con la cabeza reducida): cabe en su diámetro
+    CHECK(bevel.bounds().max.x <= 16.0 + 2.0 + 1e-6);
+    // Menos material que el prisma de esa rueda
+    geometry::GearSpec spur;
+    spur.module = 2.0;
+    spur.teeth = 15;
+    spur.thickness = 8.0 * std::cos(coneAngle);
+    spur.bore = 5.0;
+    CHECK(bevel.volume() < geometry::gear("s", plane, spur).volume());
+    CHECK(bevel.volume() > 0.4 * geometry::gear("s", plane, spur).volume());
+    // El sentido contrario
+    spec.thickness = -8.0;
+    CHECK(geometry::gear("b", plane, spec).bounds().min.z == Catch::Approx(-8.0 * std::cos(coneAngle)).margin(1e-6));
+    spec.thickness = 8.0;
+    spec.mateTeeth = 4;
+    CHECK_THROWS_AS(geometry::gear("b", plane, spec), geometry::GeometryError);
+    spec.mateTeeth = 30;
+    spec.helixAngle = 0.2;
+    CHECK_THROWS_AS(geometry::gear("b", plane, spec), geometry::GeometryError);
+    spec.helixAngle = 0.0;
+    spec.thickness = 40.0;  // más de la mitad de la distancia al vértice
+    CHECK_THROWS_AS(geometry::gear("b", plane, spec), geometry::GeometryError);
+}
+
+TEST_CASE("El par de engranajes cónicos engrana sin chocar, y choca con la corona mal girada", "[bevel][params]")
+{
+    const document::Generator* generator = document::findGenerator("engranajes-conicos");
+    REQUIRE(generator != nullptr);
+    for (const auto& [z1, z2] : {std::pair{15.0, 30.0}, std::pair{20.0, 20.0}, std::pair{24.0, 12.0}}) {
+        INFO("dientes " << z1 << " y " << z2);
+        document::GeneratorValues values = generator->defaults();
+        values["dientes_1"] = z1;
+        values["dientes_2"] = z2;
+        values["adelgazar"] = 0.0;
+        document::Document doc;
+        document::applyRecipe(doc, generator->make(values, ""));
+        REQUIRE(doc.result().bodies.size() == 2);
+        const auto& pinion = doc.result().bodies[0].shape;
+        const auto& crown = doc.result().bodies[1].shape;
+        REQUIRE(pinion.isValid());
+        REQUIRE(crown.isValid());
+        const double common = geometry::boolean(geometry::BooleanOp::Common, pinion, crown).volume();
+        // Las dos ruedas se rozan en los flancos (el diente es una aproximación): casi nada compartido frente a un diente entero
+        CHECK(common < 0.02 * pinion.volume());
+        // Con la corona girada medio paso, un diente cae sobre otro
+        document::Recipe wrong = generator->make(values, "");
+        dynamic_cast<document::GearFeature*>(wrong.features[1].get())->expressions["rotation"] = "giro_2 + 180/dientes_2";
+        document::Document bad;
+        document::applyRecipe(bad, wrong);
+        CHECK(geometry::boolean(geometry::BooleanOp::Common, bad.result().bodies[0].shape, bad.result().bodies[1].shape).volume() > 2.0 * common);
+    }
 }

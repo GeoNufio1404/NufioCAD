@@ -78,6 +78,13 @@ Dos campos nuevos del engranaje, ambos en 0 por defecto (los diseños anteriores
 ---
 
 
+## Fase 16, E4 a E6: tornillo sin fin, cónicos y selector de tipo — 18 nov. 2026
+
+- **Qué hace:** el **tornillo sin fin** (1 a 4 entradas) con su rueda helicoidal, los **engranajes cónicos** a 90° y el **surco central** de la espina de pescado; el panel del Engranaje elige el tipo y enseña solo sus campos. Dos generadores nuevos: «Tornillo sin fin y rueda» y «Engranajes cónicos».
+- **Cómo:** `twistedRod` (la rosca generalizada: una sección que gira al avanzar, por tramos) sirve a la rosca y al tornillo; `GearType::Worm` y `GearType::Bevel` en `GearSpec` (campos `wormDiameter`, `leftHanded`, `mateTeeth`, `heightScale`, `herringboneGroove`, que viajan en el archivo y se ligan a parámetros); el cónico reutiliza el loft del engranaje helicoidal con una homotecia respecto al vértice del cono.
+- **Pruebas:** `tests/test_worm.cpp` (tornillo, cónico y los dos generadores con la booleana: sin material compartido bien girados, choque mal girados) y el surco en `test_gear_tuning.cpp`.
+- **Cómo volver atrás:** no fusionar `feature/fase-16-familias`.
+
 ## Fase 16, E1: engranaje de espina de pescado — 18 nov. 2026
 
 - `GearSpec::herringbone` (`Modeling.cpp`, `gearSolid`): dos lofts (`Half`) con la hélice contraria que se cosen en el contorno de la mitad; volumen igual al del helicoidal; caras de la segunda mitad con «:m2». Se guarda como `herringbone` en el archivo.
