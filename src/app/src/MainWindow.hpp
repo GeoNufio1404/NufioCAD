@@ -226,6 +226,11 @@ private:
     QComboBox* sectionPlane_ = nullptr;
     QDoubleSpinBox* sectionOffset_ = nullptr;
     QCheckBox* sectionFlip_ = nullptr;
+    // Sección por un plano de construcción o por una cara plana (O5): el plano elegido y la lista de planos de construcción.
+    QString lastMeasureText_;  // el resultado de Medir en texto plano, para Ctrl+C (O5)
+    sketch::Plane sectionCustom_;
+    bool hasSectionCustom_ = false;
+    std::vector<document::FeatureId> sectionPlaneIds_;
     QLabel* busyBadge_ = nullptr;     // «Calculando…», sobre la vista
     // Menú radial con clic derecho sobre la vista (U6) y atajos de una tecla para todo.
     void openRadialMenu(const QPoint& at);

@@ -44,6 +44,9 @@
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
+#include <QClipboard>
+#include <QGuiApplication>
+#include <QShortcut>
 #include <QFrame>
 #include <QLabel>
 #include <QSignalBlocker>
@@ -160,7 +163,7 @@ void MainWindow::toggleSection(bool on)
         form->addRow(title);
         sectionPlane_ = new QComboBox(sectionPanel_);
         sectionPlane_->addItems({QStringLiteral("Plano XY (horizontal)"), QStringLiteral("Plano XZ (frontal)"),
-                                 QStringLiteral("Plano YZ (lateral)")});
+                                 QStringLiteral("Plano YZ (lateral)"), QStringLiteral("Cara plana elegida (clic en una cara antes)")});
         form->addRow(QStringLiteral("Corte"), sectionPlane_);
         sectionOffset_ = new ExpressionSpinBox(sectionPanel_);
         sectionOffset_->setRange(-100000.0, 100000.0);
@@ -170,6 +173,35 @@ void MainWindow::toggleSection(bool on)
         sectionFlip_ = new QCheckBox(QStringLiteral("Ver el otro lado"), sectionPanel_);
         form->addRow(QString(), sectionFlip_);
         connect(sectionPlane_, &QComboBox::currentIndexChanged, this, [this] {
+            const int index = sectionPlane_->currentIndex();
+            if (index >= 3) {
+                // Una cara plana o un plano de construcción: el corte parte del propio plano (posición 0).
+                hasSectionCustom_ = false;
+                if (index == 3) {
+                    const render::ModelSelection picked = viewport_->modelSelection();
+                    for (const render::ModelSelection::Face& face : picked.faces) {
+                        if (const auto hit = document_.result().findFace(face.ref)) {
+                            if (const auto plane = document_.result().bodies[hit->body].shape.facePlane(hit->face)) {
+                                sectionCustom_ = *plane;
+                                hasSectionCustom_ = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!hasSectionCustom_) {
+                        statusBar()->showMessage(QStringLiteral("Haz clic en una cara plana del cuerpo y vuelve a elegir esta opción"), 6000);
+                    }
+                } else if (const std::size_t at = std::size_t(index - 4); at < sectionPlaneIds_.size()) {
+                    const auto& planes = document_.result().planes;
+                    if (const auto it = planes.find(sectionPlaneIds_[at]); it != planes.end()) {
+                        sectionCustom_ = it->second;
+                        hasSectionCustom_ = true;
+                    }
+                }
+                sectionOffset_->setValue(0.0);
+                updateSection();
+                return;
+            }
             // Al cambiar de plano, el corte vuelve al centro del modelo en ese eje.
             const int axis = sectionPlane_->currentIndex() == 0 ? 2 : sectionPlane_->currentIndex() == 1 ? 1 : 0;
             double lo = 0.0;
@@ -193,6 +225,23 @@ void MainWindow::toggleSection(bool on)
         sectionPanel_->move(16, 16);
     }
     if (on) {
+        // Los planos de construcción que hay ahora (cambian con el diseño) van después de la cara elegida.
+        {
+            const QSignalBlocker listBlock(sectionPlane_);
+            while (sectionPlane_->count() > 4) {
+                sectionPlane_->removeItem(4);
+            }
+            sectionPlaneIds_.clear();
+            for (const auto& [id, plane] : document_.result().planes) {
+                if (const document::Feature* f = document_.findFeature(id)) {
+                    sectionPlane_->addItem(QStringLiteral("Plano de construcción: %1").arg(QString::fromStdString(f->name())));
+                    sectionPlaneIds_.push_back(id);
+                }
+            }
+            if (sectionPlane_->currentIndex() >= sectionPlane_->count()) {
+                sectionPlane_->setCurrentIndex(0);
+            }
+        }
         // Fuerza la posición inicial (el centro del modelo) aunque el plano ya fuera el primero.
         QSignalBlocker block(sectionOffset_);
         emit sectionPlane_->currentIndexChanged(sectionPlane_->currentIndex());
@@ -220,6 +269,21 @@ void MainWindow::updateSection()
     // Por defecto se quita el lado que da a la cámara isométrica (arriba, delante, derecha) para que el corte se vea.
     const double sign = (plane == 1 ? 1.0 : -1.0) * (sectionFlip_->isChecked() ? -1.0 : 1.0);
     const double at = sectionOffset_->value();
+    if (plane >= 3) {
+        if (!hasSectionCustom_) {
+            viewport_->clearSectionPlane();
+            return;
+        }
+        // La normal de la cara apunta hacia fuera del sólido: por defecto se quita el lado de fuera (y se ve el corte hacia
+        // dentro) y «Ver el otro lado» quita el de dentro. La posición mete el corte «hacia dentro» desde la cara (o desde el
+        // plano de construcción, a lo largo de su normal opuesta).
+        const sketch::Vec3 n = sectionCustom_.normal;
+        const double flipSign = sectionFlip_->isChecked() ? -1.0 : 1.0;
+        const sketch::Vec3 origin{sectionCustom_.origin.x - n.x * at, sectionCustom_.origin.y - n.y * at,
+                                  sectionCustom_.origin.z - n.z * at};
+        viewport_->setSectionPlane(origin, {-n.x * flipSign, -n.y * flipSign, -n.z * flipSign});
+        return;
+    }
     sketch::Vec3 origin{0.0, 0.0, 0.0};
     sketch::Vec3 normal{0.0, 0.0, sign};
     if (plane == 0) {
@@ -250,6 +314,15 @@ void MainWindow::toggleMeasure(bool on)
         connect(viewport_, &render::Viewport::modelSelectionChanged, this, [this] {
             if (measureAction_ != nullptr && measureAction_->isChecked()) {
                 updateMeasure();
+            }
+        });
+        // Ctrl+C con Medir activo copia el resultado al portapapeles.
+        auto* copy = new QShortcut(QKeySequence::Copy, viewport_);
+        copy->setContext(Qt::WidgetShortcut);
+        connect(copy, &QShortcut::activated, this, [this] {
+            if (measureAction_ != nullptr && measureAction_->isChecked() && !lastMeasureText_.isEmpty()) {
+                QGuiApplication::clipboard()->setText(lastMeasureText_);
+                statusBar()->showMessage(QStringLiteral("Medida copiada al portapapeles"), 4000);
             }
         });
     }
@@ -331,9 +404,12 @@ void MainWindow::updateMeasure()
                 return;
             }
             QString html = QStringLiteral("<b>Medir</b> — ") + QString::fromStdString(outcome->measurement.title).toHtmlEscaped();
+            lastMeasureText_ = QString::fromStdString(outcome->measurement.title);
             for (const std::string& line : outcome->measurement.lines) {
                 html += QStringLiteral("<br>") + QString::fromStdString(line).toHtmlEscaped();
+                lastMeasureText_ += QLatin1Char('\n') + QString::fromStdString(line);
             }
+            html += QStringLiteral("<br><i>Ctrl+C copia estos valores</i>");
             if (moreThanTwo) {
                 html += QStringLiteral("<br><i>Se miden las dos últimas por orden de lista.</i>");
             }
