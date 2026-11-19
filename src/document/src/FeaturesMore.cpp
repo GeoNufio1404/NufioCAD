@@ -909,6 +909,44 @@ std::vector<FeatureId> ConstructionAxisFeature::dependencies() const
 
 // --- Patrón ------------------------------------------------------------------
 
+namespace {
+
+// Cómo se reparten las copias de un patrón (lineal, circular o a lo largo de una trayectoria).
+geometry::PatternSpec patternSpec(const PatternFeature& feature, const ModelState& state)
+{
+    geometry::PatternSpec spec;
+    spec.circular = feature.layout == PatternLayout::Circular;
+    spec.axis.direction = {feature.axis == 0 ? 1.0 : 0.0, feature.axis == 1 ? 1.0 : 0.0, feature.axis == 2 ? 1.0 : 0.0};
+    if (feature.axisRef != 0) {
+        const auto line = state.axes.find(feature.axisRef);
+        if (line == state.axes.end()) {
+            throw FeatureError("El eje de construcción del patrón ya no existe");
+        }
+        spec.axis.point = line->second.point;
+        spec.axis.direction = line->second.direction;
+    }
+    spec.spacing = feature.spacing;
+    spec.angle = feature.angle;
+    spec.count = feature.count;
+    if (feature.layout == PatternLayout::Path) {
+        const auto out = state.sketches.find(feature.pathSketch);
+        if (out == state.sketches.end()) {
+            throw FeatureError("Falta el sketch de la trayectoria del patrón");
+        }
+        try {
+            const std::vector<sketch::Vec3> points = geometry::pathPoints(*out->second.sketch, out->second.plane, feature.path, feature.count);
+            for (std::size_t i = 1; i < points.size(); ++i) {
+                spec.offsets.push_back({points[i].x - points[0].x, points[i].y - points[0].y, points[i].z - points[0].z});
+            }
+        } catch (const geometry::GeometryError& e) {
+            throw FeatureError(e.what());
+        }
+    }
+    return spec;
+}
+
+} // namespace
+
 std::optional<std::string> PatternFeature::compute(ModelState& state) const
 {
     if (sourceFeature != 0) {
@@ -917,20 +955,7 @@ std::optional<std::string> PatternFeature::compute(ModelState& state) const
         if (original == state.operationTools.end()) {
             throw FeatureError("La operación que se iba a repetir ya no existe");
         }
-        geometry::PatternSpec spec;
-        spec.circular = layout == PatternLayout::Circular;
-        spec.axis.direction = {axis == 0 ? 1.0 : 0.0, axis == 1 ? 1.0 : 0.0, axis == 2 ? 1.0 : 0.0};
-        if (axisRef != 0) {
-            const auto line = state.axes.find(axisRef);
-            if (line == state.axes.end()) {
-                throw FeatureError("El eje de construcción del patrón ya no existe");
-            }
-            spec.axis.point = line->second.point;
-            spec.axis.direction = line->second.direction;
-        }
-        spec.spacing = spacing;
-        spec.angle = angle;
-        spec.count = count;
+        const geometry::PatternSpec spec = patternSpec(*this, state);
         try {
             const std::vector<geometry::Shape> copies = geometry::pattern(tag(), original->second.shape, spec);
             return applyOperation(state, *this, Operation(original->second.operation), geometry::fuseBalanced(copies));
@@ -942,20 +967,7 @@ std::optional<std::string> PatternFeature::compute(ModelState& state) const
     if (source == state.bodies.end()) {
         throw FeatureError("El cuerpo que se iba a repetir ya no existe");
     }
-    geometry::PatternSpec spec;
-    spec.circular = layout == PatternLayout::Circular;
-    spec.axis.direction = {axis == 0 ? 1.0 : 0.0, axis == 1 ? 1.0 : 0.0, axis == 2 ? 1.0 : 0.0};
-    if (axisRef != 0) {
-        const auto line = state.axes.find(axisRef);
-        if (line == state.axes.end()) {
-            throw FeatureError("El eje de construcción del patrón ya no existe");
-        }
-        spec.axis.point = line->second.point;
-        spec.axis.direction = line->second.direction;
-    }
-    spec.spacing = spacing;
-    spec.angle = angle;
-    spec.count = count;
+    const geometry::PatternSpec spec = patternSpec(*this, state);
     // El cuerpo y los demás de la lista (los que ya no existen se avisan); cada uno se repite con sus copias.
     std::vector<std::string> keys = {body};
     int missing = 0;
@@ -1000,17 +1012,17 @@ std::vector<FeatureId> PatternFeature::dependencies() const
     std::vector<FeatureId> ids;
     if (sourceFeature != 0) {
         ids.push_back(sourceFeature);
-        if (axisRef != 0) {
-            ids.push_back(axisRef);
+    } else {
+        addAll(ids, geometry::ElementRef{body + ":", 0});  // la operación que creó el cuerpo
+        for (const std::string& other : alsoBodies) {
+            addAll(ids, geometry::ElementRef{other + ":", 0});
         }
-        return ids;
-    }
-    addAll(ids, geometry::ElementRef{body + ":", 0});  // la operación que creó el cuerpo
-    for (const std::string& other : alsoBodies) {
-        addAll(ids, geometry::ElementRef{other + ":", 0});
     }
     if (axisRef != 0) {
         ids.push_back(axisRef);
+    }
+    if (layout == PatternLayout::Path && pathSketch != 0) {
+        ids.push_back(pathSketch);
     }
     return ids;
 }

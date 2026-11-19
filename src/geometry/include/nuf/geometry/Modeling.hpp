@@ -144,6 +144,8 @@ struct PatternSpec {
     double spacing = 0.0;              // mm entre copias (lineal)
     double angle = 6.283185307179586;  // rad en total (circular); 2π = vuelta completa
     int count = 2;                     // con el original
+    // Si no está vacío: una copia por desplazamiento (mm), sin girar (patrón a lo largo de una trayectoria); manda sobre el resto.
+    std::vector<sketch::Vec3> offsets;
 };
 
 // Las copias del cuerpo (sin el original), una forma por copia. La copia k
@@ -151,6 +153,11 @@ struct PatternSpec {
 // completa las copias se reparten en count partes iguales; si no, el ángulo
 // total va del original a la última copia.
 std::vector<Shape> pattern(std::string_view tag, const Shape& body, const PatternSpec& spec);
+
+// «count» puntos repartidos a distancias iguales a lo largo de una trayectoria hecha con curvas de un sketch (la misma que usa el
+// barrido), del primero al último extremo. Lanza GeometryError si las curvas no forman un camino continuo.
+std::vector<sketch::Vec3> pathPoints(const sketch::Sketch& pathSketch, const sketch::Plane& pathPlane,
+                                     const std::vector<sketch::EntityId>& pathEntities, int count);
 
 // Tipo de dentado: rueda exterior, corona con los dientes hacia dentro (engranaje interno) o cremallera
 // (barra dentada: es una rueda de radio infinito).

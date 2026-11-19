@@ -397,6 +397,49 @@ TEST_CASE("Repetir y reflejar una operación (un agujero) en vez de un cuerpo, c
     CHECK(mirrored.result().bodies.front().shape.volume() == Catch::Approx(before).margin(1e-6));
 }
 
+TEST_CASE("Patrón a lo largo de una trayectoria: copias a distancias iguales, con archivo", "[pattern][io]")
+{
+    Document doc = boxDocument();
+    // La trayectoria: una recta de 100 mm en el plano XY desde (0, 20)
+    sketch::Sketch path;
+    const sketch::EntityId line = path.addLine({0, 20}, {100, 20});
+    SketchAttachment at;
+    at.origin = OriginPlane::XY;
+    const FeatureId pathId = doc.addFeature(std::make_unique<SketchFeature>(std::move(path), at));
+    const std::string key = doc.result().bodies.front().key;
+
+    auto pattern = std::make_unique<PatternFeature>();
+    pattern->body = key;
+    pattern->layout = PatternLayout::Path;
+    pattern->pathSketch = pathId;
+    pattern->path = {line};
+    pattern->count = 3;
+    pattern->operation = Operation::NewBody;
+    const FeatureId pid = doc.addFeature(std::move(pattern));
+    REQUIRE(doc.status(pid).health == Health::Ok);
+    // La caja original y, como cuerpo nuevo, las dos copias a 50 y 100 mm a lo largo de X (la trayectoria mide 100)
+    REQUIRE(doc.result().bodies.size() == 2);
+    const geometry::Box copies = doc.result().bodies[1].shape.bounds();
+    CHECK(copies.min.x == Catch::Approx(50.0).margin(1e-6));
+    CHECK(copies.max.x == Catch::Approx(120.0).margin(1e-6));
+
+    const auto file = std::filesystem::temp_directory_path() / "nuf_patron_trayectoria.nuf";
+    std::filesystem::remove(file);
+    io::saveDocument(file, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(file, reopened, view);
+    std::filesystem::remove(file);
+    REQUIRE(reopened.status(pid).health == Health::Ok);
+    CHECK(reopened.result().bodies.size() == 2);
+
+    // Sin curvas: error claro
+    auto empty = std::make_unique<PatternFeature>(*static_cast<const PatternFeature*>(doc.findFeature(pid)));
+    empty->path.clear();
+    doc.replaceFeature(pid, std::move(empty));
+    CHECK(doc.status(pid).health == Health::Error);
+}
+
 TEST_CASE("Un agujero puesto con un clic en una cara entra en el material, se guarda y sigue a la pieza", "[hole][io]")
 {
     Document doc = boxDocument();

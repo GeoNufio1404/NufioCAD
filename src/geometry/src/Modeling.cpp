@@ -31,6 +31,8 @@
 #include <BRepAlgoAPI_Splitter.hxx>
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeWire.hxx>
+#include <GCPnts_UniformAbscissa.hxx>
+#include <BRepAdaptor_CompCurve.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
 #include <BRepOffsetAPI_MakePipeShell.hxx>
 #include <BRepOffsetAPI_ThruSections.hxx>
@@ -1150,31 +1152,39 @@ std::vector<Shape> pattern(std::string_view tag, const Shape& body, const Patter
     if (body.isNull()) {
         throw GeometryError("No hay cuerpo que repetir");
     }
-    if (spec.count < 2) {
+    const int total = spec.offsets.empty() ? spec.count : int(spec.offsets.size()) + 1;
+    if (!spec.offsets.empty()) {
+        if (total > 500) {
+            throw GeometryError("Demasiados elementos en el patrón (máximo 500)");
+        }
+    } else if (spec.count < 2) {
         throw GeometryError("Un patrón necesita al menos 2 elementos");
     }
     if (spec.count > 500) {
         throw GeometryError("Demasiados elementos en el patrón (máximo 500)");
     }
     const sketch::Vec3& dir = spec.axis.direction;
-    if (std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z) <= kTiny) {
+    if (spec.offsets.empty() && std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z) <= kTiny) {
         throw GeometryError("La dirección del patrón no es válida");
     }
-    if (!spec.circular && std::abs(spec.spacing) <= kTiny) {
+    if (spec.offsets.empty() && !spec.circular && std::abs(spec.spacing) <= kTiny) {
         throw GeometryError("La distancia entre copias debe ser distinta de cero");
     }
-    if (spec.circular && std::abs(spec.angle) <= 1e-9) {
+    if (spec.offsets.empty() && spec.circular && std::abs(spec.angle) <= 1e-9) {
         throw GeometryError("El ángulo del patrón debe ser distinto de cero");
     }
     try {
         const TopoDS_Shape source = occtShape(body);
         const Shape::Impl& in = *body.impl();
         const bool full = std::abs(spec.angle) >= 6.283185307179586 - 1e-6;
-        const double step = full ? spec.angle / spec.count : spec.angle / (spec.count - 1);
+        const double step = full ? spec.angle / total : spec.angle / std::max(1, total - 1);
         std::vector<Shape> copies;
-        for (int k = 1; k < spec.count; ++k) {
+        for (int k = 1; k < total; ++k) {
             gp_Trsf move;
-            if (spec.circular) {
+            if (!spec.offsets.empty()) {
+                const sketch::Vec3& o = spec.offsets[std::size_t(k - 1)];
+                move.SetTranslation(gp_Vec(o.x, o.y, o.z));
+            } else if (spec.circular) {
                 move.SetRotation(gp_Ax1(toPnt(spec.axis.point), toDir(spec.axis.direction)), step * k);
             } else {
                 move.SetTranslation(gp_Vec(toDir(spec.axis.direction)).Multiplied(spec.spacing * k));
@@ -1196,6 +1206,47 @@ std::vector<Shape> pattern(std::string_view tag, const Shape& body, const Patter
         return copies;
     } catch (const Standard_Failure& e) {
         throw kernelFailure("repetir el cuerpo", "prueba con menos copias o con otra distancia entre ellas", e);
+    }
+}
+
+std::vector<sketch::Vec3> pathPoints(const sketch::Sketch& pathSketch, const sketch::Plane& pathPlane,
+                                     const std::vector<sketch::EntityId>& pathEntities, int count)
+{
+    if (pathEntities.empty()) {
+        throw GeometryError("Elige la trayectoria del patrón");
+    }
+    if (count < 2 || count > 500) {
+        throw GeometryError("El patrón necesita entre 2 y 500 elementos");
+    }
+    try {
+        const gp_Ax3 pathAxes = toAx3(pathPlane);
+        NCollection_List<TopoDS_Shape> edges;
+        for (const sketch::EntityId id : pathEntities) {
+            const sketch::Entity* entity = pathSketch.entity(id);
+            const auto edge = entity ? sketchEdge(*entity, pathAxes) : std::nullopt;
+            if (!edge) {
+                throw GeometryError("Una curva de la trayectoria ya no existe o no se puede usar");
+            }
+            edges.Append(*edge);
+        }
+        BRepBuilderAPI_MakeWire pathMaker;
+        pathMaker.Add(edges);
+        if (!pathMaker.IsDone()) {
+            throw GeometryError("Las curvas de la trayectoria no forman un camino continuo");
+        }
+        const BRepAdaptor_CompCurve curve(pathMaker.Wire());
+        GCPnts_UniformAbscissa spread(curve, count);
+        if (!spread.IsDone() || spread.NbPoints() < 2) {
+            throw GeometryError("No se pudieron repartir los elementos a lo largo de la trayectoria");
+        }
+        std::vector<sketch::Vec3> points;
+        for (int i = 1; i <= spread.NbPoints(); ++i) {
+            const gp_Pnt p = curve.Value(spread.Parameter(i));
+            points.push_back({p.X(), p.Y(), p.Z()});
+        }
+        return points;
+    } catch (const Standard_Failure& e) {
+        throw kernelFailure("repartir los elementos", "revisa que las curvas formen un camino continuo", e);
     }
 }
 

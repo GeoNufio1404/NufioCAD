@@ -1683,6 +1683,8 @@ PatternTool::PatternTool(document::Document& document, render::Viewport& viewpor
     if (const auto* p = dynamic_cast<const document::PatternFeature*>(original_.get())) {
         body_ = p->body;
         sourceOp_ = p->sourceFeature;
+        pathSketch_ = p->pathSketch;
+        path_ = p->path;
     }
 }
 
@@ -1705,7 +1707,7 @@ void PatternTool::createFields(QFormLayout* form)
     if (const int at = bodyBox_->findData(sourceOp_ != 0 ? QStringLiteral("op:%1").arg(qulonglong(sourceOp_)) : QString::fromStdString(body_)); at >= 0) {
         bodyBox_->setCurrentIndex(at);
     }
-    layout_ = combo({QStringLiteral("Lineal"), QStringLiteral("Circular")});
+    layout_ = combo({QStringLiteral("Lineal"), QStringLiteral("Circular"), QStringLiteral("A lo largo de una trayectoria")});
     axis_ = combo({QStringLiteral("Eje X"), QStringLiteral("Eje Y"), QStringLiteral("Eje Z")});
     for (const auto& [id, line] : before().axes) {
         const document::Feature* f = document_.findFeature(id);
@@ -1780,8 +1782,10 @@ void PatternTool::createFields(QFormLayout* form)
 void PatternTool::updateVisibility()
 {
     const bool circular = layout_->currentIndex() == 1;
-    form_->setRowVisible(spacing_, !circular);
+    const bool alongPath = layout_->currentIndex() == 2;
+    form_->setRowVisible(spacing_, !circular && !alongPath);
     form_->setRowVisible(angle_, circular);
+    form_->setRowVisible(axis_, !alongPath);
     // Una operación se repite igual que ella era (corta, une…): sin otros cuerpos ni operación propia.
     form_->setRowVisible(others_, sourceOp_ == 0);
     form_->setRowVisible(operation_, sourceOp_ == 0);
@@ -1804,7 +1808,16 @@ std::unique_ptr<document::Feature> PatternTool::build() const
             f->alsoBodies.push_back(key);
         }
     }
-    f->layout = layout_->currentIndex() == 1 ? document::PatternLayout::Circular : document::PatternLayout::Linear;
+    f->layout = layout_->currentIndex() == 1 ? document::PatternLayout::Circular
+                : layout_->currentIndex() == 2 ? document::PatternLayout::Path
+                                               : document::PatternLayout::Linear;
+    if (f->layout == document::PatternLayout::Path) {
+        if (path_.empty() || pathSketch_ == 0) {
+            return nullptr;  // falta elegir las curvas de la trayectoria
+        }
+        f->pathSketch = pathSketch_;
+        f->path = path_;
+    }
     if (axis_->currentIndex() >= 3) {
         f->axisRef = axisIds_[std::size_t(axis_->currentIndex() - 3)];
     } else {
@@ -1875,10 +1888,32 @@ std::optional<FeatureTool::Arc> PatternTool::dimensionArc(const std::string& key
     return Arc{point, axis, start, angle_->value() * kDegree};
 }
 
+void PatternTool::selectionChanged(const render::ModelSelection& selection)
+{
+    // Con «A lo largo de una trayectoria», las curvas elegidas en la vista son el camino (de un solo sketch: el de la primera).
+    if (layout_ == nullptr || layout_->currentIndex() != 2 || selection.curves.empty()) {
+        return;
+    }
+    pathSketch_ = selection.curves.front().sketch;
+    path_.clear();
+    for (const render::ModelSelection::Curve& c : selection.curves) {
+        if (c.sketch == pathSketch_) {
+            path_.push_back(c.entity);
+        }
+    }
+    updatePreview();
+}
+
 QString PatternTool::inputsText() const
 {
     if (bodyBox_->count() == 0) {
         return QStringLiteral("No hay cuerpos que repetir");
+    }
+    if (layout_->currentIndex() == 2) {
+        return path_.empty() ? QStringLiteral("Elige en la vista las curvas de la trayectoria (un sketch); las copias se reparten a distancias iguales a lo largo de ella")
+                             : QStringLiteral("Patrón a lo largo de una trayectoria de %1 curva(s): %2 en total")
+                                   .arg(path_.size())
+                                   .arg(int(std::lround(count_->value())));
     }
     return QStringLiteral("Patrón %1 de «%2»: %3 en total")
         .arg(layout_->currentIndex() == 1 ? QStringLiteral("circular") : QStringLiteral("lineal"))

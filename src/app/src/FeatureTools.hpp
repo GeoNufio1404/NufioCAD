@@ -873,7 +873,7 @@ public:
 protected:
     QString title() const override { return QStringLiteral("Patrón"); }
     void createFields(QFormLayout* form) override;
-    void selectionChanged(const render::ModelSelection&) override {}
+    void selectionChanged(const render::ModelSelection& selection) override;
     QString inputsText() const override;
     std::optional<Arrow> dimensionArrow(const std::string& key) const override;
     std::optional<Arc> dimensionArc(const std::string& key) const override;
@@ -882,6 +882,8 @@ protected:
 private:
     void updateVisibility();
 
+    document::FeatureId pathSketch_ = 0;     // con «A lo largo de una trayectoria»: las curvas elegidas
+    std::vector<sketch::EntityId> path_;
     document::FeatureId sourceOp_ = 0;  // si no es 0: se repite esa operación en vez de un cuerpo
     std::string body_;
     std::vector<document::FeatureId> axisIds_;  // ejes de construcción del desplegable (tras X, Y, Z)

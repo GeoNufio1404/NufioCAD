@@ -92,8 +92,8 @@ const Table<geo::HoleKind, 3> kHoleKinds{{
     {geo::HoleKind::Countersink, "countersink"},
 }};
 
-const Table<PatternLayout, 2> kPatternLayouts{{
-    {PatternLayout::Linear, "linear"}, {PatternLayout::Circular, "circular"},
+const Table<PatternLayout, 3> kPatternLayouts{{
+    {PatternLayout::Linear, "linear"}, {PatternLayout::Circular, "circular"}, {PatternLayout::Path, "path"},
 }};
 
 const Table<JointType, 7> kJointTypes{{
@@ -686,6 +686,14 @@ FeatureRow rowOf(const Feature& f)
         if (pt.sourceFeature != 0) {
             params["source"] = pt.sourceFeature;
         }
+        if (pt.layout == PatternLayout::Path) {
+            params["pathSketch"] = pt.pathSketch;
+            Json pathIds = Json::array();
+            for (const sk::EntityId id : pt.path) {
+                pathIds.push_back(std::uint64_t(id));
+            }
+            params["path"] = pathIds;
+        }
         break;
     }
     case FeatureKind::Hole: {
@@ -993,6 +1001,12 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
             }
         }
         pt->sourceFeature = p.value("source", std::uint64_t(0));
+        if (pt->layout == PatternLayout::Path) {
+            pt->pathSketch = unsignedValue(p, "pathSketch");
+            for (const Json& entity : p.at("path")) {
+                pt->path.push_back(static_cast<sk::EntityId>(entity.get<std::uint64_t>()));
+            }
+        }
         feature = std::move(pt);
     } else if (row.type == "hole") {
         auto h = std::make_unique<HoleFeature>();

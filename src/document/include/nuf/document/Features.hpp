@@ -494,7 +494,7 @@ public:
     std::vector<NumericField> numericFields() override;
 };
 
-enum class PatternLayout { Linear, Circular };
+enum class PatternLayout { Linear, Circular, Path };
 
 // Patrón: copias de un cuerpo en fila (a lo largo de un eje de origen) o
 // alrededor de un eje de origen. «count» incluye el original. Con «Unir» las
@@ -504,6 +504,8 @@ public:
     std::string body;                          // clave del cuerpo («f3»)
     std::vector<std::string> alsoBodies;       // otros cuerpos que se repiten a la vez (O1), cada uno con sus copias
     FeatureId sourceFeature = 0;               // si no es 0: se repite esa operación (un agujero, un corte…) en vez de cuerpos
+    FeatureId pathSketch = 0;                  // con «Path»: el sketch cuyas curvas son la trayectoria…
+    std::vector<sketch::EntityId> path;        // …y cuáles de ellas (un camino continuo); «count» elementos a distancias iguales
     PatternLayout layout = PatternLayout::Linear;
     int axis = 0;                              // 0 = X, 1 = Y, 2 = Z (por el origen)
     FeatureId axisRef = 0;                     // si no es 0, un eje de construcción (en vez de axis)
