@@ -13,6 +13,8 @@
 #include <Poly_Triangulation.hxx>
 #include <STEPControl_StepModelType.hxx>
 #include <STEPControl_Reader.hxx>
+#include <NCollection_Sequence.hxx>
+#include <TCollection_AsciiString.hxx>
 #include <Standard_Failure.hxx>
 #include <STEPControl_Writer.hxx>
 #include <Standard_Version.hxx>
@@ -576,6 +578,22 @@ StepImport readStep(const std::filesystem::path& path)
     }
 
     StepImport result;
+    // Las unidades del archivo: el lector las convierte a milímetros (xstep.cascade.unit); si no eran milímetros, se dice (O6).
+    {
+        NCollection_Sequence<TCollection_AsciiString> lengthUnits;
+        NCollection_Sequence<TCollection_AsciiString> angleUnits;
+        NCollection_Sequence<TCollection_AsciiString> solidAngleUnits;
+        reader.FileUnits(lengthUnits, angleUnits, solidAngleUnits);
+        if (!lengthUnits.IsEmpty()) {
+            std::string unit = lengthUnits.First().ToCString();
+            std::transform(unit.begin(), unit.end(), unit.begin(), [](unsigned char c) { return char(std::toupper(c)); });
+            if (unit != "MM" && unit != "MILLIMETRE" && unit != "MILLIMETER" && !unit.empty()) {
+                const bool inches = unit.find("INCH") != std::string::npos;
+                result.warnings.push_back(std::string("El archivo estaba en ") + (inches ? "pulgadas" : "«" + unit + "»") +
+                                          ": se convirtió a milímetros al importarlo.");
+            }
+        }
+    }
     ShapeFix_Shape fixer(whole);
     fixer.Perform();
     if (!fixer.Shape().IsNull()) {
