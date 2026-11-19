@@ -2836,13 +2836,13 @@ TEST_CASE("Un engranaje interno tiene los dientes hacia dentro y un aro por fuer
     REQUIRE(flank);
     REQUIRE(outside);
 
-    // Con hélice no se puede: error claro.
+    // Con hélice sí se puede (E1, corona helicoidal); con más de 45° no: error claro.
     Document bad;
     auto helical = std::make_unique<GearFeature>();
     helical->base.origin = OriginPlane::XY;
     helical->spec.type = geometry::GearType::Internal;
     helical->spec.teeth = 36;
-    helical->spec.helixAngle = 0.2;
+    helical->spec.helixAngle = 0.9;
     REQUIRE(bad.status(bad.addFeature(std::move(helical))).health == Health::Error);
 }
 

@@ -264,13 +264,14 @@ TEST_CASE("La espina de pescado tiene el mismo volumen que el engranaje helicoid
     REQUIRE(countNamed(both, "h:lado:agujero") == 1);
 }
 
-TEST_CASE("La espina de pescado pide hélice y solo se hace en ruedas exteriores", "[gear][herringbone]")
+TEST_CASE("La espina de pescado pide hélice, en cualquier tipo de rueda", "[gear][herringbone]")
 {
     geometry::GearSpec spec = spur();
     spec.herringbone = true;  // sin ángulo de hélice
     REQUIRE_THROWS_AS(geometry::gear("h", xy(), spec), geometry::GeometryError);
-    spec.helixAngle = 0.3;
     spec.type = geometry::GearType::Internal;
+    REQUIRE_THROWS_AS(geometry::gear("h", xy(), spec), geometry::GeometryError);
+    spec.type = geometry::GearType::Rack;
     REQUIRE_THROWS_AS(geometry::gear("h", xy(), spec), geometry::GeometryError);
 }
 
