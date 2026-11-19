@@ -405,7 +405,15 @@ public:
     std::vector<FeatureId> dependencies() const override;
 };
 
-enum class JointType { Rigid, Revolute, Slider };
+enum class JointType { Rigid, Revolute, Slider, Cylindrical, PinSlot, Planar, Ball };
+
+// Una cara o una arista de un cuerpo, para alinear o unir: el centro de una cara plana, el eje de un cilindro, el
+// centro de una arista circular… (geometry::Frame).
+struct ElementPick {
+    geometry::ElementRef ref;
+    bool edge = false;
+    bool operator==(const ElementPick&) const = default;
+};
 
 // Unión entre dos caras planas de dos cuerpos: el cuerpo de la segunda cara se
 // coloca de modo que sus caras queden enfrentadas (centro con centro). La
@@ -414,16 +422,67 @@ enum class JointType { Rigid, Revolute, Slider };
 // primera cara. La primera cara es la fija.
 class JointFeature final : public Feature {
 public:
-    geometry::ElementRef fixedFace;
-    geometry::ElementRef movingFace;
+    geometry::ElementRef fixedFace;   // la cara o la arista (según «fixedEdge») de la pieza que se queda
+    geometry::ElementRef movingFace;  // lo mismo, de la pieza que se mueve
+    bool fixedEdge = false;
+    bool movingEdge = false;
+    std::vector<std::string> alsoMove;  // otros cuerpos que van con la pieza móvil
     JointType type = JointType::Rigid;
-    double offset = 0.0;  // mm entre las caras (positivo las separa)
+    double offset = 0.0;  // mm entre las caras (positivo las separa); en la cilíndrica, el deslizamiento por el eje
     double angle = 0.0;   // rad alrededor de la normal
-    double slide = 0.0;   // mm a lo largo del eje X de la cara fija
-    bool flip = false;    // caras del mismo lado (no enfrentadas)
+    double slide = 0.0;   // mm a lo largo del eje X del elemento fijo
+    double slideY = 0.0;  // mm a lo largo de su eje Y (unión plana)
+    double tiltX = 0.0;   // rad: cabeceo de la unión esférica
+    double tiltY = 0.0;
+    bool flip = false;    // del mismo lado (no enfrentadas)
+    // Límites del movimiento (Fase 21): el giro, y el deslizamiento (el de X; en la cilíndrica, el del eje).
+    bool limitAngle = false;
+    double angleMin = 0.0;  // rad
+    double angleMax = 0.0;
+    bool limitSlide = false;
+    double slideMin = 0.0;  // mm
+    double slideMax = 0.0;
 
     FeatureKind kind() const override { return FeatureKind::Joint; }
     std::unique_ptr<Feature> clone() const override { return std::make_unique<JointFeature>(*this); }
+    std::optional<std::string> compute(ModelState& state) const override;
+    std::vector<FeatureId> dependencies() const override;
+    std::vector<NumericField> numericFields() override;
+};
+
+// Alinear (Fase 21): coloca de una vez una pieza sobre otra, centro con centro, sin dejar una unión que se pueda mover.
+// Si la pieza que se mueve está fija, se mueve la otra (nunca se mueve una pieza fija).
+class AlignFeature final : public Feature {
+public:
+    ElementPick moving;  // en la pieza que salta
+    ElementPick target;  // adonde llega
+    std::vector<std::string> alsoMove;  // otros cuerpos que van con la pieza que salta
+    bool flip = false;   // del otro lado (las caras planas se enfrentan; los ejes van en el mismo sentido)
+    double angle = 0.0;  // rad: giro alrededor de la dirección del destino (de 90 en 90 con los botones)
+    double offset = 0.0; // mm: separación a lo largo de esa dirección
+
+    FeatureKind kind() const override { return FeatureKind::Align; }
+    std::unique_ptr<Feature> clone() const override { return std::make_unique<AlignFeature>(*this); }
+    std::optional<std::string> compute(ModelState& state) const override;
+    std::vector<FeatureId> dependencies() const override;
+    std::vector<NumericField> numericFields() override;
+};
+
+// Enlace de movimiento (Fase 21): hace girar (o deslizar) a la vez varias uniones con una relación fija. Es la manera
+// de decir «cuando gira el sol, el planeta gira al revés y más rápido»: la «posición» del enlace es lo que gira el
+// primer miembro y cada miembro se mueve «razón» veces eso (un giro en radianes; un deslizamiento, en mm por radián).
+class MotionLinkFeature final : public Feature {
+public:
+    struct Member {
+        FeatureId joint = 0;
+        double ratio = 1.0;
+        bool operator==(const Member&) const = default;
+    };
+    std::vector<Member> members;
+    double position = 0.0;  // rad: lo que gira el miembro con razón 1
+
+    FeatureKind kind() const override { return FeatureKind::MotionLink; }
+    std::unique_ptr<Feature> clone() const override { return std::make_unique<MotionLinkFeature>(*this); }
     std::optional<std::string> compute(ModelState& state) const override;
     std::vector<FeatureId> dependencies() const override;
     std::vector<NumericField> numericFields() override;

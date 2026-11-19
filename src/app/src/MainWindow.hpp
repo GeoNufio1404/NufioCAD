@@ -154,6 +154,35 @@ private:
 
     // Operaciones sólidas.
     void startTool(std::unique_ptr<FeatureTool> tool);
+    // Piezas de un conjunto (Fase 21): duplicar, fijar, agrupar; MainWindowAssembly.cpp.
+    void connectAssembly();
+    std::vector<std::string> selectedBodyKeys() const;
+    void duplicateBodies(const std::vector<std::string>& keys);
+    void setBodiesFixed(const std::vector<std::string>& keys, bool fix);
+    void groupBodies(const std::vector<std::string>& keys);
+    QAction* duplicateAction_ = nullptr;
+    QAction* dragAction_ = nullptr;
+    // Arrastrar piezas (A5, A7): lo que se agarró y cómo se mueve.
+    struct BodyDragState {
+        std::vector<std::string> group;           // los cuerpos que se mueven (el agarrado, primero)
+        sketch::Vec3 grab;                        // el punto agarrado
+        sketch::Vec3 translation;                 // lo arrastrado (sin unión)
+        bool joint = false;                       // lo coloca una unión: solo se mueve como ella permite
+        document::FeatureId jointId = 0;
+        document::JointAxis axis;
+        std::unique_ptr<document::Feature> original;  // la unión antes de arrastrar
+        std::unique_ptr<document::Feature> edited;    // la unión con el valor de ahora
+        double startValue = 0.0;                  // el ángulo o el deslizamiento de antes
+    };
+    std::unique_ptr<BodyDragState> bodyDrag_;
+    void connectBodyDrag();
+    bool canDragBody(const std::string& key);
+    void beginBodyDrag(const std::string& key, const sketch::Vec3& grab);
+    void moveBodyDrag(const sketch::Vec3& delta, bool snap);
+    void endBodyDrag(bool moved);
+    QAction* interferenceAction_ = nullptr;
+    QAction* linkAction_ = nullptr;
+    std::vector<std::string> bodyClipboard_;  // Ctrl+C / Ctrl+V de cuerpos
     // El modelo se recalcula en segundo plano: lo que necesita el resultado nuevo espera (avisa y devuelve true).
     bool modelBusy();
     // ¿Hay algo cargando? El modelo, la vista previa de una herramienta, una exportación, una importación, una
@@ -217,6 +246,7 @@ private:
     QAction* combineAction_ = nullptr;
     QAction* organizeAction_ = nullptr;
     QAction* jointAction_ = nullptr;
+    QAction* alignAction_ = nullptr;
     QAction* measureAction_ = nullptr;
     QAction* boxAction_ = nullptr;
     QAction* cylinderAction_ = nullptr;

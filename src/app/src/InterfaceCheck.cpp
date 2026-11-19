@@ -13,6 +13,8 @@
 #include "SketchSession.hpp"
 #include "Ribbon.hpp"
 #include "FieldMarks.hpp"
+#include "InterferenceDialog.hpp"
+#include "ModelPanels.hpp"
 #include "RadialMenu.hpp"
 #include "ValueInput.hpp"
 #include "StartScreen.hpp"
@@ -27,6 +29,7 @@
 #include <nuf/sketch/Annotations.hpp>
 
 #include <QAction>
+#include <QTableWidget>
 #include <QApplication>
 #include <QCoreApplication>
 #include <QDateTime>
@@ -1385,6 +1388,259 @@ int InterfaceCheck::run()
             }
             waitFor([this] { return window_.tool_ == nullptr; }, 10000);
         }
+        undoAll();
+    });
+
+    // Alinear y unir (Fase 21): la herramienta se abre sobre un alineado hecho, se recorren todos sus tipos (con la vista
+    // previa de cada uno) y al aceptar como «Giratoria» el alineado pasa a ser una unión que se puede mover.
+    step(QStringLiteral("Alinear y unir dos cuerpos (herramienta, tipos y límites)"), [&] {
+        const auto addBoxAt = [&](double x) {
+            auto box = std::make_unique<document::BoxFeature>();
+            box->base.origin = document::OriginPlane::XY;
+            box->x = x;
+            blocking(QStringLiteral("agregar una caja"),
+                     [&] { window_.commands_.push(std::make_unique<commands::AddFeature>(std::move(box))); });
+        };
+        addBoxAt(0.0);
+        addBoxAt(60.0);
+        waitIdle();
+        expect(window_.document_.result().bodies.size() == 2, QStringLiteral("no hay dos cuerpos"));
+        if (window_.document_.result().bodies.size() != 2) {
+            undoAll();
+            return;
+        }
+        const auto faceFacing = [&](std::size_t body, double z) {
+            const geometry::Shape& shape = window_.document_.result().bodies[body].shape;
+            for (int i = 0; i < shape.faceCount(); ++i) {
+                if (const auto plane = shape.facePlane(i); plane && plane->normal.z * z > 0.9) {
+                    return shape.faceRef(i);
+                }
+            }
+            return geometry::ElementRef{};
+        };
+        auto align = std::make_unique<document::AlignFeature>();
+        align->moving = {faceFacing(1, -1.0), false};
+        align->target = {faceFacing(0, 1.0), false};
+        const document::FeatureId alignId = window_.document_.nextId();
+        blocking(QStringLiteral("agregar el alineado"),
+                 [&] { window_.commands_.push(std::make_unique<commands::AddFeature>(std::move(align))); });
+        waitIdle();
+        expect(window_.document_.status(alignId).health == document::Health::Ok, QStringLiteral("el alineado dio error"));
+        // La segunda caja quedó sobre la primera, centrada.
+        const geometry::Box top = window_.document_.result().bodies[1].shape.bounds();
+        expect(std::abs(top.min.z - 10.0) < 1e-6 && std::abs(top.min.x - 0.0) < 1e-6,
+               QStringLiteral("el alineado no apoyó la caja sobre la otra"));
+        blocking(QStringLiteral("abrir la herramienta Alinear"), [&] { window_.activateFeature(alignId); });
+        waitIdle();
+        expect(window_.tool_ != nullptr, QStringLiteral("no se abrió la herramienta Alinear"));
+        auto* type = window_.propertiesDock_->widget() != nullptr ? window_.propertiesDock_->widget()->findChild<QComboBox*>() : nullptr;
+        expect(type != nullptr && type->count() == 8, QStringLiteral("la lista de tipos no tiene los 8 tipos"));
+        if (type != nullptr && window_.tool_ != nullptr) {
+            for (int index = 1; index < type->count(); ++index) {
+                blocking(QStringLiteral("cambiar el tipo"), [&] { type->setCurrentIndex(index); });
+                waitIdle();
+                expect(window_.tool_ != nullptr, QStringLiteral("la herramienta se cerró al cambiar de tipo"));
+            }
+            blocking(QStringLiteral("elegir Giratoria"), [&] { type->setCurrentIndex(2); });
+            waitIdle();
+            if (QPushButton* ok = button(QStringLiteral("Aceptar")); ok != nullptr && ok->isEnabled()) {
+                blocking(QStringLiteral("aceptar"), [&] { ok->click(); });
+            }
+            waitFor([this] { return window_.tool_ == nullptr; }, 10000);
+            waitIdle();
+            const auto* joint = dynamic_cast<const document::JointFeature*>(window_.document_.findFeature(alignId));
+            expect(joint != nullptr && joint->type == document::JointType::Revolute,
+                   QStringLiteral("al aceptar como Giratoria no quedó una unión giratoria"));
+        }
+        if (window_.tool_ != nullptr) {
+            if (QPushButton* cancel = button(QStringLiteral("Cancelar"))) {
+                cancel->click();
+            }
+            waitFor([this] { return window_.tool_ == nullptr; }, 10000);
+        }
+        undoAll();
+    });
+
+    // Enlace de movimiento e interferencias (Fase 21): dos uniones giratorias se atan con razón 1 y −2; la herramienta
+    // las lista, se acepta, y el diálogo de interferencias abre y revisa sin problemas.
+    step(QStringLiteral("Enlace de movimiento e interferencias"), [&] {
+        const auto addBoxAt = [&](double x, double z) {
+            auto box = std::make_unique<document::BoxFeature>();
+            box->base.origin = document::OriginPlane::XY;
+            box->x = x;
+            box->z = z;
+            blocking(QStringLiteral("agregar una caja"),
+                     [&] { window_.commands_.push(std::make_unique<commands::AddFeature>(std::move(box))); });
+        };
+        addBoxAt(0.0, 0.0);
+        addBoxAt(100.0, 0.0);
+        addBoxAt(300.0, 0.0);
+        addBoxAt(400.0, 0.0);
+        waitIdle();
+        expect(window_.document_.result().bodies.size() == 4, QStringLiteral("no hay cuatro cuerpos"));
+        if (window_.document_.result().bodies.size() != 4) {
+            undoAll();
+            return;
+        }
+        const auto faceFacing = [&](std::size_t body, double z) {
+            const geometry::Shape& shape = window_.document_.result().bodies[body].shape;
+            for (int i = 0; i < shape.faceCount(); ++i) {
+                if (const auto plane = shape.facePlane(i); plane && plane->normal.z * z > 0.9) {
+                    return shape.faceRef(i);
+                }
+            }
+            return geometry::ElementRef{};
+        };
+        std::vector<document::FeatureId> joints;
+        for (const std::size_t plate : {std::size_t(0), std::size_t(2)}) {
+            auto joint = std::make_unique<document::JointFeature>();
+            joint->fixedFace = faceFacing(plate, 1.0);
+            joint->movingFace = faceFacing(plate + 1, -1.0);
+            joint->type = document::JointType::Revolute;
+            joints.push_back(window_.document_.nextId());
+            blocking(QStringLiteral("agregar una unión"),
+                     [&] { window_.commands_.push(std::make_unique<commands::AddFeature>(std::move(joint))); });
+        }
+        waitIdle();
+        auto link = std::make_unique<document::MotionLinkFeature>();
+        link->members = {{joints[0], 1.0}, {joints[1], -2.0}};
+        link->position = 0.5;
+        const document::FeatureId linkId = window_.document_.nextId();
+        blocking(QStringLiteral("agregar el enlace"),
+                 [&] { window_.commands_.push(std::make_unique<commands::AddFeature>(std::move(link))); });
+        waitIdle();
+        expect(window_.document_.status(linkId).health == document::Health::Ok, QStringLiteral("el enlace dio error: %1")
+                   .arg(QString::fromStdString(window_.document_.status(linkId).message)));
+        blocking(QStringLiteral("abrir la herramienta Enlace"), [&] { window_.activateFeature(linkId); });
+        waitIdle();
+        expect(window_.tool_ != nullptr, QStringLiteral("no se abrió la herramienta Enlace"));
+        auto* table = window_.propertiesDock_->widget() != nullptr ? window_.propertiesDock_->widget()->findChild<QTableWidget*>() : nullptr;
+        expect(table != nullptr && table->rowCount() == 2, QStringLiteral("la lista de uniones no tiene las 2 uniones"));
+        if (window_.tool_ != nullptr) {
+            if (QPushButton* ok = button(QStringLiteral("Aceptar")); ok != nullptr && ok->isEnabled()) {
+                blocking(QStringLiteral("aceptar"), [&] { ok->click(); });
+            }
+            waitFor([this] { return window_.tool_ == nullptr; }, 10000);
+            waitIdle();
+        }
+        // El diálogo de interferencias abre, mira la posición de ahora y el giro del enlace sin fallar.
+        blocking(QStringLiteral("abrir Interferencias"), [&] {
+            InterferenceDialog dialog(window_.document_, *window_.viewport_, {}, &window_);
+            dialog.show();
+            QApplication::processEvents();
+        });
+        if (window_.tool_ != nullptr) {
+            if (QPushButton* cancel = button(QStringLiteral("Cancelar"))) {
+                cancel->click();
+            }
+            waitFor([this] { return window_.tool_ == nullptr; }, 10000);
+        }
+        undoAll();
+    });
+
+    // Arrastrar piezas (Fase 21): las señales del visor se simulan (agarrar, arrastrar, soltar). Una pieza suelta se
+    // mueve lo arrastrado y queda guardada como un Mover; una colocada por una unión giratoria solo gira.
+    step(QStringLiteral("Arrastrar piezas (libre y con una unión giratoria)"), [&] {
+        const auto addBoxAt = [&](double x, double z) {
+            auto box = std::make_unique<document::BoxFeature>();
+            box->base.origin = document::OriginPlane::XY;
+            box->x = x;
+            box->z = z;
+            blocking(QStringLiteral("agregar una caja"),
+                     [&] { window_.commands_.push(std::make_unique<commands::AddFeature>(std::move(box))); });
+        };
+        addBoxAt(0.0, 0.0);
+        waitIdle();
+        expect(window_.document_.result().bodies.size() == 1, QStringLiteral("no hay un cuerpo"));
+        if (window_.document_.result().bodies.size() != 1) {
+            undoAll();
+            return;
+        }
+        const QString key = QString::fromStdString(window_.document_.result().bodies[0].key);
+        const double x0 = window_.document_.result().bodies[0].shape.bounds().min.x;
+        blocking(QStringLiteral("arrastrar libre"), [&] {
+            emit window_.viewport_->bodyDragStarted(key, {5.0, 5.0, 10.0});
+            emit window_.viewport_->bodyDragged(key, {12.0, 3.0, 0.0}, false);
+            emit window_.viewport_->bodyDragFinished(key, true);
+        });
+        waitIdle();
+        const geometry::Box moved = window_.document_.result().bodies[0].shape.bounds();
+        expect(std::abs(moved.min.x - (x0 + 12.0)) < 1e-6 && std::abs(moved.min.y - 3.0) < 1e-6,
+               QStringLiteral("el arrastre libre no movió el cuerpo 12 y 3 mm (quedó en %1, %2)").arg(moved.min.x).arg(moved.min.y));
+        expect(window_.document_.featureCount() == 2, QStringLiteral("no se guardó una operación Mover"));
+        undoAll();
+
+        // Con una unión giratoria entre una placa y un bloque: el arrastre cambia el ángulo de la unión.
+        addBoxAt(0.0, 0.0);
+        addBoxAt(100.0, 0.0);
+        waitIdle();
+        if (window_.document_.result().bodies.size() == 2) {
+            const auto faceFacing = [&](std::size_t body, double z) {
+                const geometry::Shape& shape = window_.document_.result().bodies[body].shape;
+                for (int i = 0; i < shape.faceCount(); ++i) {
+                    if (const auto plane = shape.facePlane(i); plane && plane->normal.z * z > 0.9) {
+                        return shape.faceRef(i);
+                    }
+                }
+                return geometry::ElementRef{};
+            };
+            auto joint = std::make_unique<document::JointFeature>();
+            joint->fixedFace = faceFacing(0, 1.0);
+            joint->movingFace = faceFacing(1, -1.0);
+            joint->type = document::JointType::Revolute;
+            const document::FeatureId jointId = window_.document_.nextId();
+            blocking(QStringLiteral("agregar la unión"),
+                     [&] { window_.commands_.push(std::make_unique<commands::AddFeature>(std::move(joint))); });
+            waitIdle();
+            const QString block = QString::fromStdString(window_.document_.result().bodies[1].key);
+            const geometry::Box top = window_.document_.result().bodies[1].shape.bounds();
+            blocking(QStringLiteral("arrastrar con la unión"), [&] {
+                emit window_.viewport_->bodyDragStarted(block, {top.max.x, top.min.y, top.max.z});
+                emit window_.viewport_->bodyDragged(block, {0.0, 6.0, 0.0}, false);
+                emit window_.viewport_->bodyDragFinished(block, true);
+            });
+            waitIdle();
+            const auto* edited = dynamic_cast<const document::JointFeature*>(window_.document_.findFeature(jointId));
+            expect(edited != nullptr && std::abs(edited->angle) > 0.01, QStringLiteral("el arrastre no giró la unión"));
+            // El bloque sigue centrado sobre la placa: giró, no se desplazó.
+            const geometry::Box after = window_.document_.result().bodies[1].shape.bounds();
+            expect(std::abs(0.5 * (after.min.x + after.max.x) - 5.0) < 1e-4, QStringLiteral("el bloque se salió de su eje al girar"));
+            undoAll();
+        } else {
+            undoAll();
+        }
+    });
+
+    // Duplicar, fijar y soltar desde el navegador (Fase 21): lo mismo que hace el clic derecho, sin abrir el menú.
+    step(QStringLiteral("Duplicar y fijar un cuerpo desde el navegador"), [&] {
+        auto box = std::make_unique<document::BoxFeature>();
+        box->base.origin = document::OriginPlane::XY;
+        blocking(QStringLiteral("agregar una caja"),
+                 [&] { window_.commands_.push(std::make_unique<commands::AddFeature>(std::move(box))); });
+        waitIdle();
+        expect(window_.document_.result().bodies.size() == 1, QStringLiteral("no hay un cuerpo"));
+        if (window_.document_.result().bodies.size() != 1) {
+            undoAll();
+            return;
+        }
+        const std::string key = window_.document_.result().bodies[0].key;
+        blocking(QStringLiteral("duplicar"), [&] { emit window_.navigator_->duplicateRequested({key}); });
+        waitIdle();
+        expect(window_.document_.result().bodies.size() == 2, QStringLiteral("Duplicar no creó la copia"));
+        if (window_.document_.result().bodies.size() == 2) {
+            expect(window_.document_.result().bodies[1].name == QStringLiteral("Caja 2").toStdString(),
+                   QStringLiteral("la copia no se llama «Caja 2» sino «%1»")
+                       .arg(QString::fromStdString(window_.document_.result().bodies[1].name)));
+            const geometry::Box a = window_.document_.result().bodies[0].shape.bounds();
+            const geometry::Box b = window_.document_.result().bodies[1].shape.bounds();
+            expect(b.min.x >= a.max.x, QStringLiteral("la copia no quedó al lado"));
+        }
+        blocking(QStringLiteral("fijar"), [&] { emit window_.navigator_->fixRequested({key}, true); });
+        waitIdle();
+        expect(window_.document_.isFixed(key), QStringLiteral("no quedó fijo"));
+        blocking(QStringLiteral("soltar"), [&] { emit window_.navigator_->fixRequested({key}, false); });
+        waitIdle();
+        expect(!window_.document_.isFixed(key), QStringLiteral("no se soltó"));
         undoAll();
     });
 

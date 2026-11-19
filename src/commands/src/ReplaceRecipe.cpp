@@ -132,7 +132,7 @@ void ReplaceRecipe::execute(document::Document& doc)
                 features.push_back(current.clone());
                 continue;
             }
-            auto next = document::instantiate(*recipe_.features[k], recipeSketch);
+            auto next = document::instantiate(*recipe_.features[k], recipeSketch, ids_);
             next->setId(current.id());
             next->setName(current.name());
             next->setSuppressed(current.suppressed());
@@ -161,7 +161,7 @@ void ReplaceRecipe::execute(document::Document& doc)
                     document::Feature& source = *recipe_.features[j];
                     const document::FeatureId id = j == 0 ? lead : source.id() != 0 ? source.id() : nextId++;
                     source.setId(id);
-                    auto next = document::instantiate(source, recipeSketch);
+                    auto next = document::instantiate(source, recipeSketch, ids_);
                     next->origin = originFor(j, lead);
                     if (next->name().empty()) {
                         next->setName(source.name().empty() ? doc.defaultName(source.kind()) + "_" + std::to_string(id) : source.name());
@@ -203,7 +203,8 @@ void ReplaceRecipe::execute(document::Document& doc)
             continue;
         }
         if (!info.contains(body.key)) {
-            info[body.key] = {next < recipe_.bodyNames.size() ? recipe_.bodyNames[next] : std::string(), component};
+            info[body.key] = {next < recipe_.bodyNames.size() ? recipe_.bodyNames[next] : std::string(), component,
+                              std::ranges::find(recipe_.fixedBodies, int(next)) != recipe_.fixedBodies.end()};
         }
         ++next;
     }

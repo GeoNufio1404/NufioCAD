@@ -4,6 +4,8 @@
 
 #include "ViewportDrawing.hpp"
 
+#include <functional>
+
 #include <StdPrs_ToolTriangulatedShape.hxx>
 
 namespace nuf::render {
@@ -189,6 +191,16 @@ public:
     Handle(AIS_Shape) gizmoShapes[3];
     gp_Pnt gizmoOrigin;
     double gizmoBuiltSize = 0.0;
+    // Arrastrar piezas (Fase 21)
+    bool bodyDragEnabled = false;
+    std::function<bool(const std::string&)> bodyDragFilter;
+    bool bodyDragging = false;
+    std::string dragKey;
+    gp_Pnt dragGrab;      // el punto del cuerpo que se agarró
+    gp_Dir dragNormal;    // la dirección de la vista: el plano del arrastre pasa por «dragGrab» perpendicular a ella
+    QPointF dragPress;
+    bool dragMoved = false;
+    std::optional<gp_Pnt> dragPlanePoint(const Vec2i& pixel) const;
     int gizmoActive = -1;  // el eje que se está arrastrando
     gp_Pnt gizmoDragOrigin;  // dónde estaba el centro al agarrar (el arrastre se mide desde ahí)
     double gizmoGrab = 0.0;  // mover: parámetro sobre el eje al agarrar; girar: ángulo anterior
@@ -228,7 +240,7 @@ public:
 
     void hideGhost();
 
-    void showGhost(const std::vector<geometry::Shape>& list);
+    void showGhost(const std::vector<geometry::Shape>& list, bool alert = false);
 
     void setGhostMotion(const sketch::Vec3& pivot, const sketch::Vec3& rotation, const sketch::Vec3& translation);
 

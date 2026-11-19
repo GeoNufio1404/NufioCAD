@@ -78,6 +78,16 @@ Dos campos nuevos del engranaje, ambos en 0 por defecto (los diseños anteriores
 ---
 
 
+## Fase 21: ensamblar y mover piezas — 19 nov. 2026
+
+- **Piezas fijas** (`BodyInfo::fixed`, `ModelState::fixedBodies`): Alinear y Unión mueven siempre la pieza que no está fija; se guarda en el archivo (`cuerpos.<clave>.fixed`).
+- **Alinear** (`AlignFeature`) y **Unión ampliada** (`JointFeature`): sobre caras planas, cilindros, conos, esferas y aristas circulares o rectas (`geometry::Frame`, `Shape::faceFrame` y `edgeFrame`); siete tipos de unión con límites; los componentes se mueven enteros. Una sola herramienta (`JointTool`) con el botón Alinear (`A`).
+- **Enlace de movimiento** (`MotionLinkFeature`, `MotionLinkTool`) e **Interferencias** (`geometry::overlap`, `document::findInterferences` y `findInterferencesAlong`, diálogo con sombra roja).
+- **Duplicar** (`commands::DuplicateBodies`, Mover con copia de varios cuerpos), clic derecho del Navegador (duplicar, fijar, crear componente, mover) con candado en los fijos, `Ctrl+D`, `Ctrl+C` y `Ctrl+V`.
+- **Arrastrar piezas** (`Viewport::bodyDragged`, tecla `G`): libre sobre el plano de la pantalla (guarda un Mover) o según la unión (guarda el ángulo o el desplazamiento).
+- **Tren planetario** (generador): sol, planetas, corona fija, portasatélites, ejes, uniones y enlace de movimiento; las recetas pueden ahora llevar uniones y enlaces (`@axis:#k`, `kRecipeFeatureBase`) y cuerpos que salen fijos (`Recipe::fixedBodies`).
+- **Cómo volver atrás:** no fusionar `feature/fase-21-mover-piezas`.
+
 ## Fase 19: distribución — 19 nov. 2026
 
 - **Instalador y paquetes** (`cmake/Packaging.cmake`, reglas de instalación de `src/app/CMakeLists.txt`): Windows con NSIS y ZIP (DLL de Qt, OpenCASCADE y vcpkg, plugins con `windeployqt`, asociación de `.nuf`, avisos de licencias); Linux con `.tar.gz`, `.deb`, `.rpm` y AppImage (`packaging/linux/crear-appimage.sh`).

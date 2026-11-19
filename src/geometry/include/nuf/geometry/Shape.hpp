@@ -41,6 +41,17 @@ struct Box {
     bool empty = true;
 };
 
+// Sistema de referencia de un elemento: un punto, una dirección y un eje X perpendicular a ella. Es lo que se alinea
+// y se une (Fase 21): el centro de una cara plana con su normal, el eje de un cilindro, el centro de una arista
+// circular con la normal de su plano, o el punto medio de una arista recta con su dirección.
+struct Frame {
+    enum class Kind { PlaneFace, Axis, Point };
+    sketch::Vec3 origin;
+    sketch::Vec3 direction;  // unitaria
+    sketch::Vec3 xAxis;      // unitaria y perpendicular a «direction»
+    Kind kind = Kind::PlaneFace;
+};
+
 class Shape {
 public:
     struct Impl;
@@ -71,6 +82,9 @@ public:
     // Plano de una cara plana, con la normal hacia fuera del sólido; el
     // origen y los ejes, como Plane::fromPointAndNormal.
     std::optional<sketch::Plane> facePlane(int index) const;
+    // Marco de una cara (plana, cilíndrica, cónica o esférica) o de una arista (circular o recta); nada si es otra cosa.
+    std::optional<Frame> faceFrame(int index) const;
+    std::optional<Frame> edgeFrame(int index) const;
     // Centro (de masas) de una cara.
     sketch::Vec3 faceCenter(int index) const;
     // Caja que envuelve una cara.

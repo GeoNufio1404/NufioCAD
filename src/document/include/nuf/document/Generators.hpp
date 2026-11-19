@@ -53,14 +53,20 @@ std::vector<sketch::Geometry> textOutline(const std::string& text, double height
 // Las operaciones de una receta que usan el sketch hecho en la misma receta lo nombran con este id; al aplicarla
 // se cambia por el real.
 constexpr FeatureId kRecipeSketch = 0x7FFFFFF0;
-// Una copia de la operación con el sketch de la receta ya resuelto.
-std::unique_ptr<Feature> instantiate(const Feature& feature, FeatureId recipeSketch);
+// Las uniones y los enlaces de una receta nombran a otras operaciones de la misma receta (Fase 21): un enlace, a sus
+// uniones con «kRecipeFeatureBase + k» (k = el lugar de la unión en la receta); una unión, al eje de un cuerpo con una
+// referencia «@axis:#k» (k = el lugar de la operación que lo crea). Al aplicarla se cambian por los ids reales.
+constexpr FeatureId kRecipeFeatureBase = 0x7FFF0000;
+// Una copia de la operación con el sketch de la receta y las operaciones de la receta ya resueltos: «ids» son los ids
+// de las operaciones anteriores de la receta, por su lugar.
+std::unique_ptr<Feature> instantiate(const Feature& feature, FeatureId recipeSketch, const std::vector<FeatureId>& ids = {});
 
 // Lo que hace un generador: parámetros, operaciones y cómo llamar a los cuerpos que salgan.
 struct Recipe {
     std::vector<Parameter> parameters;
     std::vector<std::unique_ptr<Feature>> features;
     std::vector<std::string> bodyNames;  // los de los cuerpos nuevos, en el orden en que salen
+    std::vector<int> fixedBodies;        // cuáles de ellos (por ese orden) salen fijos (Fase 21)
     std::string component;               // al que se agrupan (vacío: ninguno)
     // De dónde sale (id del generador, sufijo y respuestas codificadas); lo pone quien arma la receta para que
     // las operaciones queden marcadas y se pueda reabrir el formulario. «lead» lo pone el comando.

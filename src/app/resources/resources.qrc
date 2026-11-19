@@ -81,6 +81,9 @@
         <file alias="ui/combine-solid.svg">icons/ui/combine-solid.svg</file>
         <file alias="ui/components-solid.svg">icons/ui/components-solid.svg</file>
         <file alias="ui/joint-solid.svg">icons/ui/joint-solid.svg</file>
+        <file alias="ui/align-solid.svg">icons/ui/align-solid.svg</file>
+        <file alias="ui/interference-solid.svg">icons/ui/interference-solid.svg</file>
+        <file alias="ui/link-solid.svg">icons/ui/link-solid.svg</file>
         <file alias="ui/measure-solid.svg">icons/ui/measure-solid.svg</file>
         <file alias="ui/sign-solid.svg">icons/ui/sign-solid.svg</file>
         <file alias="ui/box-solid.svg">icons/ui/box-solid.svg</file>

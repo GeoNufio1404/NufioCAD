@@ -174,6 +174,20 @@ void Viewport::Impl::showGizmo(Viewport::GizmoKind kind, const sketch::Vec3& ori
     }
 }
 
+std::optional<gp_Pnt> Viewport::Impl::dragPlanePoint(const Vec2i& pixel) const
+{
+    double x = 0, y = 0, z = 0, dx = 0, dy = 0, dz = 0;
+    view->ConvertWithProj(pixel.x(), pixel.y(), x, y, z, dx, dy, dz);
+    const gp_Vec ray(dx, dy, dz);
+    const gp_Vec normal(dragNormal);
+    const double facing = ray.Dot(normal);
+    if (ray.Magnitude() < 1e-12 || std::abs(facing / ray.Magnitude()) < 0.05) {
+        return std::nullopt;
+    }
+    const double t = gp_Vec(gp_Pnt(x, y, z), dragGrab).Dot(normal) / facing;
+    return gp_Pnt(x, y, z).Translated(ray * t);
+}
+
 std::optional<double> Viewport::Impl::gizmoLineParameter(const Vec2i& pixel, const gp_Pnt& origin, int k) const
 {
     double x = 0, y = 0, z = 0, dx = 0, dy = 0, dz = 0;
@@ -285,7 +299,7 @@ void Viewport::Impl::hideGhost()
     }
 }
 
-void Viewport::Impl::showGhost(const std::vector<geometry::Shape>& list)
+void Viewport::Impl::showGhost(const std::vector<geometry::Shape>& list, bool alert)
 {
     hideGhost();
     BRep_Builder builder;
@@ -310,8 +324,8 @@ void Viewport::Impl::showGhost(const std::vector<geometry::Shape>& list)
         return;
     }
     ghost = new AIS_Shape(shape);
-    ghost->SetColor(rgb(0x6C, 0xA6, 0xFF));
-    ghost->SetTransparency(0.55);
+    ghost->SetColor(alert ? rgb(0xE5, 0x39, 0x35) : rgb(0x6C, 0xA6, 0xFF));
+    ghost->SetTransparency(alert ? 0.15 : 0.55);
     ghost->Attributes()->SetFaceBoundaryDraw(false);
     context->Display(ghost, AIS_Shaded, -1, false);
 }

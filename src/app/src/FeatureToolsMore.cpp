@@ -18,6 +18,9 @@
 #include <QListWidget>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QHeaderView>
+#include <QSignalBlocker>
+#include <QTableWidget>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -207,9 +210,13 @@ constexpr double kHoldTolerance = 9.0;  // y a cuántos se despega (el «softblo
 }
 
 MoveTool::MoveTool(document::Document& document, render::Viewport& viewport,
-                   std::optional<document::FeatureId> editing)
+                   std::optional<document::FeatureId> editing, const std::vector<std::string>& initial)
     : FeatureTool(document, viewport, editing)
 {
+    if (!initial.empty() && !original_) {
+        body_ = initial.front();
+        alsoMove_.assign(initial.begin() + 1, initial.end());
+    }
     if (const auto* m = dynamic_cast<const document::MoveFeature*>(original_.get())) {
         body_ = m->body;
         alsoMove_ = m->alsoMove;
@@ -399,12 +406,7 @@ void MoveTool::choose(const std::vector<std::string>& keys)
         const std::string key = bodyList_->item(i)->data(Qt::UserRole).toString().toStdString();
         bodyList_->item(i)->setCheckState(std::ranges::find(keys, key) != keys.end() ? Qt::Checked : Qt::Unchecked);
     }
-    if (copy_ != nullptr) {
-        copy_->setEnabled(keys.size() == 1);
-        if (keys.size() > 1) {
-            copy_->setChecked(false);
-        }
-    }
+    // Copiar vale con varios cuerpos a la vez (Fase 21): salen tantas copias como cuerpos.
 }
 
 std::optional<sketch::Vec3> MoveTool::bodiesCenter() const
@@ -808,83 +810,215 @@ bool CombineTool::removesMaterial() const
     return operation_ != nullptr && operation_->currentIndex() != 0;
 }
 
-// --- Unión ---------------------------------------------------------------------------------
+// --- Alinear y unir ---------------------------------------------------------------------------
+// Una sola herramienta para las dos cosas, como el cuadro de Uniones de Fusion 360: el primer tipo, «Alinear», coloca
+// una pieza sobre otra de una vez; los demás dejan una unión que se puede mover (con límites, animar y enlazar).
+
+namespace {
+
+constexpr int kAlignType = 0;  // los demás son JointType(índice - 1)
+
+}
 
 JointTool::JointTool(document::Document& document, render::Viewport& viewport,
-                     std::optional<document::FeatureId> editing)
+                     std::optional<document::FeatureId> editing, bool align)
     : FeatureTool(document, viewport, editing)
+    , startAsAlign_(align)
 {
     if (const auto* j = dynamic_cast<const document::JointFeature*>(original_.get())) {
-        fixed_ = j->fixedFace;
-        moving_ = j->movingFace;
+        // En una unión, lo primero que se elige es la fija.
+        first_ = {j->fixedFace, j->fixedEdge};
+        second_ = {j->movingFace, j->movingEdge};
+        startAsAlign_ = false;
+    } else if (const auto* a = dynamic_cast<const document::AlignFeature*>(original_.get())) {
+        // En un alineado, lo primero que se elige es lo que se mueve.
+        first_ = a->moving;
+        second_ = a->target;
+        startAsAlign_ = true;
     }
+}
+
+bool JointTool::alignMode() const
+{
+    return type_ != nullptr && type_->currentIndex() == kAlignType;
+}
+
+document::ElementPick JointTool::movingPick() const
+{
+    return alignMode() ? first_ : second_;
+}
+
+document::ElementPick JointTool::targetPick() const
+{
+    return alignMode() ? second_ : first_;
 }
 
 void JointTool::createFields(QFormLayout* form)
 {
     form_ = form;
-    type_ = combo({QStringLiteral("Rígida"), QStringLiteral("Giratoria (con ángulo)"),
-                   QStringLiteral("Deslizante (con desplazamiento)")});
+    type_ = combo({QStringLiteral("Alinear (una sola vez)"), QStringLiteral("Rígida"), QStringLiteral("Giratoria"),
+                   QStringLiteral("Deslizante"), QStringLiteral("Cilíndrica (gira y desliza)"),
+                   QStringLiteral("Pasador y ranura"), QStringLiteral("Plana"), QStringLiteral("Esférica")});
     offset_ = lengthBox(0.0);
     field("offset", offset_);
     angle_ = angleBox(0.0, 360.0);
     field("angle", angle_);
     slide_ = lengthBox(0.0);
     field("slide", slide_);
-    flip_ = new QCheckBox(QStringLiteral("Caras del mismo lado (no enfrentadas)"));
-    auto* swap = new QPushButton(QStringLiteral("Intercambiar fija y móvil"));
+    slideY_ = lengthBox(0.0);
+    field("slideY", slideY_);
+    tiltX_ = angleBox(0.0, 180.0);
+    field("tiltX", tiltX_);
+    tiltY_ = angleBox(0.0, 180.0);
+    field("tiltY", tiltY_);
+    flip_ = new QCheckBox(QStringLiteral("Del otro lado"));
+    flip_->setToolTip(QStringLiteral("Caras enfrentadas ↔ del mismo lado; ejes en un sentido ↔ en el contrario"));
+    auto* swap = new QPushButton(QStringLiteral("Intercambiar las dos piezas"));
+    turn_ = new QPushButton(QStringLiteral("Girar 90°"));
+    turn_->setToolTip(QStringLiteral("Suma 90° al ángulo (para alinear de cuatro en cuatro posiciones)"));
+    limitAngle_ = new QCheckBox(QStringLiteral("Límite de giro"));
+    angleMin_ = angleBox(0.0, 360.0);
+    angleMax_ = angleBox(90.0, 360.0);
+    limitSlide_ = new QCheckBox(QStringLiteral("Límite de deslizamiento"));
+    slideMin_ = lengthBox(0.0);
+    slideMax_ = lengthBox(10.0);
+    animate_ = new QPushButton(QStringLiteral("▶ Animar"));
+    animate_->setCheckable(true);
+    animate_->setToolTip(QStringLiteral("La unión se mueve sola de un límite al otro para ver cómo funciona"));
+
     if (const auto* j = dynamic_cast<const document::JointFeature*>(original_.get())) {
-        type_->setCurrentIndex(int(j->type));
+        type_->setCurrentIndex(int(j->type) + 1);
         offset_->setValue(j->offset);
         angle_->setValue(j->angle / kDegree);
         slide_->setValue(j->slide);
+        slideY_->setValue(j->slideY);
+        tiltX_->setValue(j->tiltX / kDegree);
+        tiltY_->setValue(j->tiltY / kDegree);
         flip_->setChecked(j->flip);
+        limitAngle_->setChecked(j->limitAngle);
+        angleMin_->setValue(j->angleMin / kDegree);
+        angleMax_->setValue(j->angleMax / kDegree);
+        limitSlide_->setChecked(j->limitSlide);
+        slideMin_->setValue(j->slideMin);
+        slideMax_->setValue(j->slideMax);
+    } else if (const auto* a = dynamic_cast<const document::AlignFeature*>(original_.get())) {
+        type_->setCurrentIndex(kAlignType);
+        offset_->setValue(a->offset);
+        angle_->setValue(a->angle / kDegree);
+        flip_->setChecked(a->flip);
+    } else {
+        type_->setCurrentIndex(startAsAlign_ ? kAlignType : 1 + int(document::JointType::Revolute));
     }
+
     form->addRow(QStringLiteral("Tipo"), type_);
     form->addRow(QStringLiteral("Distancia"), offset_);
     form->addRow(QStringLiteral("Ángulo"), angle_);
+    form->addRow(QString(), turn_);
     form->addRow(QStringLiteral("Desplazamiento"), slide_);
+    form->addRow(QStringLiteral("Desplazamiento Y"), slideY_);
+    form->addRow(QStringLiteral("Inclinación X"), tiltX_);
+    form->addRow(QStringLiteral("Inclinación Y"), tiltY_);
     form->addRow(QString(), flip_);
+    form->addRow(QString(), limitAngle_);
+    form->addRow(QStringLiteral("Giro mínimo"), angleMin_);
+    form->addRow(QStringLiteral("Giro máximo"), angleMax_);
+    form->addRow(QString(), limitSlide_);
+    form->addRow(QStringLiteral("Desplazamiento mínimo"), slideMin_);
+    form->addRow(QStringLiteral("Desplazamiento máximo"), slideMax_);
+    form->addRow(QString(), animate_);
     form->addRow(QString(), swap);
+
     connect(type_, &QComboBox::currentIndexChanged, this, [this] {
+        stopAnimation();
         updateVisibility();
         updatePreview();
     });
-    for (QDoubleSpinBox* box : {offset_, angle_, slide_}) {
+    for (QDoubleSpinBox* box : {offset_, angle_, slide_, slideY_, tiltX_, tiltY_, angleMin_, angleMax_, slideMin_, slideMax_}) {
         connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
     }
-    connect(flip_, &QCheckBox::toggled, this, [this] { updatePreview(); });
+    for (QCheckBox* box : {flip_, limitAngle_, limitSlide_}) {
+        connect(box, &QCheckBox::toggled, this, [this] {
+            updateVisibility();
+            updatePreview();
+        });
+    }
     connect(swap, &QPushButton::clicked, this, [this] {
-        std::swap(fixed_, moving_);
+        std::swap(first_, second_);
         updatePreview();
+    });
+    connect(turn_, &QPushButton::clicked, this, [this] {
+        double next = angle_->value() + 90.0;
+        if (next > 360.0) {
+            next -= 360.0;
+        }
+        angle_->setValue(next);
+    });
+    connect(animate_, &QPushButton::toggled, this, [this](bool on) {
+        if (on) {
+            startAnimation();
+        } else {
+            stopAnimation();
+        }
     });
     updateVisibility();
 }
 
 void JointTool::updateVisibility()
 {
-    const int type = type_->currentIndex();
-    form_->setRowVisible(angle_, type == int(document::JointType::Revolute));
-    form_->setRowVisible(slide_, type == int(document::JointType::Slider));
+    const int index = type_->currentIndex();
+    const bool align = index == kAlignType;
+    const auto type = align ? document::JointType::Rigid : document::JointType(index - 1);
+    using T = document::JointType;
+    const bool turns = align || type == T::Revolute || type == T::Cylindrical || type == T::PinSlot || type == T::Planar ||
+                       type == T::Ball;
+    const bool slidesX = type == T::Slider || type == T::PinSlot || type == T::Planar;
+    const bool slidesY = type == T::Planar;
+    const bool tilts = type == T::Ball;
+    form_->setRowVisible(angle_, turns);
+    form_->setRowVisible(turn_, align);
+    form_->setRowVisible(slide_, slidesX);
+    form_->setRowVisible(slideY_, slidesY);
+    form_->setRowVisible(tiltX_, tilts);
+    form_->setRowVisible(tiltY_, tilts);
+    const bool angleLimits = !align && (type == T::Revolute || type == T::Cylindrical || type == T::PinSlot);
+    const bool slideLimits = !align && (type == T::Slider || type == T::Cylindrical || type == T::PinSlot);
+    form_->setRowVisible(limitAngle_, angleLimits);
+    form_->setRowVisible(angleMin_, angleLimits && limitAngle_->isChecked());
+    form_->setRowVisible(angleMax_, angleLimits && limitAngle_->isChecked());
+    form_->setRowVisible(limitSlide_, slideLimits);
+    form_->setRowVisible(slideMin_, slideLimits && limitSlide_->isChecked());
+    form_->setRowVisible(slideMax_, slideLimits && limitSlide_->isChecked());
+    form_->setRowVisible(animate_, !align && type != T::Rigid);
+    // En la cilíndrica, la distancia es el deslizamiento por el eje.
+    if (auto* label = qobject_cast<QLabel*>(form_->labelForField(offset_))) {
+        label->setText(type == T::Cylindrical ? QStringLiteral("Deslizamiento por el eje") : QStringLiteral("Distancia"));
+    }
 }
 
 void JointTool::selectionChanged(const render::ModelSelection& selection)
 {
-    // Cada clic en una cara la elige (primero la fija, luego la móvil) o, si ya estaba elegida, la quita;
+    // Cada clic en una cara o una arista la elige (la primera y luego la segunda) o, si ya estaba elegida, la quita;
     // la lista es de la herramienta y el visor se deja sin selección (la vista previa lo redibuja todo).
-    for (const render::ModelSelection::Face& f : selection.faces) {
-        if (!before().findFace(f.ref)) {
-            continue;  // una cara del resultado de la vista previa que no existe antes
-        }
-        if (f.ref == fixed_) {
-            fixed_ = moving_;
-            moving_ = {};
-        } else if (f.ref == moving_) {
-            moving_ = {};
-        } else if (fixed_.empty()) {
-            fixed_ = f.ref;
+    const auto take = [this](const document::ElementPick& pick) {
+        if (pick == first_) {
+            first_ = second_;
+            second_ = {};
+        } else if (pick == second_) {
+            second_ = {};
+        } else if (first_.ref.empty()) {
+            first_ = pick;
         } else {
-            moving_ = f.ref;
+            second_ = pick;
+        }
+    };
+    for (const render::ModelSelection::Face& f : selection.faces) {
+        if (before().findFace(f.ref)) {  // una cara del resultado de la vista previa que no existe antes: no cuenta
+            take({f.ref, false});
+        }
+    }
+    for (const render::ModelSelection::Edge& e : selection.edges) {
+        if (before().findEdge(e.ref)) {
+            take({e.ref, true});
         }
     }
     if (!selection.empty()) {
@@ -892,83 +1026,400 @@ void JointTool::selectionChanged(const render::ModelSelection& selection)
     }
 }
 
-QString JointTool::faceText(const geometry::ElementRef& ref) const
+QString JointTool::pickText(const document::ElementPick& pick) const
 {
-    if (ref.empty()) {
+    if (pick.ref.empty()) {
         return QStringLiteral("—");
     }
-    const auto hit = before().findFace(ref);
-    return hit ? QString::fromStdString(before().bodies[hit->body].name) : QStringLiteral("(ya no existe)");
+    const auto body = [&]() -> std::optional<std::size_t> {
+        if (pick.edge) {
+            const auto hit = before().findEdge(pick.ref);
+            return hit ? std::optional(hit->body) : std::nullopt;
+        }
+        const auto hit = before().findFace(pick.ref);
+        return hit ? std::optional(hit->body) : std::nullopt;
+    }();
+    if (!body) {
+        return QStringLiteral("(ya no existe)");
+    }
+    return QStringLiteral("%1 (%2)").arg(QString::fromStdString(before().bodies[*body].name),
+                                         pick.edge ? QStringLiteral("arista") : QStringLiteral("cara"));
+}
+
+std::optional<geometry::Frame> JointTool::frameOf(const document::ElementPick& pick) const
+{
+    if (pick.ref.empty()) {
+        return std::nullopt;
+    }
+    if (pick.edge) {
+        const auto hit = before().findEdge(pick.ref);
+        return hit ? before().bodies[hit->body].shape.edgeFrame(hit->edge) : std::nullopt;
+    }
+    const auto hit = before().findFace(pick.ref);
+    return hit ? before().bodies[hit->body].shape.faceFrame(hit->face) : std::nullopt;
+}
+
+std::optional<std::string> JointTool::bodyOf(const document::ElementPick& pick) const
+{
+    if (pick.ref.empty()) {
+        return std::nullopt;
+    }
+    if (pick.edge) {
+        const auto hit = before().findEdge(pick.ref);
+        return hit ? std::optional(before().bodies[hit->body].key) : std::nullopt;
+    }
+    const auto hit = before().findFace(pick.ref);
+    return hit ? std::optional(before().bodies[hit->body].key) : std::nullopt;
+}
+
+std::vector<std::string> JointTool::companions() const
+{
+    // Si la pieza que se mueve forma parte de un componente, los demás cuerpos del componente van con ella (como una
+    // sola pieza): el tren de engranajes entero se mueve al alinear uno de ellos.
+    std::vector<std::string> keys;
+    const auto moving = bodyOf(movingPick());
+    if (!moving) {
+        return keys;
+    }
+    const std::string component = document_.componentOf(*moving);
+    if (component.empty()) {
+        return keys;
+    }
+    for (const document::Body& body : before().bodies) {
+        if (body.key != *moving && document_.componentOf(body.key) == component) {
+            keys.push_back(body.key);
+        }
+    }
+    return keys;
 }
 
 std::unique_ptr<document::Feature> JointTool::build() const
 {
-    if (fixed_.empty() || moving_.empty()) {
+    if (first_.ref.empty() || second_.ref.empty()) {
         return nullptr;
+    }
+    const int index = type_->currentIndex();
+    if (index == kAlignType) {
+        auto f = std::make_unique<document::AlignFeature>();
+        if (original_) {
+            f->setName(original_->name());
+        }
+        f->moving = first_;
+        f->target = second_;
+        f->alsoMove = companions();
+        f->flip = flip_->isChecked();
+        f->angle = angle_->value() * kDegree;
+        f->offset = offset_->value();
+        return f;
     }
     auto f = std::make_unique<document::JointFeature>();
     if (original_) {
         f->setName(original_->name());
     }
-    f->fixedFace = fixed_;
-    f->movingFace = moving_;
-    f->type = document::JointType(type_->currentIndex());
+    f->fixedFace = first_.ref;
+    f->fixedEdge = first_.edge;
+    f->movingFace = second_.ref;
+    f->movingEdge = second_.edge;
+    f->alsoMove = companions();
+    f->type = document::JointType(index - 1);
     f->offset = offset_->value();
     f->angle = angle_->value() * kDegree;
     f->slide = slide_->value();
+    f->slideY = slideY_->value();
+    f->tiltX = tiltX_->value() * kDegree;
+    f->tiltY = tiltY_->value() * kDegree;
     f->flip = flip_->isChecked();
+    f->limitAngle = limitAngle_->isChecked();
+    f->angleMin = angleMin_->value() * kDegree;
+    f->angleMax = angleMax_->value() * kDegree;
+    f->limitSlide = limitSlide_->isChecked();
+    f->slideMin = slideMin_->value();
+    f->slideMax = slideMax_->value();
     return f;
-}
-
-std::optional<std::pair<sketch::Vec3, sketch::Plane>> JointTool::fixedFace() const
-{
-    const auto hit = before().findFace(fixed_);
-    if (!hit) {
-        return std::nullopt;
-    }
-    const geometry::Shape& shape = before().bodies[hit->body].shape;
-    const auto plane = shape.facePlane(hit->face);
-    if (!plane) {
-        return std::nullopt;
-    }
-    return std::pair{shape.faceCenter(hit->face), *plane};
 }
 
 std::optional<FeatureTool::Arrow> JointTool::dimensionArrow(const std::string& key) const
 {
-    const auto face = fixedFace();
-    if (!face) {
+    const auto frame = frameOf(targetPick());
+    if (!frame) {
         return std::nullopt;
     }
+    const sketch::Vec3 y{frame->direction.y * frame->xAxis.z - frame->direction.z * frame->xAxis.y,
+                         frame->direction.z * frame->xAxis.x - frame->direction.x * frame->xAxis.z,
+                         frame->direction.x * frame->xAxis.y - frame->direction.y * frame->xAxis.x};
     if (key == "offset") {
-        return arrowAlong(face->first, face->second.normal, offset_->value());
+        return arrowAlong(frame->origin, frame->direction, offset_->value());
     }
     if (key == "slide") {
-        return arrowAlong(face->first, face->second.xAxis, slide_->value());
+        return arrowAlong(frame->origin, frame->xAxis, slide_->value());
+    }
+    if (key == "slideY") {
+        return arrowAlong(frame->origin, y, slideY_->value());
     }
     return std::nullopt;
 }
 
 std::optional<FeatureTool::Arc> JointTool::dimensionArc(const std::string& key) const
 {
-    const auto face = fixedFace();
-    if (key != "angle" || !face) {
+    const auto frame = frameOf(targetPick());
+    if (key != "angle" || !frame) {
         return std::nullopt;
     }
-    // Girar alrededor de la normal de la cara fija.
-    const sketch::Vec3 normal = normalized(face->second.normal);
-    return Arc{face->first, normal, perpendicularPoint(face->first, normal, arcRadius()), angle_->value() * kDegree};
+    // Girar alrededor de la dirección del elemento de destino.
+    return Arc{frame->origin, frame->direction, perpendicularPoint(frame->origin, frame->direction, arcRadius()),
+               angle_->value() * kDegree};
 }
 
 QString JointTool::inputsText() const
 {
-    if (fixed_.empty()) {
-        return QStringLiteral("Elige en la vista una cara del cuerpo que se queda quieto y luego una cara del que se mueve");
+    const bool align = alignMode();
+    if (first_.ref.empty()) {
+        return align ? QStringLiteral("Elige en la vista la cara o la arista de la pieza que se va a mover (un centro, un eje o una cara)")
+                     : QStringLiteral("Elige en la vista la cara o la arista de la pieza que se queda quieta y luego la de la que se mueve");
     }
-    if (moving_.empty()) {
-        return QStringLiteral("Fija: %1. Ahora elige la cara del cuerpo que se mueve").arg(faceText(fixed_));
+    if (second_.ref.empty()) {
+        return align ? QStringLiteral("Se mueve: %1. Ahora elige adónde llega (cara, arista o eje de otra pieza)").arg(pickText(first_))
+                     : QStringLiteral("Fija: %1. Ahora elige la cara o la arista de la pieza que se mueve").arg(pickText(first_));
     }
-    return QStringLiteral("Fija: %1 — Móvil: %2").arg(faceText(fixed_), faceText(moving_));
+    QString text = align ? QStringLiteral("Se mueve: %1 — Llega a: %2").arg(pickText(first_), pickText(second_))
+                         : QStringLiteral("Fija: %1 — Móvil: %2").arg(pickText(first_), pickText(second_));
+    // Una pieza fija no se mueve: se mueve la otra.
+    const auto moving = bodyOf(movingPick());
+    const auto target = bodyOf(targetPick());
+    if (moving && document_.isFixed(*moving)) {
+        text += target && document_.isFixed(*target)
+                    ? QStringLiteral(" — Las dos piezas están fijas")
+                    : QStringLiteral(" — «%1» está fija: se moverá la otra").arg(pickText(movingPick()));
+    }
+    return text;
+}
+
+void JointTool::startAnimation()
+{
+    // La unión se mueve sola entre sus límites (o una vuelta, o ±25 mm si no los tiene), de ida y vuelta.
+    const int index = type_->currentIndex();
+    const auto type = index == kAlignType ? document::JointType::Rigid : document::JointType(index - 1);
+    using T = document::JointType;
+    animatedAngle_ = type == T::Revolute || type == T::Cylindrical || type == T::PinSlot || type == T::Planar || type == T::Ball;
+    animatedBox_ = animatedAngle_ ? angle_ : (type == T::Slider || type == T::PinSlot) ? slide_ : nullptr;
+    if (type == T::Cylindrical && !animatedAngle_) {
+        animatedBox_ = offset_;
+    }
+    if (animatedBox_ == nullptr) {
+        animate_->setChecked(false);
+        return;
+    }
+    animationFrom_ = animatedBox_->value();
+    if (animatedAngle_) {
+        animationLow_ = limitAngle_->isChecked() ? angleMin_->value() : 0.0;
+        animationHigh_ = limitAngle_->isChecked() ? angleMax_->value() : 360.0;
+    } else {
+        animationLow_ = limitSlide_->isChecked() ? slideMin_->value() : -25.0;
+        animationHigh_ = limitSlide_->isChecked() ? slideMax_->value() : 25.0;
+    }
+    if (animationHigh_ < animationLow_) {
+        std::swap(animationLow_, animationHigh_);
+    }
+    animationPhase_ = 0.0;
+    if (animationTimer_ == nullptr) {
+        animationTimer_ = new QTimer(this);
+        animationTimer_->setInterval(60);
+        connect(animationTimer_, &QTimer::timeout, this, [this] {
+            if (animatedBox_ == nullptr || previewing()) {
+                return;  // un cuadro por cálculo: si el anterior no acabó, se espera
+            }
+            animationPhase_ += 0.04;
+            const double wave = animatedAngle_ && !limitAngle_->isChecked() ? std::fmod(animationPhase_, 1.0)
+                                                                            : 0.5 - 0.5 * std::cos(animationPhase_ * 2.0 * std::numbers::pi);
+            animatedBox_->setValue(animationLow_ + (animationHigh_ - animationLow_) * wave);
+        });
+    }
+    animationTimer_->start();
+}
+
+void JointTool::stopAnimation()
+{
+    if (animationTimer_ != nullptr && animationTimer_->isActive()) {
+        animationTimer_->stop();
+        if (animatedBox_ != nullptr) {
+            animatedBox_->setValue(animationFrom_);  // vuelve a donde estaba
+        }
+    }
+    animatedBox_ = nullptr;
+    if (animate_ != nullptr && animate_->isChecked()) {
+        const QSignalBlocker block(animate_);
+        animate_->setChecked(false);
+    }
+}
+
+void JointTool::stopPreview()
+{
+    stopAnimation();
+    FeatureTool::stopPreview();
+}
+
+void JointTool::accept()
+{
+    stopAnimation();  // lo que se acepta son los valores de antes de animar
+    FeatureTool::accept();
+}
+
+// --- Enlace de movimiento ----------------------------------------------------------------------
+// Ata varias uniones (giratorias o deslizantes) para que se muevan a la vez en una proporción: el engranaje que gira
+// y el que lo sigue, o el piñón y la cremallera.
+
+MotionLinkTool::MotionLinkTool(document::Document& document, render::Viewport& viewport,
+                               std::optional<document::FeatureId> editing)
+    : FeatureTool(document, viewport, editing)
+{
+}
+
+void MotionLinkTool::createFields(QFormLayout* form)
+{
+    const auto* original = dynamic_cast<const document::MotionLinkFeature*>(original_.get());
+    auto* help = new QLabel(QStringLiteral(
+        "Marca las uniones que se mueven juntas. <b>Razón</b>: cuánto se mueve cada una por cada giro de la que tiene "
+        "razón 1; con signo menos gira al revés (para dos engranajes: −dientes del primero ÷ dientes del segundo)."));
+    help->setWordWrap(true);
+    form->addRow(help);
+    table_ = new QTableWidget(0, 2);
+    table_->setHorizontalHeaderLabels({QStringLiteral("Unión"), QStringLiteral("Razón")});
+    table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    table_->verticalHeader()->setVisible(false);
+    table_->setMinimumHeight(130);
+    table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    for (const auto& [id, joint] : before().joints) {
+        const document::Feature* feature = document_.findFeature(id);
+        if (feature == nullptr) {
+            continue;
+        }
+        // «Unión 3 — Engranaje 2»: el nombre de la unión y de los cuerpos que mueve.
+        QStringList moved;
+        for (const std::string& key : joint.moved) {
+            for (const document::Body& body : before().bodies) {
+                if (body.key == key) {
+                    moved << QString::fromStdString(body.name);
+                }
+            }
+        }
+        const int row = table_->rowCount();
+        table_->insertRow(row);
+        auto* item = new QTableWidgetItem(QStringLiteral("%1 — %2").arg(QString::fromStdString(feature->name()), moved.join(QStringLiteral(", "))));
+        item->setData(Qt::UserRole, QVariant::fromValue<qulonglong>(id));
+        item->setFlags((item->flags() | Qt::ItemIsUserCheckable) & ~Qt::ItemIsEditable);
+        double ratio = 1.0;
+        bool checked = false;
+        if (original != nullptr) {
+            for (const auto& member : original->members) {
+                if (member.joint == id) {
+                    checked = true;
+                    ratio = member.ratio;
+                }
+            }
+        }
+        item->setCheckState(checked ? Qt::Checked : Qt::Unchecked);
+        table_->setItem(row, 0, item);
+        auto* box = new QDoubleSpinBox();
+        box->setRange(-10000.0, 10000.0);
+        box->setDecimals(4);
+        box->setValue(ratio);
+        box->setKeyboardTracking(false);
+        table_->setCellWidget(row, 1, box);
+        connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
+    }
+    connect(table_, &QTableWidget::itemChanged, this, [this] { updatePreview(); });
+    form->addRow(table_);
+    position_ = angleBox(original != nullptr ? original->position / kDegree : 0.0, 3600.0);
+    field("position", position_);
+    form->addRow(QStringLiteral("Posición (giro de la razón 1)"), position_);
+    animate_ = new QPushButton(QStringLiteral("▶ Animar"));
+    animate_->setCheckable(true);
+    animate_->setToolTip(QStringLiteral("Gira el enlace entero para ver cómo se mueven las piezas (y si se pisan: Interferencias)"));
+    form->addRow(QString(), animate_);
+    connect(position_, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
+    connect(animate_, &QPushButton::toggled, this, [this](bool on) {
+        if (on) {
+            animationFrom_ = position_->value();
+            animationPhase_ = 0.0;
+            if (animationTimer_ == nullptr) {
+                animationTimer_ = new QTimer(this);
+                animationTimer_->setInterval(60);
+                connect(animationTimer_, &QTimer::timeout, this, [this] {
+                    if (previewing()) {
+                        return;  // un cuadro por cálculo
+                    }
+                    animationPhase_ = std::fmod(animationPhase_ + 0.02, 1.0);
+                    position_->setValue(animationFrom_ + 360.0 * animationPhase_);
+                });
+            }
+            animationTimer_->start();
+        } else {
+            stopAnimation();
+        }
+    });
+}
+
+void MotionLinkTool::stopAnimation()
+{
+    if (animationTimer_ != nullptr && animationTimer_->isActive()) {
+        animationTimer_->stop();
+        position_->setValue(animationFrom_);
+    }
+    if (animate_ != nullptr && animate_->isChecked()) {
+        const QSignalBlocker block(animate_);
+        animate_->setChecked(false);
+    }
+}
+
+void MotionLinkTool::stopPreview()
+{
+    stopAnimation();
+    FeatureTool::stopPreview();
+}
+
+void MotionLinkTool::accept()
+{
+    stopAnimation();
+    FeatureTool::accept();
+}
+
+void MotionLinkTool::selectionChanged(const render::ModelSelection& selection)
+{
+    // Las uniones se eligen en la lista; un clic en la vista no hace nada.
+    if (!selection.empty()) {
+        viewport_.clearModelSelection();
+    }
+}
+
+std::unique_ptr<document::Feature> MotionLinkTool::build() const
+{
+    auto f = std::make_unique<document::MotionLinkFeature>();
+    if (original_) {
+        f->setName(original_->name());
+    }
+    for (int row = 0; row < table_->rowCount(); ++row) {
+        if (table_->item(row, 0)->checkState() != Qt::Checked) {
+            continue;
+        }
+        const auto* box = qobject_cast<QDoubleSpinBox*>(table_->cellWidget(row, 1));
+        f->members.push_back({table_->item(row, 0)->data(Qt::UserRole).toULongLong(), box != nullptr ? box->value() : 1.0});
+    }
+    f->position = position_->value() * kDegree;
+    return f->members.size() >= 2 ? std::unique_ptr<document::Feature>(std::move(f)) : nullptr;
+}
+
+QString MotionLinkTool::inputsText() const
+{
+    if (before().joints.empty()) {
+        return QStringLiteral("No hay uniones que enlazar: crea antes uniones giratorias o deslizantes con Unión");
+    }
+    int checked = 0;
+    if (table_ != nullptr) {
+        for (int row = 0; row < table_->rowCount(); ++row) {
+            checked += table_->item(row, 0)->checkState() == Qt::Checked ? 1 : 0;
+        }
+    }
+    return checked < 2 ? QStringLiteral("Marca al menos dos uniones en la lista") : QStringLiteral("%1 uniones enlazadas").arg(checked);
 }
 
 // --- Rosca ----------------------------------------------------------------------------
