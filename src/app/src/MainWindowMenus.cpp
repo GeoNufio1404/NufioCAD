@@ -529,9 +529,9 @@ void MainWindow::createMenus()
                                              [this] { sketch_->intersectModel(); });
     decorate(intersectAction_, QStringLiteral("intersect"), QStringLiteral("Traza la intersección de la pieza con el plano del sketch"),
              QStringLiteral("Intersección"));
-    importDxfAction_ = sketchMenu->addAction(QStringLiteral("Importar &DXF…"), this, [this] {
-        const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("Importar DXF"), QString(),
-                                                          QStringLiteral("Dibujos DXF (*.dxf)"));
+    importDxfAction_ = sketchMenu->addAction(QStringLiteral("Importar &DXF o SVG…"), this, [this] {
+        const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("Importar dibujo"), QString(),
+                                                          QStringLiteral("Dibujos (*.dxf *.svg);;DXF (*.dxf);;SVG (*.svg)"));
         if (!path.isEmpty()) {
             sketch_->importDxf(path);
         }

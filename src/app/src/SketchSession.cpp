@@ -9,6 +9,7 @@
 #include <nuf/sketch/Pick.hpp>
 
 #include <nuf/sketch/Dxf.hpp>
+#include <nuf/sketch/Svg.hpp>
 #include <nuf/sketch/Edit.hpp>
 
 #include <QCursor>
@@ -491,9 +492,11 @@ void SketchSession::importDxf(const QString& path)
         emit message(QStringLiteral("No se pudo abrir %1").arg(path));
         return;
     }
-    const sketch::DxfDrawing drawing = sketch::readDxf(in);
+    const bool svg = path.endsWith(QStringLiteral(".svg"), Qt::CaseInsensitive);
+    const sketch::DxfDrawing drawing = svg ? sketch::readSvg(in) : sketch::readDxf(in);
     if (drawing.geometry.empty()) {
-        emit message(QStringLiteral("El DXF no tiene geometría que se pueda importar"));
+        emit message(svg ? QStringLiteral("El SVG no tiene trazados que se puedan importar (el texto hay que convertirlo a trazados antes)")
+                         : QStringLiteral("El DXF no tiene geometría que se pueda importar"));
         return;
     }
     remember(sketch_);
