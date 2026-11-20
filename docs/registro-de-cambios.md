@@ -11,6 +11,13 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 ---
 
 
+## Fase 15, pendientes menores — 20 nov. 2026
+
+- **Qué:** secciones plegables en Lightbox, Caja con tapa y Letrero (`grouped` en `Generators.cpp`); el panel de comandos flotantes recuerda su posición y tamaño (`MainWindow.cpp`, ajuste `view/floatingCommandsGeometry`); el desfase del sketch admite una elipse, un arco de elipse o una spline sola (`offset` en `Edit.cpp`, con prueba en `test_sketch_edit.cpp`).
+- **Volver atrás:** `git revert` de la fusión; no cambia el formato de los archivos.
+
+---
+
 ## Patrón por trayectoria: las copias giran con la curva — 20 nov. 2026
 
 - **Qué:** casilla «Girar las copias siguiendo la curva» en Patrón › «A lo largo de una trayectoria».

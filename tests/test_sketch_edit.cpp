@@ -210,6 +210,45 @@ TEST_CASE("Desfase de un rectángulo y de una cadena línea-arco", "[sketch][edi
     }
 }
 
+TEST_CASE("Desfase de una elipse y de una spline (aproximado con una spline)", "[sketch][edit]")
+{
+    SECTION("Elipse hacia fuera y hacia dentro")
+    {
+        Sketch s;
+        const EntityId e = s.addEllipse(Ellipse{{0, 0}, 20.0, 10.0, 0.0});
+        const auto outer = offset(s, chainOf(s, e), -2.0);
+        REQUIRE(outer.size() == 1);
+        const auto* spline = std::get_if<BSpline>(&s.entity(outer[0])->geometry);
+        REQUIRE(spline != nullptr);
+        // Los extremos de los ejes quedan 2 mm más lejos (aproximado)
+        const auto polyline = nuf::sketch::polyline(*spline);
+        double maxX = 0.0;
+        double maxY = 0.0;
+        for (const Vec2& p : polyline) {
+            maxX = std::max(maxX, p.x);
+            maxY = std::max(maxY, p.y);
+        }
+        REQUIRE_THAT(maxX, WithinAbs(22.0, 0.05));
+        REQUIRE_THAT(maxY, WithinAbs(12.0, 0.05));
+        // Hacia dentro más allá de la curvatura mínima (b²/a = 5) no se puede
+        REQUIRE(offset(s, chainOf(s, e), 6.0).empty());
+        const auto inner = offset(s, chainOf(s, e), 2.0);
+        REQUIRE(inner.size() == 1);
+    }
+    SECTION("Spline")
+    {
+        Sketch s;
+        const EntityId sp = s.addBSpline(nuf::sketch::interpolatingSpline({{0, 0}, {10, 8}, {20, 0}, {30, 8}}));
+        const auto out = offset(s, chainOf(s, sp), 3.0);
+        REQUIRE(out.size() == 1);
+        const auto* moved = std::get_if<BSpline>(&s.entity(out[0])->geometry);
+        REQUIRE(moved != nullptr);
+        // El primer punto queda a 3 mm del original, hacia la izquierda de la curva (que sale hacia arriba: x negativa)
+        REQUIRE_THAT(std::hypot(moved->poles.front().x, moved->poles.front().y), WithinAbs(3.0, 1e-3));
+        REQUIRE(moved->poles.front().x < 0.0);
+    }
+}
+
 TEST_CASE("Simetría respecto al eje Y", "[sketch][edit]")
 {
     Sketch s;
