@@ -124,7 +124,7 @@ Lo que más se nota al usar la aplicación cada día. Lo ya hecho está en «Int
 
 **Pendientes menores de la Fase 15** (decididos el 18 nov. 2026: no bloquean nada y se retoman si una pieza real los pide o dentro de la Fase 18):
 - Barra de progreso real: el kernel no informa del avance (hay botón Cancelar).
-- Las flechas de medida que faltan: holgura y cable de los generadores, presión y hélice del par, tamaño del texto del Letrero, cabeza del Agujero.
+- Las flechas de medida que faltan (la **holgura del labio** de Lightbox y Caja con tapa ya la tiene, 20 nov. 2026): cable de Lightbox, holgura de los engranajes, presión y hélice del par, tamaño del texto del Letrero, cabeza del Agujero.
 - Ajuste del movimiento a otros cuerpos; gizmo de tamaño constante y gizmo para Patrón, Espejo y Unión.
 - ~~Secciones plegables en Lightbox, Caja con tapa y Letrero~~ ✅ 20 nov. 2026 (UI.6; con la caja redonda la sección «Bisagra» queda con el encabezado y sin preguntas).
 - Selector de espacio de trabajo (solo hay uno; las pestañas lo cubren) y comandos flotantes como panel dentro del lienzo (hoy es una ventana flotante de Qt; desde el 20 nov. 2026 **recuerda su posición y tamaño**, UI.7).

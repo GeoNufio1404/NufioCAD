@@ -126,10 +126,15 @@ public:
         lipWall.at = [](const GeneratorValues& v) {
             return std::array<double, 3>{v.at("pared") + v.at("holgura"), kCenter, v.at("frente") + v.at("labio") / 2.0};
         };
+        // La holgura: el aire entre la cara interior de la pared de la caja y el labio de la tapa.
+        ArrowSpec gap{1, 'x', false};
+        gap.at = [](const GeneratorValues& v) {
+            return std::array<double, 3>{v.at("pared"), kCenter, v.at("frente") + v.at("labio") / 2.0};
+        };
         return {{"ancho", {0, 'x', false}}, {"diametro", {0, 'x', false}}, {"alto", {0, 'y', false}},
                 {"profundidad", {0, 'z', false}}, {"pared", {0, 'x', true}}, {"fondo", {0, 'z', false}},
                 {"frente", {1, 'z', false}}, {"labio", {1, 'z', true}}, {"labio_pared", lipWall},
-                {"esquina", corner}};
+                {"esquina", corner}, {"holgura", gap}};
     }
 
     Recipe make(const GeneratorValues& values, const std::string& suffix) const override
@@ -415,9 +420,13 @@ public:
         lipWall.at = [](const GeneratorValues& v) {
             return std::array<double, 3>{v.at("pared") + v.at("holgura"), kCenter, v.at("tapa") + v.at("labio") / 2.0};
         };
+        ArrowSpec gap{1, 'x', false};
+        gap.at = [](const GeneratorValues& v) {
+            return std::array<double, 3>{v.at("pared"), kCenter, v.at("tapa") + v.at("labio") / 2.0};
+        };
         return {{"ancho", {0, 'x', false}}, {"fondo", {0, 'y', false}}, {"alto", {0, 'z', false}},
                 {"pared", {0, 'x', true}}, {"base", {0, 'z', false}}, {"tapa", {1, 'z', false}}, {"labio", {1, 'z', true}},
-                {"esquina", corner}, {"labio_pared", lipWall}, {"poste", post("alto", 0)}, {"tornillo", post("alto", 0)},
+                {"esquina", corner}, {"labio_pared", lipWall}, {"holgura", gap}, {"poste", post("alto", 0)}, {"tornillo", post("alto", 0)},
                 {"pasante", post("tapa", 1)}};
     }
 
