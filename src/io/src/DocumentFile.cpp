@@ -92,8 +92,8 @@ const Table<geo::HoleKind, 3> kHoleKinds{{
     {geo::HoleKind::Countersink, "countersink"},
 }};
 
-const Table<PatternLayout, 2> kPatternLayouts{{
-    {PatternLayout::Linear, "linear"}, {PatternLayout::Circular, "circular"},
+const Table<PatternLayout, 3> kPatternLayouts{{
+    {PatternLayout::Linear, "linear"}, {PatternLayout::Circular, "circular"}, {PatternLayout::Path, "path"},
 }};
 
 const Table<JointType, 7> kJointTypes{{
@@ -518,6 +518,9 @@ FeatureRow rowOf(const Feature& f)
         if (f.kind() == FeatureKind::Fillet && e.variable) {
             params["variable"] = true;
             params["size2"] = e.size2;
+            if (e.middle > 0.0) {
+                params["middle"] = e.middle;
+            }
         }
         if (f.kind() == FeatureKind::Chamfer) {
             params["style"] = e.style == geometry::ChamferStyle::TwoDistances ? "two" : e.style == geometry::ChamferStyle::DistanceAngle ? "angle" : "equal";
@@ -534,12 +537,19 @@ FeatureRow rowOf(const Feature& f)
         if (!m.alsoBodies.empty()) {
             params["alsoBodies"] = m.alsoBodies;
         }
+        if (m.sourceFeature != 0) {
+            params["source"] = m.sourceFeature;
+        }
         break;
     }
     case FeatureKind::Split: {
         const auto& sp = static_cast<const SplitFeature&>(f);
         row.type = "split";
         params = {{"body", sp.body}, {"plane", toJson(sp.plane)}, {"offset", sp.offset}};
+        if (sp.byFace) {
+            params["byFace"] = true;
+            params["toolFace"] = toJson(sp.toolFace);
+        }
         break;
     }
     case FeatureKind::ConstructionPlane: {
@@ -637,6 +647,10 @@ FeatureRow rowOf(const Feature& f)
                   {"diameter", t.spec.diameter}, {"pitch", t.spec.pitch},
                   {"length", t.spec.length}, {"leftHanded", t.spec.leftHanded},
                   {"operation", nameOf(kOperations, t.operation)}};
+        if (t.onCylinder) {
+            params["onCylinder"] = true;
+            params["cylinderFace"] = toJson(t.cylinderFace);
+        }
         break;
     }
     case FeatureKind::Gear: {
@@ -673,6 +687,20 @@ FeatureRow rowOf(const Feature& f)
         if (!pt.alsoBodies.empty()) {
             params["alsoBodies"] = pt.alsoBodies;
         }
+        if (pt.sourceFeature != 0) {
+            params["source"] = pt.sourceFeature;
+        }
+        if (pt.layout == PatternLayout::Path) {
+            params["pathSketch"] = pt.pathSketch;
+            if (pt.followPath) {
+                params["followPath"] = true;
+            }
+            Json pathIds = Json::array();
+            for (const sk::EntityId id : pt.path) {
+                pathIds.push_back(std::uint64_t(id));
+            }
+            params["path"] = pathIds;
+        }
         break;
     }
     case FeatureKind::Hole: {
@@ -681,6 +709,12 @@ FeatureRow rowOf(const Feature& f)
         params = {{"sketch", h.sketch}, {"kind", nameOf(kHoleKinds, h.spec.kind)}, {"diameter", h.spec.diameter},
                   {"depth", h.spec.depth}, {"throughAll", h.spec.throughAll}, {"headDiameter", h.spec.headDiameter},
                   {"headDepth", h.spec.headDepth}, {"headAngle", h.spec.headAngle}, {"flip", h.flip}};
+        if (h.onFace) {
+            params["onFace"] = true;
+            params["base"] = toJson(h.base);
+            params["x"] = h.x;
+            params["y"] = h.y;
+        }
         break;
     }
     case FeatureKind::Shell: {
@@ -751,6 +785,7 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         }
         e->size = number(p, "size");
         e->variable = p.value("variable", false);
+        e->middle = p.value("middle", 0.0);
         // Los archivos anteriores solo tienen chaflán con una distancia.
         {
             const std::string style = p.value("style", std::string("equal"));
@@ -767,6 +802,10 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         sp->body = text(p, "body");
         sp->plane = attachmentOf(p.at("plane"));
         sp->offset = number(p, "offset");
+        sp->byFace = p.value("byFace", false);
+        if (sp->byFace) {
+            sp->toolFace = elementRef(p.at("toolFace"));
+        }
         feature = std::move(sp);
     } else if (row.type == "mirror") {
         auto m = std::make_unique<MirrorFeature>();
@@ -778,6 +817,7 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
                 m->alsoBodies.push_back(other.get<std::string>());
             }
         }
+        m->sourceFeature = p.value("source", std::uint64_t(0));
         feature = std::move(m);
     } else if (row.type == "plane") {
         auto cp = std::make_unique<ConstructionPlaneFeature>();
@@ -902,6 +942,10 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
     } else if (row.type == "thread") {
         auto t = std::make_unique<ThreadFeature>();
         t->base = attachmentOf(p.at("base"));
+        t->onCylinder = p.value("onCylinder", false);
+        if (t->onCylinder) {
+            t->cylinderFace = elementRef(p.at("cylinderFace"));
+        }
         t->x = p.value("x", 0.0);  // los archivos anteriores no lo traen
         t->y = p.value("y", 0.0);
         t->clearance = p.value("clearance", 0.0);
@@ -967,10 +1011,24 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
                 pt->alsoBodies.push_back(other.get<std::string>());
             }
         }
+        pt->sourceFeature = p.value("source", std::uint64_t(0));
+        if (pt->layout == PatternLayout::Path) {
+            pt->pathSketch = unsignedValue(p, "pathSketch");
+            pt->followPath = p.value("followPath", false);
+            for (const Json& entity : p.at("path")) {
+                pt->path.push_back(static_cast<sk::EntityId>(entity.get<std::uint64_t>()));
+            }
+        }
         feature = std::move(pt);
     } else if (row.type == "hole") {
         auto h = std::make_unique<HoleFeature>();
         h->sketch = unsignedValue(p, "sketch");
+        h->onFace = p.value("onFace", false);
+        if (h->onFace) {
+            h->base = attachmentOf(p.at("base"));
+            h->x = p.value("x", 0.0);
+            h->y = p.value("y", 0.0);
+        }
         h->spec.kind = parseEnum(kHoleKinds, text(p, "kind"), "tipo de agujero");
         h->spec.diameter = number(p, "diameter");
         h->spec.depth = number(p, "depth");
@@ -1112,6 +1170,9 @@ SavePlan prepareSave(const Document& document, const ViewState& view, const std:
         Json bodies = Json::object();
         for (const auto& [key, info] : document.bodyInfo()) {
             bodies[key] = {{"name", info.name}, {"component", info.component}};
+            if (!info.color.empty()) {
+                bodies[key]["color"] = info.color;
+            }
             if (info.fixed) {
                 bodies[key]["fixed"] = true;
             }
@@ -1216,6 +1277,7 @@ void loadDocument(const std::filesystem::path& path, Document& document, ViewSta
             const Json parsed = Json::parse(*bodies);  // con nombre: items() de un temporal queda colgando
             for (const auto& [key, value] : parsed.items()) {
                 bodyInfo[key] = {value.at("name").get<std::string>(), value.at("component").get<std::string>(),
+                                 value.contains("color") ? value.at("color").get<std::string>() : std::string(),
                                  value.value("fixed", false)};
             }
         }

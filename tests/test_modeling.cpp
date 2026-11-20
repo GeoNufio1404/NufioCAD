@@ -696,6 +696,13 @@ TEST_CASE("Redondeo de radio variable y voladizos", "[fillet][overhang]")
     CHECK(removed > small);
     CHECK(removed < constant);
     CHECK_THROWS_AS(geometry::filletVariable("f", box, {edge}, 0.0, 3.0), geometry::GeometryError);
+
+    // Con un radio en el centro más grueso que los extremos se quita más material que con el cambio recto
+    const geometry::Shape bulged = geometry::filletVariable("f", box, {edge}, 1.0, 1.0, 3.0);
+    REQUIRE(bulged.isValid());
+    CHECK(box.volume() - bulged.volume() > small);
+    CHECK(box.volume() - bulged.volume() < constant);
+    CHECK_THROWS_AS(geometry::filletVariable("f", box, {edge}, 1.0, 3.0, -1.0), geometry::GeometryError);
 }
 
 TEST_CASE("El ángulo de voladizo se puede cambiar: una cara a 63° se avisa a 45° y no a 70°", "[overhang]")
@@ -729,4 +736,39 @@ TEST_CASE("El ángulo de voladizo se puede cambiar: una cara a 63° se avisa a 4
         }
     }
     FAIL("ninguna orientación del chaflán dio una cara a 63°");
+}
+
+TEST_CASE("Dividir un cuerpo con una cara curva de otro cuerpo", "[split]")
+{
+    using namespace nuf;
+    const auto plane = sketch::Plane::fromPointAndNormal({0, 0, 0}, {0, 0, 1});
+    // Una caja de 40 de lado y, como cortador, un cilindro más alto que la caja que la atraviesa por el centro: su pared curva
+    // la parte en el trozo de dentro del cilindro y el de fuera.
+    const geometry::Shape box = geometry::box("b", plane, 40.0, 40.0, 10.0, true, 0.0);
+    const auto bottom = sketch::Plane::fromPointAndNormal({0, 0, -20}, {0, 0, 1});
+    const geometry::Shape cutter = geometry::cylinder("c", bottom, 20.0, 40.0);
+    int wall = -1;
+    for (int i = 0; i < cutter.faceCount(); ++i) {
+        if (cutter.cylinderFace(i)) {
+            wall = i;
+        }
+    }
+    REQUIRE(wall >= 0);
+    const auto [first, second] = geometry::splitBodyByFace("s", box, cutter, wall);
+    REQUIRE(first.isValid());
+    REQUIRE(second.isValid());
+    CHECK(first.volume() + second.volume() == Catch::Approx(box.volume()).epsilon(1e-6));
+    const double inside = std::numbers::pi * 10.0 * 10.0 * 10.0;
+    const double smaller = std::min(first.volume(), second.volume());
+    CHECK(smaller == Catch::Approx(inside).epsilon(1e-3));
+    // Una cara que no atraviesa el cuerpo no divide nada
+    const auto far = sketch::Plane::fromPointAndNormal({0, 0, 200}, {0, 0, 1});  // 200 mm más arriba: no toca la caja
+    const geometry::Shape away = geometry::cylinder("c", far, 20.0, 40.0);
+    int farWall = -1;
+    for (int i = 0; i < away.faceCount(); ++i) {
+        if (away.cylinderFace(i)) {
+            farWall = i;
+        }
+    }
+    CHECK_THROWS_AS(geometry::splitBodyByFace("s", box, away, farWall), geometry::GeometryError);
 }

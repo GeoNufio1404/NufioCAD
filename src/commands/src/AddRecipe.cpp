@@ -60,7 +60,7 @@ void AddRecipe::execute(document::Document& doc)
         if (std::ranges::find(before, body.key) != before.end()) {
             continue;
         }
-        info[body.key] = {next < recipe_.bodyNames.size() ? recipe_.bodyNames[next] : std::string(), component,
+        info[body.key] = {next < recipe_.bodyNames.size() ? recipe_.bodyNames[next] : std::string(), component, std::string(),
                           std::ranges::find(recipe_.fixedBodies, int(next)) != recipe_.fixedBodies.end()};
         ++next;
     }

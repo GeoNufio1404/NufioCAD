@@ -113,6 +113,8 @@ protected:
         std::vector<document::FeatureId> planeIds;
         geometry::ElementRef face;
     };
+    // Con true, al elegir una cara la posición queda donde se hizo clic (y no en su centro): agujeros y roscas.
+    bool placeAtClick_ = false;
     void createPlacement(QFormLayout* form, Placement& placement, const document::SketchAttachment* original, double x,
                          double y);
     // Toma la cara plana de la selección, si la hay; true si cambió algo.
@@ -309,6 +311,7 @@ private:
     QCheckBox* variable_ = nullptr;      // redondeo: radio variable
     QComboBox* chamferKind_ = nullptr;  // chaflán: igual, dos distancias, distancia y ángulo
     QDoubleSpinBox* size2_ = nullptr;
+    QDoubleSpinBox* middle_ = nullptr;  // radio a mitad de la arista (0: ninguno)
     QDoubleSpinBox* angle_ = nullptr;
     QCheckBox* flip_ = nullptr;
 };
@@ -359,7 +362,11 @@ protected:
 private:
     void updateVisibility();
 
+    bool faceMode() const { return sketchBox_ != nullptr && sketchBox_->currentData().toULongLong() == 0; }
+
+    bool faceWanted_ = false;  // al editar: el agujero estaba puesto con un clic en una cara
     document::FeatureId sketch_ = 0;
+    Placement placement_;  // el modo «clic en una cara»: la cara y el punto donde se hizo clic
     QComboBox* sketchBox_ = nullptr;
     QComboBox* kind_ = nullptr;
     QDoubleSpinBox* diameter_ = nullptr;
@@ -390,6 +397,8 @@ protected:
     bool removesMaterial() const override { return false; }
 
 private:
+    document::FeatureId sourceOp_ = 0;  // si no es 0: se refleja esa operación en vez de un cuerpo
+    QFormLayout* form_ = nullptr;
     std::string body_;
     geometry::ElementRef face_;
     std::vector<document::FeatureId> planeIds_;  // los planos de construcción del desplegable (tras los 4 fijos)
@@ -418,6 +427,8 @@ protected:
 private:
     std::string body_;
     geometry::ElementRef face_;
+    geometry::ElementRef toolFace_;  // la cara (curva o plana) de otro cuerpo que hace el corte
+    int curvedIndex_ = -1;           // el lugar de «Cara de otro cuerpo» en la lista de planos
     std::vector<document::FeatureId> planeIds_;
     QComboBox* bodyBox_ = nullptr;
     QComboBox* plane_ = nullptr;
@@ -833,9 +844,16 @@ protected:
 
 private:
     void adjustDirection();
+    // Con una cara cilíndrica elegida (agujero o cilindro macizo) solo cuentan el paso y el sentido; el resto se oculta.
+    void showCylinderMode(bool on);
 
     QFormLayout* form_ = nullptr;
     Placement placement_;
+    bool cylinderMode_ = false;
+    geometry::ElementRef cylinderFace_;
+    double cylinderDiameter_ = 0.0;
+    bool cylinderHole_ = false;
+    double cylinderLength_ = 0.0;
     QDoubleSpinBox* clearance_ = nullptr;
     QComboBox* standard_ = nullptr;
     QDoubleSpinBox* diameter_ = nullptr;
@@ -857,7 +875,7 @@ public:
 protected:
     QString title() const override { return QStringLiteral("Patrón"); }
     void createFields(QFormLayout* form) override;
-    void selectionChanged(const render::ModelSelection&) override {}
+    void selectionChanged(const render::ModelSelection& selection) override;
     QString inputsText() const override;
     std::optional<Arrow> dimensionArrow(const std::string& key) const override;
     std::optional<Arc> dimensionArc(const std::string& key) const override;
@@ -866,12 +884,16 @@ protected:
 private:
     void updateVisibility();
 
+    document::FeatureId pathSketch_ = 0;     // con «A lo largo de una trayectoria»: las curvas elegidas
+    std::vector<sketch::EntityId> path_;
+    document::FeatureId sourceOp_ = 0;  // si no es 0: se repite esa operación en vez de un cuerpo
     std::string body_;
     std::vector<document::FeatureId> axisIds_;  // ejes de construcción del desplegable (tras X, Y, Z)
     QFormLayout* form_ = nullptr;
     QListWidget* others_ = nullptr;  // los demás cuerpos que se repiten a la vez
     QComboBox* bodyBox_ = nullptr;
     QComboBox* layout_ = nullptr;
+    QCheckBox* follow_ = nullptr;
     QComboBox* axis_ = nullptr;
     QDoubleSpinBox* count_ = nullptr;
     QDoubleSpinBox* spacing_ = nullptr;

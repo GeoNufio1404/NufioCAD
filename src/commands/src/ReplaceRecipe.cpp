@@ -203,7 +203,7 @@ void ReplaceRecipe::execute(document::Document& doc)
             continue;
         }
         if (!info.contains(body.key)) {
-            info[body.key] = {next < recipe_.bodyNames.size() ? recipe_.bodyNames[next] : std::string(), component,
+            info[body.key] = {next < recipe_.bodyNames.size() ? recipe_.bodyNames[next] : std::string(), component, std::string(),
                               std::ranges::find(recipe_.fixedBodies, int(next)) != recipe_.fixedBodies.end()};
         }
         ++next;

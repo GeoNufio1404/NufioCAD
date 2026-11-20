@@ -405,7 +405,7 @@ void Document::setBodyInfo(std::map<std::string, BodyInfo> info)
 {
     // Una entrada vacía no dice nada.
     std::erase_if(info, [](const auto& entry) {
-        return entry.second.name.empty() && entry.second.component.empty() && !entry.second.fixed;
+        return entry.second.name.empty() && entry.second.component.empty() && entry.second.color.empty() && !entry.second.fixed;
     });
     if (info == bodyInfo_) {
         return;
@@ -421,7 +421,8 @@ void Document::setBodyInfo(std::map<std::string, BodyInfo> info)
     // Los cuerpos que ya no llevan nombre propio vuelven al suyo: se rehace el estado.
     const bool lostName = std::ranges::any_of(bodyInfo_, [&](const auto& entry) {
         const auto next = info.find(entry.first);
-        return !entry.second.name.empty() && (next == info.end() || next->second.name.empty());
+        return (!entry.second.name.empty() && (next == info.end() || next->second.name.empty()))
+            || (!entry.second.color.empty() && (next == info.end() || next->second.color.empty()));
     });
     bodyInfo_ = std::move(info);
     // Fijar o soltar un cuerpo cambia dónde quedan las alineaciones y las uniones: se rehace desde el principio.
@@ -458,6 +459,9 @@ void Document::applyBodyInfo()
             const auto it = bodyInfo_.find(body.key);
             if (it != bodyInfo_.end() && !it->second.name.empty()) {
                 body.name = it->second.name;
+            }
+            if (it != bodyInfo_.end() && !it->second.color.empty()) {
+                body.color = it->second.color;
             }
         }
     }

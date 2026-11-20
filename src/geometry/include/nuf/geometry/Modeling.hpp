@@ -115,7 +115,8 @@ Shape fillet(std::string_view tag, const Shape& body, const std::vector<int>& ed
 // la arista; con «flip», la otra) y, según el tipo, la otra distancia sobre la cara vecina o el ángulo con que el chaflán se
 // aparta de esa cara de referencia (rad, entre 0 y 90°).
 // Redondeo de radio variable (O2): en cada arista elegida el radio va de «start» en su primer vértice a «end» en el último.
-Shape filletVariable(std::string_view tag, const Shape& body, const std::vector<int>& edges, double start, double end);
+// «middle» > 0 añade un punto intermedio: el radio a mitad de la arista (la ley pasa por los tres radios).
+Shape filletVariable(std::string_view tag, const Shape& body, const std::vector<int>& edges, double start, double end, double middle = 0.0);
 
 enum class ChamferStyle { Equal, TwoDistances, DistanceAngle };
 struct ChamferSpec {
@@ -135,6 +136,10 @@ Shape chamfer(std::string_view tag, const Shape& body, const std::vector<int>& e
 // lo atraviesa lanza GeometryError. Las caras del corte se llaman «tag:corte» y «tag:corte:2».
 std::pair<Shape, Shape> splitBody(std::string_view tag, const Shape& body, const sketch::Plane& plane);
 
+// Igual, pero con una cara cualquiera (también curva) de otro cuerpo como superficie de corte. La cara tiene que atravesar el
+// cuerpo de lado a lado; si no, lanza GeometryError. Con más de dos trozos, el segundo reúne todos menos el primero.
+std::pair<Shape, Shape> splitBodyByFace(std::string_view tag, const Shape& body, const Shape& toolBody, int toolFace);
+
 Shape mirror(std::string_view tag, const Shape& body, const sketch::Plane& plane);
 
 struct PatternSpec {
@@ -143,6 +148,12 @@ struct PatternSpec {
     double spacing = 0.0;              // mm entre copias (lineal)
     double angle = 6.283185307179586;  // rad en total (circular); 2π = vuelta completa
     int count = 2;                     // con el original
+    // Si no está vacío: una copia por desplazamiento (mm), sin girar (patrón a lo largo de una trayectoria); manda sobre el resto.
+    std::vector<sketch::Vec3> offsets;
+    // Con «offsets»: la dirección de la trayectoria en cada copia (la primera es la del original, así que hay una más que offsets);
+    // si no está vacío, cada copia se gira además para seguirla (la rotación mínima entre la dirección del original y la suya).
+    std::vector<sketch::Vec3> tangents;
+    sketch::Vec3 tangentOrigin;  // el primer punto de la trayectoria: donde está el original, sobre el que se suman los desplazamientos
 };
 
 // Las copias del cuerpo (sin el original), una forma por copia. La copia k
@@ -150,6 +161,12 @@ struct PatternSpec {
 // completa las copias se reparten en count partes iguales; si no, el ángulo
 // total va del original a la última copia.
 std::vector<Shape> pattern(std::string_view tag, const Shape& body, const PatternSpec& spec);
+
+// «count» puntos repartidos a distancias iguales a lo largo de una trayectoria hecha con curvas de un sketch (la misma que usa el
+// barrido), del primero al último extremo. Lanza GeometryError si las curvas no forman un camino continuo.
+std::vector<sketch::Vec3> pathPoints(const sketch::Sketch& pathSketch, const sketch::Plane& pathPlane,
+                                     const std::vector<sketch::EntityId>& pathEntities, int count,
+                                     std::vector<sketch::Vec3>* tangents = nullptr);
 
 // Tipo de dentado: rueda exterior, corona con los dientes hacia dentro (engranaje interno) o cremallera
 // (barra dentada: es una rueda de radio infinito).
@@ -232,6 +249,11 @@ Shape thread(std::string_view tag, const sketch::Plane& plane, const ThreadSpec&
 
 // Diámetro menor de la rosca (el del agujero que se roscará).
 double threadMinorDiameter(const ThreadSpec& spec);
+
+// El sólido que hay que RESTAR de un cuerpo para roscar una cara cilíndrica que ya existe, en todo su largo: en un agujero,
+// la varilla roscada cuyo diámetro menor es el del agujero (rosca interior); en un cilindro macizo, el anillo que queda
+// entre el cilindro y la varilla del mismo diámetro (rosca exterior). Del «spec» se usan el paso y el sentido.
+Shape threadOnCylinderTool(std::string_view tag, const Shape::CylinderInfo& cylinder, const ThreadSpec& spec);
 
 // Tornillo sin fin: una varilla con «starts» entradas (1 a 4) cuyo perfil axial es el de una cremallera de ese módulo
 // (cabeza 1 módulo, raíz 1,25 módulos, flancos al ángulo de presión). El avance por vuelta es starts·π·módulo.

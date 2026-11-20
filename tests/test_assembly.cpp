@@ -191,7 +191,7 @@ TEST_CASE("Una pieza fija no se mueve: se mueve la otra", "[assembly][align][fix
     const FeatureId id = addAlign(doc, {flatFace(body(doc, 1).shape, -1.0), false}, {flatFace(body(doc, 0).shape, 1.0), false});
     REQUIRE(!doc.isFixed(blockKey));
     // Se fija el bloque: la placa sube hasta él (su cara de arriba queda bajo el bloque, centrada).
-    doc.setBodyInfo({{blockKey, {"", "", true}}});
+    doc.setBodyInfo({{blockKey, {"", "", "", true}}});
     REQUIRE(doc.isFixed(blockKey));
     REQUIRE(doc.status(id).health == Health::Ok);
     CHECK_THAT(body(doc, 1).shape.bounds().min.x, WithinAbs(200.0, 1e-6));  // el bloque se queda donde estaba
@@ -200,10 +200,10 @@ TEST_CASE("Una pieza fija no se mueve: se mueve la otra", "[assembly][align][fix
     CHECK_THAT(centerOf(body(doc, 0).shape).x, WithinAbs(210.0, 1e-6));
     CHECK_THAT(centerOf(body(doc, 0).shape).y, WithinAbs(5.0, 1e-6));
     // Con las dos fijas no hay nada que mover.
-    doc.setBodyInfo({{blockKey, {"", "", true}}, {plateKey, {"", "", true}}});
+    doc.setBodyInfo({{blockKey, {"", "", "", true}}, {plateKey, {"", "", "", true}}});
     CHECK(doc.status(id).health == Health::Error);
     // Soltar el bloque vuelve a lo de antes.
-    doc.setBodyInfo({{plateKey, {"", "", true}}});
+    doc.setBodyInfo({{plateKey, {"", "", "", true}}});
     REQUIRE(doc.status(id).health == Health::Ok);
     CHECK_THAT(body(doc, 1).shape.bounds().min.z, WithinAbs(5.0, 1e-6));
     CHECK_THAT(body(doc, 0).shape.bounds().max.z, WithinAbs(5.0, 1e-6));
@@ -214,7 +214,7 @@ TEST_CASE("Lo fijo y lo alineado se guardan y se abren", "[assembly][io]")
     Document doc = plateAndBlock();
     const auto plateKey = body(doc, 0).key;
     const FeatureId id = addAlign(doc, {flatFace(body(doc, 1).shape, -1.0), false}, {flatFace(body(doc, 0).shape, 1.0), false});
-    doc.setBodyInfo({{plateKey, {"Base", "", true}}});
+    doc.setBodyInfo({{plateKey, {"Base", "", "", true}}});
     const auto path = std::filesystem::temp_directory_path() / "nuf_alinear.nuf";
     std::filesystem::remove(path);
     io::saveDocument(path, doc, {});
@@ -347,7 +347,7 @@ TEST_CASE("Duplicar copia varios cuerpos de una vez, con nombres y componente nu
     const std::string a = body(doc, 0).key;
     const std::string b = body(doc, 1).key;
     const std::string c = body(doc, 2).key;
-    doc.setBodyInfo({{a, {"Tapa", "Caja 1", false}}, {b, {"Base 1", "Caja 1", false}}, {c, {"Suelto", "", false}}});
+    doc.setBodyInfo({{a, {"Tapa", "Caja 1", "", false}}, {b, {"Base 1", "Caja 1", "", false}}, {c, {"Suelto", "", "", false}}});
 
     commands::DuplicateBodies duplicate({a, b, c}, {0, 100, 0});
     duplicate.execute(doc);
@@ -396,7 +396,7 @@ TEST_CASE("Duplicar un cuerpo fijo da una copia suelta", "[assembly][duplicate][
     Document doc;
     addBox(doc, 0, 0, 0, 10, 10, 10);
     const std::string a = body(doc, 0).key;
-    doc.setBodyInfo({{a, {"Base", "", true}}});
+    doc.setBodyInfo({{a, {"Base", "", "", true}}});
     commands::DuplicateBodies duplicate({a}, {20, 0, 0});
     duplicate.execute(doc);
     REQUIRE(doc.result().bodies.size() == 2);

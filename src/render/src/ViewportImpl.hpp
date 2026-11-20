@@ -4,6 +4,7 @@
 
 #include "ViewportDrawing.hpp"
 
+#include <optional>
 #include <functional>
 
 #include <StdPrs_ToolTriangulatedShape.hxx>
@@ -88,6 +89,7 @@ public:
         std::string key;
         geometry::Shape shape;
         Handle(AIS_Shape) ais;
+        std::string color;  // el del usuario («#rrggbb») con el que se creó
     };
 
     // --- Mallado en segundo plano ---------------------------------------------
@@ -196,6 +198,7 @@ public:
     std::function<bool(const std::string&)> bodyDragFilter;
     bool bodyDragging = false;
     std::string dragKey;
+    std::optional<gp_Pnt> lastPick;  // el punto 3D donde cayó el último clic que seleccionó algo
     gp_Pnt dragGrab;      // el punto del cuerpo que se agarró
     gp_Dir dragNormal;    // la dirección de la vista: el plano del arrastre pasa por «dragGrab» perpendicular a ella
     QPointF dragPress;

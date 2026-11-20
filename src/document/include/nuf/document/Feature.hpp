@@ -34,6 +34,7 @@ struct Body {
     std::string key;   // estable: «f<id>» de la operación que lo creó
     std::string name;  // «Cuerpo1»
     geometry::Shape shape;
+    std::string color{};  // «#rrggbb» elegido por el usuario; vacío: el gris de siempre
 };
 
 // Sketch ya colocado en su plano.
@@ -66,6 +67,13 @@ struct ModelState {
     std::map<FeatureId, SketchOutput> sketches;
     std::map<FeatureId, sketch::Plane> planes;  // planos de construcción
     std::map<FeatureId, AxisLine> axes;         // ejes de construcción
+    // El sólido con que cada operación de modelado (extruir, revolver, agujero, cilindro, rosca…) cortó, unió o creó, y cuál de
+    // las operaciones era (0 Unir, 1 Cortar, 2 Intersecar, 3 Cuerpo nuevo): el patrón y el espejo de una operación lo repiten.
+    struct OperationTool {
+        geometry::Shape shape;
+        int operation = 0;
+    };
+    std::map<FeatureId, OperationTool> operationTools;
     int bodiesCreated = 0;  // los cuerpos que se han creado (en total)
     std::set<std::string> fixedBodies;          // las claves de los cuerpos fijos (Fase 21): el documento las pone
     std::map<std::string, int> bodyNameCounts;  // cuántos van de cada clase («Caja» → 2), para numerar «Caja 3»

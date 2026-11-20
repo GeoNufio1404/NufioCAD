@@ -27,6 +27,7 @@ struct Parameter {
 struct BodyInfo {
     std::string name;
     std::string component;
+    std::string color{};  // «#rrggbb»; vacío: el color de siempre
     bool fixed = false;  // fijo (Fase 21): las alineaciones y las uniones no lo mueven, mueven siempre la otra pieza
     bool operator==(const BodyInfo&) const = default;
 };

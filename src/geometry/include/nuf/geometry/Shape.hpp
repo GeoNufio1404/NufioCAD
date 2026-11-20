@@ -85,6 +85,16 @@ public:
     // Marco de una cara (plana, cilíndrica, cónica o esférica) o de una arista (circular o recta); nada si es otra cosa.
     std::optional<Frame> faceFrame(int index) const;
     std::optional<Frame> edgeFrame(int index) const;
+    // Una cara cilíndrica: el centro de su borde inicial sobre el eje, la dirección del eje hacia el otro borde, el radio,
+    // el largo y si es un agujero (el material queda por fuera) o un cilindro macizo (por dentro).
+    struct CylinderInfo {
+        sketch::Vec3 start;
+        sketch::Vec3 direction;  // unitaria
+        double radius = 0.0;
+        double length = 0.0;
+        bool hole = false;
+    };
+    std::optional<CylinderInfo> cylinderFace(int index) const;
     // Centro (de masas) de una cara.
     sketch::Vec3 faceCenter(int index) const;
     // Caja que envuelve una cara.

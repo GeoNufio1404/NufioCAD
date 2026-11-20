@@ -341,6 +341,188 @@ TEST_CASE("Un agujero simple resta un cilindro de la profundidad pedida", "[hole
     REQUIRE_THAT(two.result().bodies.front().shape.volume(), WithinRel(kBox - 2 * kPi * 4.0 * 3.0, 1e-6));
 }
 
+TEST_CASE("Repetir y reflejar una operación (un agujero) en vez de un cuerpo, con archivo", "[hole][pattern][mirror][io]")
+{
+    Document doc = boxDocument();
+    const FeatureId sk = addHoleSketch(doc, {{4, 5}});
+    geometry::HoleSpec spec;
+    spec.diameter = 4;
+    spec.depth = 3;
+    const FeatureId hole = addHole(doc, sk, spec);
+    REQUIRE(doc.status(hole).health == Health::Ok);
+    const double one = kBox - kPi * 4.0 * 3.0;
+    REQUIRE_THAT(doc.result().bodies.front().shape.volume(), WithinRel(one, 1e-6));
+
+    // Patrón lineal del agujero: 3 en total, cada 5 mm en X (no se solapan: Ø 4 y paso 5)
+    auto pattern = std::make_unique<PatternFeature>();
+    pattern->sourceFeature = hole;
+    pattern->layout = PatternLayout::Linear;
+    pattern->axis = 0;
+    pattern->count = 3;
+    pattern->spacing = 5.0;
+    const FeatureId pid = doc.addFeature(std::move(pattern));
+    REQUIRE(doc.status(pid).health == Health::Ok);
+    REQUIRE(doc.result().bodies.size() == 1);
+    REQUIRE_THAT(doc.result().bodies.front().shape.volume(), WithinRel(kBox - 3.0 * kPi * 4.0 * 3.0, 1e-6));
+
+    // Se guarda y se abre igual
+    const auto path = std::filesystem::temp_directory_path() / "nuf_patron_operacion.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    REQUIRE(reopened.status(pid).health == Health::Ok);
+    REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(doc.result().bodies.front().shape.volume(), 1e-9));
+
+    // Si la operación original se borra, el patrón da un error claro en vez de dejar el modelo a medias
+    Document broken = boxDocument();
+    auto lost = std::make_unique<PatternFeature>();
+    lost->sourceFeature = 9999;
+    const FeatureId lostId = broken.addFeature(std::move(lost));
+    CHECK(broken.status(lostId).health == Health::Error);
+
+    // Espejo del agujero respecto del plano YZ por el centro de la caja (x = 10): el agujero de x = 4 cae en x = 16
+    Document mirrored = boxDocument();
+    const FeatureId sk2 = addHoleSketch(mirrored, {{4, 5}});
+    const FeatureId hole2 = addHole(mirrored, sk2, spec);
+    REQUIRE(mirrored.status(hole2).health == Health::Ok);
+    const double before = mirrored.result().bodies.front().shape.volume();
+    auto mirror = std::make_unique<MirrorFeature>();
+    mirror->sourceFeature = hole2;
+    mirror->plane.origin = OriginPlane::YZ;  // plano x = 0: el agujero reflejado cae fuera de la caja y no corta nada
+    const FeatureId mid = mirrored.addFeature(std::move(mirror));
+    CHECK(mirrored.status(mid).health != Health::Error);
+    CHECK(mirrored.result().bodies.front().shape.volume() == Catch::Approx(before).margin(1e-6));
+}
+
+TEST_CASE("Patrón a lo largo de una trayectoria: copias a distancias iguales, con archivo", "[pattern][io]")
+{
+    Document doc = boxDocument();
+    // La trayectoria: una recta de 100 mm en el plano XY desde (0, 20)
+    sketch::Sketch path;
+    const sketch::EntityId line = path.addLine({0, 20}, {100, 20});
+    SketchAttachment at;
+    at.origin = OriginPlane::XY;
+    const FeatureId pathId = doc.addFeature(std::make_unique<SketchFeature>(std::move(path), at));
+    const std::string key = doc.result().bodies.front().key;
+
+    auto pattern = std::make_unique<PatternFeature>();
+    pattern->body = key;
+    pattern->layout = PatternLayout::Path;
+    pattern->pathSketch = pathId;
+    pattern->path = {line};
+    pattern->count = 3;
+    pattern->operation = Operation::NewBody;
+    const FeatureId pid = doc.addFeature(std::move(pattern));
+    REQUIRE(doc.status(pid).health == Health::Ok);
+    // La caja original y, como cuerpo nuevo, las dos copias a 50 y 100 mm a lo largo de X (la trayectoria mide 100)
+    REQUIRE(doc.result().bodies.size() == 2);
+    const geometry::Box copies = doc.result().bodies[1].shape.bounds();
+    CHECK(copies.min.x == Catch::Approx(50.0).margin(1e-6));
+    CHECK(copies.max.x == Catch::Approx(120.0).margin(1e-6));
+
+    const auto file = std::filesystem::temp_directory_path() / "nuf_patron_trayectoria.nuf";
+    std::filesystem::remove(file);
+    io::saveDocument(file, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(file, reopened, view);
+    std::filesystem::remove(file);
+    REQUIRE(reopened.status(pid).health == Health::Ok);
+    CHECK(reopened.result().bodies.size() == 2);
+
+    // Sin curvas: error claro
+    auto empty = std::make_unique<PatternFeature>(*static_cast<const PatternFeature*>(doc.findFeature(pid)));
+    empty->path.clear();
+    doc.replaceFeature(pid, std::move(empty));
+    CHECK(doc.status(pid).health == Health::Error);
+}
+
+TEST_CASE("Patrón a lo largo de una trayectoria: la copia gira para seguir la curva", "[pattern][io]")
+{
+    Document doc = boxDocument();
+    // Una L: de (0, 20) a (100, 20) y de ahí a (100, 120); la última copia queda al final, donde la curva mira hacia +Y
+    sketch::Sketch path;
+    const sketch::EntityId first = path.addLine({0, 20}, {100, 20});
+    const sketch::EntityId second = path.addLine({100, 20}, {100, 120});
+    SketchAttachment at;
+    at.origin = OriginPlane::XY;
+    const FeatureId pathId = doc.addFeature(std::make_unique<SketchFeature>(std::move(path), at));
+    auto pattern = std::make_unique<PatternFeature>();
+    pattern->body = doc.result().bodies.front().key;
+    pattern->layout = PatternLayout::Path;
+    pattern->pathSketch = pathId;
+    pattern->path = {first, second};
+    pattern->count = 2;
+    pattern->followPath = true;
+    pattern->operation = Operation::NewBody;
+    const FeatureId pid = doc.addFeature(std::move(pattern));
+    REQUIRE(doc.status(pid).health == Health::Ok);
+    REQUIRE(doc.result().bodies.size() == 2);
+    // La caja de 20 × 10 se gira 90° alrededor de (100, 120): queda de 10 × 20, con x entre 110 y 120 e y entre 120 y 140
+    const geometry::Box copy = doc.result().bodies[1].shape.bounds();
+    CHECK(copy.min.x == Catch::Approx(110.0).margin(1e-4));
+    CHECK(copy.max.x == Catch::Approx(120.0).margin(1e-4));
+    CHECK(copy.min.y == Catch::Approx(120.0).margin(1e-4));
+    CHECK(copy.max.y == Catch::Approx(140.0).margin(1e-4));
+
+    const auto file = std::filesystem::temp_directory_path() / "nuf_patron_gira.nuf";
+    std::filesystem::remove(file);
+    io::saveDocument(file, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(file, reopened, view);
+    std::filesystem::remove(file);
+    REQUIRE(reopened.result().bodies.size() == 2);
+    CHECK(reopened.result().bodies[1].shape.bounds().max.y == Catch::Approx(140.0).margin(1e-4));
+}
+
+TEST_CASE("Un agujero puesto con un clic en una cara entra en el material, se guarda y sigue a la pieza", "[hole][io]")
+{
+    Document doc = boxDocument();
+    const geometry::Shape& box = doc.result().bodies.front().shape;
+    // La cara de arriba (normal hacia +Z, z = 5) y el punto donde se hizo clic: (10, 5, 5)
+    SketchAttachment at;
+    at.origin = std::nullopt;
+    sketch::Plane facePlane = sketch::Plane::xy();
+    for (int i = 0; i < box.faceCount(); ++i) {
+        if (const auto plane = box.facePlane(i); plane && plane->normal.z > 0.9) {
+            at.face = box.faceRef(i);
+            facePlane = *plane;
+        }
+    }
+    REQUIRE(!at.face.empty());
+    const sketch::Vec2 click = facePlane.toLocal({10, 5, 5});
+
+    auto hole = std::make_unique<HoleFeature>();
+    hole->onFace = true;
+    hole->base = at;
+    hole->x = click.x;
+    hole->y = click.y;
+    hole->spec.diameter = 4;
+    hole->spec.depth = 3;
+    const FeatureId id = doc.addFeature(std::move(hole));
+    REQUIRE(doc.status(id).health == Health::Ok);
+    REQUIRE_THAT(doc.result().bodies.front().shape.volume(), WithinRel(kBox - kPi * 4.0 * 3.0, 1e-6));
+
+    // Ida y vuelta por el archivo
+    const auto path = std::filesystem::temp_directory_path() / "nuf_agujero_cara.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    REQUIRE(reopened.status(id).health == Health::Ok);
+    REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(kBox - kPi * 4.0 * 3.0, 1e-6));
+    const auto* loaded = dynamic_cast<const HoleFeature*>(reopened.findFeature(id));
+    REQUIRE(loaded != nullptr);
+    CHECK(loaded->onFace);
+    CHECK(loaded->x == Catch::Approx(click.x));
+}
+
 TEST_CASE("Abocardado y avellanado quitan más que un agujero simple", "[hole]")
 {
     geometry::HoleSpec spec;
@@ -1404,6 +1586,29 @@ TEST_CASE("Los cuerpos pueden llevar nombre propio y componente, con deshacer y 
     REQUIRE(doc.componentOf("f2") == "Carcasa");
 }
 
+TEST_CASE("El color de un cuerpo se aplica, se guarda, se abre y se quita", "[bodies][io]")
+{
+    Document doc = boxDocument();
+    REQUIRE(doc.result().bodies[0].color.empty());
+    doc.setBodyInfo({{"f2", {"", "", "#FF8000"}}});
+    REQUIRE(doc.result().bodies[0].color == "#FF8000");
+    REQUIRE(doc.result().bodies[0].name == "Extrusión 1");  // sin nombre propio sigue con el de fábrica
+
+    const auto path = std::filesystem::temp_directory_path() / "nuf_color.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    REQUIRE(reopened.bodyInfo() == doc.bodyInfo());
+    REQUIRE(reopened.result().bodies[0].color == "#FF8000");
+
+    // Quitarlo vuelve al color de siempre
+    doc.setBodyInfo({});
+    REQUIRE(doc.result().bodies[0].color.empty());
+}
+
 namespace {
 
 // Una segunda caja (copia de la primera, lejos) y una unión entre la cara superior de la primera y la
@@ -2156,6 +2361,79 @@ TEST_CASE("Buscar caras y aristas por nombre da lo mismo con el índice guardado
         thread.join();
     }
     REQUIRE(mismatches == 0);
+}
+
+TEST_CASE("Roscar un agujero y un cilindro que ya existen, en todo su largo, y se guarda", "[thread][io]")
+{
+    // Un agujero pasante de Ø 6,5 en la caja de 20×10×5: la rosca interior le quita material en las crestas
+    Document doc = boxDocument();
+    const FeatureId sk = addHoleSketch(doc, {{10, 5}});
+    geometry::HoleSpec spec;
+    spec.diameter = 6.5;
+    spec.throughAll = true;
+    REQUIRE(doc.status(addHole(doc, sk, spec)).health == Health::Ok);
+    const double drilled = doc.result().bodies.front().shape.volume();
+    const geometry::Shape& drilledShape = doc.result().bodies.front().shape;
+    geometry::ElementRef wall;
+    for (int i = 0; i < drilledShape.faceCount(); ++i) {
+        if (const auto info = drilledShape.cylinderFace(i)) {
+            CHECK(info->hole);
+            CHECK(info->radius == Catch::Approx(3.25).margin(1e-6));
+            CHECK(info->length == Catch::Approx(5.0).margin(1e-6));
+            wall = drilledShape.faceRef(i);
+        }
+    }
+    REQUIRE(!wall.empty());
+    auto thread = std::make_unique<ThreadFeature>();
+    thread->onCylinder = true;
+    thread->cylinderFace = wall;
+    thread->spec.pitch = 1.25;
+    const FeatureId t = doc.addFeature(std::move(thread));
+    REQUIRE(doc.status(t).health == Health::Ok);
+    const geometry::Shape& threaded = doc.result().bodies.front().shape;
+    CHECK(threaded.isValid());
+    CHECK(threaded.volume() < drilled - 1.0);  // las canales de la rosca quitan material
+    CHECK(threaded.volume() > drilled - 80.0);
+
+    // Ida y vuelta por el archivo
+    const auto path = std::filesystem::temp_directory_path() / "nuf_rosca_existente.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    REQUIRE(reopened.status(t).health == Health::Ok);
+    REQUIRE_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(threaded.volume(), 1e-9));
+
+    // Un cilindro macizo (un perno de Ø 8 y 10 de largo): la rosca exterior también quita material
+    Document pin;
+    auto rod = std::make_unique<CylinderFeature>();
+    rod->base.origin = OriginPlane::XY;
+    rod->diameter = 8.0;
+    rod->height = 10.0;
+    REQUIRE(pin.status(pin.addFeature(std::move(rod))).health == Health::Ok);
+    const geometry::Shape& solid = pin.result().bodies.front().shape;
+    const double before = solid.volume();
+    geometry::ElementRef side;
+    for (int i = 0; i < solid.faceCount(); ++i) {
+        if (const auto info = solid.cylinderFace(i)) {
+            CHECK(!info->hole);
+            CHECK(info->length == Catch::Approx(10.0).margin(1e-6));
+            side = solid.faceRef(i);
+        }
+    }
+    REQUIRE(!side.empty());
+    auto outer = std::make_unique<ThreadFeature>();
+    outer->onCylinder = true;
+    outer->cylinderFace = side;
+    outer->spec.pitch = 1.25;
+    const FeatureId ot = pin.addFeature(std::move(outer));
+    REQUIRE(pin.status(ot).health == Health::Ok);
+    const geometry::Shape& bolt = pin.result().bodies.front().shape;
+    CHECK(bolt.isValid());
+    CHECK(bolt.volume() < before - 1.0);
+    CHECK(bolt.volume() > before * 0.5);
 }
 
 TEST_CASE("Una rosca y un engranaje se colocan en una posición X/Y del plano", "[thread][gear]")

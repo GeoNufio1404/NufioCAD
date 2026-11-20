@@ -256,6 +256,21 @@ std::optional<std::string> applyOperation(ModelState& state, const Feature& feat
     if (tool.isNull()) {
         throw FeatureError("La operación no produce ningún sólido");
     }
+    switch (feature.kind()) {
+    case FeatureKind::Extrude:
+    case FeatureKind::Revolve:
+    case FeatureKind::Hole:
+    case FeatureKind::Box:
+    case FeatureKind::Cylinder:
+    case FeatureKind::Thread:
+    case FeatureKind::Gear:
+    case FeatureKind::Sweep:
+    case FeatureKind::Loft:
+        state.operationTools[feature.id()] = {tool, int(operation)};
+        break;
+    default:
+        break;
+    }
     const auto newBody = [&] {
         state.bodies.push_back({feature.tag(), newBodyName(state, feature), tool});
     };
@@ -566,6 +581,24 @@ std::vector<FeatureId> ShellFeature::dependencies() const
 
 std::optional<std::string> MirrorFeature::compute(ModelState& state) const
 {
+    if (sourceFeature != 0) {
+        // Reflejar una operación (un agujero, un corte…): se repite su sólido al otro lado del plano.
+        const auto original = state.operationTools.find(sourceFeature);
+        if (original == state.operationTools.end()) {
+            throw FeatureError("La operación que se iba a reflejar ya no existe");
+        }
+        std::optional<std::string> note;
+        const sketch::Plane across = resolvePlane(state, plane, "del plano de simetría", "se usa su última posición", note);
+        try {
+            const geometry::Shape mirroredTool = geometry::mirror(tag(), original->second.shape, across);
+            if (auto extra = applyOperation(state, *this, Operation(original->second.operation), mirroredTool)) {
+                note = note ? *note + " " + *extra : *extra;
+            }
+        } catch (const geometry::GeometryError& e) {
+            throw FeatureError(e.what());
+        }
+        return note;
+    }
     const auto source = std::ranges::find_if(state.bodies, [&](const Body& b) { return b.key == body; });
     if (source == state.bodies.end()) {
         throw FeatureError("El cuerpo que se iba a reflejar ya no existe");
@@ -614,6 +647,24 @@ std::optional<std::string> SplitFeature::compute(ModelState& state) const
     if (source == state.bodies.end()) {
         throw FeatureError("El cuerpo que se iba a dividir ya no existe");
     }
+    if (byFace) {
+        const auto hit = state.findFace(toolFace);
+        if (!hit) {
+            throw FeatureError("Ya no existe la cara con que se iba a dividir");
+        }
+        const std::size_t index = std::size_t(source - state.bodies.begin());
+        if (hit->body == index) {
+            throw FeatureError("Elige una cara de otro cuerpo para dividir (un cuerpo no se divide con su propia cara)");
+        }
+        try {
+            auto [front, back] = geometry::splitBodyByFace(tag(), source->shape, state.bodies[hit->body].shape, hit->face);
+            state.bodies[index].shape = std::move(front);
+            state.bodies.push_back({tag(), newBodyName(state, *this), std::move(back)});
+        } catch (const geometry::GeometryError& e) {
+            throw FeatureError(e.what());
+        }
+        return std::nullopt;
+    }
     std::optional<std::string> warning;
     sketch::Plane cut = resolvePlane(state, plane, "del plano de corte", "se usa su última posición", warning);
     cut.origin = {cut.origin.x + cut.normal.x * offset, cut.origin.y + cut.normal.y * offset, cut.origin.z + cut.normal.z * offset};
@@ -632,6 +683,10 @@ std::vector<FeatureId> SplitFeature::dependencies() const
 {
     std::vector<FeatureId> ids;
     addAll(ids, geometry::ElementRef{body + ":", 0});
+    if (byFace) {
+        addAll(ids, toolFace);
+        return ids;
+    }
     addAttachmentDependencies(ids, plane);
     return ids;
 }
@@ -639,6 +694,11 @@ std::vector<FeatureId> SplitFeature::dependencies() const
 std::vector<FeatureId> MirrorFeature::dependencies() const
 {
     std::vector<FeatureId> ids;
+    if (sourceFeature != 0) {
+        ids.push_back(sourceFeature);
+        addAttachmentDependencies(ids, plane);
+        return ids;
+    }
     addAll(ids, geometry::ElementRef{body + ":", 0});  // la operación que creó el cuerpo
     for (const std::string& other : alsoBodies) {
         addAll(ids, geometry::ElementRef{other + ":", 0});

@@ -33,20 +33,28 @@ MirrorTool::MirrorTool(document::Document& document, render::Viewport& viewport,
 {
     if (const auto* m = dynamic_cast<const document::MirrorFeature*>(original_.get())) {
         body_ = m->body;
+        sourceOp_ = m->sourceFeature;
         face_ = m->plane.face;
     }
 }
 
 void MirrorTool::createFields(QFormLayout* form)
 {
+    form_ = form;
     bodyBox_ = new QComboBox();
     for (const document::Body& b : before().bodies) {
         bodyBox_->addItem(QString::fromStdString(b.name), QString::fromStdString(b.key));
     }
-    if (body_.empty() && bodyBox_->count() > 0) {
+    // También se puede reflejar una operación (un agujero, un corte…) en vez de un cuerpo entero.
+    for (const auto& [id, op] : before().operationTools) {
+        const document::Feature* f = document_.findFeature(id);
+        bodyBox_->addItem(QStringLiteral("Operación: %1").arg(f ? QString::fromStdString(f->name()) : QStringLiteral("?")),
+                          QStringLiteral("op:%1").arg(qulonglong(id)));
+    }
+    if (body_.empty() && sourceOp_ == 0 && bodyBox_->count() > 0) {
         body_ = bodyBox_->itemData(0).toString().toStdString();
     }
-    if (const int at = bodyBox_->findData(QString::fromStdString(body_)); at >= 0) {
+    if (const int at = bodyBox_->findData(sourceOp_ != 0 ? QStringLiteral("op:%1").arg(qulonglong(sourceOp_)) : QString::fromStdString(body_)); at >= 0) {
         bodyBox_->setCurrentIndex(at);
     }
     plane_ = combo({QStringLiteral("Plano XY"), QStringLiteral("Plano XZ"), QStringLiteral("Plano YZ"),
@@ -82,13 +90,21 @@ void MirrorTool::createFields(QFormLayout* form)
     form->addRow(QStringLiteral("Reflejar también"), others_);
     form->addRow(QStringLiteral("Plano de simetría"), plane_);
     form->addRow(QStringLiteral("Operación"), operation_);
-    connect(bodyBox_, &QComboBox::currentIndexChanged, this, [this] {
-        body_ = bodyBox_->currentData().toString().toStdString();
+    const auto refresh = [this] {
+        form_->setRowVisible(others_, sourceOp_ == 0);
+        form_->setRowVisible(operation_, sourceOp_ == 0);
+    };
+    connect(bodyBox_, &QComboBox::currentIndexChanged, this, [this, refresh] {
+        const QString data = bodyBox_->currentData().toString();
+        sourceOp_ = data.startsWith(QLatin1String("op:")) ? document::FeatureId(data.mid(3).toULongLong()) : 0;
+        body_ = sourceOp_ != 0 ? std::string() : data.toStdString();
+        refresh();
         updatePreview();
     });
     for (QComboBox* box : {plane_, operation_}) {
         connect(box, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
     }
+    refresh();
 }
 
 void MirrorTool::selectionChanged(const render::ModelSelection& selection)
@@ -105,7 +121,7 @@ void MirrorTool::selectionChanged(const render::ModelSelection& selection)
 
 std::unique_ptr<document::Feature> MirrorTool::build() const
 {
-    if (body_.empty()) {
+    if (body_.empty() && sourceOp_ == 0) {
         return nullptr;
     }
     auto f = std::make_unique<document::MirrorFeature>();
@@ -113,6 +129,7 @@ std::unique_ptr<document::Feature> MirrorTool::build() const
         f->setName(original_->name());
     }
     f->body = body_;
+    f->sourceFeature = sourceOp_;
     for (int i = 0; others_ != nullptr && i < others_->count(); ++i) {
         const std::string key = others_->item(i)->data(Qt::UserRole).toString().toStdString();
         if (others_->item(i)->checkState() == Qt::Checked && key != body_) {
@@ -171,6 +188,7 @@ SplitTool::SplitTool(document::Document& document, render::Viewport& viewport, s
     if (const auto* s = dynamic_cast<const document::SplitFeature*>(original_.get())) {
         body_ = s->body;
         face_ = s->plane.face;
+        toolFace_ = s->toolFace;
     }
 }
 
@@ -192,6 +210,9 @@ void SplitTool::createFields(QFormLayout* form)
         plane_->addItem(f ? QString::fromStdString(f->name()) : QStringLiteral("Plano"));
         planeIds_.push_back(id);
     }
+    // Una cara (también curva) de otro cuerpo como superficie de corte.
+    plane_->addItem(QStringLiteral("Cara de otro cuerpo (curva o plana)"));
+    curvedIndex_ = plane_->count() - 1;
     plane_->setCurrentIndex(2);
     offset_ = lengthBox(0.0);
     offset_->setRange(-100000.0, 100000.0);
@@ -202,12 +223,15 @@ void SplitTool::createFields(QFormLayout* form)
             const auto it = std::ranges::find(planeIds_, s->plane.reference);
             at = it != planeIds_.end() ? 4 + int(it - planeIds_.begin()) : 3;
         }
-        plane_->setCurrentIndex(at);
+        plane_->setCurrentIndex(s->byFace ? curvedIndex_ : at);
         offset_->setValue(s->offset);
     }
     form->addRow(QStringLiteral("Cuerpo"), bodyBox_);
     form->addRow(QStringLiteral("Plano de corte"), plane_);
     form->addRow(QStringLiteral("Posición del corte"), offset_);
+    const auto refresh = [this, form] { form->setRowVisible(offset_, plane_->currentIndex() != curvedIndex_); };
+    connect(plane_, &QComboBox::currentIndexChanged, this, refresh);
+    refresh();
     connect(bodyBox_, &QComboBox::currentIndexChanged, this, [this] {
         body_ = bodyBox_->currentData().toString().toStdString();
         updatePreview();
@@ -218,9 +242,21 @@ void SplitTool::createFields(QFormLayout* form)
 
 void SplitTool::selectionChanged(const render::ModelSelection& selection)
 {
-    // Una cara plana elegida en la vista es el plano de corte.
+    // Una cara plana elegida en la vista es el plano de corte; una curva (o de otro cuerpo, si «Cara de otro cuerpo» está
+    // elegido) es la superficie de corte.
     for (const render::ModelSelection::Face& face : selection.faces) {
-        if (const auto hit = before().findFace(face.ref); hit && before().bodies[hit->body].shape.facePlane(hit->face)) {
+        const auto hit = before().findFace(face.ref);
+        if (!hit) {
+            continue;
+        }
+        const bool planar = before().bodies[hit->body].shape.facePlane(hit->face).has_value();
+        const bool otherBody = before().bodies[hit->body].key != body_;
+        if (otherBody && (!planar || plane_->currentIndex() == curvedIndex_)) {
+            toolFace_ = face.ref;
+            plane_->setCurrentIndex(curvedIndex_);
+            break;
+        }
+        if (planar) {
             face_ = face.ref;
             plane_->setCurrentIndex(3);
             break;
@@ -240,6 +276,14 @@ std::unique_ptr<document::Feature> SplitTool::build() const
     f->body = body_;
     f->offset = offset_->value();
     const int plane = plane_->currentIndex();
+    if (plane == curvedIndex_) {
+        if (toolFace_.empty() || !before().findFace(toolFace_)) {
+            return nullptr;
+        }
+        f->byFace = true;
+        f->toolFace = toolFace_;
+        return f;
+    }
     if (plane < 3) {
         f->plane.origin = document::OriginPlane(plane);
         return f;
@@ -269,6 +313,10 @@ QString SplitTool::inputsText() const
 {
     if (bodyBox_->count() == 0) {
         return QStringLiteral("No hay cuerpos que dividir");
+    }
+    if (plane_->currentIndex() == curvedIndex_) {
+        return toolFace_.empty() ? QStringLiteral("Elige en la vista una cara de OTRO cuerpo (puede ser curva): hará de superficie de corte")
+                                 : QStringLiteral("Dividir «%1» con la cara elegida: tiene que atravesar el cuerpo de lado a lado").arg(bodyBox_->currentText());
     }
     if (plane_->currentIndex() == 3 && face_.empty()) {
         return QStringLiteral("Elige en la vista la cara plana que hace de plano de corte");

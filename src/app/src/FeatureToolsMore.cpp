@@ -1442,6 +1442,11 @@ ThreadTool::ThreadTool(document::Document& document, render::Viewport& viewport,
                        std::optional<document::FeatureId> editing)
     : FeatureTool(document, viewport, editing)
 {
+    if (const auto* t = dynamic_cast<const document::ThreadFeature*>(original_.get()); t != nullptr && t->onCylinder) {
+        cylinderMode_ = true;
+        cylinderFace_ = t->cylinderFace;
+    }
+    placeAtClick_ = true;
 }
 
 void ThreadTool::createFields(QFormLayout* form)
@@ -1488,6 +1493,17 @@ void ThreadTool::createFields(QFormLayout* form)
     form->addRow(QStringLiteral("Operación"), operation_);
     form->addRow(QStringLiteral("Holgura"), clearance_);
     form->setRowVisible(clearance_, operation_->currentIndex() == 2);
+    if (cylinderMode_) {
+        // Al editar una rosca puesta sobre un cilindro: se saca su medida de la cara.
+        if (const auto hit = before().findFace(cylinderFace_)) {
+            if (const auto info = before().bodies[hit->body].shape.cylinderFace(hit->face)) {
+                cylinderDiameter_ = 2.0 * info->radius;
+                cylinderHole_ = info->hole;
+                cylinderLength_ = info->length;
+            }
+        }
+        showCylinderMode(true);
+    }
     connect(standard_, &QComboBox::currentIndexChanged, this, [this](int index) {
         if (index > 0) {
             diameter_->setValue(kMetric[index - 1].diameter);
@@ -1515,9 +1531,52 @@ void ThreadTool::createFields(QFormLayout* form)
     }
 }
 
+void ThreadTool::showCylinderMode(bool on)
+{
+    cylinderMode_ = on;
+    for (QWidget* w : {static_cast<QWidget*>(placement_.base), static_cast<QWidget*>(placement_.x), static_cast<QWidget*>(placement_.y),
+                       static_cast<QWidget*>(diameter_), static_cast<QWidget*>(length_), static_cast<QWidget*>(operation_)}) {
+        form_->setRowVisible(w, !on);
+    }
+    form_->setRowVisible(clearance_, !on && operation_->currentIndex() == 2);
+}
+
 void ThreadTool::selectionChanged(const render::ModelSelection& selection)
 {
+    // Una cara cilíndrica (un agujero o un cilindro macizo) se rosca tal como está, en todo su largo.
+    for (const render::ModelSelection::Face& f : selection.faces) {
+        const auto hit = before().findFace(f.ref);
+        if (!hit) {
+            continue;
+        }
+        if (const auto info = before().bodies[hit->body].shape.cylinderFace(hit->face)) {
+            cylinderFace_ = f.ref;
+            cylinderDiameter_ = 2.0 * info->radius;
+            cylinderHole_ = info->hole;
+            cylinderLength_ = info->length;
+            // Ya que se está eligiendo, se propone la medida métrica más cercana (la del paso normal de esa medida).
+            int best = -1;
+            double gap = 0.3;
+            for (int i = 0; i < int(std::size(kMetric)); ++i) {
+                const double wanted = info->hole ? kMetric[i].diameter - 2.0 * 0.6134 * kMetric[i].pitch : kMetric[i].diameter;
+                if (std::abs(wanted - cylinderDiameter_) < gap) {
+                    gap = std::abs(wanted - cylinderDiameter_);
+                    best = i;
+                }
+            }
+            if (best >= 0) {
+                standard_->setCurrentIndex(best + 1);
+            }
+            showCylinderMode(true);
+            viewport_.clearModelSelection();
+            updatePreview();
+            return;
+        }
+    }
     if (placementSelection(placement_, selection)) {
+        if (cylinderMode_) {
+            showCylinderMode(false);
+        }
         adjustDirection();
         updatePreview();
     }
@@ -1539,6 +1598,16 @@ std::unique_ptr<document::Feature> ThreadTool::build() const
     if (original_) {
         f->setName(original_->name());
     }
+    if (cylinderMode_) {
+        f->onCylinder = true;
+        f->cylinderFace = cylinderFace_;
+        f->spec.pitch = pitch_->value();
+        f->spec.leftHanded = left_->isChecked();
+        f->spec.diameter = diameter_->value();
+        f->spec.length = length_->value();
+        f->operation = document::Operation::Cut;
+        return f;
+    }
     f->base = placementAttachment(placement_);
     f->x = placement_.x->value();
     f->y = placement_.y->value();
@@ -1558,6 +1627,12 @@ QString ThreadTool::inputsText() const
     spec.diameter = diameter_->value();
     spec.pitch = pitch_->value();
     const Units& units = Units::instance();
+    if (cylinderMode_) {
+        return cylinderHole_ ? QStringLiteral("Rosca interior en el agujero de Ø %1 · largo %2")
+                                   .arg(units.formatWithUnit(cylinderDiameter_), units.formatWithUnit(cylinderLength_))
+                             : QStringLiteral("Rosca exterior en el cilindro de Ø %1 · largo %2")
+                                   .arg(units.formatWithUnit(cylinderDiameter_), units.formatWithUnit(cylinderLength_));
+    }
     if (operation_->currentIndex() == 2) {
         return QStringLiteral("Rosca interior: agujero de Ø %1 (tornillo Ø %2 + holgura) · «Largo» negativo entra en la pieza")
             .arg(units.formatWithUnit(spec.diameter + 2.0 * clearance_->value()), units.formatWithUnit(spec.diameter));
@@ -1568,6 +1643,9 @@ QString ThreadTool::inputsText() const
 
 std::optional<FeatureTool::Arrow> ThreadTool::dimensionArrow(const std::string& key) const
 {
+    if (cylinderMode_) {
+        return std::nullopt;
+    }
     if (key == "x" || key == "y") {
         return placementArrow(placement_, key);
     }
@@ -1593,7 +1671,7 @@ std::optional<FeatureTool::Arrow> ThreadTool::dimensionArrow(const std::string& 
 
 bool ThreadTool::removesMaterial() const
 {
-    return operation_ != nullptr && operation_->currentIndex() == 2;
+    return cylinderMode_ || (operation_ != nullptr && operation_->currentIndex() == 2);
 }
 
 // --- Patrón -----------------------------------------------------------------------
@@ -1604,6 +1682,9 @@ PatternTool::PatternTool(document::Document& document, render::Viewport& viewpor
 {
     if (const auto* p = dynamic_cast<const document::PatternFeature*>(original_.get())) {
         body_ = p->body;
+        sourceOp_ = p->sourceFeature;
+        pathSketch_ = p->pathSketch;
+        path_ = p->path;
     }
 }
 
@@ -1614,13 +1695,19 @@ void PatternTool::createFields(QFormLayout* form)
     for (const document::Body& b : before().bodies) {
         bodyBox_->addItem(QString::fromStdString(b.name), QString::fromStdString(b.key));
     }
-    if (body_.empty() && bodyBox_->count() > 0) {
+    // También se puede repetir una operación (un agujero, un corte…) en vez de un cuerpo entero.
+    for (const auto& [id, op] : before().operationTools) {
+        const document::Feature* f = document_.findFeature(id);
+        bodyBox_->addItem(QStringLiteral("Operación: %1").arg(f ? QString::fromStdString(f->name()) : QStringLiteral("?")),
+                          QStringLiteral("op:%1").arg(qulonglong(id)));
+    }
+    if (body_.empty() && sourceOp_ == 0 && bodyBox_->count() > 0) {
         body_ = bodyBox_->itemData(0).toString().toStdString();
     }
-    if (const int at = bodyBox_->findData(QString::fromStdString(body_)); at >= 0) {
+    if (const int at = bodyBox_->findData(sourceOp_ != 0 ? QStringLiteral("op:%1").arg(qulonglong(sourceOp_)) : QString::fromStdString(body_)); at >= 0) {
         bodyBox_->setCurrentIndex(at);
     }
-    layout_ = combo({QStringLiteral("Lineal"), QStringLiteral("Circular")});
+    layout_ = combo({QStringLiteral("Lineal"), QStringLiteral("Circular"), QStringLiteral("A lo largo de una trayectoria")});
     axis_ = combo({QStringLiteral("Eje X"), QStringLiteral("Eje Y"), QStringLiteral("Eje Z")});
     for (const auto& [id, line] : before().axes) {
         const document::Feature* f = document_.findFeature(id);
@@ -1639,7 +1726,10 @@ void PatternTool::createFields(QFormLayout* form)
     angle_ = angleBox(360.0, 360.0);
     field("angle", angle_);
     operation_ = combo({QStringLiteral("Unir"), QStringLiteral("Cuerpo nuevo")});
+    follow_ = new QCheckBox(QStringLiteral("Girar las copias siguiendo la curva"));
+    follow_->setToolTip(QStringLiteral("Cada copia se gira para mirar hacia donde va la trayectoria en su punto (como el original miraba en el primero)"));
     if (const auto* p = dynamic_cast<const document::PatternFeature*>(original_.get())) {
+        follow_->setChecked(p->followPath);
         layout_->setCurrentIndex(int(p->layout));
         int at = p->axis;
         if (p->axisRef != 0) {
@@ -1668,11 +1758,15 @@ void PatternTool::createFields(QFormLayout* form)
     form->addRow(QStringLiteral("Tipo"), layout_);
     form->addRow(QStringLiteral("Eje"), axis_);
     form->addRow(QStringLiteral("Cantidad"), count_);
+    form->addRow(QString(), follow_);
     form->addRow(QStringLiteral("Distancia entre copias"), spacing_);
     form->addRow(QStringLiteral("Ángulo total"), angle_);
     form->addRow(QStringLiteral("Operación"), operation_);
     connect(bodyBox_, &QComboBox::currentIndexChanged, this, [this] {
-        body_ = bodyBox_->currentData().toString().toStdString();
+        const QString data = bodyBox_->currentData().toString();
+        sourceOp_ = data.startsWith(QLatin1String("op:")) ? document::FeatureId(data.mid(3).toULongLong()) : 0;
+        body_ = sourceOp_ != 0 ? std::string() : data.toStdString();
+        updateVisibility();
         updatePreview();
     });
     connect(layout_, &QComboBox::currentIndexChanged, this, [this] {
@@ -1683,6 +1777,7 @@ void PatternTool::createFields(QFormLayout* form)
         connect(box, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
     }
     connect(count_, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
+    connect(follow_, &QCheckBox::toggled, this, [this] { updatePreview(); });
     for (QDoubleSpinBox* box : {spacing_, angle_}) {
         connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
     }
@@ -1692,13 +1787,19 @@ void PatternTool::createFields(QFormLayout* form)
 void PatternTool::updateVisibility()
 {
     const bool circular = layout_->currentIndex() == 1;
-    form_->setRowVisible(spacing_, !circular);
+    const bool alongPath = layout_->currentIndex() == 2;
+    form_->setRowVisible(spacing_, !circular && !alongPath);
     form_->setRowVisible(angle_, circular);
+    form_->setRowVisible(axis_, !alongPath);
+    form_->setRowVisible(follow_, alongPath);
+    // Una operación se repite igual que ella era (corta, une…): sin otros cuerpos ni operación propia.
+    form_->setRowVisible(others_, sourceOp_ == 0);
+    form_->setRowVisible(operation_, sourceOp_ == 0);
 }
 
 std::unique_ptr<document::Feature> PatternTool::build() const
 {
-    if (body_.empty()) {
+    if (body_.empty() && sourceOp_ == 0) {
         return nullptr;
     }
     auto f = std::make_unique<document::PatternFeature>();
@@ -1706,13 +1807,24 @@ std::unique_ptr<document::Feature> PatternTool::build() const
         f->setName(original_->name());
     }
     f->body = body_;
+    f->sourceFeature = sourceOp_;
     for (int i = 0; others_ != nullptr && i < others_->count(); ++i) {
         const std::string key = others_->item(i)->data(Qt::UserRole).toString().toStdString();
         if (others_->item(i)->checkState() == Qt::Checked && key != body_) {
             f->alsoBodies.push_back(key);
         }
     }
-    f->layout = layout_->currentIndex() == 1 ? document::PatternLayout::Circular : document::PatternLayout::Linear;
+    f->layout = layout_->currentIndex() == 1 ? document::PatternLayout::Circular
+                : layout_->currentIndex() == 2 ? document::PatternLayout::Path
+                                               : document::PatternLayout::Linear;
+    if (f->layout == document::PatternLayout::Path) {
+        if (path_.empty() || pathSketch_ == 0) {
+            return nullptr;  // falta elegir las curvas de la trayectoria
+        }
+        f->pathSketch = pathSketch_;
+        f->path = path_;
+        f->followPath = follow_->isChecked();
+    }
     if (axis_->currentIndex() >= 3) {
         f->axisRef = axisIds_[std::size_t(axis_->currentIndex() - 3)];
     } else {
@@ -1783,10 +1895,32 @@ std::optional<FeatureTool::Arc> PatternTool::dimensionArc(const std::string& key
     return Arc{point, axis, start, angle_->value() * kDegree};
 }
 
+void PatternTool::selectionChanged(const render::ModelSelection& selection)
+{
+    // Con «A lo largo de una trayectoria», las curvas elegidas en la vista son el camino (de un solo sketch: el de la primera).
+    if (layout_ == nullptr || layout_->currentIndex() != 2 || selection.curves.empty()) {
+        return;
+    }
+    pathSketch_ = selection.curves.front().sketch;
+    path_.clear();
+    for (const render::ModelSelection::Curve& c : selection.curves) {
+        if (c.sketch == pathSketch_) {
+            path_.push_back(c.entity);
+        }
+    }
+    updatePreview();
+}
+
 QString PatternTool::inputsText() const
 {
     if (bodyBox_->count() == 0) {
         return QStringLiteral("No hay cuerpos que repetir");
+    }
+    if (layout_->currentIndex() == 2) {
+        return path_.empty() ? QStringLiteral("Elige en la vista las curvas de la trayectoria (un sketch); las copias se reparten a distancias iguales a lo largo de ella")
+                             : QStringLiteral("Patrón a lo largo de una trayectoria de %1 curva(s): %2 en total")
+                                   .arg(path_.size())
+                                   .arg(int(std::lround(count_->value())));
     }
     return QStringLiteral("Patrón %1 de «%2»: %3 en total")
         .arg(layout_->currentIndex() == 1 ? QStringLiteral("circular") : QStringLiteral("lineal"))

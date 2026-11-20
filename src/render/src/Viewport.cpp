@@ -304,6 +304,14 @@ void Viewport::clearToolPreview()
 
 ModelSelection Viewport::modelSelection() const { return impl_->modelSelection(); }
 
+std::optional<sketch::Vec3> Viewport::lastPickPoint() const
+{
+    if (!impl_->lastPick) {
+        return std::nullopt;
+    }
+    return sketch::Vec3{impl_->lastPick->X(), impl_->lastPick->Y(), impl_->lastPick->Z()};
+}
+
 void Viewport::clearModelSelection()
 {
     impl_->context->ClearSelected(false);

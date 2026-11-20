@@ -32,6 +32,11 @@ void Viewport::Impl::handleViewRedraw(const Handle(AIS_InteractiveContext)& ctx,
 void Viewport::Impl::OnSelectionChanged(const Handle(AIS_InteractiveContext)& /*ctx*/,
                         const Handle(V3d_View)& /*v*/)
 {
+    // El punto donde cayó el clic (si lo hay bajo el cursor): lo usan el agujero y la rosca puestos con un clic en una cara.
+    lastPick.reset();
+    if (!context.IsNull() && context->HasDetected() && context->MainSelector()->NbPicked() > 0) {
+        lastPick = context->MainSelector()->PickedPoint(1);
+    }
     if (mode == Mode::PickPlane) {
         pickedSketchPlane();
     } else {

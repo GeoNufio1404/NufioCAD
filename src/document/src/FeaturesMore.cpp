@@ -50,6 +50,7 @@ std::vector<Feature::NumericField> EdgeFeature::numericFields()
         fields.push_back(field("angle", "Ángulo", angle, kRadiansPerDegree));
     } else if (variable) {
         fields.push_back(field("size2", "Radio del otro extremo", size2));
+        fields.push_back(field("middle", "Radio en el centro", middle));
     }
     return fields;
 }
@@ -71,10 +72,26 @@ std::vector<Feature::NumericField> ShellFeature::numericFields()
 
 std::vector<Feature::NumericField> HoleFeature::numericFields()
 {
-    return {field("diameter", "Diámetro", spec.diameter), field("depth", "Profundidad", spec.depth),
-            field("headDiameter", "Diámetro de la cabeza", spec.headDiameter),
-            field("headDepth", "Profundidad de la cabeza", spec.headDepth),
-            field("headAngle", "Ángulo del cono", spec.headAngle, kRadiansPerDegree)};
+    std::vector<NumericField> fields = {field("diameter", "Diámetro", spec.diameter), field("depth", "Profundidad", spec.depth),
+                                        field("headDiameter", "Diámetro de la cabeza", spec.headDiameter),
+                                        field("headDepth", "Profundidad de la cabeza", spec.headDepth),
+                                        field("headAngle", "Ángulo del cono", spec.headAngle, kRadiansPerDegree)};
+    if (onFace) {
+        fields.push_back(field("x", "Posición X", x));
+        fields.push_back(field("y", "Posición Y", y));
+    }
+    return fields;
+}
+
+std::vector<FeatureId> HoleFeature::dependencies() const
+{
+    std::vector<FeatureId> ids;
+    if (onFace) {
+        addAttachmentDependencies(ids, base);
+    } else {
+        ids.push_back(sketch);
+    }
+    return ids;
 }
 
 std::vector<Feature::NumericField> PatternFeature::numericFields()
@@ -231,6 +248,22 @@ std::vector<Feature::NumericField> GearFeature::numericFields()
 
 std::optional<std::string> ThreadFeature::compute(ModelState& state) const
 {
+    if (onCylinder) {
+        const auto hit = state.findFace(cylinderFace);
+        if (!hit) {
+            throw FeatureError("Ya no existe la cara cilíndrica que se iba a roscar");
+        }
+        const auto info = state.bodies[hit->body].shape.cylinderFace(hit->face);
+        if (!info) {
+            throw FeatureError("La cara elegida ya no es un cilindro");
+        }
+        try {
+            const geometry::Shape tool = geometry::threadOnCylinderTool(tag(), *info, spec);
+            return applyOperation(state, *this, Operation::Cut, tool);
+        } catch (const geometry::GeometryError& e) {
+            throw FeatureError(e.what());
+        }
+    }
     std::optional<std::string> warning;
     sketch::Plane plane = resolvePlane(state, base, "de la rosca", "se usa su última posición", warning);
     plane.origin = plane.toWorld({x, y});
@@ -252,6 +285,10 @@ std::optional<std::string> ThreadFeature::compute(ModelState& state) const
 std::vector<FeatureId> ThreadFeature::dependencies() const
 {
     std::vector<FeatureId> ids;
+    if (onCylinder) {
+        addAll(ids, cylinderFace);
+        return ids;
+    }
     addAttachmentDependencies(ids, base);
     return ids;
 }
@@ -872,26 +909,71 @@ std::vector<FeatureId> ConstructionAxisFeature::dependencies() const
 
 // --- Patrón ------------------------------------------------------------------
 
-std::optional<std::string> PatternFeature::compute(ModelState& state) const
+namespace {
+
+// Cómo se reparten las copias de un patrón (lineal, circular o a lo largo de una trayectoria).
+geometry::PatternSpec patternSpec(const PatternFeature& feature, const ModelState& state)
 {
-    const auto source = std::ranges::find_if(state.bodies, [&](const Body& b) { return b.key == body; });
-    if (source == state.bodies.end()) {
-        throw FeatureError("El cuerpo que se iba a repetir ya no existe");
-    }
     geometry::PatternSpec spec;
-    spec.circular = layout == PatternLayout::Circular;
-    spec.axis.direction = {axis == 0 ? 1.0 : 0.0, axis == 1 ? 1.0 : 0.0, axis == 2 ? 1.0 : 0.0};
-    if (axisRef != 0) {
-        const auto line = state.axes.find(axisRef);
+    spec.circular = feature.layout == PatternLayout::Circular;
+    spec.axis.direction = {feature.axis == 0 ? 1.0 : 0.0, feature.axis == 1 ? 1.0 : 0.0, feature.axis == 2 ? 1.0 : 0.0};
+    if (feature.axisRef != 0) {
+        const auto line = state.axes.find(feature.axisRef);
         if (line == state.axes.end()) {
             throw FeatureError("El eje de construcción del patrón ya no existe");
         }
         spec.axis.point = line->second.point;
         spec.axis.direction = line->second.direction;
     }
-    spec.spacing = spacing;
-    spec.angle = angle;
-    spec.count = count;
+    spec.spacing = feature.spacing;
+    spec.angle = feature.angle;
+    spec.count = feature.count;
+    if (feature.layout == PatternLayout::Path) {
+        const auto out = state.sketches.find(feature.pathSketch);
+        if (out == state.sketches.end()) {
+            throw FeatureError("Falta el sketch de la trayectoria del patrón");
+        }
+        try {
+            std::vector<sketch::Vec3> tangents;
+            const std::vector<sketch::Vec3> points = geometry::pathPoints(*out->second.sketch, out->second.plane, feature.path, feature.count,
+                                                                         feature.followPath ? &tangents : nullptr);
+            if (feature.followPath) {
+                spec.tangents = tangents;
+                spec.tangentOrigin = points[0];
+            }
+            for (std::size_t i = 1; i < points.size(); ++i) {
+                spec.offsets.push_back({points[i].x - points[0].x, points[i].y - points[0].y, points[i].z - points[0].z});
+            }
+        } catch (const geometry::GeometryError& e) {
+            throw FeatureError(e.what());
+        }
+    }
+    return spec;
+}
+
+} // namespace
+
+std::optional<std::string> PatternFeature::compute(ModelState& state) const
+{
+    if (sourceFeature != 0) {
+        // Repetir una operación (un agujero, un corte…): su sólido se copia con el patrón y se aplica igual que ella.
+        const auto original = state.operationTools.find(sourceFeature);
+        if (original == state.operationTools.end()) {
+            throw FeatureError("La operación que se iba a repetir ya no existe");
+        }
+        const geometry::PatternSpec spec = patternSpec(*this, state);
+        try {
+            const std::vector<geometry::Shape> copies = geometry::pattern(tag(), original->second.shape, spec);
+            return applyOperation(state, *this, Operation(original->second.operation), geometry::fuseBalanced(copies));
+        } catch (const geometry::GeometryError& e) {
+            throw FeatureError(e.what());
+        }
+    }
+    const auto source = std::ranges::find_if(state.bodies, [&](const Body& b) { return b.key == body; });
+    if (source == state.bodies.end()) {
+        throw FeatureError("El cuerpo que se iba a repetir ya no existe");
+    }
+    const geometry::PatternSpec spec = patternSpec(*this, state);
     // El cuerpo y los demás de la lista (los que ya no existen se avisan); cada uno se repite con sus copias.
     std::vector<std::string> keys = {body};
     int missing = 0;
@@ -934,12 +1016,19 @@ std::optional<std::string> PatternFeature::compute(ModelState& state) const
 std::vector<FeatureId> PatternFeature::dependencies() const
 {
     std::vector<FeatureId> ids;
-    addAll(ids, geometry::ElementRef{body + ":", 0});  // la operación que creó el cuerpo
-    for (const std::string& other : alsoBodies) {
-        addAll(ids, geometry::ElementRef{other + ":", 0});
+    if (sourceFeature != 0) {
+        ids.push_back(sourceFeature);
+    } else {
+        addAll(ids, geometry::ElementRef{body + ":", 0});  // la operación que creó el cuerpo
+        for (const std::string& other : alsoBodies) {
+            addAll(ids, geometry::ElementRef{other + ":", 0});
+        }
     }
     if (axisRef != 0) {
         ids.push_back(axisRef);
+    }
+    if (layout == PatternLayout::Path && pathSketch != 0) {
+        ids.push_back(pathSketch);
     }
     return ids;
 }
@@ -948,6 +1037,15 @@ std::vector<FeatureId> PatternFeature::dependencies() const
 
 geometry::Shape HoleFeature::tool(const ModelState& state) const
 {
+    if (onFace) {
+        std::optional<std::string> ignored;
+        const sketch::Plane plane = resolvePlane(state, base, "del agujero", "se usa su última posición", ignored);
+        try {
+            return geometry::holeTool(tag(), plane, {sketch::Vec2{x, y}}, spec, flip, state.shapes());
+        } catch (const geometry::GeometryError& e) {
+            throw FeatureError(e.what());
+        }
+    }
     const auto out = state.sketches.find(sketch);
     if (out == state.sketches.end()) {
         throw FeatureError("Falta el sketch que marca los agujeros");

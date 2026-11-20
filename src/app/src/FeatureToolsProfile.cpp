@@ -622,12 +622,20 @@ void EdgeTool::createFields(QFormLayout* form)
         variable_->setChecked(e != nullptr && e->variable);
         form->addRow(QString(), variable_);
         form->addRow(QStringLiteral("Radio del otro extremo"), size2_);
+        middle_ = lengthBox(e != nullptr ? e->middle : 0.0);
+        middle_->setMinimum(0.0);
+        middle_->setToolTip(QStringLiteral("Radio a mitad de la arista; 0 deja el cambio recto de un extremo al otro."));
+        field("middle", middle_);
+        form->addRow(QStringLiteral("Radio en el centro (0 = ninguno)"), middle_);
         form->setRowVisible(size2_, variable_->isChecked());
+        form->setRowVisible(middle_, variable_->isChecked());
         connect(variable_, &QCheckBox::toggled, this, [this, form] {
             form->setRowVisible(size2_, variable_->isChecked());
+            form->setRowVisible(middle_, variable_->isChecked());
             updatePreview();
         });
         connect(size2_, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
+        connect(middle_, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
     }
     if (style_ == Style::Chamfer) {
         // Chaflán con una distancia por los dos lados, con dos distancias o con distancia y ángulo (O2).
@@ -739,6 +747,7 @@ std::unique_ptr<document::Feature> EdgeTool::build() const
     if (style_ == Style::Fillet && variable_ != nullptr) {
         f->variable = variable_->isChecked();
         f->size2 = size2_->value();
+        f->middle = middle_ != nullptr ? middle_->value() : 0.0;
     }
     if (style_ == Style::Chamfer && chamferKind_ != nullptr) {
         const int k = chamferKind_->currentIndex();
@@ -888,8 +897,10 @@ HoleTool::HoleTool(document::Document& document, render::Viewport& viewport,
     : FeatureTool(document, viewport, editing)
 {
     if (const auto* h = dynamic_cast<const document::HoleFeature*>(original_.get())) {
-        sketch_ = h->sketch;
+        sketch_ = h->onFace ? 0 : h->sketch;
+        faceWanted_ = h->onFace;
     }
+    placeAtClick_ = true;
 }
 
 void HoleTool::createFields(QFormLayout* form)
@@ -907,7 +918,9 @@ void HoleTool::createFields(QFormLayout* form)
             sketchBox_->addItem(QString::fromStdString(f->name()), qulonglong(id));
         }
     }
-    if (sketch_ == 0 && sketchBox_->count() > 0) {
+    // «Clic en una cara»: pone un agujero justo donde se hace clic, sin dibujar un sketch antes (es la primera opción).
+    sketchBox_->insertItem(0, QStringLiteral("Clic en una cara…"), qulonglong(0));
+    if (sketch_ == 0 && !faceWanted_ && sketchBox_->count() > 1) {
         sketch_ = document::FeatureId(sketchBox_->itemData(sketchBox_->count() - 1).toULongLong());  // el último
     }
     if (const int at = sketchBox_->findData(qulonglong(sketch_)); at >= 0) {
@@ -942,6 +955,11 @@ void HoleTool::createFields(QFormLayout* form)
         flip_->setChecked(h->flip);
     }
     form->addRow(QStringLiteral("Sketch"), sketchBox_);
+    {
+        const auto* h = dynamic_cast<const document::HoleFeature*>(original_.get());
+        const bool on = h != nullptr && h->onFace;
+        createPlacement(form, placement_, on ? &h->base : nullptr, on ? h->x : 0.0, on ? h->y : 0.0);
+    }
     form->addRow(QStringLiteral("Tipo"), kind_);
     form->addRow(QStringLiteral("Diámetro"), diameter_);
     form->addRow(QString(), throughAll_);
@@ -965,6 +983,7 @@ void HoleTool::createFields(QFormLayout* form)
     });
     connect(sketchBox_, &QComboBox::currentIndexChanged, this, [this] {
         sketch_ = document::FeatureId(sketchBox_->currentData().toULongLong());
+        updateVisibility();
         updatePreview();
     });
     updateVisibility();
@@ -977,23 +996,36 @@ void HoleTool::updateVisibility()
     form_->setRowVisible(headDiameter_, kind != 0);
     form_->setRowVisible(headDepth_, kind == 1);
     form_->setRowVisible(headAngle_, kind == 2);
+    for (QWidget* w : {static_cast<QWidget*>(placement_.base), static_cast<QWidget*>(placement_.x), static_cast<QWidget*>(placement_.y)}) {
+        form_->setRowVisible(w, faceMode());
+    }
 }
 
-void HoleTool::selectionChanged(const render::ModelSelection&)
+void HoleTool::selectionChanged(const render::ModelSelection& selection)
 {
-    // El sketch se elige en la lista; la selección en la vista no cambia nada.
+    // En el modo «clic en una cara», la cara y el punto del clic dan el agujero; si no, el sketch se elige en la lista.
+    if (faceMode() && placementSelection(placement_, selection)) {
+        updatePreview();
+    }
 }
 
 std::unique_ptr<document::Feature> HoleTool::build() const
 {
-    if (sketch_ == 0) {
+    const bool onFace = faceMode();
+    if (sketch_ == 0 && !onFace) {
         return nullptr;
     }
     auto f = std::make_unique<document::HoleFeature>();
     if (original_) {
         f->setName(original_->name());
     }
-    f->sketch = sketch_;
+    f->sketch = onFace ? 0 : sketch_;
+    if (onFace) {
+        f->onFace = true;
+        f->base = placementAttachment(placement_);
+        f->x = placement_.x->value();
+        f->y = placement_.y->value();
+    }
     f->spec.kind = geometry::HoleKind(kind_->currentIndex());
     f->spec.diameter = diameter_->value();
     f->spec.throughAll = throughAll_->isChecked();
@@ -1007,8 +1039,12 @@ std::unique_ptr<document::Feature> HoleTool::build() const
 
 QString HoleTool::inputsText() const
 {
-    if (sketchBox_->count() == 0) {
-        return QStringLiteral("Primero dibuja un sketch con círculos (o puntos) donde van los agujeros");
+    if (faceMode()) {
+        return placementOnFace(placement_) ? QStringLiteral("Agujero donde hiciste clic en la cara (puedes mover su posición abajo)")
+                                           : QStringLiteral("Haz clic en la cara plana donde va el agujero");
+    }
+    if (sketchBox_->count() <= 1) {
+        return QStringLiteral("Haz clic en una cara, o dibuja un sketch con círculos (o puntos) donde van los agujeros");
     }
     return QStringLiteral("Agujeros en los círculos de «%1»").arg(sketchBox_->currentText());
 }

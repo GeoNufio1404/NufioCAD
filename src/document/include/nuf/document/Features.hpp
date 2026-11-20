@@ -136,6 +136,7 @@ public:
     geometry::ChamferStyle style = geometry::ChamferStyle::Equal;
     double size2 = 1.0;                // la segunda distancia, mm (chaflán) o el radio del otro extremo (redondeo variable)
     bool variable = false;             // redondeo de radio variable: de «size» a «size2» a lo largo de la arista
+    double middle = 0.0;               // con «variable»: radio a mitad de la arista (0: sin punto intermedio)
     double angle = 0.7853981633974483; // rad, con la distancia y ángulo
     bool flip = false;                 // la cara de referencia es la otra de las dos
 
@@ -154,7 +155,7 @@ public:
 protected:
     geometry::Shape apply(std::string_view tag, const geometry::Shape& body, const std::vector<int>& indices) const override
     {
-        return variable ? geometry::filletVariable(tag, body, indices, size, size2) : geometry::fillet(tag, body, indices, size);
+        return variable ? geometry::filletVariable(tag, body, indices, size, size2, middle) : geometry::fillet(tag, body, indices, size);
     }
 };
 
@@ -199,6 +200,7 @@ class MirrorFeature final : public Feature {
 public:
     std::string body;            // clave del cuerpo («f3»)
     std::vector<std::string> alsoBodies;  // otros cuerpos que se reflejan a la vez (O1); cada uno da su copia
+    FeatureId sourceFeature = 0;  // si no es 0: se refleja esa operación (un agujero, un corte…) en vez de cuerpos; «operation» no cuenta
     SketchAttachment plane;      // dónde está el plano de simetría
     Operation operation = Operation::Join;
 
@@ -215,6 +217,9 @@ public:
     std::string body;        // clave del cuerpo
     SketchAttachment plane;  // dónde está el plano de corte
     double offset = 0.0;     // mm a lo largo de la normal del plano
+    // Con «byFace»: el corte lo hace esa cara (de otro cuerpo, plana o curva) en vez de un plano.
+    bool byFace = false;
+    geometry::ElementRef toolFace;
 
     FeatureKind kind() const override { return FeatureKind::Split; }
     std::unique_ptr<Feature> clone() const override { return std::make_unique<SplitFeature>(*this); }
@@ -329,6 +334,10 @@ public:
     double clearance = 0.0;
     geometry::ThreadSpec spec;
     Operation operation = Operation::NewBody;
+    // Rosca sobre una cara cilíndrica que ya existe (un agujero o un cilindro macizo): se corta del cuerpo en todo el largo de
+    // la cara, con su diámetro; del «spec» solo se usan el paso y el sentido. La cara se busca por nombre.
+    bool onCylinder = false;
+    geometry::ElementRef cylinderFace;
 
     FeatureKind kind() const override { return FeatureKind::Thread; }
     std::unique_ptr<Feature> clone() const override { return std::make_unique<ThreadFeature>(*this); }
@@ -488,7 +497,7 @@ public:
     std::vector<NumericField> numericFields() override;
 };
 
-enum class PatternLayout { Linear, Circular };
+enum class PatternLayout { Linear, Circular, Path };
 
 // Patrón: copias de un cuerpo en fila (a lo largo de un eje de origen) o
 // alrededor de un eje de origen. «count» incluye el original. Con «Unir» las
@@ -497,6 +506,10 @@ class PatternFeature final : public Feature {
 public:
     std::string body;                          // clave del cuerpo («f3»)
     std::vector<std::string> alsoBodies;       // otros cuerpos que se repiten a la vez (O1), cada uno con sus copias
+    FeatureId sourceFeature = 0;               // si no es 0: se repite esa operación (un agujero, un corte…) en vez de cuerpos
+    FeatureId pathSketch = 0;                  // con «Path»: el sketch cuyas curvas son la trayectoria…
+    std::vector<sketch::EntityId> path;        // …y cuáles de ellas (un camino continuo); «count» elementos a distancias iguales
+    bool followPath = false;                   // con «Path»: las copias giran para seguir la dirección de la curva
     PatternLayout layout = PatternLayout::Linear;
     int axis = 0;                              // 0 = X, 1 = Y, 2 = Z (por el origen)
     FeatureId axisRef = 0;                     // si no es 0, un eje de construcción (en vez de axis)
@@ -516,7 +529,13 @@ public:
 // restan del cuerpo hacia dentro del material, desde el plano del sketch.
 class HoleFeature final : public Feature {
 public:
-    FeatureId sketch = 0;
+    FeatureId sketch = 0;   // el sketch que marca los agujeros; 0 si el agujero se puso con un clic en una cara
+    // Con «onFace»: un solo agujero puesto con un clic en una cara (o plano): «base» la identifica y (x, y) es el punto en
+    // su plano (mm, desde su origen). La cara se busca por nombre, así que el agujero sigue a la pieza si se edita antes.
+    bool onFace = false;
+    SketchAttachment base;
+    double x = 0.0;
+    double y = 0.0;
     geometry::HoleSpec spec;
     bool flip = false;  // al otro lado del plano
 
@@ -524,7 +543,7 @@ public:
     std::vector<NumericField> numericFields() override;
     std::unique_ptr<Feature> clone() const override { return std::make_unique<HoleFeature>(*this); }
     std::optional<std::string> compute(ModelState& state) const override;
-    std::vector<FeatureId> dependencies() const override { return {sketch}; }
+    std::vector<FeatureId> dependencies() const override;
     // Solo el sólido que se resta (para la vista previa).
     geometry::Shape tool(const ModelState& state) const;
 };

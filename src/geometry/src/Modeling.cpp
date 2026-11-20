@@ -31,6 +31,8 @@
 #include <BRepAlgoAPI_Splitter.hxx>
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeWire.hxx>
+#include <GCPnts_UniformAbscissa.hxx>
+#include <BRepAdaptor_CompCurve.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
 #include <BRepOffsetAPI_MakePipeShell.hxx>
 #include <BRepOffsetAPI_ThruSections.hxx>
@@ -44,6 +46,7 @@
 #include <BRepExtrema_DistShapeShape.hxx>
 #include <BRepFilletAPI_MakeChamfer.hxx>
 #include <BRepFilletAPI_MakeFillet.hxx>
+#include <gp_Pnt2d.hxx>
 #include <BRepGProp.hxx>
 #include <BRepOffsetAPI_DraftAngle.hxx>
 #include <BRepOffsetAPI_MakeOffset.hxx>
@@ -84,6 +87,7 @@
 #include <gp_Pln.hxx>
 
 #include <algorithm>
+#include <cstdio>
 #include <functional>
 #include <cmath>
 #include <numbers>
@@ -1014,15 +1018,23 @@ Shape chamfer(std::string_view tag, const Shape& body, const std::vector<int>& e
                                                      "No se pudo achaflanar: prueba con una distancia menor");
 }
 
-Shape filletVariable(std::string_view tag, const Shape& body, const std::vector<int>& edges, double start, double end)
+Shape filletVariable(std::string_view tag, const Shape& body, const std::vector<int>& edges, double start, double end, double middle)
 {
-    if (start <= kTiny || end <= kTiny) {
+    if (start <= kTiny || end <= kTiny || middle < 0.0) {
         throw GeometryError("Los radios del redondeo deben ser mayores que cero");
     }
     const std::function<void(BRepFilletAPI_MakeFillet&, const TopoDS_Edge&)> add = [&](BRepFilletAPI_MakeFillet& maker, const TopoDS_Edge& edge) {
-        maker.Add(start, end, edge);
+        if (middle > kTiny) {
+            NCollection_Array1<gp_Pnt2d> law(1, 3);
+            law.SetValue(1, gp_Pnt2d(0.0, start));
+            law.SetValue(2, gp_Pnt2d(0.5, middle));
+            law.SetValue(3, gp_Pnt2d(1.0, end));
+            maker.Add(law, edge);
+        } else {
+            maker.Add(start, end, edge);
+        }
     };
-    return edgeOperation<BRepFilletAPI_MakeFillet>(tag, "redondeo", body, edges, std::max(start, end),
+    return edgeOperation<BRepFilletAPI_MakeFillet>(tag, "redondeo", body, edges, std::max({start, end, middle}),
                                                    "No se pudo redondear: prueba con radios menores", add);
 }
 
@@ -1091,6 +1103,67 @@ std::pair<Shape, Shape> splitBody(std::string_view tag, const Shape& body, const
     return {std::move(first), std::move(second)};
 }
 
+std::pair<Shape, Shape> splitBodyByFace(std::string_view tagView, const Shape& body, const Shape& toolBody, int toolFace)
+{
+    const std::string tag(tagView);
+    if (body.isNull() || toolBody.isNull()) {
+        throw GeometryError("No hay cuerpo que dividir");
+    }
+    if (toolFace < 0 || toolFace >= toolBody.faceCount()) {
+        throw GeometryError("Ya no existe la cara con que se iba a dividir");
+    }
+    try {
+        NCollection_List<TopoDS_Shape> objects;
+        NCollection_List<TopoDS_Shape> tools;
+        objects.Append(occtShape(body));
+        tools.Append(toolBody.impl()->faces(toolFace + 1));
+        BRepAlgoAPI_Splitter splitter;
+        splitter.SetArguments(objects);
+        splitter.SetTools(tools);
+        splitter.Build();
+        if (!splitter.IsDone() || splitter.HasErrors()) {
+            throw GeometryError("No se pudo dividir el cuerpo con esa cara");
+        }
+        std::vector<TopoDS_Shape> solids;
+        for (TopExp_Explorer ex(splitter.Shape(), TopAbs_SOLID); ex.More(); ex.Next()) {
+            // Sin dividir, el resultado puede traer el mismo sólido más de una vez: no cuenta como trozo nuevo.
+            if (std::ranges::none_of(solids, [&](const TopoDS_Shape& known) { return known.IsSame(ex.Current()); })) {
+                solids.push_back(ex.Current());
+            }
+        }
+        if (solids.size() < 2) {
+            throw GeometryError("La cara no atraviesa el cuerpo de lado a lado: no hay nada que dividir");
+        }
+        const Shape::Impl& toolIn = *toolBody.impl();
+        const auto make = [&](const std::vector<TopoDS_Shape>& pieces, const std::string& label) {
+            TopoDS_Shape shape;
+            if (pieces.size() == 1) {
+                shape = pieces.front();
+            } else {
+                BRep_Builder builder;
+                TopoDS_Compound compound;
+                builder.MakeCompound(compound);
+                for (const TopoDS_Shape& piece : pieces) {
+                    builder.Add(compound, piece);
+                }
+                shape = compound;
+            }
+            Namer namer(shape);
+            namer.inherit(body, *splitter.History());
+            for (const TopoDS_Shape& image : splitter.Modified(toolIn.faces(toolFace + 1))) {
+                namer.name(image, label);
+            }
+            namer.nameUnnamed(label);
+            return namer.finish(tag);
+        };
+        Shape first = make({solids.front()}, tag + ":corte");
+        Shape second = make(std::vector<TopoDS_Shape>(solids.begin() + 1, solids.end()), tag + ":corte2");
+        return {std::move(first), std::move(second)};
+    } catch (const Standard_Failure& e) {
+        throw kernelFailure("dividir el cuerpo", "elige una cara que atraviese el cuerpo de lado a lado", e);
+    }
+}
+
 Shape mirror(std::string_view tag, const Shape& body, const sketch::Plane& plane)
 {
     if (body.isNull()) {
@@ -1141,31 +1214,56 @@ std::vector<Shape> pattern(std::string_view tag, const Shape& body, const Patter
     if (body.isNull()) {
         throw GeometryError("No hay cuerpo que repetir");
     }
-    if (spec.count < 2) {
+    const int total = spec.offsets.empty() ? spec.count : int(spec.offsets.size()) + 1;
+    if (!spec.offsets.empty()) {
+        if (total > 500) {
+            throw GeometryError("Demasiados elementos en el patrón (máximo 500)");
+        }
+    } else if (spec.count < 2) {
         throw GeometryError("Un patrón necesita al menos 2 elementos");
     }
     if (spec.count > 500) {
         throw GeometryError("Demasiados elementos en el patrón (máximo 500)");
     }
     const sketch::Vec3& dir = spec.axis.direction;
-    if (std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z) <= kTiny) {
+    if (spec.offsets.empty() && std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z) <= kTiny) {
         throw GeometryError("La dirección del patrón no es válida");
     }
-    if (!spec.circular && std::abs(spec.spacing) <= kTiny) {
+    if (spec.offsets.empty() && !spec.circular && std::abs(spec.spacing) <= kTiny) {
         throw GeometryError("La distancia entre copias debe ser distinta de cero");
     }
-    if (spec.circular && std::abs(spec.angle) <= 1e-9) {
+    if (spec.offsets.empty() && spec.circular && std::abs(spec.angle) <= 1e-9) {
         throw GeometryError("El ángulo del patrón debe ser distinto de cero");
     }
     try {
         const TopoDS_Shape source = occtShape(body);
         const Shape::Impl& in = *body.impl();
         const bool full = std::abs(spec.angle) >= 6.283185307179586 - 1e-6;
-        const double step = full ? spec.angle / spec.count : spec.angle / (spec.count - 1);
+        const double step = full ? spec.angle / total : spec.angle / std::max(1, total - 1);
         std::vector<Shape> copies;
-        for (int k = 1; k < spec.count; ++k) {
+        for (int k = 1; k < total; ++k) {
             gp_Trsf move;
-            if (spec.circular) {
+            if (!spec.offsets.empty()) {
+                const sketch::Vec3& o = spec.offsets[std::size_t(k - 1)];
+                move.SetTranslation(gp_Vec(o.x, o.y, o.z));
+                if (spec.tangents.size() == spec.offsets.size() + 1) {
+                    // Gira la copia alrededor de su punto para que mire a lo largo de la trayectoria, como el original miraba a lo largo de ella.
+                    const sketch::Vec3& a = spec.tangents[0];
+                    const sketch::Vec3& b = spec.tangents[std::size_t(k)];
+                    const gp_Vec from(a.x, a.y, a.z);
+                    const gp_Vec to(b.x, b.y, b.z);
+                    if (from.Magnitude() > 1e-9 && to.Magnitude() > 1e-9) {
+                        gp_Vec axisVec = from.Crossed(to);
+                        const double angle = from.Angle(to);
+                        gp_Trsf turn;
+                        if (axisVec.Magnitude() > 1e-9) {
+                            turn.SetRotation(gp_Ax1(gp_Pnt(o.x + spec.tangentOrigin.x, o.y + spec.tangentOrigin.y, o.z + spec.tangentOrigin.z),
+                                                    gp_Dir(axisVec)), angle);
+                            move = turn * move;
+                        }
+                    }
+                }
+            } else if (spec.circular) {
                 move.SetRotation(gp_Ax1(toPnt(spec.axis.point), toDir(spec.axis.direction)), step * k);
             } else {
                 move.SetTranslation(gp_Vec(toDir(spec.axis.direction)).Multiplied(spec.spacing * k));
@@ -1187,6 +1285,56 @@ std::vector<Shape> pattern(std::string_view tag, const Shape& body, const Patter
         return copies;
     } catch (const Standard_Failure& e) {
         throw kernelFailure("repetir el cuerpo", "prueba con menos copias o con otra distancia entre ellas", e);
+    }
+}
+
+std::vector<sketch::Vec3> pathPoints(const sketch::Sketch& pathSketch, const sketch::Plane& pathPlane,
+                                     const std::vector<sketch::EntityId>& pathEntities, int count,
+                                     std::vector<sketch::Vec3>* tangents)
+{
+    if (pathEntities.empty()) {
+        throw GeometryError("Elige la trayectoria del patrón");
+    }
+    if (count < 2 || count > 500) {
+        throw GeometryError("El patrón necesita entre 2 y 500 elementos");
+    }
+    try {
+        const gp_Ax3 pathAxes = toAx3(pathPlane);
+        NCollection_List<TopoDS_Shape> edges;
+        for (const sketch::EntityId id : pathEntities) {
+            const sketch::Entity* entity = pathSketch.entity(id);
+            const auto edge = entity ? sketchEdge(*entity, pathAxes) : std::nullopt;
+            if (!edge) {
+                throw GeometryError("Una curva de la trayectoria ya no existe o no se puede usar");
+            }
+            edges.Append(*edge);
+        }
+        BRepBuilderAPI_MakeWire pathMaker;
+        pathMaker.Add(edges);
+        if (!pathMaker.IsDone()) {
+            throw GeometryError("Las curvas de la trayectoria no forman un camino continuo");
+        }
+        const BRepAdaptor_CompCurve curve(pathMaker.Wire());
+        GCPnts_UniformAbscissa spread(curve, count);
+        if (!spread.IsDone() || spread.NbPoints() < 2) {
+            throw GeometryError("No se pudieron repartir los elementos a lo largo de la trayectoria");
+        }
+        std::vector<sketch::Vec3> points;
+        for (int i = 1; i <= spread.NbPoints(); ++i) {
+            gp_Pnt p;
+            gp_Vec d;
+            curve.D1(spread.Parameter(i), p, d);
+            points.push_back({p.X(), p.Y(), p.Z()});
+            if (tangents != nullptr) {
+                if (d.Magnitude() > 1e-12) {
+                    d.Normalize();
+                }
+                tangents->push_back({d.X(), d.Y(), d.Z()});
+            }
+        }
+        return points;
+    } catch (const Standard_Failure& e) {
+        throw kernelFailure("repartir los elementos", "revisa que las curvas formen un camino continuo", e);
     }
 }
 
@@ -2314,6 +2462,22 @@ Shape thread(std::string_view tagView, const sketch::Plane& plane, const ThreadS
     };
     return twistedRod(tag, plane, profile, pitch, spec.length, spec.leftHanded, 32, 8, pitch / 12.0, "rosca", "la rosca",
                       "revisa el paso y el diámetro: el diámetro menor (diámetro − 1,23 × paso) debe ser positivo");
+}
+
+Shape threadOnCylinderTool(std::string_view tag, const Shape::CylinderInfo& info, const ThreadSpec& spec)
+{
+    const sketch::Plane plane = sketch::Plane::fromPointAndNormal(info.start, info.direction);
+    ThreadSpec used = spec;
+    used.length = info.length;
+    if (info.hole) {
+        used.diameter = 2.0 * info.radius + 2.0 * 0.6134 * spec.pitch;
+        return thread(tag, plane, used);
+    }
+    used.diameter = 2.0 * info.radius;
+    const Shape rod = thread(tag, plane, used);
+    // Un poco más ancho que el cilindro para no dejar una lámina en las crestas.
+    const Shape sleeve = cylinder(tag, plane, 2.0 * info.radius + 0.1, info.length);
+    return boolean(BooleanOp::Cut, sleeve, rod);
 }
 
 double wormLeadAngle(const WormSpec& spec)
