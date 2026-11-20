@@ -1,9 +1,10 @@
 name: CI
 
+# Solo en develop (tiene la caché) y a mano desde la pestaña Actions: sin ramas feature ni pull requests para no gastar cuota.
 on:
   push:
-    branches: [main, develop, 'feature/**']
-  pull_request:
+    branches: [develop]
+  workflow_dispatch:
 
 jobs:
   linux:
