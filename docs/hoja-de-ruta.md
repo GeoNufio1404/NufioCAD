@@ -126,10 +126,10 @@ Lo que más se nota al usar la aplicación cada día. Lo ya hecho está en «Int
 - Barra de progreso real: el kernel no informa del avance (hay botón Cancelar).
 - Las flechas de medida que faltan: holgura y cable de los generadores, presión y hélice del par, tamaño del texto del Letrero, cabeza del Agujero.
 - Ajuste del movimiento a otros cuerpos; gizmo de tamaño constante y gizmo para Patrón, Espejo y Unión.
-- Secciones plegables en Lightbox, Caja con tapa y Letrero (los engranajes ya las tienen).
-- Selector de espacio de trabajo (solo hay uno; las pestañas lo cubren) y comandos flotantes como panel dentro del lienzo (hoy es una ventana flotante de Qt).
+- ~~Secciones plegables en Lightbox, Caja con tapa y Letrero~~ ✅ 20 nov. 2026 (UI.6; con la caja redonda la sección «Bisagra» queda con el encabezado y sin preguntas).
+- Selector de espacio de trabajo (solo hay uno; las pestañas lo cubren) y comandos flotantes como panel dentro del lienzo (hoy es una ventana flotante de Qt; desde el 20 nov. 2026 **recuerda su posición y tamaño**, UI.7).
 - Valores de la lista de parámetros con unidad (un parámetro puede ser longitud, ángulo o cantidad) y ayudas de los demás generadores con «mm» fijo.
-- Extender y desfase con elipses y splines; recortar una spline; extender un arco de elipse; conservar cotas al editar un texto.
+- ~~Desfase de elipses, arcos de elipse y splines~~ ✅ 20 nov. 2026 (UI.8: una elipse, un arco de elipse o una spline sola se desfasan como una spline aproximada que pasa por 64 a 96 puntos; la elipse completa no admite desfasar hacia dentro más allá de su curvatura mínima; las cadenas que mezclan estas curvas con líneas y arcos siguen sin desfasarse, y la elipse cerrada queda con una pequeña discontinuidad de tangente en el empalme). Siguen pendientes: extender, recortar una spline, extender un arco de elipse y conservar cotas al editar un texto.
 
 ### Fase 16 — Familias de engranajes (pedido del usuario)
 

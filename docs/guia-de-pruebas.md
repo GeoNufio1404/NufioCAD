@@ -85,6 +85,9 @@ Código de las pruebas: **UI**.
 | UI.2 | Pasar el cursor por los botones de la cinta | Tooltip con nombre y descripción |
 | UI.3 | Ver › tema claro/oscuro (si está en el menú) | Los iconos y colores cambian en caliente |
 | UI.4 | Archivo › Recientes… (Ctrl+Mayús+O) | Lista con miniaturas; Esc la cierra |
+| UI.6 | Abre Lightbox, Caja con tapa y Letrero (Sólido › Generadores) | Las preguntas van en secciones plegables («Medidas de la caja», «Tapa y cierre», «Bisagra», «Texto», «Placa»…); al plegar una se ocultan sus preguntas y al desplegar vuelven; con la Caja redonda, la sección de la bisagra queda sin preguntas |
+| UI.7 | Ver › «Comandos flotantes sobre el lienzo» activo: abre una herramienta, mueve y estira el panel, acepta; abre otra | El panel vuelve a donde lo dejaste (si esa posición ya no cabe en ninguna pantalla, sale arriba a la derecha) |
+| UI.8 | Sketch › Desfase: clic en una elipse y mueve el cursor a un lado; luego en una spline | Se ve una curva paralela a la distancia del cursor (hacia dentro de una elipse más allá de su curvatura mínima no se deja); el resultado es una spline que pasa por puntos de la curva desplazada |
 | UI.5 | Con una herramienta activa (p. ej. Extruir) | El panel de Propiedades aparece a la derecha; sin herramienta se oculta |
 
 **Fíjate en:** ¿encuentras las cosas sin buscarlas? ¿Algún botón no se entiende por su icono? ¿Falta algo que esperabas ver (lo pendiente está en la hoja de ruta, sección «Interfaz estilo Fusion 360»)?

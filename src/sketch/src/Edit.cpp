@@ -1,12 +1,14 @@
 #include <nuf/sketch/Edit.hpp>
 
 #include <nuf/sketch/Pick.hpp>
+#include <nuf/sketch/Tools.hpp>
 
 #include "Curves2d.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <deque>
+#include <functional>
 #include <map>
 #include <numbers>
 #include <set>
@@ -880,6 +882,56 @@ std::vector<EntityId> offset(Sketch& sketch, const std::vector<EntityId>& chain,
 {
     if (chain.empty() || std::abs(distance) < kOnCurve) {
         return {};
+    }
+    // Una elipse, un arco de elipse o una spline sola: el desfase de estas curvas no es de su misma clase, así que se
+    // muestrea y se aproxima con una spline que pasa por los puntos (a la izquierda del sentido de recorrido; en la
+    // elipse completa, hacia dentro con distancia positiva).
+    if (chain.size() == 1) {
+        const Entity* e = sketch.entity(chain.front());
+        if (e && (std::holds_alternative<Ellipse>(e->geometry) || std::holds_alternative<EllipseArc>(e->geometry) ||
+                  std::holds_alternative<BSpline>(e->geometry))) {
+            const auto shifted = [&](const std::function<Vec2(double)>& at, int count, bool closedCurve) -> std::vector<Vec2> {
+                std::vector<Vec2> out;
+                const double h = 1e-4;
+                for (int i = 0; i <= count; ++i) {
+                    const double u = double(i) / count;
+                    const Vec2 p = at(u);
+                    Vec2 tangent = sub(at(std::min(1.0, u + h)), at(std::max(0.0, u - h)));
+                    if (closedCurve && (i == 0 || i == count)) {
+                        tangent = sub(at(h), at(1.0 - h));
+                    }
+                    const double length = std::hypot(tangent.x, tangent.y);
+                    if (length < 1e-12) {
+                        return {};
+                    }
+                    out.push_back(add(p, mul(distance / length, Vec2{-tangent.y, tangent.x})));
+                }
+                if (closedCurve) {
+                    out.back() = out.front();
+                }
+                return out;
+            };
+            std::vector<Vec2> points;
+            if (const auto* el = std::get_if<Ellipse>(&e->geometry)) {
+                if (distance > 0.0 && distance >= el->minorRadius * el->minorRadius / el->majorRadius) {
+                    return {};  // hacia dentro más allá de la curvatura mínima: se formarían picos
+                }
+                points = shifted([el](double u) { return el->pointAt(u * 2.0 * std::numbers::pi); }, 96, true);
+            } else if (const auto* arc = std::get_if<EllipseArc>(&e->geometry)) {
+                double end = arc->endParam;
+                while (end <= arc->startParam) {
+                    end += 2.0 * std::numbers::pi;
+                }
+                points = shifted([arc, end](double u) { return arc->ellipse.pointAt(arc->startParam + u * (end - arc->startParam)); }, 64, false);
+            } else if (const auto* spline = std::get_if<BSpline>(&e->geometry)) {
+                points = shifted([spline](double u) { return spline->pointAt(u); }, 64, false);
+            }
+            if (points.size() < 4) {
+                return {};
+            }
+            BSpline fitted = interpolatingSpline(points);
+            return {sketch.addBSpline(fitted, e->construction)};
+        }
     }
     // Sentido de recorrido de cada curva para que la cadena sea continua.
     struct Item {

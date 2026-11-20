@@ -30,6 +30,21 @@ std::string number(double value)
     return text;
 }
 
+// Pone sección plegable a las preguntas: desde la que tiene la clave de cada par hasta la siguiente (las anteriores quedan sin sección).
+std::vector<GeneratorField> grouped(std::vector<GeneratorField> fields, std::initializer_list<std::pair<const char*, const char*>> starts)
+{
+    std::string current;
+    for (GeneratorField& f : fields) {
+        for (const auto& [key, name] : starts) {
+            if (f.key == key) {
+                current = name;
+            }
+        }
+        f.group = current;
+    }
+    return fields;
+}
+
 // --- Lightbox ------------------------------------------------------------------------------
 // Como la «Light Box» de MakerLab: una caja abierta por delante (fondo cerrado y paredes), y una tapa delantera
 // hecha de un marco, un labio que entra en la caja y la cara central (donde va la imagen). La caja y la tapa son
@@ -80,7 +95,7 @@ public:
         cableWall.kind = K::Choice;
         cableWall.choices = {"Atrás (en el fondo)", "Pared de abajo", "Pared de arriba", "Pared izquierda", "Pared derecha"};
         cableWall.hint = "Por dónde sale el cable de la tira LED";
-        return {shape,
+        return grouped({shape,
                 length("ancho", "Ancho (exterior)", 175.0, 30.0, 1000.0, "La imagen mide esto menos 2 paredes", "forma", 0),
                 length("alto", "Alto (exterior)", 131.0, 30.0, 1000.0, {}, "forma", 0),
                 length("diametro", "Diámetro (exterior)", 150.0, 30.0, 1000.0, {}, "forma", 1),
@@ -97,7 +112,7 @@ public:
                 channel,
                 length("tira_ancho", "Ancho de la tira LED", 10.0, 3.0, 50.0, "El ancho del canal entre la pared y el muro (una tira de 8 mm: 10)", "canal", 1),
                 length("canal_alto", "Alto del muro del canal", 8.0, 2.0, 60.0, "Desde el fondo de la caja", "canal", 1),
-                length("canal_pared", "Grosor del muro del canal", 1.2, 0.4, 10.0, {}, "canal", 1)};
+                length("canal_pared", "Grosor del muro del canal", 1.2, 0.4, 10.0, {}, "canal", 1)}, {{"forma", "Medidas de la caja"}, {"labio", "Tapa y labio"}, {"cable", "Cable y tira LED"}});
     }
 
     std::map<std::string, ArrowSpec> arrows() const override
@@ -349,7 +364,7 @@ public:
         clips.hint = "Dos lengüetas con gancho en la tapa que encajan en un resalte de la caja; el cierre por labio o por tornillos sigue funcionando";
         clips.showKey = "forma";
         clips.showIndex = 0;
-        return {shape,
+        return grouped({shape,
                 length("ancho", "Ancho (exterior)", 100.0, 20.0, 1000.0, {}, "forma", 0),
                 length("fondo", "Fondo (exterior)", 60.0, 20.0, 1000.0, "El otro lado de la planta", "forma", 0),
                 length("diametro", "Diámetro (exterior)", 100.0, 20.0, 1000.0, {}, "forma", 1),
@@ -380,7 +395,7 @@ public:
                 length("bisagra_pasador", "Pasador (filamento)", 1.75, 1.0, 6.0, "El agujero queda 0,3 mm más ancho", "bisagra", 1),
                 clips,
                 length("clip_ancho", "Ancho de los clips", 10.0, 4.0, 60.0, {}, "clips", 1),
-                length("clip_largo", "Largo de los clips", 8.0, 5.0, 30.0, "Lo que baja la lengüeta por fuera de la caja", "clips", 1)};
+                length("clip_largo", "Largo de los clips", 8.0, 5.0, 30.0, "Lo que baja la lengüeta por fuera de la caja", "clips", 1)}, {{"forma", "Medidas de la caja"}, {"tapa", "Tapa y cierre"}, {"divisiones", "Interior y ventilación"}, {"patas", "Patas"}, {"ranuras_pared", "Ranuras en las paredes"}, {"bisagra", "Bisagra"}, {"clips", "Clips"}});
     }
 
     std::map<std::string, ArrowSpec> arrows() const override
@@ -787,7 +802,7 @@ public:
                                                        "En relieve (un solo cuerpo)"});
         mode.value = 3.0;
         mode.hint = "«Otro cuerpo» deja el texto aparte para imprimirlo en otro color";
-        return {choice("tipo", "Tipo", {"Letrero", "Llavero"}),
+        return grouped({choice("tipo", "Tipo", {"Letrero", "Llavero"}),
                 text,
                 font,
                 length("altura_texto", "Tamaño del texto", 20.0, 3.0, 300.0, "Tamaño de la fuente; las letras mayúsculas miden ~70 %"),
@@ -799,7 +814,7 @@ public:
                 length("relieve", "Relieve o profundidad", 1.2, 0.2, 50.0, "Cuánto sobresale (o se hunde) el texto"),
                 length("esquina", "Radio de esquinas", 3.0, 0.0, 50.0),
                 length("anilla", "Diámetro de la anilla", 12.0, 5.0, 60.0, "El círculo que rodea el agujero", "tipo", 1),
-                length("agujero", "Agujero de la anilla", 5.0, 2.0, 40.0, {}, "tipo", 1)};
+                length("agujero", "Agujero de la anilla", 5.0, 2.0, 40.0, {}, "tipo", 1)}, {{"texto", "Texto"}, {"modo", "Placa"}, {"anilla", "Anilla de llavero"}});
     }
 
     std::map<std::string, ArrowSpec> arrows() const override

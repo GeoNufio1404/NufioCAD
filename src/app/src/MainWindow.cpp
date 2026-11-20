@@ -865,6 +865,16 @@ void MainWindow::startTool(std::unique_ptr<FeatureTool> tool)
         const int height = std::min(std::max(propertiesDock_->sizeHint().height(), 320), std::max(240, viewport_->height() - 40));
         propertiesDock_->resize(width, height);
         propertiesDock_->move(viewport_->mapToGlobal(QPoint(std::max(0, viewport_->width() - width - 16), 16)));
+        // Si el usuario lo movió o le cambió el tamaño la vez anterior, vuelve a donde lo dejó (si aún cabe en alguna pantalla).
+        const QRect saved = QSettings().value(QStringLiteral("view/floatingCommandsGeometry")).toRect();
+        if (saved.isValid() && saved.width() >= 240 && saved.height() >= 200) {
+            for (QScreen* screen : QGuiApplication::screens()) {
+                if (screen->availableGeometry().contains(saved.topLeft() + QPoint(40, 20))) {
+                    propertiesDock_->setGeometry(saved);
+                    break;
+                }
+            }
+        }
     }
     // Si hay sitio, el panel se abre del ancho que pide su contenido (hasta el 40 % de la ventana); si no, se desplaza.
     {
@@ -944,6 +954,9 @@ void MainWindow::finishTool(bool accepted)
     toolComputing_ = false;
     updateBusyBadge();
     // Se destruye después: esta llamada viene de una señal de la herramienta.
+    if (propertiesDock_->isFloating() && propertiesDock_->isVisible()) {
+        QSettings().setValue(QStringLiteral("view/floatingCommandsGeometry"), propertiesDock_->geometry());
+    }
     propertiesDock_->setWidget(propertiesPlaceholder_);
     propertiesDock_->setFloating(false);
     propertiesDock_->hide();  // como los diálogos de Fusion: solo mientras hay un comando

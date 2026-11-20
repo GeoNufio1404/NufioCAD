@@ -34,7 +34,7 @@ std::optional<EntityId> chamfer(Sketch& sketch, Vec2 corner, double distance, do
 // desfasar juntas.
 std::vector<EntityId> chainOf(const Sketch& sketch, EntityId curve);
 
-// Desfase de una cadena de líneas, arcos y círculos: a la izquierda del
+// Desfase de una cadena de líneas, arcos y círculos (o de una elipse, un arco de elipse o una spline, que se aproximan con una spline): a la izquierda del
 // sentido de la cadena si distance > 0 (a la derecha si < 0). Las líneas
 // quedan paralelas a su original y acotadas a esa distancia; arcos y
 // círculos, concéntricos. Devuelve las curvas nuevas.
