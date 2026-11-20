@@ -893,6 +893,7 @@ private:
     QListWidget* others_ = nullptr;  // los demás cuerpos que se repiten a la vez
     QComboBox* bodyBox_ = nullptr;
     QComboBox* layout_ = nullptr;
+    QCheckBox* follow_ = nullptr;
     QComboBox* axis_ = nullptr;
     QDoubleSpinBox* count_ = nullptr;
     QDoubleSpinBox* spacing_ = nullptr;

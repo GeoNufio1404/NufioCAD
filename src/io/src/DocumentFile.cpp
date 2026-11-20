@@ -692,6 +692,9 @@ FeatureRow rowOf(const Feature& f)
         }
         if (pt.layout == PatternLayout::Path) {
             params["pathSketch"] = pt.pathSketch;
+            if (pt.followPath) {
+                params["followPath"] = true;
+            }
             Json pathIds = Json::array();
             for (const sk::EntityId id : pt.path) {
                 pathIds.push_back(std::uint64_t(id));
@@ -1011,6 +1014,7 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         pt->sourceFeature = p.value("source", std::uint64_t(0));
         if (pt->layout == PatternLayout::Path) {
             pt->pathSketch = unsignedValue(p, "pathSketch");
+            pt->followPath = p.value("followPath", false);
             for (const Json& entity : p.at("path")) {
                 pt->path.push_back(static_cast<sk::EntityId>(entity.get<std::uint64_t>()));
             }

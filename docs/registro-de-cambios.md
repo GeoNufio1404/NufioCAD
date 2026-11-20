@@ -11,6 +11,14 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 ---
 
 
+## Patrón por trayectoria: las copias giran con la curva — 20 nov. 2026
+
+- **Qué:** casilla «Girar las copias siguiendo la curva» en Patrón › «A lo largo de una trayectoria».
+- **Dónde:** `Modeling.cpp` (`pathPoints` devuelve también las tangentes; `pattern` gira cada copia con `PatternSpec::tangents`), `FeaturesMore.cpp` (`patternSpec`), `Features.hpp` (`PatternFeature::followPath`), `DocumentFile.cpp` (campo `followPath`), `FeatureToolsMore.cpp` (casilla), `tests/test_edge_ops.cpp`.
+- **Volver atrás:** `git revert` del commit; los archivos con la casilla marcada se abren igual, sin girar las copias.
+
+---
+
 ## Fase 20, R2: paneles de herramienta con desplazamiento — 18 nov. 2026
 
 - **Qué cambia:** `FeatureTool::start` (`FeatureTools.cpp`) pone el contenido del panel en un `QScrollArea` y deja Aceptar y Cancelar fijos abajo; `MainWindow::startTool` abre el panel del ancho que pide su contenido (hasta el 40 % de la ventana). El inventario deja de contar lo que está dentro de un área con desplazamiento como «fuera de la pantalla».

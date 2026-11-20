@@ -1726,7 +1726,10 @@ void PatternTool::createFields(QFormLayout* form)
     angle_ = angleBox(360.0, 360.0);
     field("angle", angle_);
     operation_ = combo({QStringLiteral("Unir"), QStringLiteral("Cuerpo nuevo")});
+    follow_ = new QCheckBox(QStringLiteral("Girar las copias siguiendo la curva"));
+    follow_->setToolTip(QStringLiteral("Cada copia se gira para mirar hacia donde va la trayectoria en su punto (como el original miraba en el primero)"));
     if (const auto* p = dynamic_cast<const document::PatternFeature*>(original_.get())) {
+        follow_->setChecked(p->followPath);
         layout_->setCurrentIndex(int(p->layout));
         int at = p->axis;
         if (p->axisRef != 0) {
@@ -1755,6 +1758,7 @@ void PatternTool::createFields(QFormLayout* form)
     form->addRow(QStringLiteral("Tipo"), layout_);
     form->addRow(QStringLiteral("Eje"), axis_);
     form->addRow(QStringLiteral("Cantidad"), count_);
+    form->addRow(QString(), follow_);
     form->addRow(QStringLiteral("Distancia entre copias"), spacing_);
     form->addRow(QStringLiteral("Ángulo total"), angle_);
     form->addRow(QStringLiteral("Operación"), operation_);
@@ -1773,6 +1777,7 @@ void PatternTool::createFields(QFormLayout* form)
         connect(box, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
     }
     connect(count_, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
+    connect(follow_, &QCheckBox::toggled, this, [this] { updatePreview(); });
     for (QDoubleSpinBox* box : {spacing_, angle_}) {
         connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
     }
@@ -1786,6 +1791,7 @@ void PatternTool::updateVisibility()
     form_->setRowVisible(spacing_, !circular && !alongPath);
     form_->setRowVisible(angle_, circular);
     form_->setRowVisible(axis_, !alongPath);
+    form_->setRowVisible(follow_, alongPath);
     // Una operación se repite igual que ella era (corta, une…): sin otros cuerpos ni operación propia.
     form_->setRowVisible(others_, sourceOp_ == 0);
     form_->setRowVisible(operation_, sourceOp_ == 0);
@@ -1817,6 +1823,7 @@ std::unique_ptr<document::Feature> PatternTool::build() const
         }
         f->pathSketch = pathSketch_;
         f->path = path_;
+        f->followPath = follow_->isChecked();
     }
     if (axis_->currentIndex() >= 3) {
         f->axisRef = axisIds_[std::size_t(axis_->currentIndex() - 3)];

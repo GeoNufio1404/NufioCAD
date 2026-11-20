@@ -1246,6 +1246,23 @@ std::vector<Shape> pattern(std::string_view tag, const Shape& body, const Patter
             if (!spec.offsets.empty()) {
                 const sketch::Vec3& o = spec.offsets[std::size_t(k - 1)];
                 move.SetTranslation(gp_Vec(o.x, o.y, o.z));
+                if (spec.tangents.size() == spec.offsets.size() + 1) {
+                    // Gira la copia alrededor de su punto para que mire a lo largo de la trayectoria, como el original miraba a lo largo de ella.
+                    const sketch::Vec3& a = spec.tangents[0];
+                    const sketch::Vec3& b = spec.tangents[std::size_t(k)];
+                    const gp_Vec from(a.x, a.y, a.z);
+                    const gp_Vec to(b.x, b.y, b.z);
+                    if (from.Magnitude() > 1e-9 && to.Magnitude() > 1e-9) {
+                        gp_Vec axisVec = from.Crossed(to);
+                        const double angle = from.Angle(to);
+                        gp_Trsf turn;
+                        if (axisVec.Magnitude() > 1e-9) {
+                            turn.SetRotation(gp_Ax1(gp_Pnt(o.x + spec.tangentOrigin.x, o.y + spec.tangentOrigin.y, o.z + spec.tangentOrigin.z),
+                                                    gp_Dir(axisVec)), angle);
+                            move = turn * move;
+                        }
+                    }
+                }
             } else if (spec.circular) {
                 move.SetRotation(gp_Ax1(toPnt(spec.axis.point), toDir(spec.axis.direction)), step * k);
             } else {
@@ -1272,7 +1289,8 @@ std::vector<Shape> pattern(std::string_view tag, const Shape& body, const Patter
 }
 
 std::vector<sketch::Vec3> pathPoints(const sketch::Sketch& pathSketch, const sketch::Plane& pathPlane,
-                                     const std::vector<sketch::EntityId>& pathEntities, int count)
+                                     const std::vector<sketch::EntityId>& pathEntities, int count,
+                                     std::vector<sketch::Vec3>* tangents)
 {
     if (pathEntities.empty()) {
         throw GeometryError("Elige la trayectoria del patrón");
@@ -1303,8 +1321,16 @@ std::vector<sketch::Vec3> pathPoints(const sketch::Sketch& pathSketch, const ske
         }
         std::vector<sketch::Vec3> points;
         for (int i = 1; i <= spread.NbPoints(); ++i) {
-            const gp_Pnt p = curve.Value(spread.Parameter(i));
+            gp_Pnt p;
+            gp_Vec d;
+            curve.D1(spread.Parameter(i), p, d);
             points.push_back({p.X(), p.Y(), p.Z()});
+            if (tangents != nullptr) {
+                if (d.Magnitude() > 1e-12) {
+                    d.Normalize();
+                }
+                tangents->push_back({d.X(), d.Y(), d.Z()});
+            }
         }
         return points;
     } catch (const Standard_Failure& e) {

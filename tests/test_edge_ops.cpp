@@ -440,6 +440,45 @@ TEST_CASE("Patrón a lo largo de una trayectoria: copias a distancias iguales, c
     CHECK(doc.status(pid).health == Health::Error);
 }
 
+TEST_CASE("Patrón a lo largo de una trayectoria: la copia gira para seguir la curva", "[pattern][io]")
+{
+    Document doc = boxDocument();
+    // Una L: de (0, 20) a (100, 20) y de ahí a (100, 120); la última copia queda al final, donde la curva mira hacia +Y
+    sketch::Sketch path;
+    const sketch::EntityId first = path.addLine({0, 20}, {100, 20});
+    const sketch::EntityId second = path.addLine({100, 20}, {100, 120});
+    SketchAttachment at;
+    at.origin = OriginPlane::XY;
+    const FeatureId pathId = doc.addFeature(std::make_unique<SketchFeature>(std::move(path), at));
+    auto pattern = std::make_unique<PatternFeature>();
+    pattern->body = doc.result().bodies.front().key;
+    pattern->layout = PatternLayout::Path;
+    pattern->pathSketch = pathId;
+    pattern->path = {first, second};
+    pattern->count = 2;
+    pattern->followPath = true;
+    pattern->operation = Operation::NewBody;
+    const FeatureId pid = doc.addFeature(std::move(pattern));
+    REQUIRE(doc.status(pid).health == Health::Ok);
+    REQUIRE(doc.result().bodies.size() == 2);
+    // La caja de 20 × 10 se gira 90° alrededor de (100, 120): queda de 10 × 20, con x entre 110 y 120 e y entre 120 y 140
+    const geometry::Box copy = doc.result().bodies[1].shape.bounds();
+    CHECK(copy.min.x == Catch::Approx(110.0).margin(1e-4));
+    CHECK(copy.max.x == Catch::Approx(120.0).margin(1e-4));
+    CHECK(copy.min.y == Catch::Approx(120.0).margin(1e-4));
+    CHECK(copy.max.y == Catch::Approx(140.0).margin(1e-4));
+
+    const auto file = std::filesystem::temp_directory_path() / "nuf_patron_gira.nuf";
+    std::filesystem::remove(file);
+    io::saveDocument(file, doc, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(file, reopened, view);
+    std::filesystem::remove(file);
+    REQUIRE(reopened.result().bodies.size() == 2);
+    CHECK(reopened.result().bodies[1].shape.bounds().max.y == Catch::Approx(140.0).margin(1e-4));
+}
+
 TEST_CASE("Un agujero puesto con un clic en una cara entra en el material, se guarda y sigue a la pieza", "[hole][io]")
 {
     Document doc = boxDocument();

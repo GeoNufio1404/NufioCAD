@@ -934,7 +934,13 @@ geometry::PatternSpec patternSpec(const PatternFeature& feature, const ModelStat
             throw FeatureError("Falta el sketch de la trayectoria del patrón");
         }
         try {
-            const std::vector<sketch::Vec3> points = geometry::pathPoints(*out->second.sketch, out->second.plane, feature.path, feature.count);
+            std::vector<sketch::Vec3> tangents;
+            const std::vector<sketch::Vec3> points = geometry::pathPoints(*out->second.sketch, out->second.plane, feature.path, feature.count,
+                                                                         feature.followPath ? &tangents : nullptr);
+            if (feature.followPath) {
+                spec.tangents = tangents;
+                spec.tangentOrigin = points[0];
+            }
             for (std::size_t i = 1; i < points.size(); ++i) {
                 spec.offsets.push_back({points[i].x - points[0].x, points[i].y - points[0].y, points[i].z - points[0].z});
             }

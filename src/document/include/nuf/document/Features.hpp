@@ -509,6 +509,7 @@ public:
     FeatureId sourceFeature = 0;               // si no es 0: se repite esa operación (un agujero, un corte…) en vez de cuerpos
     FeatureId pathSketch = 0;                  // con «Path»: el sketch cuyas curvas son la trayectoria…
     std::vector<sketch::EntityId> path;        // …y cuáles de ellas (un camino continuo); «count» elementos a distancias iguales
+    bool followPath = false;                   // con «Path»: las copias giran para seguir la dirección de la curva
     PatternLayout layout = PatternLayout::Linear;
     int axis = 0;                              // 0 = X, 1 = Y, 2 = Z (por el origen)
     FeatureId axisRef = 0;                     // si no es 0, un eje de construcción (en vez de axis)
