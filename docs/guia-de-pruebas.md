@@ -491,7 +491,7 @@ Código: **SKS**. Estado: **sin probar** (rama `feature/pendientes-s-sketch`, si
 | SKS.11 | En **Cota**, haz clic en una línea (se abre el campo de valor) y luego, **sin cerrar el campo**, haz clic en otra línea | El campo se cierra y a la vez se elige la segunda línea: se abre el campo del ángulo (o de la distancia, si son paralelas) con un solo clic más |
 | SKS.12 | En **Cota**, haz clic en un círculo, cancela con Esc y haz clic en otra cosa | No pasa nada raro: el clic en el vacío limpia la selección |
 | SKS.13 | En **Cota**, **Mayús + clic** en una línea | Se crea una cota de referencia (entre paréntesis) sin preguntar el valor, y sigue la medida si la pieza cambia |
-| SKS.14 | Dibuja varios **arcos con el mismo centro** (por ejemplo, una ranura curva) y acótalos con radio | Cada cota va a un ángulo distinto: los textos no se pisan |
+| SKS.14 | Dibuja varios **arcos con el mismo centro** (por ejemplo, una ranura curva) y acótalos con radio | Cada cota va a un ángulo distinto: los textos no se pisan. Las cotas de **radio y diámetro se ven siempre**, aunque el cursor esté lejos (antes se ocultaban) |
 
 ---
 
@@ -698,6 +698,8 @@ Código: **GEN**.
 | MOD.23 | Dibuja una recta o curva en un sketch y Patrón › «A lo largo de una trayectoria»: elige la curva en la vista y 4 copias | Las copias quedan repartidas a distancias iguales a lo largo de la curva (sin girar); el primero queda donde está el cuerpo |
 | MOD.24 | Una caja y un cilindro que la atraviesa (otro cuerpo): Sólido › Dividir cuerpo › «Cara de otro cuerpo» y clic en la pared del cilindro | La caja se parte en el trozo de dentro y el de fuera; con una cara que no la atraviesa da un error claro |
 | MOD.25 | Patrón › «A lo largo de una trayectoria» con una curva (un arco o una spline) y marca **«Girar las copias siguiendo la curva»** | Cada copia queda inclinada como la curva en su punto (la vista previa se actualiza al marcar y desmarcar); sin marcar quedan sin girar (MOD.23) |
+| MOD.26 | Patrón › «A lo largo de una trayectoria» con **Girar las copias** sobre dos líneas que forman una esquina (una L) y tantas copias que una caiga justo en la esquina | La copia de la esquina queda girada a medias (la bisectriz de las dos líneas), no con la dirección de una sola |
+| MOD.27 | Con dos o tres cuerpos, abre **Combinar cuerpos**, elige el destino en la lista y haz **clic en la cara de otro cuerpo** de la vista | Ese cuerpo se marca en la lista de herramientas y la vista previa cambia; otro clic en él lo desmarca; un clic en el destino no hace nada |
 | DIS.1 | En Windows: `cmake --install build/windows-release --prefix C:\temp\nufiocad` y abre `C:\temp\nufiocad\bin\NufioCAD.exe` | El programa arranca con ventana (si no, falta una DLL en `bin\`), con las herramientas, el visor y los diálogos como siempre |
 | DIS.2 | `cd build/windows-release` y `cpack -G ZIP`; descomprime el ZIP en otra carpeta y ábrelo | Funciona sin instalar nada más (sin Qt ni vcpkg en el PATH: prueba con un PC limpio si puedes); lleva `AVISOS-DE-TERCEROS.txt` |
 | DIS.3 | Con NSIS instalado (`choco install nsis`): `cpack -G NSIS` e instala el `.exe` resultante | Instala en Archivos de programa, crea el acceso del menú Inicio y del escritorio, y la página de licencia muestra los avisos de terceros |

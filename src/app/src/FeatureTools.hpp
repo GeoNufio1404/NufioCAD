@@ -714,7 +714,7 @@ public:
 protected:
     QString title() const override { return QStringLiteral("Combinar cuerpos"); }
     void createFields(QFormLayout* form) override;
-    void selectionChanged(const render::ModelSelection&) override {}
+    void selectionChanged(const render::ModelSelection& selection) override;
     QString inputsText() const override;
     bool removesMaterial() const override;
 

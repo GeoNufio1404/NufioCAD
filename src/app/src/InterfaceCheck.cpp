@@ -385,6 +385,152 @@ int InterfaceCheck::captureThemes(const QString& folder)
     return 0;
 }
 
+int InterfaceCheck::captureSketchCases(const QString& folder)
+{
+    QDir().mkpath(folder);
+    settle(300);
+    // Un caso: abre un sketch limpio, lo arma con «build» (que recibe la sesión y un «clic») y guarda una captura por cada
+    // «shot» que pida; al acabar cierra el sketch.
+    using Click = std::function<void(double, double)>;
+    const auto scene = [&](const QString& name, const std::function<void(SketchSession&, const Click&,
+                                                                          const std::function<void(const QString&)>&)>& build) {
+        blocking(QStringLiteral("abrir un sketch"), [&] { window_.startSketch(sketch::Plane::xy(), name, {}); });
+        if (window_.sketch_ == nullptr) {
+            return;
+        }
+        SketchSession& session = *window_.sketch_;
+        const Click click = [&](double x, double y) { emit window_.viewport_->sketchClicked(x, y, Qt::NoModifier); };
+        const auto shot = [&](const QString& suffix) {
+            window_.viewport_->setSketchShowAll(true, true);
+            settle(500);
+            // El recorte alrededor del origen, ampliado al doble: los casos son pequeños y así se leen.
+            const QImage full = window_.viewport_->grabFramebuffer();
+            const QPoint center(full.width() / 2, int(full.height() * 0.5));
+            full.copy(QRect(center.x() - 300, center.y() - 180, 600, 360))
+                .scaled(1200, 720, Qt::KeepAspectRatio, Qt::SmoothTransformation)
+                .save(QDir(folder).filePath(QStringLiteral("s-%1-%2.png").arg(name, suffix)));
+        };
+        build(session, click, shot);
+        window_.finishSketch();
+        waitIdle();
+        undoAll();  // el siguiente caso parte de un diseño vacío
+    };
+    // Los clics pasan por el snap de la rejilla (de 10 mm a este zoom): los puntos van en múltiplos de 10, salvo los que
+    // deben caer sobre una curva (el snap los pega a ella).
+    const auto ellipse = [](SketchSession& s, const Click& click) {
+        s.setTool(SketchSession::Tool::Ellipse);
+        click(0.0, 0.0);
+        click(20.0, 0.0);
+        click(0.0, 10.0);
+        s.setTool(SketchSession::Tool::None);
+    };
+    const auto line = [](SketchSession& s, const Click& click, double x0, double y0, double x1, double y1) {
+        s.setTool(SketchSession::Tool::Line);
+        click(x0, y0);
+        click(x1, y1);
+        s.setTool(SketchSession::Tool::None);
+    };
+    const auto spline = [](SketchSession& s, const Click& click) {
+        s.setTool(SketchSession::Tool::SplineFit);
+        click(0.0, 0.0);
+        click(10.0, 10.0);
+        click(20.0, 10.0);
+        click(30.0, 0.0);
+        s.finishShape();
+        s.setTool(SketchSession::Tool::None);
+    };
+
+    scene(QStringLiteral("punto"), [&](SketchSession& s, const Click& click, const auto& shot) {
+        line(s, click, -30.0, -10.0, 30.0, -10.0);
+        s.setTool(SketchSession::Tool::Point);
+        click(-20.0, 20.0);
+        click(0.0, 20.0);
+        click(20.0, 20.0);
+        click(14.0, -10.3);  // sobre la línea: queda unido a ella
+        shot(QStringLiteral("despues"));
+    });
+    scene(QStringLiteral("elipse-recortar"), [&](SketchSession& s, const Click& click, const auto& shot) {
+        ellipse(s, click);
+        line(s, click, -40.0, 0.0, 40.0, 0.0);
+        shot(QStringLiteral("antes"));
+        s.setTool(SketchSession::Tool::Trim);
+        click(30.0, 0.0);
+        s.setTool(SketchSession::Tool::None);
+        shot(QStringLiteral("despues"));
+    });
+    scene(QStringLiteral("elipse-extender"), [&](SketchSession& s, const Click& click, const auto& shot) {
+        ellipse(s, click);
+        line(s, click, -50.0, 0.0, -30.0, 0.0);
+        shot(QStringLiteral("antes"));
+        s.setTool(SketchSession::Tool::Extend);
+        click(-31.0, 0.0);
+        s.setTool(SketchSession::Tool::None);
+        shot(QStringLiteral("despues"));
+    });
+    scene(QStringLiteral("spline-extender"), [&](SketchSession& s, const Click& click, const auto& shot) {
+        spline(s, click);
+        line(s, click, 50.0, -80.0, 50.0, 80.0);
+        shot(QStringLiteral("antes"));
+        s.setTool(SketchSession::Tool::Extend);
+        click(30.0, 0.0);
+        s.setTool(SketchSession::Tool::None);
+        shot(QStringLiteral("despues"));
+    });
+    scene(QStringLiteral("spline-recortar"), [&](SketchSession& s, const Click& click, const auto& shot) {
+        spline(s, click);
+        line(s, click, 10.0, -20.0, 10.0, 30.0);
+        line(s, click, 20.0, -20.0, 20.0, 30.0);
+        shot(QStringLiteral("antes"));
+        s.setTool(SketchSession::Tool::Trim);
+        click(15.0, 10.0);
+        s.setTool(SketchSession::Tool::None);
+        shot(QStringLiteral("despues"));
+    });
+    scene(QStringLiteral("cota-ligada"), [&](SketchSession& s, const Click& click, const auto& shot) {
+        s.setTool(SketchSession::Tool::Circle);
+        click(0.0, 0.0);
+        click(10.0, 0.0);
+        s.setTool(SketchSession::Tool::None);
+        // Una cota de diámetro ligada a un parámetro (con su ƒ) y otra de número fijo.
+        for (const sketch::Entity& e : s.sketch_.entities()) {
+            if (std::holds_alternative<sketch::Circle>(e.geometry)) {
+                sketch::Constraint c = sketch::Constraint::diameter(e.id, 20.0);
+                c.expression = "radio * 2";
+                s.sketch_.addConstraint(c);
+            }
+        }
+        line(s, click, -20.0, -20.0, 20.0, -20.0);
+        s.sketch_.addConstraint(sketch::Constraint::length(s.sketch_.entities().back().id, 40.0));
+        s.solveAndShow();
+        shot(QStringLiteral("despues"));
+    });
+    scene(QStringLiteral("arcos-concentricos"), [&](SketchSession& s, const Click&, const auto& shot) {
+        for (int i = 0; i < 4; ++i) {
+            const sketch::EntityId arc = s.sketch_.addArc({0.0, 0.0}, 10.0 + 4.0 * i, 0.2, 1.4);
+            s.sketch_.addConstraint(sketch::Constraint::radius(arc, 10.0 + 4.0 * i));
+        }
+        s.solveAndShow();
+        {
+            QFile debug(QDir(folder).filePath(QStringLiteral("debug.txt")));
+            if (debug.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                QTextStream out(&debug);
+                out << "restricciones " << s.sketch_.constraints().size() << "\n";
+                for (const sketch::Constraint& c : s.sketch_.constraints()) {
+                    out << " tipo " << int(c.type) << " driving " << c.driving << " first " << c.first.entity << "\n";
+                }
+                const auto notes = sketch::layoutAnnotations(s.sketch_, window_.viewport_->sketchPixelSize());
+                out << "px " << window_.viewport_->sketchPixelSize() << " notas " << notes.size() << "\n";
+                for (const auto& n : notes) {
+                    out << " nota dim " << n.dimension << " texto " << QString::fromStdString(n.text) << " lineas " << n.lines.size() << "\n";
+                }
+            }
+        }
+        shot(QStringLiteral("despues"));
+    });
+    undoAll();
+    return 0;
+}
+
 namespace {
 
 // Lo que se ve mal en un widget y sus hijos: recortado por su contenedor, fuera de la pantalla o con el texto cortado.

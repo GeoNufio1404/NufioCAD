@@ -69,7 +69,6 @@ void addArrow(std::vector<Geometry>& lines, Vec2 tip, Vec2 dir, double size)
     lines.push_back(Line{tip, tip + size * right});
 }
 
-// Cota alineada entre a y b, desplazada hacia «side» (level: renglones más lejos).
 // Cuántos círculos o arcos anteriores tienen el mismo centro que «e»: cada cota va a otro ángulo (30° más que la del
 // anterior) para que los textos y las líneas de cota no se pisen.
 int concentricRank(const Sketch& sketch, const Entity& e, Vec2 center)
@@ -94,6 +93,7 @@ int concentricRank(const Sketch& sketch, const Entity& e, Vec2 center)
     return rank;
 }
 
+// Cota alineada entre a y b, desplazada hacia «side» (level: renglones más lejos).
 Annotation alignedDimension(Vec2 a, Vec2 b, Vec2 side, double px, int level)
 {
     Annotation note;
@@ -107,6 +107,7 @@ Annotation alignedDimension(Vec2 a, Vec2 b, Vec2 side, double px, int level)
     addArrow(note.lines, a2, a2 - b2, kArrowPx * px);
     addArrow(note.lines, b2, b2 - a2, kArrowPx * px);
     note.anchor = midpoint(a2, b2) + kTextGapPx * px * unit(side);
+    note.extent = length(b - a);
     return note;
 }
 
@@ -368,9 +369,16 @@ std::optional<Annotation> dimensionAnnotation(const Sketch& sketch, const Constr
             while (end <= arc->startAngle) {
                 end += 2.0 * std::numbers::pi;
             }
-            // Los arcos con el mismo centro (las ranuras, los círculos partidos) también se reparten.
-            angle = 0.5 * (arc->startAngle + end) + double(concentricRank(sketch, *e, center)) * std::numbers::pi / 6.0
-                    + double(level) * std::numbers::pi / 6.0;
+            // Los arcos con el mismo centro (las ranuras, los círculos partidos) también se reparten, pero dentro del
+            // propio arco: el medio, y luego a un lado y a otro (+1, −1, +2…) en pasos de un sexto del arco (o 30°).
+            const double sweep = end - arc->startAngle;
+            const int rank = concentricRank(sketch, *e, center);
+            const auto alternate = [](int n) { return (n + 1) / 2 * (n % 2 == 1 ? 1 : -1); };  // 0, +1, −1, +2, −2…
+            const double step = std::min(std::numbers::pi / 6.0, sweep / 6.0);
+            const double spread = std::clamp(double(alternate(rank)) * step, -0.45 * sweep, 0.45 * sweep);
+            // Si aun así choca con otra, el nivel la da la vuelta (30° más por nivel), aunque salga del arco: que no se pisen
+            // los textos pesa más que apuntar al arco.
+            angle = 0.5 * (arc->startAngle + end) + spread + double(level) * std::numbers::pi / 6.0;
         } else {
             return std::nullopt;
         }
@@ -390,6 +398,19 @@ std::optional<Annotation> dimensionAnnotation(const Sketch& sketch, const Constr
     }
     default:
         return std::nullopt;
+    }
+    if (note->extent <= 0.0) {
+        // Radios, diámetros y ángulos: lo que ocupa todo el dibujo de la cota (la línea de cota si es lineal ya lo trae).
+        double x0 = 1e300, y0 = 1e300, x1 = -1e300, y1 = -1e300;
+        for (const Geometry& g : note->lines) {
+            for (const Vec2& p : polyline(g)) {
+                x0 = std::min(x0, p.x);
+                x1 = std::max(x1, p.x);
+                y0 = std::min(y0, p.y);
+                y1 = std::max(y1, p.y);
+            }
+        }
+        note->extent = x1 < x0 ? 0.0 : std::hypot(x1 - x0, y1 - y0);
     }
     note->dimension = true;
     note->reference = !c.driving;

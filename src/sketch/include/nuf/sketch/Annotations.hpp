@@ -23,6 +23,9 @@ struct Annotation {
     std::vector<Geometry> icon;
     bool dimension = false;
     bool reference = false;       // cota de referencia (se muestra entre paréntesis)
+    // Cuánto mide lo que se acota (mm): la línea de cota, el radio, el arco… El que pinta oculta las cotas de lo que se
+    // ve diminuto con él; 0 si no se calculó.
+    double extent = 0.0;
 };
 
 // Lo que el que pinta recuerda entre un repintado y el siguiente para que las

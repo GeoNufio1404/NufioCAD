@@ -194,3 +194,16 @@ TEST_CASE("Volver a ligar lo que tocaba a unas entidades sustituidas (texto edit
     // Sin pareja, nada se vuelve a ligar.
     REQUIRE(restoreConstraints(sketch, saved, {}) == 0);
 }
+
+TEST_CASE("Extender una spline se detiene en la primera curva que encuentra, también un eje", "[sketch][edit][s]")
+{
+    Sketch sketch;
+    // Una curva suave que baja al final: antes de llegar a la pared de x = 45 cruza el eje X (que también cuenta).
+    const EntityId spline = sketch.addBSpline(interpolatingSpline({{0.0, 0.0}, {10.0, 5.0}, {20.0, 7.0}, {30.0, 6.0}}));
+    sketch.addLine({45.0, -60.0}, {45.0, 60.0});
+    REQUIRE(extend(sketch, spline, {29.5, 6.0}));
+    const BSpline grown = std::get<BSpline>(sketch.entity(spline)->geometry);
+    REQUIRE(grown.poles.back().x > 40.0);
+    REQUIRE(grown.poles.back().x < 45.0);
+    REQUIRE_THAT(grown.poles.back().y, WithinAbs(0.0, 1e-6));
+}

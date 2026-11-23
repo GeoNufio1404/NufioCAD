@@ -205,7 +205,7 @@ Para que otra persona pueda instalar NufioCAD en Windows sin que SmartScreen, De
 Lo que **sí bloquea la v0.2.0** no está aquí: es la Fase 14 (pruebas manuales P1, medir en Linux P3, publicar P4) y, de la Fase 19, la licencia de NufioCAD (D7), el certificado de firma (D3) y probar los instaladores (D1). Lo que solo falta **probar a mano** tampoco: va en P1 con su ID de la [guía de pruebas](guia-de-pruebas.md).
 
 ### S — Sketch y cotas
-Rama `feature/pendientes-s-sketch` (23 nov. 2026, sin fusionar hasta la prueba manual **SKS.1 a SKS.14** de la [guía](guia-de-pruebas.md#27-pendientes-del-sketch-categoría-s-de-la-hoja-de-ruta)).
+Rama `feature/pendientes-s-sketch` (23 nov. 2026, fusionada en `develop` sin probar a mano: prueba manual **SKS.1 a SKS.14** de la [guía](guia-de-pruebas.md#27-pendientes-del-sketch-categoría-s-de-la-hoja-de-ruta)).
 - [x] **Herramienta Punto ✅** en la familia Punto de CREAR (`makePointTool`): cada clic deja un punto unido a lo que haya debajo (curva, punto medio…) y no pone otro encima de un punto que ya existe; sigue activa hasta Esc. Sin atajo de teclado (el punto `.` se usa para escribir decimales). (5c)
 - [x] **Extender y recortar con elipses y splines ✅:** las líneas, arcos y círculos se recortan, extienden y parten contra **elipses, arcos de elipse y splines** (cruces sobre su polilínea; el extremo queda con «punto sobre objeto»); un **arco de elipse** se alarga hasta la primera curva que encuentra; una **spline** se **recorta** (el tramo que queda se rehace con una spline que pasa por puntos de él, y si se quita el del medio salen dos) y se **alarga** (prolongación natural de su último tramo hasta la primera curva). Los puntos de paso de una spline por puntos se reparten entre los tramos. **Pendiente:** una spline recortada o alargada queda como spline por puntos (pierde su estructura de polos y las restricciones que dependían de ella: igualdad, tangencia…; se conservan lo apoyado en ella y lo unido a sus extremos); extender una elipse entera no tiene sentido (U9).
 - [ ] Desfasar cadenas que mezclan elipses o splines con líneas y arcos, y quitar la pequeña discontinuidad de tangente de la elipse cerrada desfasada (UI.8): **no se hizo** (hay que cortar y empalmar las curvas desfasadas en cada esquina).
@@ -214,7 +214,7 @@ Rama `feature/pendientes-s-sketch` (23 nov. 2026, sin fusionar hasta la prueba m
 - [ ] Inferencias: que las guías de las curvas tengan su sitio en la lista de prioridad (I1): **no se hizo**: no está claro qué caso falla; se retoma si la prueba manual (SKI) enseña uno concreto.
 
 ### P — Parámetros y unidades
-Rama `feature/pendientes-p-parametros` (23 nov. 2026, sin fusionar hasta la prueba manual **REF.25 a REF.32** de la [guía](guia-de-pruebas.md)).
+Rama `feature/pendientes-p-parametros` (23 nov. 2026, fusionada en `develop` sin probar a mano: prueba manual **REF.25 a REF.32** de la [guía](guia-de-pruebas.md)).
 - [x] **Cota ligada ✅:** la cota que sigue a un parámetro o expresión lleva una **ƒ** delante en el sketch, y escribir un número suelto en ella avisa de que ya no sigue a la expresión (6c).
 - [x] **Intercambiar nombres a↔b ✅:** el diálogo de Parámetros propaga los cambios de nombre todos a la vez y solo cuando todos son válidos y distintos; mientras están repetidos un momento, avisa y no deja aceptar (6c).
 - [ ] Solo las cotas con valor se ligan a parámetros (no restricciones como la curvatura): **no se hizo** (la curvatura no tiene un valor que ligar).
@@ -223,13 +223,14 @@ Rama `feature/pendientes-p-parametros` (23 nov. 2026, sin fusionar hasta la prue
 - [x] **Cuadro rápido con expresiones ✅:** con una herramienta abierta, escribir una expresión que **empiece por número, «-» o «.»** (`2*grosor`) abre el cuadro del valor principal y se aplica como expresión (U7). Las que empiezan por letra no, porque las letras son atajos.
 
 ### M — Operaciones de modelado
+Rama `feature/pendientes-m-modelado` (23 nov. 2026, sin fusionar hasta la prueba manual **MOD.26 y MOD.27** de la [guía](guia-de-pruebas.md)).
+- [x] **Patrón por trayectoria, esquina viva ✅:** la copia que cae justo en una esquina se orienta con la bisectriz de las dos curvas que se encuentran (`pathPoints`; prueba en `test_edge_ops.cpp`) (O1).
+- [x] **Combinar cuerpos eligiéndolos en la vista ✅:** un clic en una cara de un cuerpo lo marca o desmarca como herramienta (el destino se sigue eligiendo en la lista) (8a).
 - [ ] Redondeo con dos radios asimétricos (cuerda): `BRepFilletAPI_MakeFillet` no lo ofrece (O2).
-- [ ] Al editar un redondeo o chaflán, las aristas no se marcan en la vista hasta que se cambian (5a).
+- [ ] Al editar un redondeo o chaflán, las aristas no se marcan en la vista hasta que se cambian (5a): **no se tocó**; el código muestra las aristas tras cada vista previa, así que hace falta verlo con la ventana para saber qué falla.
 - [ ] Vaciado con espesores distintos por cara (el kernel admite uno por vaciado); el vaciado cerrado deja el aire dentro (abrir un agujero a mano) (5b, O3).
-- [ ] Barrido y loft: curvas guía, torsión y condiciones de tangencia (O4, 7c, 7d); trayectoria con aristas de un cuerpo (7c); perfiles con huecos y elegir el vértice de arranque del loft (7d).
-- [ ] Patrón por trayectoria: en una esquina viva la dirección es la de la curva que acaba allí, sin promediar (O1).
-- [ ] Combinar cuerpos eligiéndolos en la vista (8a).
-- [ ] Rosca y Engranaje: flecha para arrastrar el largo en la vista; elegir la posición con el ratón (un punto, el centro de un agujero o círculo); planos, ejes y patrones sin posición propia; la holgura no se usa en un tornillo normal (Unir/Cuerpo nuevo) (colocación).
+- [ ] Barrido y loft: curvas guía, torsión y condiciones de tangencia (O4, 7c, 7d); trayectoria con aristas de un cuerpo (7c); perfiles con huecos (hay que lofts aparte de cada hueco y restarlos conservando los nombres de las caras) y elegir el vértice de arranque del loft (7d).
+- [ ] Rosca y Engranaje: flecha **arrastrable** para el largo en la vista (la de Extruir usa `showDistanceHandle`); elegir la posición con el ratón (un punto, el centro de un agujero o círculo); planos, ejes y patrones sin posición propia; la holgura no se usa en un tornillo normal (Unir/Cuerpo nuevo) (colocación): **no se hizo**, necesita verse con la ventana.
 
 ### R — Roscas y agujeros
 - [ ] Perfiles no métricos (trapezoidal, UNC) y chaflán de entrada (7b).
