@@ -98,6 +98,9 @@ std::unique_ptr<SketchTool> makeCircleTool();
 // Arco por 3 puntos: inicio, fin y un punto por el que pasa.
 std::unique_ptr<SketchTool> makeArcTool();
 
+// Punto suelto: cada clic deja uno (unido a lo que haya bajo el cursor).
+std::unique_ptr<SketchTool> makePointTool();
+
 // --- Variantes (Fase 2b) ---------------------------------------------------
 
 // Rectángulo por 3 puntos: un lado (girado como se quiera) y la altura.

@@ -204,6 +204,7 @@ void SketchSession::setTool(Tool tool)
     case Tool::SplineFit: tool_ = sketch::makeSplineTool(sketch::SplineMode::FitPoints); break;
     case Tool::SplineControl: tool_ = sketch::makeSplineTool(sketch::SplineMode::ControlPoints); break;
     case Tool::Conic: tool_ = sketch::makeConicTool(); break;
+    case Tool::Point: tool_ = sketch::makePointTool(); break;
     case Tool::Trim: tool_ = sketch::makeCurveEditTool(sketch::CurveEdit::Trim); break;
     case Tool::Extend: tool_ = sketch::makeCurveEditTool(sketch::CurveEdit::Extend); break;
     case Tool::Break: tool_ = sketch::makeCurveEditTool(sketch::CurveEdit::Break); break;

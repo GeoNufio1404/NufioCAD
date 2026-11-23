@@ -25,6 +25,8 @@ add_executable(nuf_tests
     test_sketch_tools_2b.cpp
     test_sketch_inference.cpp
     test_sketch_open_figures.cpp
+    test_sketch_point_tool.cpp
+    test_sketch_edit_curves.cpp
     bench_sketch.cpp
     test_annotations_overlap.cpp
     test_gear_tuning.cpp

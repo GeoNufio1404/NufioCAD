@@ -39,6 +39,7 @@ public:
         Ellipse, EllipseArc,
         SplineFit, SplineControl,
         Conic,
+        Point,
         // Modificar (Fase 2c)
         Trim, Extend, Break,
         Fillet, Chamfer,

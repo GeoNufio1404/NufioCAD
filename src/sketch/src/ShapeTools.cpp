@@ -928,8 +928,43 @@ public:
     bool amendedLast() const override { return amended_; }
 };
 
+// --- Punto ----------------------------------------------------------------------------------------------------
+// Un clic deja un punto suelto (para marcar dónde van los agujeros, centros, referencias…). Sigue activa para poner
+// más; Esc sale. Un punto sobre algo existente queda unido a ello (coincidente, punto medio o sobre la curva).
+
+class PointTool final : public SketchTool {
+public:
+    void move(const Snap& cursor) override { cursor_ = cursor; }
+
+    bool click(Sketch& sketch, const Snap& cursor) override
+    {
+        // Con el cursor en un punto que ya existe no se pone otro encima.
+        if ((cursor.kind == SnapKind::Point || cursor.kind == SnapKind::Center) && cursor.alignX.empty()
+            && cursor.alignY.empty()) {
+            return false;
+        }
+        const EntityId id = sketch.addPoint(cursor.point);
+        attach(sketch, Ref::of(id), cursor);
+        return true;
+    }
+
+    // Terminar no tiene nada a medias: la interfaz sale de la herramienta.
+    bool cancel() override { return false; }
+
+    Preview preview() const override { return {}; }
+
+    std::string hint() const override
+    {
+        return "Clic para poner un punto · Esc para terminar";
+    }
+
+private:
+    Snap cursor_;
+};
+
 } // namespace
 
+std::unique_ptr<SketchTool> makePointTool() { return std::make_unique<PointTool>(); }
 std::unique_ptr<SketchTool> makeThreePointRectangleTool() { return std::make_unique<ThreePointRectangleTool>(); }
 std::unique_ptr<SketchTool> makeCenterRectangleTool() { return std::make_unique<CenterRectangleTool>(); }
 std::unique_ptr<SketchTool> makePolygonTool(PolygonMode mode) { return std::make_unique<PolygonTool>(mode); }

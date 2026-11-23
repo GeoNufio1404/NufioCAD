@@ -125,6 +125,7 @@ void MainWindow::createMenus()
             {QStringLiteral("ellipse-arc"), QStringLiteral("Un trozo de elipse: elipse más inicio y fin")},
             {QStringLiteral("spline-fit"), QStringLiteral("Curva suave que pasa por los puntos que marcas (Enter termina)")},
             {QStringLiteral("spline-control"), QStringLiteral("Curva suave guiada por puntos de control (Enter termina)")},
+            {QStringLiteral("point"), QStringLiteral("Punto suelto: marca un centro, un agujero o una referencia")},
             {QStringLiteral("conic"), QStringLiteral("Curva cónica (elipse, parábola o hipérbola) con inicio, fin y vértice")},
             {QStringLiteral("trim"), QStringLiteral("Recorta una curva hasta la siguiente que la cruza")},
             {QStringLiteral("extend"), QStringLiteral("Alarga una curva hasta la siguiente")},
@@ -467,6 +468,7 @@ void MainWindow::createMenus()
          {{Tool::SplineFit, QStringLiteral("Spline por puntos de paso"), {}, QStringLiteral("spline-fit")},
           {Tool::SplineControl, QStringLiteral("Spline por polos"), {}, QStringLiteral("spline-control")}}},
         {QStringLiteral("Cónica"), {{Tool::Conic, QStringLiteral("Curva cónica"), {}, QStringLiteral("conic")}}},
+        {QStringLiteral("Punto"), {{Tool::Point, QStringLiteral("Punto"), {}, QStringLiteral("point")}}},
         // Modificar
         {QStringLiteral("Recortar"),
          {{Tool::Trim, QStringLiteral("Recortar"), QKeySequence(Qt::Key_T), QStringLiteral("trim")},
@@ -491,7 +493,7 @@ void MainWindow::createMenus()
           {Tool::Image, QStringLiteral("Imagen de referencia"), {}, QStringLiteral("image")}}},
     };
     // A partir de esta familia van a la barra «Modificar».
-    const std::size_t firstModifyFamily = 9;
+    const std::size_t firstModifyFamily = 10;
     auto* toolGroup = new QActionGroup(this);
     toolGroup->setExclusionPolicy(QActionGroup::ExclusionPolicy::ExclusiveOptional);
     for (const auto& [family, entries] : families) {
@@ -639,7 +641,7 @@ void MainWindow::createMenus()
     };
     ribbon_->addGroup(sketchTab_, QStringLiteral("CREAR"));
     for (const char* name : {"Línea", "Rectángulo", "Círculo", "Arco", "Polígono", "Elipse", "Ranura", "Spline",
-                             "Cónica", "Simetría", "Patrón", "Proyectar"}) {
+                             "Cónica", "Punto", "Simetría", "Patrón", "Proyectar"}) {
         family(QString::fromUtf8(name));
     }
     ribbon_->addAction(sketchTab_, intersectAction_);
