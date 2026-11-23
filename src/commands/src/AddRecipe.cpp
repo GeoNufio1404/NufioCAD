@@ -53,6 +53,9 @@ void AddRecipe::execute(document::Document& doc)
         ids_.push_back(id);
     }
 
+    // Con el cálculo en segundo plano el resultado todavía es el de antes: sin esperarlo, los cuerpos nuevos no se
+    // encuentran y se quedan sin el nombre ni el componente de la receta.
+    doc.waitForCompute();
     std::map<std::string, document::BodyInfo> info = doc.bodyInfo();
     const std::string component = document::numberedComponent(info, recipe_.component);
     std::size_t next = 0;

@@ -38,6 +38,15 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 ---
 
 
+## Pendientes por categoría, A (ensamblar y componentes) — 23 nov. 2026
+
+- **Qué:** **corrección de un fallo real:** al aceptar o rehacer un generador, los cuerpos nuevos salían sin el nombre ni el componente de la receta (el comando leía el resultado antes de que acabara el cálculo en segundo plano, desde la Fase 13); el Navegador ya no muestra la carpeta «Cuerpos» vacía cuando todos los cuerpos están en componentes; Alinear y Unión resaltan en la vista las caras o aristas elegidas (sin confirmar a ojo).
+- **Dónde:** `AddRecipe.cpp` y `ReplaceRecipe.cpp` (`waitForCompute`), `ModelPanels.cpp`, `Viewport` (`showToolPicks`), `FeatureToolsMore.cpp` (`JointTool::afterPreview`), `FeatureTools.cpp` (`afterPreview` también sin operación), `InterfaceCheck.cpp` (más casos de `--captura-sketch`). Manual: `MUL.20` y `MUL.21`.
+- **Volver atrás:** rama `feature/pendientes-a-ensamblar` sin fusionar: `git branch -D`; ya fusionada, `git revert` de la fusión. No cambia el formato de los archivos.
+
+---
+
+
 ## Pendientes por categoría, E (engranajes) — 23 nov. 2026
 
 - **Qué:** el **surco central** de la espina de pescado funciona también en la corona y en la cremallera, y los generadores del Par, la corona, la cremallera y el tren planetario lo ofrecen; el Par puede dejar las **ruedas separadas** para imprimirlas.

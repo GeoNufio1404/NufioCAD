@@ -183,6 +183,8 @@ void ReplaceRecipe::execute(document::Document& doc)
                 parameters);
 
     // Los cuerpos nuevos de la receta (sin nombre propio todavía) reciben los nombres y el componente de la receta.
+    // (Con el cálculo en segundo plano hay que esperarlo: si no, el resultado es el de antes y no se los encuentra.)
+    doc.waitForCompute();
     std::map<std::string, document::BodyInfo> info = doc.bodyInfo();
     // El componente que ya tienen los cuerpos de la receta (con su número); si no tienen, uno nuevo numerado.
     std::string component;

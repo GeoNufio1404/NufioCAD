@@ -1054,6 +1054,26 @@ void JointTool::selectionChanged(const render::ModelSelection& selection)
     }
 }
 
+// Las caras y aristas elegidas (la primera y la segunda, de cuerpos distintos) se resaltan en la vista.
+void JointTool::afterPreview(const document::ModelState& state)
+{
+    std::vector<std::pair<geometry::Shape, int>> faces;
+    std::vector<std::pair<geometry::Shape, int>> edges;
+    for (const document::ElementPick& pick : {first_, second_}) {
+        if (pick.ref.empty()) {
+            continue;
+        }
+        if (pick.edge) {
+            if (const auto hit = state.findEdge(pick.ref)) {
+                edges.emplace_back(state.bodies[hit->body].shape, hit->edge);
+            }
+        } else if (const auto hit = state.findFace(pick.ref)) {
+            faces.emplace_back(state.bodies[hit->body].shape, hit->face);
+        }
+    }
+    viewport_.showToolPicks(faces, edges);
+}
+
 QString JointTool::pickText(const document::ElementPick& pick) const
 {
     if (pick.ref.empty()) {

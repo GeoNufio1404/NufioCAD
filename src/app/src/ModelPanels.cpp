@@ -477,6 +477,11 @@ void NavigatorWidget::refresh(const document::Document& document, const document
             item->setToolTip(0, QStringLiteral("Fijo: no se mueve (clic derecho › Soltar)"));
         }
     }
+    // Con todos los cuerpos dentro de componentes la carpeta «Cuerpos» quedaría vacía: se quita (sin cuerpos sigue ahí).
+    if (!state.bodies.empty() && bodies->childCount() == 0) {
+        delete bodies;
+        bodies = nullptr;
+    }
     // Cada componente se muestra u oculta de una vez (marcado si todos sus cuerpos se ven).
     for (auto& [name, node] : components) {
         bool allShown = true;

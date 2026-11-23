@@ -400,6 +400,7 @@ void FeatureTool::updatePreview()
         showPlanes(viewport_, document_, before(), nullptr);
         viewport_.clearToolPreview();
         viewport_.hideDistanceHandle();
+        afterPreview(before());  // lo ya elegido (aristas, caras) se sigue viendo aunque aún no haya operación
         statusLabel_->clear();
         markByMessage(markableFields(), QString(), Mark::None);
         okButton_->setEnabled(false);

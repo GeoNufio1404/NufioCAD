@@ -438,6 +438,49 @@ void Viewport::Impl::showToolEdges(const geometry::Shape& body, const std::vecto
     context->Display(toolEdges, AIS_WireFrame, -1, false);
 }
 
+void Viewport::Impl::showToolPicks(const std::vector<std::pair<geometry::Shape, int>>& faces,
+                                   const std::vector<std::pair<geometry::Shape, int>>& edges)
+{
+    if (!toolEdges.IsNull()) {
+        context->Remove(toolEdges, false);
+        toolEdges.Nullify();
+    }
+    if (!toolFaces.IsNull()) {
+        context->Remove(toolFaces, false);
+        toolFaces.Nullify();
+    }
+    BRep_Builder builder;
+    if (!edges.empty()) {
+        TopoDS_Compound compound;
+        builder.MakeCompound(compound);
+        for (const auto& [body, index] : edges) {
+            if (!body.isNull()) {
+                builder.Add(compound, geometry::edgeAt(body, index));
+            }
+        }
+        toolEdges = new AIS_Shape(compound);
+        toolEdges->SetColor(rgb(0x2F, 0x80, 0xED));
+        toolEdges->SetWidth(3.5);
+        context->Display(toolEdges, AIS_WireFrame, -1, false);
+    }
+    if (!faces.empty()) {
+        TopoDS_Compound compound;
+        builder.MakeCompound(compound);
+        for (const auto& [body, index] : faces) {
+            if (!body.isNull()) {
+                builder.Add(compound, geometry::faceAt(body, index));
+            }
+        }
+        toolFaces = new AIS_Shape(compound);
+        toolFaces->SetColor(rgb(0x2F, 0x80, 0xED));
+        toolFaces->SetTransparency(0.45);
+        toolFaces->Attributes()->SetFaceBoundaryDraw(false);
+        context->Display(toolFaces, AIS_Shaded, -1, false);
+        // Las caras elegidas son las del propio cuerpo (en el mismo plano): en la capa de arriba se ven sobre él.
+        context->SetZLayer(toolFaces, Graphic3d_ZLayerId_Top);
+    }
+}
+
 void Viewport::Impl::showToolFaces(const geometry::Shape& body, const std::vector<int>& faces)
 {
     if (!toolFaces.IsNull()) {

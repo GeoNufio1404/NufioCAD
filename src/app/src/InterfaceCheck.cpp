@@ -527,6 +527,61 @@ int InterfaceCheck::captureSketchCases(const QString& folder)
         }
         shot(QStringLiteral("despues"));
     });
+    // Los dos elementos elegidos en Alinear se resaltan en la vista, y un par de engranajes (un componente) deja el
+    // Navegador sin carpeta «Cuerpos» vacía.
+    const auto generate = [&](const QString& name) {
+        for (QAction* action : window_.generatorActions_) {
+            if (action->text().contains(name)) {
+                openChangeAccept(action, 0);
+                waitIdle();
+                settle(500);
+                return true;
+            }
+        }
+        return false;
+    };
+    generate(QStringLiteral("Par de engranajes"));  // dos cuerpos
+    if (window_.document_.result().bodies.size() >= 2) {
+        blocking(QStringLiteral("abrir Alinear"), [&] { window_.alignAction_->trigger(); });
+        waitIdle();
+        if (auto* joint = dynamic_cast<JointTool*>(window_.tool_.get())) {
+            const auto& bodies = window_.document_.result().bodies;
+            for (int which = 0; which < 2; ++which) {
+                const geometry::Shape& shape = bodies[std::size_t(which)].shape;
+                for (int i = 0; i < shape.faceCount(); ++i) {
+                    if (const auto plane = shape.facePlane(i); plane && plane->normal.z > 0.9) {
+                        (which == 0 ? joint->first_ : joint->second_) = {shape.faceRef(i), false};
+                        break;
+                    }
+                }
+            }
+            blocking(QStringLiteral("resaltar lo elegido"), [&] { joint->updatePreview(); });
+            waitIdle();
+            window_.viewport_->fitAll();
+            settle(500);
+            joint->afterPreview(joint->before());  // por si la vista previa llegó antes de elegir
+            settle(500);
+            window_.viewport_->grabFramebuffer().save(QDir(folder).filePath(QStringLiteral("s-alinear-elegidos.png")));
+        }
+        if (QPushButton* cancel = button(QStringLiteral("Cancelar"))) {
+            cancel->click();
+        }
+        waitIdle();
+    }
+    undoAll();
+    if (generate(QStringLiteral("Lightbox"))) {  // sus cuerpos van todos en un componente
+        {
+            QFile note(QDir(folder).filePath(QStringLiteral("debug3.txt")));
+            if (note.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                QTextStream out(&note);
+                for (const document::Body& b : window_.document_.result().bodies) {
+                    out << "cuerpo " << QString::fromStdString(b.name) << " componente ["
+                        << QString::fromStdString(window_.document_.componentOf(b.key)) << "]" << Qt::endl;
+                }
+            }
+        }
+        window_.grab().save(QDir(folder).filePath(QStringLiteral("s-navegador-componente.png")));
+    }
     undoAll();
     return 0;
 }

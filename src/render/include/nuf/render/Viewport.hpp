@@ -159,6 +159,10 @@ public:
     void showToolEdges(const geometry::Shape& body, const std::vector<int>& edges);
     // Resalta caras de un cuerpo (por índice) en azul translúcido; clearToolPreview() las quita.
     void showToolFaces(const geometry::Shape& body, const std::vector<int>& faces);
+    // Resalta caras y aristas de cuerpos distintos a la vez (los dos elementos que se eligen en Alinear y Unión): cada
+    // par es un cuerpo y el índice de su cara o su arista. Sustituye lo que resaltaban las otras dos.
+    void showToolPicks(const std::vector<std::pair<geometry::Shape, int>>& faces,
+                       const std::vector<std::pair<geometry::Shape, int>>& edges);
     void clearToolPreview();
 
     ModelSelection modelSelection() const;

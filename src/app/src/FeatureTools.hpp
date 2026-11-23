@@ -744,9 +744,11 @@ public:
     void accept() override;
 
 protected:
+    friend class InterfaceCheck;  // la captura de lo elegido en Alinear (--captura-sketch)
     QString title() const override { return alignMode() ? QStringLiteral("Alinear") : QStringLiteral("Unión"); }
     void createFields(QFormLayout* form) override;
     void selectionChanged(const render::ModelSelection& selection) override;
+    void afterPreview(const document::ModelState& before) override;
     QString inputsText() const override;
     std::optional<Arrow> dimensionArrow(const std::string& key) const override;
     std::optional<Arc> dimensionArc(const std::string& key) const override;
