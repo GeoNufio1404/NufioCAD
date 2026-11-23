@@ -3592,3 +3592,22 @@ TEST_CASE("Un patrón repite varios cuerpos a la vez, cada uno con sus copias", 
     REQUIRE(again != nullptr);
     REQUIRE(again->alsoBodies == std::vector<std::string>{"f3"});
 }
+
+TEST_CASE("Patrón por trayectoria: en una esquina viva la dirección es la bisectriz de las dos curvas", "[pattern]")
+{
+    sketch::Sketch path;
+    const sketch::EntityId first = path.addLine({0, 0}, {10, 0});
+    const sketch::EntityId second = path.addLine({10, 0}, {10, 10});
+    std::vector<sketch::Vec3> tangents;
+    const std::vector<sketch::Vec3> points = geometry::pathPoints(path, sketch::Plane::xy(), {first, second}, 3, &tangents);
+    REQUIRE(points.size() == 3);
+    REQUIRE(tangents.size() == 3);
+    // El punto del medio cae justo en la esquina (10, 0): ni la dirección de la primera ni la de la segunda, la media.
+    CHECK(points[1].x == Catch::Approx(10.0).margin(1e-6));
+    CHECK(points[1].y == Catch::Approx(0.0).margin(1e-6));
+    CHECK(tangents[1].x == Catch::Approx(std::sqrt(0.5)).margin(1e-6));
+    CHECK(tangents[1].y == Catch::Approx(std::sqrt(0.5)).margin(1e-6));
+    // Los extremos, con la de su curva.
+    CHECK(tangents[0].x == Catch::Approx(1.0).margin(1e-6));
+    CHECK(tangents[2].y == Catch::Approx(1.0).margin(1e-6));
+}

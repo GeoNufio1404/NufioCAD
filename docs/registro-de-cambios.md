@@ -20,6 +20,15 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 ---
 
 
+## Pendientes por categoría, M (operaciones de modelado) — 23 nov. 2026
+
+- **Qué:** en el patrón por trayectoria, la copia que cae justo en una esquina viva se orienta con la bisectriz de las dos curvas; en Combinar cuerpos, un clic en un cuerpo de la vista lo marca o desmarca como herramienta.
+- **Dónde:** `Modeling.cpp` (`pathPoints`), `FeatureToolsMore.cpp` y `FeatureTools.hpp` (`CombineTool::selectionChanged`). Prueba en `test_edge_ops.cpp`; manual: `MOD.26` y `MOD.27`.
+- **Volver atrás:** rama `feature/pendientes-m-modelado` sin fusionar: `git branch -D`; ya fusionada, `git revert` de la fusión. No cambia el formato de los archivos.
+
+---
+
+
 ## Pendientes por categoría, P (parámetros y unidades) — 23 nov. 2026
 
 - **Qué:** la cota ligada lleva una «ƒ» y avisa si pierde su expresión; los nombres de parámetros se pueden intercambiar (a↔b); el valor de un parámetro da su longitud en la unidad elegida en el tooltip; las ayudas de los generadores y los mensajes de la geometría pasan los «mm» a la unidad elegida; el volumen de Interferencias sigue la unidad; el cuadro rápido de valor admite expresiones que empiecen por número. Antes, y ya en `develop`: el CI solo se ejecuta a mano (`workflow_dispatch`).

@@ -749,6 +749,34 @@ void CombineTool::createFields(QFormLayout* form)
     connect(tools_, &QListWidget::itemChanged, this, [this] { updatePreview(); });
 }
 
+// Un clic en una cara de un cuerpo de la vista lo marca (o desmarca) como cuerpo herramienta; el destino se elige en la lista.
+void CombineTool::selectionChanged(const render::ModelSelection& selection)
+{
+    if (tools_ == nullptr || target_ == nullptr) {
+        return;
+    }
+    const QString targetKey = target_->currentData().toString();
+    for (const render::ModelSelection::Face& face : selection.faces) {
+        const auto hit = before().findFace(face.ref);
+        if (!hit) {
+            continue;
+        }
+        const QString key = QString::fromStdString(before().bodies[hit->body].key);
+        if (key == targetKey) {
+            continue;
+        }
+        for (int i = 0; i < tools_->count(); ++i) {
+            QListWidgetItem* item = tools_->item(i);
+            if (item->data(Qt::UserRole).toString() == key) {
+                item->setCheckState(item->checkState() == Qt::Checked ? Qt::Unchecked : Qt::Checked);  // actualiza la vista previa
+            }
+        }
+    }
+    if (!selection.empty()) {
+        viewport_.clearModelSelection();
+    }
+}
+
 // La lista de herramientas son todos los cuerpos menos el destino.
 void CombineTool::fillTools()
 {
@@ -802,7 +830,7 @@ QString CombineTool::inputsText() const
     if (target_->count() < 2) {
         return QStringLiteral("Hacen falta al menos dos cuerpos para combinar");
     }
-    return QStringLiteral("Marca los cuerpos que se unen, cortan o intersecan con el destino");
+    return QStringLiteral("Marca los cuerpos que se unen, cortan o intersecan con el destino (o haz clic en ellos en la vista)");
 }
 
 bool CombineTool::removesMaterial() const

@@ -1320,13 +1320,31 @@ std::vector<sketch::Vec3> pathPoints(const sketch::Sketch& pathSketch, const ske
             throw GeometryError("No se pudieron repartir los elementos a lo largo de la trayectoria");
         }
         std::vector<sketch::Vec3> points;
-        for (int i = 1; i <= spread.NbPoints(); ++i) {
-            gp_Pnt p;
+        // En una esquina viva (dos curvas que se unen en ángulo) la dirección de un punto justo en ella es la media de la
+        // de la curva que llega y la de la que sale (la bisectriz), no la de una sola.
+        const double first = curve.FirstParameter();
+        const double last = curve.LastParameter();
+        const double step = 1e-6 * (last - first);
+        const auto unitTangent = [&](double u) {
+            gp_Pnt ignored;
             gp_Vec d;
-            curve.D1(spread.Parameter(i), p, d);
+            curve.D1(std::clamp(u, first, last), ignored, d);
+            if (d.Magnitude() > 1e-12) {
+                d.Normalize();
+            }
+            return d;
+        };
+        for (int i = 1; i <= spread.NbPoints(); ++i) {
+            const double u = spread.Parameter(i);
+            gp_Pnt p;
+            gp_Vec ignored;
+            curve.D1(u, p, ignored);
             points.push_back({p.X(), p.Y(), p.Z()});
             if (tangents != nullptr) {
-                if (d.Magnitude() > 1e-12) {
+                gp_Vec d = unitTangent(u - step) + unitTangent(u + step);
+                if (d.Magnitude() < 1e-9) {
+                    d = unitTangent(u + step);  // una vuelta en U: no hay media
+                } else {
                     d.Normalize();
                 }
                 tangents->push_back({d.X(), d.Y(), d.Z()});

@@ -223,13 +223,14 @@ Rama `feature/pendientes-p-parametros` (23 nov. 2026, fusionada en `develop` sin
 - [x] **Cuadro rápido con expresiones ✅:** con una herramienta abierta, escribir una expresión que **empiece por número, «-» o «.»** (`2*grosor`) abre el cuadro del valor principal y se aplica como expresión (U7). Las que empiezan por letra no, porque las letras son atajos.
 
 ### M — Operaciones de modelado
+Rama `feature/pendientes-m-modelado` (23 nov. 2026, sin fusionar hasta la prueba manual **MOD.26 y MOD.27** de la [guía](guia-de-pruebas.md)).
+- [x] **Patrón por trayectoria, esquina viva ✅:** la copia que cae justo en una esquina se orienta con la bisectriz de las dos curvas que se encuentran (`pathPoints`; prueba en `test_edge_ops.cpp`) (O1).
+- [x] **Combinar cuerpos eligiéndolos en la vista ✅:** un clic en una cara de un cuerpo lo marca o desmarca como herramienta (el destino se sigue eligiendo en la lista) (8a).
 - [ ] Redondeo con dos radios asimétricos (cuerda): `BRepFilletAPI_MakeFillet` no lo ofrece (O2).
-- [ ] Al editar un redondeo o chaflán, las aristas no se marcan en la vista hasta que se cambian (5a).
+- [ ] Al editar un redondeo o chaflán, las aristas no se marcan en la vista hasta que se cambian (5a): **no se tocó**; el código muestra las aristas tras cada vista previa, así que hace falta verlo con la ventana para saber qué falla.
 - [ ] Vaciado con espesores distintos por cara (el kernel admite uno por vaciado); el vaciado cerrado deja el aire dentro (abrir un agujero a mano) (5b, O3).
-- [ ] Barrido y loft: curvas guía, torsión y condiciones de tangencia (O4, 7c, 7d); trayectoria con aristas de un cuerpo (7c); perfiles con huecos y elegir el vértice de arranque del loft (7d).
-- [ ] Patrón por trayectoria: en una esquina viva la dirección es la de la curva que acaba allí, sin promediar (O1).
-- [ ] Combinar cuerpos eligiéndolos en la vista (8a).
-- [ ] Rosca y Engranaje: flecha para arrastrar el largo en la vista; elegir la posición con el ratón (un punto, el centro de un agujero o círculo); planos, ejes y patrones sin posición propia; la holgura no se usa en un tornillo normal (Unir/Cuerpo nuevo) (colocación).
+- [ ] Barrido y loft: curvas guía, torsión y condiciones de tangencia (O4, 7c, 7d); trayectoria con aristas de un cuerpo (7c); perfiles con huecos (hay que lofts aparte de cada hueco y restarlos conservando los nombres de las caras) y elegir el vértice de arranque del loft (7d).
+- [ ] Rosca y Engranaje: flecha **arrastrable** para el largo en la vista (la de Extruir usa `showDistanceHandle`); elegir la posición con el ratón (un punto, el centro de un agujero o círculo); planos, ejes y patrones sin posición propia; la holgura no se usa en un tornillo normal (Unir/Cuerpo nuevo) (colocación): **no se hizo**, necesita verse con la ventana.
 
 ### R — Roscas y agujeros
 - [ ] Perfiles no métricos (trapezoidal, UNC) y chaflán de entrada (7b).
