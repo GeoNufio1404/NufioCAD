@@ -223,7 +223,7 @@ Rama `feature/pendientes-p-parametros` (23 nov. 2026, fusionada en `develop` sin
 - [x] **Cuadro rápido con expresiones ✅:** con una herramienta abierta, escribir una expresión que **empiece por número, «-» o «.»** (`2*grosor`) abre el cuadro del valor principal y se aplica como expresión (U7). Las que empiezan por letra no, porque las letras son atajos.
 
 ### M — Operaciones de modelado
-Rama `feature/pendientes-m-modelado` (23 nov. 2026, sin fusionar hasta la prueba manual **MOD.26 y MOD.27** de la [guía](guia-de-pruebas.md)).
+Rama `feature/pendientes-m-modelado` (23 nov. 2026, fusionada en `develop` sin probar a mano: prueba manual **MOD.26 y MOD.27** de la [guía](guia-de-pruebas.md)).
 - [x] **Patrón por trayectoria, esquina viva ✅:** la copia que cae justo en una esquina se orienta con la bisectriz de las dos curvas que se encuentran (`pathPoints`; prueba en `test_edge_ops.cpp`) (O1).
 - [x] **Combinar cuerpos eligiéndolos en la vista ✅:** un clic en una cara de un cuerpo lo marca o desmarca como herramienta (el destino se sigue eligiendo en la lista) (8a).
 - [ ] Redondeo con dos radios asimétricos (cuerda): `BRepFilletAPI_MakeFillet` no lo ofrece (O2).
@@ -233,20 +233,21 @@ Rama `feature/pendientes-m-modelado` (23 nov. 2026, sin fusionar hasta la prueba
 - [ ] Rosca y Engranaje: flecha **arrastrable** para el largo en la vista (la de Extruir usa `showDistanceHandle`); elegir la posición con el ratón (un punto, el centro de un agujero o círculo); planos, ejes y patrones sin posición propia; la holgura no se usa en un tornillo normal (Unir/Cuerpo nuevo) (colocación): **no se hizo**, necesita verse con la ventana.
 
 ### R — Roscas y agujeros
-Rama `feature/pendientes-r-roscas` (23 nov. 2026, sin fusionar hasta la prueba manual **GEN.20 a GEN.24** de la [guía](guia-de-pruebas.md)).
+Rama `feature/pendientes-r-roscas` (23 nov. 2026, fusionada en `develop` sin probar a mano: prueba manual **GEN.20 a GEN.24** de la [guía](guia-de-pruebas.md)).
 - [x] **Perfiles y medidas ✅:** la herramienta Rosca tiene **Perfil** (métrica o unificada de 60°, y **trapezoidal Tr** con flancos a 15°: cresta y fondo de 0,366 P, profundidad 0,5 P), medidas **UNC** (#6-32 a 3/4-10) y **Tr** (Tr8 a Tr24) en la lista de medidas, y **chaflán de entrada** (a 45°, solo en tornillos; en la rosca que se corta no se usa). `ThreadSpec::profile` y `entryChamfer`, `threadDepth`; se guardan en el archivo (los anteriores abren como métrica y sin chaflán) (7b). **Pendiente:** el perfil unificado usa el mismo dibujo que el métrico (60°, cresta P/8 y fondo P/4) aunque la norma UNC difiere un poco en los redondeos; Acme (29°) y roscas de tubo (BSP/NPT, cónicas) no existen; el chaflán de entrada no se ve aún en el visor con capturas (lo comprueban las pruebas de volumen y validez).
 - [ ] Unir o cortar con una rosca cuesta ~2 s en Debug (booleana contra la superficie spline): medir en Release y, si hace falta, rosca en 4 caras (cresta, flancos, fondo) (7b): **no se hizo** (hay que compilar Release en esta máquina para medir).
 - [x] **Flecha del ángulo del cono del Agujero ✅ (sin verla en pantalla):** `HoleTool::dimensionArc("headAngle")` dibuja el arco entre las dos generatrices del avellanado, con el vértice en el eje. **Pendiente de comprobar a mano (GEN.24):** el arco se calculó pero no se pudo capturar (la escena del Agujero con captura se quedó colgada en el arnés); si sale del lado equivocado, hay que invertir el eje.
 
 ### E — Engranajes
+Rama `feature/pendientes-e-engranajes` (23 nov. 2026, sin fusionar hasta la prueba manual **PAR.44 a PAR.46** de la [guía](guia-de-pruebas.md)). Lo no hecho de esta categoría (redondeo de raíz, cicloide, chaflán de la base a mano, garganta del sin fin, cónicos a otro ángulo, planetario orbitando, rendimiento del helicoidal, flechas) sigue abajo: son cambios de geometría que piden mucha prueba o ver el resultado en pantalla.
 - [ ] Redondeo de raíz y perfil de cicloide (7a).
 - [ ] Chaflán de la base: con hélice se rechaza, y el kernel falla de forma irregular según dientes y medida; la solución de fondo es **construir el chaflán a mano** (cara inicial recortada y loft reglado) en vez de `BRepFilletAPI_MakeChamfer` (E2).
-- [ ] Surco central de la espina de pescado en el generador del Par, en la corona y en la cremallera (E1).
+- [x] **Surco central ✅** en el generador del Par, en la corona, en la cremallera y en el tren planetario (pregunta «Surco central» en los ajustes de impresión; solo cuenta con espina de pescado; la geometría lo corta también en la corona —un anillo entre dentro de las cabezas y la raíz— y en la cremallera —una losa que quita los dientes de un extremo al otro—) (E1).
 - [ ] Corrección de perfil automática en Interno y Cremallera; con menos de 9 dientes la punta sigue fina; el aviso de compatibilidad solo mira engranajes exteriores del mismo plano (E7, Fase 10).
 - [ ] Tornillo sin fin: rueda con garganta envolvente (contacto en línea, no en punto) y agujero en el tornillo (E4).
 - [ ] Cónicos: ejes a un ángulo distinto de 90° y diente con el perfil esférico exacto (hoy roza algo en los flancos) (E5).
 - [ ] Cremallera inclinada o con chaflán de punta; corona con aro no circular (brida, orejas); aviso de interferencia del engranaje interno también en la herramienta suelta (Fase 10).
-- [ ] Ruedas separadas para imprimir en el Par (10e); comprobar con una booleana el engrane con hélice (10e) y el tren planetario con hélice (A9).
+- [x] **Ruedas separadas para imprimir en el Par ✅:** pregunta «Colocación de las ruedas»: engranadas (como antes) o separadas, la rueda 2 al lado de la 1 a 5 mm de sus puntas (10e). **Pendiente:** comprobar con una booleana el engrane con hélice (10e) y el del tren planetario con hélice (A9); la separación es fija (5 mm).
 - [ ] Tren planetario: hoy sol, planetas y portasatélites giran juntos al mover el enlace; falta el movimiento real con la corona fija (los planetas orbitan) (A9).
 - [ ] Rendimiento del engranaje helicoidal: el loft de todas las aristas del perfil es ≈ 3/4 del tiempo; hacer un diente y repetirlo girado, o simplificar la vista previa mientras se teclea (engranaje).
 - [ ] Las flechas que faltan: holgura de los engranajes, presión y hélice del Par (flechas, U8).

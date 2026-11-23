@@ -2125,18 +2125,34 @@ Shape gear(std::string_view tagView, const sketch::Plane& plane, const GearSpec&
         if (width >= 0.5 * std::abs(spec.thickness)) {
             throw GeometryError("El surco central es demasiado ancho para el ancho del engranaje");
         }
-        // Una corona (de la altura del surco, a media altura) desde la raíz de los dientes hacia fuera.
         const double rp = spec.module * spec.teeth / 2.0;
-        const double outer = rp + (1.0 + spec.profileShift) * spec.module + 1.0;
-        const double root = rp - (1.25 - spec.profileShift) * spec.module;
         sketch::Plane mid = plane;
         const double sign = spec.thickness > 0.0 ? 1.0 : -1.0;
-        mid.origin = {plane.origin.x + plane.normal.x * (spec.thickness / 2.0 - sign * width / 2.0),
-                      plane.origin.y + plane.normal.y * (spec.thickness / 2.0 - sign * width / 2.0),
-                      plane.origin.z + plane.normal.z * (spec.thickness / 2.0 - sign * width / 2.0)};
-        const Shape disc = cylinder("surco", mid, 2.0 * outer, sign * width);
-        const Shape core = cylinder("nucleo", mid, 2.0 * root, sign * width);
-        solid = boolean(BooleanOp::Cut, solid, boolean(BooleanOp::Cut, disc, core));
+        const double along = spec.thickness / 2.0 - sign * width / 2.0;  // dónde empieza el surco, a lo largo del eje
+        mid.origin = {plane.origin.x + plane.normal.x * along, plane.origin.y + plane.normal.y * along,
+                      plane.origin.z + plane.normal.z * along};
+        if (spec.type == GearType::Rack) {
+            // Una losa a media altura que quita los dientes hasta la raíz: de un extremo al otro de la barra.
+            const double barLength = spec.length > kTiny ? spec.length : spec.teeth * std::numbers::pi * spec.module;
+            sketch::Plane slab = mid;
+            slab.origin = mid.toWorld({-1.0, -1.25 * spec.module});
+            const Shape groove = box("surco", slab, barLength + 2.0, 2.25 * spec.module + 1.0, sign * width, false, 0.0);
+            solid = boolean(BooleanOp::Cut, solid, groove);
+        } else if (spec.type == GearType::Internal) {
+            // Corona: un anillo desde dentro de las cabezas de los dientes hasta su raíz (sin tocar el aro).
+            const double inner = rp - spec.module - 1.0;
+            const double root = rp + 1.25 * spec.module;
+            const Shape disc = cylinder("surco", mid, 2.0 * root, sign * width);
+            const Shape core = cylinder("nucleo", mid, 2.0 * inner, sign * width);
+            solid = boolean(BooleanOp::Cut, solid, boolean(BooleanOp::Cut, disc, core));
+        } else {
+            // Una corona (de la altura del surco, a media altura) desde la raíz de los dientes hacia fuera.
+            const double outer = rp + (1.0 + spec.profileShift) * spec.module + 1.0;
+            const double root = rp - (1.25 - spec.profileShift) * spec.module;
+            const Shape disc = cylinder("surco", mid, 2.0 * outer, sign * width);
+            const Shape core = cylinder("nucleo", mid, 2.0 * root, sign * width);
+            solid = boolean(BooleanOp::Cut, solid, boolean(BooleanOp::Cut, disc, core));
+        }
     }
     if (spec.baseChamfer <= kTiny) {
         return solid;

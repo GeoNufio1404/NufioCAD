@@ -38,6 +38,15 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 ---
 
 
+## Pendientes por categoría, E (engranajes) — 23 nov. 2026
+
+- **Qué:** el **surco central** de la espina de pescado funciona también en la corona y en la cremallera, y los generadores del Par, la corona, la cremallera y el tren planetario lo ofrecen; el Par puede dejar las **ruedas separadas** para imprimirlas.
+- **Dónde:** `Modeling.cpp` (`gear`: surco por tipo), `Generators.cpp` (`tuningFields`, `addTuningParameters`, `applyTuning`, `placementField`, `GearPair`). Pruebas en `test_gear_tuning.cpp`; manual: `PAR.44` a `PAR.46`.
+- **Volver atrás:** rama `feature/pendientes-e-engranajes` sin fusionar: `git branch -D`; ya fusionada, `git revert` de la fusión. Los diseños anteriores (sin surco ni colocación) se rehacen igual.
+
+---
+
+
 ## Pendientes por categoría, R (roscas y agujeros) — 23 nov. 2026
 
 - **Qué:** la rosca tiene perfil **trapezoidal (Tr)** además del métrico/unificado, medidas **UNC** y **Tr** en la lista, y **chaflán de entrada** para tornillos; el cuadro del ángulo del cono del Agujero (avellanado) dibuja su arco en la vista.

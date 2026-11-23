@@ -1077,29 +1077,57 @@ std::vector<GeneratorField> tuningFields()
     chamfer.min = 0.0;
     chamfer.max = 1.0;
     chamfer.hint = "Chaflán en el borde de la cara de abajo contra la cama (pata de elefante); solo con dientes rectos; con algunas medidas y dientes falla: prueba otra cercana";
-    return {thin, chamfer};
+    GeneratorField groove;
+    groove.kind = GeneratorField::Kind::Length;
+    groove.key = "surco";
+    groove.label = "Surco central";
+    groove.value = 0.0;
+    groove.min = 0.0;
+    groove.max = 20.0;
+    groove.hint = "Con espina de pescado: un surco de este ancho en el medio, donde se juntan las dos mitades (0 = sin surco)";
+    return {thin, chamfer, groove};
+}
+
+// Cómo se colocan las dos ruedas del par: engranadas (a la distancia entre ejes) o separadas, una al lado de la otra,
+// para imprimirlas sin que se toquen.
+GeneratorField placementField()
+{
+    GeneratorField f;
+    f.kind = GeneratorField::Kind::Choice;
+    f.key = "colocacion";
+    f.label = "Colocación de las ruedas";
+    f.value = 0.0;
+    f.choices = {"Engranadas (a la distancia entre ejes)", "Separadas, para imprimir"};
+    f.hint = "Separadas: la rueda 2 queda al lado de la 1, a 5 mm de sus puntas, para imprimirlas sin que se toquen";
+    return f;
 }
 
 // Reparte las preguntas de un engranaje en dos secciones plegables (Fase 15, U8): las medidas y los ajustes de impresión.
 std::vector<GeneratorField> withGroups(std::vector<GeneratorField> fields)
 {
     for (GeneratorField& f : fields) {
-        const bool printing = f.key == "juego" || f.key == "adelgazar" || f.key == "chaflan_base";
+        const bool printing = f.key == "juego" || f.key == "adelgazar" || f.key == "chaflan_base" || f.key == "surco" || f.key == "colocacion";
         f.group = printing ? "Ajustes de impresión" : "Medidas del engranaje";
     }
     return fields;
 }
 
-void addTuningParameters(Recipe& recipe, const GeneratorValues& values, const std::string& suffix)
+// «groove»: el generador lleva la pregunta «Surco central» (solo cuenta con espina de pescado; los diseños anteriores no la traen).
+void addTuningParameters(Recipe& recipe, const GeneratorValues& values, const std::string& suffix, bool groove = true)
 {
     recipe.parameters.push_back({"adelgazar" + suffix, number(tuningValue(values, "adelgazar"))});
     recipe.parameters.push_back({"chaflan_base" + suffix, number(tuningValue(values, "chaflan_base"))});
+    if (groove) {
+        const bool herringbone = tuningValue(values, "espina") > 0.5;
+        recipe.parameters.push_back({"surco" + suffix, number(herringbone ? tuningValue(values, "surco") : 0.0)});
+    }
 }
 
 void applyTuning(GearFeature& gear, const std::string& suffix)
 {
     gear.expressions["backlash"] = "adelgazar" + suffix;
     gear.expressions["baseChamfer"] = "chaflan_base" + suffix;
+    gear.expressions["herringboneGroove"] = "surco" + suffix;
 }
 
 // --- Par de engranajes ---------------------------------------------------------------------
@@ -1145,7 +1173,8 @@ public:
                 make(K::Length, "agujero_2", "Agujero de la rueda 2", 5.0, 0.0, 100.0, "0 = macizo"),
                 make(K::Length, "juego", "Juego entre dientes", 0.15, 0.0, 2.0,
                      "Aire para que giren sin atascarse al imprimir (se suma a la distancia entre ejes)"),
-                tuningFields()[0], tuningFields()[1]});
+                placementField(),
+                tuningFields()[0], tuningFields()[1], tuningFields()[2]});
     }
 
     std::string summary(const GeneratorValues& values) const override
@@ -1228,7 +1257,10 @@ public:
         };
         recipe.features.push_back(wheel("Engranaje: rueda 1", z1, bore1, ""));
         auto second = wheel("Engranaje: rueda 2", z2, bore2, "-");
-        second->expressions["x"] = modulo + "*(" + z1 + " + " + z2 + ")/2 + " + juego;
+        // Separadas para imprimir: a la suma de los radios de las puntas (m·(z/2 + 1) cada una) más 5 mm de aire.
+        const bool apart = values.count("colocacion") != 0 && values.at("colocacion") > 0.5;
+        second->expressions["x"] = apart ? modulo + "*(" + z1 + " + " + z2 + ")/2 + 2*" + modulo + " + 5"
+                                         : modulo + "*(" + z1 + " + " + z2 + ")/2 + " + juego;
         second->expressions["rotation"] = giro;
         recipe.features.push_back(std::move(second));
         return recipe;
@@ -1295,7 +1327,7 @@ public:
                 gearField(K::Length, "agujero_pinon", "Agujero del piñón", 5.0, 0.0, 100.0, "0 = macizo"),
                 gearField(K::Length, "juego", "Juego entre dientes", 0.15, 0.0, 2.0,
                           "Aire para que giren sin atascarse al imprimir (acerca los ejes)"),
-                tuningFields()[0], tuningFields()[1]});
+                tuningFields()[0], tuningFields()[1], tuningFields()[2]});
     }
 
     std::string summary(const GeneratorValues& values) const override
@@ -1411,7 +1443,7 @@ public:
                           "Material por fuera de los huecos de los dientes"),
                 gearField(K::Length, "agujero_sol", "Agujero del sol", 5.0, 1.0, 100.0, "Por él pasa el eje central"),
                 gearField(K::Length, "agujero_planeta", "Agujero de cada planeta", 4.0, 1.0, 100.0, "Por él pasa su eje"),
-                thin, tuningFields()[1]});
+                thin, tuningFields()[1], tuningFields()[2]});
     }
 
     std::string summary(const GeneratorValues& values) const override
@@ -1639,7 +1671,7 @@ public:
                 gearField(K::Length, "agujero_rueda", "Agujero de la rueda", 5.0, 0.0, 100.0, "0 = macizo"),
                 gearField(K::Length, "juego", "Juego entre dientes", 0.15, 0.0, 2.0,
                           "Aire para que engranen sin atascarse al imprimir (aleja la barra de la rueda)"),
-                tuningFields()[0], tuningFields()[1]});
+                tuningFields()[0], tuningFields()[1], tuningFields()[2]});
     }
 
     // Lo que sale del modo de largo: cuántos dientes y cuánto mide la barra (los diseños hechos antes de que existiera
@@ -1849,7 +1881,7 @@ public:
         param(ancho, number(values.at("ancho_rueda")));
         param(bore, number(values.at("agujero_rueda")));
         param(juego, number(values.at("juego")));
-        addTuningParameters(recipe, values, suffix);
+        addTuningParameters(recipe, values, suffix, false);
         // Ángulo de avance del tornillo (grados) = ángulo de hélice de la rueda; con el sentido a izquierdas, negativo.
         param(avance, "atan(" + n + "*" + modulo + "/" + diam + ")");
         param(helice, "(1 - 2*" + mano + ")*" + avance);
@@ -1953,7 +1985,7 @@ public:
         param(cara, number(values.at("ancho_cara")));
         param(bore1, number(values.at("agujero_1")));
         param(bore2, number(values.at("agujero_2")));
-        addTuningParameters(recipe, values, suffix);
+        addTuningParameters(recipe, values, suffix, false);
         // Las ruedas se tocan en el origen. El piñón (plano XY, eje a x = su radio primitivo) tiene un diente apuntando a ese
         // punto (180°); la corona (plano YZ, eje a z = su radio primitivo) tiene un hueco apuntando a él (270°).
         const std::string step1 = "360/" + z1, step2 = "360/" + z2;
