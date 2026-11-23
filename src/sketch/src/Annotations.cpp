@@ -70,6 +70,30 @@ void addArrow(std::vector<Geometry>& lines, Vec2 tip, Vec2 dir, double size)
 }
 
 // Cota alineada entre a y b, desplazada hacia «side» (level: renglones más lejos).
+// Cuántos círculos o arcos anteriores tienen el mismo centro que «e»: cada cota va a otro ángulo (30° más que la del
+// anterior) para que los textos y las líneas de cota no se pisen.
+int concentricRank(const Sketch& sketch, const Entity& e, Vec2 center)
+{
+    int rank = 0;
+    for (const Entity& other : sketch.entities()) {
+        if (other.id == e.id) {
+            break;
+        }
+        Vec2 otherCenter;
+        if (const auto* circle = std::get_if<Circle>(&other.geometry)) {
+            otherCenter = circle->center;
+        } else if (const auto* arc = std::get_if<Arc>(&other.geometry)) {
+            otherCenter = arc->center;
+        } else {
+            continue;
+        }
+        if (std::hypot(otherCenter.x - center.x, otherCenter.y - center.y) < 1e-6) {
+            ++rank;
+        }
+    }
+    return rank;
+}
+
 Annotation alignedDimension(Vec2 a, Vec2 b, Vec2 side, double px, int level)
 {
     Annotation note;
@@ -335,19 +359,7 @@ std::optional<Annotation> dimensionAnnotation(const Sketch& sketch, const Constr
         if (const auto* circle = std::get_if<Circle>(&e->geometry)) {
             center = circle->center;
             radius = circle->radius;
-            // Varios círculos con el mismo centro: cada cota va a otro ángulo (30° más que la del anterior), para que
-            // los textos y las líneas de cota no se pisen.
-            int rank = 0;
-            for (const Entity& other : sketch.entities()) {
-                if (other.id == e->id) {
-                    break;
-                }
-                if (const auto* concentric = std::get_if<Circle>(&other.geometry);
-                    concentric != nullptr && std::hypot(concentric->center.x - center.x, concentric->center.y - center.y) < 1e-6) {
-                    ++rank;
-                }
-            }
-            angle += double(rank) * std::numbers::pi / 6.0;
+            angle += double(concentricRank(sketch, *e, center)) * std::numbers::pi / 6.0;
             angle += double(level) * std::numbers::pi / 6.0;
         } else if (const auto* arc = std::get_if<Arc>(&e->geometry)) {
             center = arc->center;
@@ -356,7 +368,9 @@ std::optional<Annotation> dimensionAnnotation(const Sketch& sketch, const Constr
             while (end <= arc->startAngle) {
                 end += 2.0 * std::numbers::pi;
             }
-            angle = 0.5 * (arc->startAngle + end) + double(level) * std::numbers::pi / 6.0;
+            // Los arcos con el mismo centro (las ranuras, los círculos partidos) también se reparten.
+            angle = 0.5 * (arc->startAngle + end) + double(concentricRank(sketch, *e, center)) * std::numbers::pi / 6.0
+                    + double(level) * std::numbers::pi / 6.0;
         } else {
             return std::nullopt;
         }

@@ -39,6 +39,7 @@ public:
         Ellipse, EllipseArc,
         SplineFit, SplineControl,
         Conic,
+        Point,
         // Modificar (Fase 2c)
         Trim, Extend, Break,
         Fillet, Chamfer,
@@ -95,7 +96,8 @@ public:
     // Acota la selección: pide el valor (propone el actual). Si la medida ya
     // está determinada por otras restricciones, la deja como cota de referencia.
     // Sin selección entra en el modo Cota (clic en lo que se quiere acotar). Devuelve true si creó una cota.
-    bool addDimension();
+    // Crea la cota de lo elegido; con «reference» no pregunta el valor: es una cota de referencia (solo muestra la medida).
+    bool addDimension(bool reference = false);
 
     // Deshacer/rehacer dentro del sketch.
     bool canUndo() const noexcept { return !undo_.empty(); }
@@ -148,8 +150,11 @@ private:
     // Pide un valor nuevo para la cota en un campo sobre el lienzo, junto al cursor; false si se canceló.
     bool askDimensionValue(sketch::Constraint& dimension);
     // Modo Cota: un clic en una cota existente la edita; en un círculo, arco o línea, la crea; dos clics para
-    // distancias y ángulos.
-    void dimensionClicked(sketch::Vec2 point);
+    // distancias y ángulos. Con «reference» (Mayús + clic) la cota es de referencia y no pregunta el valor.
+    void dimensionClicked(sketch::Vec2 point, bool reference = false);
+    // El clic que cerró el campo de valor sin aceptarlo, si cayó sobre la vista: se atiende después como un clic
+    // normal (la segunda línea de un ángulo no necesita un clic más).
+    std::optional<sketch::Vec2> pendingClick_;
     void editDimension(sketch::ConstraintId id);
     sketch::ConstraintId annotationAt(sketch::Vec2 point) const;
 

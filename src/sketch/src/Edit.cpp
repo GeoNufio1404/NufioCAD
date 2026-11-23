@@ -1,6 +1,7 @@
 #include <nuf/sketch/Edit.hpp>
 
 #include <nuf/sketch/Pick.hpp>
+#include <nuf/sketch/Solver.hpp>
 #include <nuf/sketch/Tools.hpp>
 
 #include "Curves2d.hpp"
@@ -86,6 +87,31 @@ double paramEnd(const Entity& e)
     return kTwoPi;
 }
 
+// Elipses, arcos de elipse y splines: no tienen intersección exacta con rectas y circunferencias, así que se cortan
+// sobre su polilínea (muy fina). El punto queda en la curva de verdad gracias a la restricción «punto sobre objeto».
+bool isPolylineCurve(const Entity& o)
+{
+    return !o.reference
+           && (std::holds_alternative<Ellipse>(o.geometry) || std::holds_alternative<EllipseArc>(o.geometry)
+               || std::holds_alternative<BSpline>(o.geometry));
+}
+
+std::vector<Vec2> polylineIntersections(const Curve& probe, const Entity& o)
+{
+    std::vector<Vec2> hits;
+    const std::vector<Vec2> points = polyline(o.geometry);
+    for (std::size_t i = 0; i + 1 < points.size(); ++i) {
+        Curve segment;
+        segment.isLine = true;
+        segment.a = points[i];
+        segment.b = points[i + 1];
+        for (const Vec2& p : intersections(probe, segment)) {
+            hits.push_back(p);
+        }
+    }
+    return hits;
+}
+
 // Un corte: dónde y qué lo produce (un punto apoyado o el cruce con otra curva).
 struct Cut {
     double param = 0.0;
@@ -117,6 +143,10 @@ std::vector<Cut> findCuts(const Sketch& sketch, const Entity& e)
         }
         if (isSimpleCurve(o)) {
             for (const Vec2& p : intersections(curveOf(e), curveOf(o))) {
+                add(paramOf(e, p), o.id, {});
+            }
+        } else if (isPolylineCurve(o)) {
+            for (const Vec2& p : polylineIntersections(curveOf(e), o)) {
                 add(paramOf(e, p), o.id, {});
             }
         }
@@ -523,6 +553,372 @@ bool trimEllipse(Sketch& sketch, EntityId id, Vec2 click)
     return true;
 }
 
+// --- Recorte y extensión de splines, y extensión de arcos de elipse -------------------------------------------------
+// Una spline se recorta o se alarga rehaciéndola con una spline que pasa por puntos de la parte que queda (como el desfase):
+// los cortes se buscan sobre su polilínea y el extremo nuevo queda unido a la curva que lo cortó.
+
+constexpr int kSplineSamples = 600;
+
+std::vector<Vec2> splineRing(const BSpline& s)
+{
+    std::vector<Vec2> ring;
+    ring.reserve(kSplineSamples + 1);
+    for (int i = 0; i <= kSplineSamples; ++i) {
+        ring.push_back(s.pointAt(double(i) / kSplineSamples));
+    }
+    return ring;
+}
+
+// Parámetro u (0 a 1) del punto de la polilínea (uniforme en u) más cercano a p.
+double ringParamOf(const std::vector<Vec2>& ring, Vec2 p)
+{
+    double best = 1e300;
+    double bestU = 0.0;
+    const std::size_t n = ring.size() - 1;
+    for (std::size_t i = 0; i < n; ++i) {
+        const Vec2 d = sub(ring[i + 1], ring[i]);
+        const double len2 = dot(d, d);
+        const double t = len2 > 0.0 ? std::clamp(dot(sub(p, ring[i]), d) / len2, 0.0, 1.0) : 0.0;
+        const double q = dist(p, add(ring[i], mul(t, d)));
+        if (q < best) {
+            best = q;
+            bestU = (double(i) + t) / double(n);
+        }
+    }
+    return bestU;
+}
+
+std::vector<Cut> splineCuts(const Sketch& sketch, const Entity& e, const std::vector<Vec2>& ring)
+{
+    const BSpline& s = std::get<BSpline>(e.geometry);
+    const std::size_t n = ring.size() - 1;
+    std::vector<Cut> cuts;
+    const auto addCut = [&](double u, EntityId cutter, Ref point) {
+        if (u > 1e-6 && u < 1.0 - 1e-6) {
+            cuts.push_back({u, cutter, point});
+        }
+    };
+    for (const Entity& o : sketch.entities()) {
+        if (o.id == e.id || o.reference) {
+            continue;
+        }
+        for (Part part : {Part::Whole, Part::Start, Part::End, Part::Center}) {
+            const auto p = sketch.point({o.id, part});
+            if (p && distanceToCurve(e, *p) < kOnCurve) {
+                addCut(ringParamOf(ring, *p), 0, {o.id, part});
+            }
+        }
+        if (std::holds_alternative<Point>(o.geometry)) {
+            continue;
+        }
+        const std::vector<Vec2> other = polyline(o.geometry);
+        if (other.size() < 2) {
+            continue;
+        }
+        for (std::size_t i = 0; i < n; ++i) {
+            for (std::size_t j = 0; j + 1 < other.size(); ++j) {
+                const auto u = segmentCross(ring[i], ring[i + 1], other[j], other[j + 1]);
+                if (!u) {
+                    continue;
+                }
+                double lo = (double(i) + std::max(0.0, *u - 0.5)) / double(n);
+                double hi = (double(i) + std::min(1.0, *u + 0.5)) / double(n);
+                for (int k = 0; k < 40; ++k) {
+                    const double m1 = lo + (hi - lo) / 3.0;
+                    const double m2 = hi - (hi - lo) / 3.0;
+                    if (distanceToPolyline(other, s.pointAt(m1)) < distanceToPolyline(other, s.pointAt(m2))) {
+                        hi = m2;
+                    } else {
+                        lo = m1;
+                    }
+                }
+                addCut(0.5 * (lo + hi), o.id, {});
+            }
+        }
+    }
+    std::ranges::sort(cuts, [](const Cut& a, const Cut& b) {
+        return a.param < b.param || (std::abs(a.param - b.param) <= 1e-6 && !a.point.empty() && b.point.empty());
+    });
+    std::vector<Cut> unique;
+    for (const Cut& c : cuts) {
+        if (unique.empty() || c.param - unique.back().param > 1e-6) {
+            unique.push_back(c);
+        }
+    }
+    return unique;
+}
+
+// La spline entre dos parámetros, rehecha por puntos.
+BSpline subSpline(const BSpline& s, double from, double to)
+{
+    const int count = std::clamp(int(std::ceil(48.0 * (to - from))) + 6, 8, 64);
+    std::vector<Vec2> points;
+    for (int i = 0; i <= count; ++i) {
+        points.push_back(s.pointAt(from + (to - from) * double(i) / count));
+    }
+    return interpolatingSpline(points);
+}
+
+// Al rehacer una spline cambian sus polos: lo que dependía de ellos o de la curva entera (igualdad, tangencia…) se quita.
+// Se conserva lo apoyado en ella («punto sobre objeto») y lo unido a sus extremos.
+void dropSplineStructure(Sketch& sketch, EntityId id)
+{
+    removeWhere(sketch, [&](const Constraint& c) {
+        for (const Ref* r : {&c.first, &c.second, &c.third}) {
+            if (r->entity == id && r->part == Part::Pole) {
+                return true;
+            }
+        }
+        const bool curveOnly =
+            c.type == ConstraintType::PointOnObject && c.second == Ref::of(id) && !(c.first == Ref::of(id));
+        const bool wholeUse = c.first == Ref::of(id) || c.second == Ref::of(id) || c.third == Ref::of(id);
+        return wholeUse && !curveOnly;
+    });
+}
+
+// Los puntos apoyados en la spline (por ejemplo, los de paso de una spline por puntos) y dónde caen.
+std::vector<std::pair<ConstraintId, double>> pointsOnSpline(const Sketch& sketch, EntityId id,
+                                                            const std::vector<Vec2>& ring)
+{
+    std::vector<std::pair<ConstraintId, double>> found;
+    for (const Constraint& c : sketch.constraints()) {
+        if (c.type == ConstraintType::PointOnObject && c.second == Ref::of(id) && !(c.first == Ref::of(id))) {
+            if (const auto p = sketch.point(c.first)) {
+                found.push_back({c.id, ringParamOf(ring, *p)});
+            }
+        }
+    }
+    return found;
+}
+
+bool trimSpline(Sketch& sketch, EntityId id, Vec2 click)
+{
+    const Entity* e = sketch.entity(id);
+    if (e == nullptr || e->reference || !std::holds_alternative<BSpline>(e->geometry)) {
+        return false;
+    }
+    const BSpline s = std::get<BSpline>(e->geometry);
+    const bool construction = e->construction;
+    const bool locked = e->locked;
+    const std::vector<Vec2> ring = splineRing(s);
+    const std::vector<Cut> cuts = splineCuts(sketch, *e, ring);
+    const double tc = ringParamOf(ring, click);
+    std::optional<Cut> before;
+    std::optional<Cut> next;
+    for (const Cut& c : cuts) {
+        if (c.param < tc) {
+            before = c;
+        } else if (!next) {
+            next = c;
+        }
+    }
+    if (!before && !next) {
+        sketch.removeEntity(id);
+        return true;
+    }
+    const auto onCurve = pointsOnSpline(sketch, id, ring);
+    dropSplineStructure(sketch, id);
+    const auto dropOnCurve = [&](auto&& outside) {
+        for (const auto& [constraint, u] : onCurve) {
+            if (outside(u) && sketch.constraint(constraint) != nullptr) {
+                sketch.removeConstraint(constraint);
+            }
+        }
+    };
+    if (before && next) {
+        // Se quita el tramo del medio: quedan los dos de los lados (el segundo es una spline nueva).
+        dropOnCurve([&](double u) { return u > before->param && u < next->param; });
+        sketch.entity(id)->geometry = subSpline(s, 0.0, before->param);
+        const EntityId second = sketch.addBSpline(subSpline(s, next->param, 1.0), construction);
+        sketch.entity(second)->locked = locked;
+        for (const Constraint& c : std::vector<Constraint>(sketch.constraints())) {
+            Constraint* k = sketch.constraint(c.id);
+            for (Ref* r : {&k->first, &k->second, &k->third}) {
+                if (r->entity == id && r->part == Part::End) {
+                    r->entity = second;  // el final de la spline de antes es el de la segunda
+                }
+            }
+        }
+        for (const auto& [constraint, u] : onCurve) {
+            if (u >= next->param) {
+                if (Constraint* k = sketch.constraint(constraint)) {
+                    k->second = Ref::of(second);
+                }
+            }
+        }
+        attachCut(sketch, Ref::end(id), *before);
+        attachCut(sketch, Ref::start(second), *next);
+        return true;
+    }
+    if (next) {
+        // Se quita el tramo del inicio.
+        dropOnCurve([&](double u) { return u < next->param; });
+        removeWhere(sketch, [&](const Constraint& c) { return refersTo(c, Ref::start(id)); });
+        sketch.entity(id)->geometry = subSpline(s, next->param, 1.0);
+        attachCut(sketch, Ref::start(id), *next);
+        return true;
+    }
+    dropOnCurve([&](double u) { return u > before->param; });
+    removeWhere(sketch, [&](const Constraint& c) { return refersTo(c, Ref::end(id)); });
+    sketch.entity(id)->geometry = subSpline(s, 0.0, before->param);
+    attachCut(sketch, Ref::end(id), *before);
+    return true;
+}
+
+// Prolongación natural de una spline por un extremo: el polinomio de su último tramo, que pasa por cuatro puntos de él
+// (du = cuánto se sale, en unidades del parámetro u).
+Vec2 splineExtrapolated(const BSpline& s, bool atEnd, double du)
+{
+    const std::vector<double> distinct = s.knots();
+    const double span = 1.0 / std::max(1.0, distinct.back());
+    const double h = span / 3.0;
+    double nodes[4];
+    Vec2 values[4];
+    for (int k = 0; k < 4; ++k) {
+        nodes[k] = double(k) * h;
+        values[k] = s.pointAt(atEnd ? 1.0 - nodes[k] : nodes[k]);
+    }
+    const double x = -du;
+    Vec2 result{0.0, 0.0};
+    for (int k = 0; k < 4; ++k) {
+        double weight = 1.0;
+        for (int j = 0; j < 4; ++j) {
+            if (j != k) {
+                weight *= (x - nodes[j]) / (nodes[k] - nodes[j]);
+            }
+        }
+        result = add(result, mul(weight, values[k]));
+    }
+    return result;
+}
+
+bool extendSpline(Sketch& sketch, EntityId id, Vec2 click)
+{
+    const Entity* e = sketch.entity(id);
+    if (e == nullptr || e->reference || !std::holds_alternative<BSpline>(e->geometry)) {
+        return false;
+    }
+    const BSpline s = std::get<BSpline>(e->geometry);
+    const bool atEnd = dist(click, s.poles.back()) <= dist(click, s.poles.front());
+    const Part which = atEnd ? Part::End : Part::Start;
+    const std::vector<Vec2> ring = splineRing(s);
+    double length = 0.0;
+    for (std::size_t i = 0; i + 1 < ring.size(); ++i) {
+        length += dist(ring[i], ring[i + 1]);
+    }
+    // Hasta cuánto se busca: lo que mide la propia spline, medido con la velocidad del extremo.
+    const double probe = 1e-3;
+    const Vec2 endPoint = atEnd ? ring.back() : ring.front();
+    const double speed = dist(splineExtrapolated(s, atEnd, probe), endPoint) / probe;
+    if (speed < 1e-9 || length < 1e-9) {
+        return false;
+    }
+    constexpr int kSteps = 300;
+    const double duMax = length / speed;
+    std::vector<Vec2> path;
+    for (int i = 0; i <= kSteps; ++i) {
+        path.push_back(i == 0 ? endPoint : splineExtrapolated(s, atEnd, duMax * double(i) / kSteps));
+    }
+    struct Hit {
+        std::size_t segment = 0;
+        double along = 0.0;
+        Vec2 point;
+        EntityId target = 0;
+    };
+    std::optional<Hit> best;
+    for (std::size_t i = 0; i + 1 < path.size() && !best; ++i) {
+        Curve step;
+        step.isLine = true;
+        step.a = path[i];
+        step.b = path[i + 1];
+        for (const Entity& o : sketch.entities()) {
+            if (o.id == id) {
+                continue;
+            }
+            std::vector<Vec2> points;
+            if (isSimpleCurve(o)) {
+                points = intersections(step, curveOf(o));
+            } else if (isPolylineCurve(o)) {
+                points = polylineIntersections(step, o);
+            }
+            for (const Vec2& p : points) {
+                if (dist(p, endPoint) <= kOnCurve) {
+                    continue;  // el propio extremo ya toca esa curva
+                }
+                const double along = dist(p, path[i]);
+                if (!best || along < best->along) {
+                    best = Hit{i, along, p, o.id};
+                }
+            }
+        }
+    }
+    if (!best) {
+        return false;
+    }
+    // Longitud de la prolongación y puntos repartidos en ella (con el de choque al final).
+    double extension = best->along;
+    for (std::size_t i = 0; i < best->segment; ++i) {
+        extension += dist(path[i], path[i + 1]);
+    }
+    const double stepLength = std::max(1e-12, dist(path[best->segment], path[best->segment + 1]));
+    const double duHit = duMax * (double(best->segment) + best->along / stepLength) / kSteps;
+    const int extra = std::max(2, int(std::ceil(extension / (length / 47.0))));
+    std::vector<Vec2> grown;
+    for (int i = 0; i < 48; ++i) {
+        grown.push_back(s.pointAt(double(i) / 47.0));
+    }
+    std::vector<Vec2> added;
+    for (int k = 1; k < extra; ++k) {
+        added.push_back(splineExtrapolated(s, atEnd, duHit * double(k) / extra));
+    }
+    added.push_back(best->point);
+    std::vector<Vec2> all;
+    if (atEnd) {
+        all = grown;
+        all.insert(all.end(), added.begin(), added.end());
+    } else {
+        all.assign(added.rbegin(), added.rend());
+        all.insert(all.end(), grown.begin(), grown.end());
+    }
+    dropSplineStructure(sketch, id);
+    removeWhere(sketch, [&](const Constraint& c) { return refersTo(c, Ref{id, which}); });
+    sketch.entity(id)->geometry = interpolatingSpline(all);
+    sketch.addConstraint(Constraint::pointOnObject(Ref{id, which}, best->target));
+    return true;
+}
+
+// Alarga un arco de elipse por el extremo más cercano al clic hasta la primera curva que encuentra.
+bool extendEllipseArc(Sketch& sketch, EntityId id, Vec2 click)
+{
+    const Entity* e = sketch.entity(id);
+    if (e == nullptr || e->reference || !std::holds_alternative<EllipseArc>(e->geometry)) {
+        return false;
+    }
+    const EllipseArc arc = std::get<EllipseArc>(e->geometry);
+    const Part which = dist(click, arc.startPoint()) < dist(click, arc.endPoint()) ? Part::Start : Part::End;
+    const double sweep = ccw(arc.startParam, arc.endParam);
+    const double room = kTwoPi - (sweep < 1e-9 ? kTwoPi : sweep);
+    std::optional<std::pair<double, Cut>> best;
+    for (const Cut& c : ellipseCuts(sketch, *e)) {
+        const double delta = which == Part::End ? ccw(arc.endParam, c.param) : ccw(c.param, arc.startParam);
+        if (delta > 1e-6 && delta < room - 1e-6 && (!best || delta < best->first)) {
+            best = {delta, c};
+        }
+    }
+    if (!best) {
+        return false;
+    }
+    removeWhere(sketch, [&](const Constraint& c) { return refersTo(c, Ref{id, which}); });
+    auto& edited = std::get<EllipseArc>(sketch.entity(id)->geometry);
+    if (which == Part::End) {
+        edited.endParam = arc.endParam + best->first;
+    } else {
+        edited.startParam = arc.startParam - best->first;
+    }
+    attachCut(sketch, Ref{id, which}, best->second);
+    return true;
+}
+
 } // namespace
 
 bool trim(Sketch& sketch, EntityId id, Vec2 click)
@@ -530,6 +926,9 @@ bool trim(Sketch& sketch, EntityId id, Vec2 click)
     const Entity* e = sketch.entity(id);
     if (e != nullptr && ellipseOf(*e) != nullptr) {
         return trimEllipse(sketch, id, click);
+    }
+    if (e != nullptr && std::holds_alternative<BSpline>(e->geometry)) {
+        return trimSpline(sketch, id, click);
     }
     if (!e || !isSplittable(*e)) {
         return false;
@@ -648,12 +1047,25 @@ bool extend(Sketch& sketch, EntityId id, Vec2 click)
     if (!e || e->reference) {
         return false;
     }
-    // Curvas contra las que se puede chocar (también los ejes).
+    if (std::holds_alternative<BSpline>(e->geometry)) {
+        return extendSpline(sketch, id, click);
+    }
+    if (std::holds_alternative<EllipseArc>(e->geometry)) {
+        return extendEllipseArc(sketch, id, click);
+    }
+    // Curvas contra las que se puede chocar (también los ejes, las elipses y las splines).
     const auto targets = [&](const Curve& probe) {
         std::vector<std::pair<Vec2, EntityId>> hits;
         for (const Entity& o : sketch.entities()) {
-            if (o.id != id && isSimpleCurve(o)) {
+            if (o.id == id) {
+                continue;
+            }
+            if (isSimpleCurve(o)) {
                 for (const Vec2& p : intersections(probe, curveOf(o))) {
+                    hits.push_back({p, o.id});
+                }
+            } else if (isPolylineCurve(o)) {
+                for (const Vec2& p : polylineIntersections(probe, o)) {
                     hits.push_back({p, o.id});
                 }
             }
@@ -876,6 +1288,57 @@ std::vector<EntityId> chainOf(const Sketch& sketch, EntityId id)
         }
     }
     return {chain.begin(), chain.end()};
+}
+
+std::vector<Constraint> constraintsOn(const Sketch& sketch, const std::vector<EntityId>& entities)
+{
+    const std::set<EntityId> wanted(entities.begin(), entities.end());
+    std::vector<Constraint> found;
+    for (const Constraint& c : sketch.constraints()) {
+        if (wanted.contains(c.first.entity) || wanted.contains(c.second.entity) || wanted.contains(c.third.entity)) {
+            found.push_back(c);
+        }
+    }
+    return found;
+}
+
+std::size_t restoreConstraints(Sketch& sketch, const std::vector<Constraint>& saved,
+                               const std::map<EntityId, EntityId>& remap)
+{
+    const std::unique_ptr<ISolver> solver = makePlaneGcsSolver();
+    std::size_t kept = 0;
+    for (Constraint c : saved) {
+        bool usable = true;
+        bool allFixed = true;  // solo fijas o bloqueadas: el solver no las comprueba, así que no se sabe si caben
+        for (Ref* r : {&c.first, &c.second, &c.third}) {
+            if (r->empty()) {
+                continue;
+            }
+            if (const auto it = remap.find(r->entity); it != remap.end()) {
+                r->entity = it->second;
+            }
+            const Entity* target = sketch.entity(r->entity);
+            if (target == nullptr) {
+                usable = false;  // lo que tocaba ya no existe y no tiene pareja
+            } else if (!target->reference && !target->locked) {
+                allFixed = false;
+            }
+        }
+        if (!usable || allFixed || !sketch.canAdd(c)) {
+            continue;
+        }
+        const ConstraintId id = sketch.addConstraint(c);
+        const SolveResult result = solver->solve(sketch);
+        const bool rejected = result.status != SolveStatus::Solved
+                              || std::ranges::find(result.conflicting, id) != result.conflicting.end()
+                              || std::ranges::find(result.redundant, id) != result.redundant.end();
+        if (rejected) {
+            sketch.removeConstraint(id);
+        } else {
+            ++kept;
+        }
+    }
+    return kept;
 }
 
 std::vector<EntityId> offset(Sketch& sketch, const std::vector<EntityId>& chain, double distance)

@@ -12,6 +12,7 @@
 #include <nuf/sketch/Svg.hpp>
 #include <nuf/sketch/Edit.hpp>
 
+#include <QCoreApplication>
 #include <QCursor>
 #include <QFileDialog>
 #include <QGuiApplication>
@@ -35,6 +36,8 @@
 #include <fstream>
 
 #include <algorithm>
+#include <map>
+#include <utility>
 #include <cmath>
 #include <numbers>
 
@@ -46,11 +49,13 @@ namespace {
 // clic fuera de él) termina la espera.
 class InlineEditorKeys final : public QObject {
 public:
-    InlineEditorKeys(QWidget* popup, QEventLoop* loop, bool* accepted)
+    // «outside», si se da, guarda dónde se hizo un clic fuera del recuadro (el filtro va en toda la aplicación).
+    InlineEditorKeys(QWidget* popup, QEventLoop* loop, bool* accepted, std::optional<QPoint>* outside = nullptr)
         : QObject(popup)
         , popup_(popup)
         , loop_(loop)
         , accepted_(accepted)
+        , outside_(outside)
     {
     }
 
@@ -69,6 +74,11 @@ public:
             }
         } else if (event->type() == QEvent::Hide && watched == popup_) {
             loop_->quit();
+        } else if (event->type() == QEvent::MouseButtonPress && outside_ != nullptr) {
+            const QPoint global = static_cast<QMouseEvent*>(event)->globalPosition().toPoint();
+            if (!popup_->frameGeometry().contains(global)) {
+                *outside_ = global;
+            }
         }
         return false;
     }
@@ -77,6 +87,7 @@ private:
     QWidget* popup_;
     QEventLoop* loop_;
     bool* accepted_;
+    std::optional<QPoint>* outside_;
 };
 
 QString dimensionCaption(sketch::ConstraintType type)
@@ -204,6 +215,7 @@ void SketchSession::setTool(Tool tool)
     case Tool::SplineFit: tool_ = sketch::makeSplineTool(sketch::SplineMode::FitPoints); break;
     case Tool::SplineControl: tool_ = sketch::makeSplineTool(sketch::SplineMode::ControlPoints); break;
     case Tool::Conic: tool_ = sketch::makeConicTool(); break;
+    case Tool::Point: tool_ = sketch::makePointTool(); break;
     case Tool::Trim: tool_ = sketch::makeCurveEditTool(sketch::CurveEdit::Trim); break;
     case Tool::Extend: tool_ = sketch::makeCurveEditTool(sketch::CurveEdit::Extend); break;
     case Tool::Break: tool_ = sketch::makeCurveEditTool(sketch::CurveEdit::Break); break;
@@ -250,7 +262,7 @@ void SketchSession::setTool(Tool tool)
         emit hintChanged(QStringLiteral("Clic donde va la esquina inferior izquierda de la imagen"));
     } else if (tool == Tool::Dimension) {
         emit hintChanged(QStringLiteral("Cota: clic en un círculo, arco o línea y escribe el valor · dos clics para una distancia o un ángulo · "
-                                        "clic en una cota para editarla · Esc para terminar"));
+                                        "Mayús + clic: cota de referencia · clic en una cota para editarla · Esc para terminar"));
     } else {
         emit hintChanged(tool_ ? QString::fromStdString(tool_->hint()) : QString());
     }
@@ -432,7 +444,7 @@ void SketchSession::clicked(double x, double y, Qt::KeyboardModifiers modifiers)
         return;
     }
     if (toolKind_ == Tool::Dimension) {
-        dimensionClicked({x, y});
+        dimensionClicked({x, y}, (modifiers & Qt::ShiftModifier) != 0);
         return;
     }
     if (!tool_) {
@@ -609,14 +621,22 @@ void SketchSession::placeText(sketch::Vec2 at, sketch::EntityId editing)
     // Las letras quedan como curvas unidas y fijas (se mueven juntas con la
     // herramienta Mover; se pueden extruir o grabar).
     remember(sketch_);
-    // Al editar, las letras de antes se quitan (con lo que estuviera ligado a ellas) y las nuevas ocupan su sitio.
+    // Al editar, las letras de antes se quitan y las nuevas ocupan su sitio. Si el texto y la fuente siguen siendo los
+    // mismos (solo cambió la altura), las letras salen en el mismo orden y lo que estuviera ligado a ellas (cotas,
+    // coincidencias…) se vuelve a ligar a las nuevas; si no, no hay manera de saber qué letra es cuál y se pierde.
+    std::vector<sketch::EntityId> old;
+    std::vector<sketch::Constraint> bound;
+    bool sameLetters = false;
     if (editing != 0) {
-        std::vector<sketch::EntityId> old;
+        const sketch::Entity* owner = sketch_.entity(editing);
+        sameLetters = owner != nullptr && owner->text && owner->text->text == textEdit->text().toStdString()
+                      && owner->text->family == textFamily_.toStdString();
         for (const sketch::Entity& e : sketch_.entities()) {
             if (e.textOwner == editing) {
                 old.push_back(e.id);
             }
         }
+        bound = sketch::constraintsOn(sketch_, old);
         for (const sketch::EntityId id : old) {
             sketch_.removeEntity(id);
         }
@@ -631,7 +651,25 @@ void SketchSession::placeText(sketch::Vec2 at, sketch::EntityId editing)
         sketch_.entity(created.front())->text = sketch::TextInfo{textEdit->text().toStdString(), textFamily_.toStdString(),
                                                                  heightBox->value(), at};
     }
+    // Se vuelven a poner las que el solver admita (una cota entre dos letras que ya no mide lo mismo no cabe).
+    QString lostNote;
+    if (!bound.empty()) {
+        std::map<sketch::EntityId, sketch::EntityId> remap;
+        if (sameLetters && created.size() == old.size()) {
+            for (std::size_t i = 0; i < old.size(); ++i) {
+                remap[old[i]] = created[i];
+            }
+        }
+        const std::size_t kept = sketch::restoreConstraints(sketch_, bound, remap);
+        if (kept < bound.size()) {
+            lostNote = QStringLiteral(" · se perdieron %1 restricciones o cotas ligadas a las letras de antes")
+                           .arg(bound.size() - kept);
+        }
+    }
     solveAndShow();
+    if (!lostNote.isEmpty()) {
+        emit message(QStringLiteral("Texto editado") + lostNote);
+    }
 }
 
 void SketchSession::placeImage(sketch::Vec2 at)
@@ -1059,7 +1097,12 @@ bool SketchSession::askDimensionValue(sketch::Constraint& dimension)
 
     QEventLoop loop;
     bool accepted = false;
-    auto* keys = new InlineEditorKeys(&popup, &loop, &accepted);
+    pendingClick_.reset();
+    std::optional<QPoint> outside;
+    auto* keys = new InlineEditorKeys(&popup, &loop, &accepted, &outside);
+    // El clic que cierra el recuadro lo atiende la sesión (no se reenvía solo a la vista).
+    popup.setAttribute(Qt::WA_NoMouseReplay);
+    qApp->installEventFilter(keys);
     popup.installEventFilter(keys);
     box->installEventFilter(keys);
     if (QLineEdit* edit = box->findChild<QLineEdit*>()) {
@@ -1077,7 +1120,13 @@ bool SketchSession::askDimensionValue(sketch::Constraint& dimension)
     box->setFocus();
     box->selectAll();
     loop.exec();
+    qApp->removeEventFilter(keys);
     if (!accepted) {
+        double x = 0.0;
+        double y = 0.0;
+        if (outside && viewport_.sketchPointAtGlobal(*outside, x, y)) {
+            pendingClick_ = sketch::Vec2{x, y};
+        }
         return false;
     }
     box->interpretText();
@@ -1089,7 +1138,7 @@ bool SketchSession::askDimensionValue(sketch::Constraint& dimension)
     return true;
 }
 
-bool SketchSession::addDimension()
+bool SketchSession::addDimension(bool reference)
 {
     if (selection_.empty() && toolKind_ != Tool::Dimension) {
         // Sin nada elegido: se entra en el modo Cota y se hace clic en lo que se quiere acotar.
@@ -1102,7 +1151,11 @@ bool SketchSession::addDimension()
                                     "un punto y una línea, o dos líneas"));
         return false;
     }
-    if (!askDimensionValue(*dimension)) {
+    if (reference) {
+        // Mayús + clic: solo muestra la medida, no la fija.
+        dimension->driving = false;
+        dimension->expression.clear();
+    } else if (!askDimensionValue(*dimension)) {
         return false;
     }
     sketch::Sketch before = sketch_;
@@ -1123,8 +1176,9 @@ bool SketchSession::addDimension()
     return true;
 }
 
-void SketchSession::dimensionClicked(sketch::Vec2 point)
+void SketchSession::dimensionClicked(sketch::Vec2 point, bool reference)
 {
+    pendingClick_.reset();
     // Un clic sobre una cota existente: se edita su valor.
     if (const sketch::ConstraintId id = annotationAt(point)) {
         const sketch::Constraint* c = sketch_.constraint(id);
@@ -1164,7 +1218,7 @@ void SketchSession::dimensionClicked(sketch::Vec2 point)
         }
     }
     const bool single = selection_.size() == 1;
-    const bool created = addDimension();
+    const bool created = addDimension(reference);
     if (!created && single && selection_.size() == 1 && sketch_.entity(selection_[0].entity) != nullptr &&
         !std::holds_alternative<sketch::Line>(sketch_.entity(selection_[0].entity)->geometry)) {
         // Se canceló en un círculo, arco o elipse: no hay con qué emparejarlo, se empieza de nuevo. (Una línea
@@ -1172,6 +1226,11 @@ void SketchSession::dimensionClicked(sketch::Vec2 point)
         selection_.clear();
         showSketch();
         emit selectionChanged();
+    }
+    // El campo de valor se cerró con un clic en otro sitio de la vista: ese clic no se pierde. Con una línea elegida y
+    // un clic en otra, sale el ángulo o la distancia entre las dos sin tener que repetirlo.
+    if (const std::optional<sketch::Vec2> next = std::exchange(pendingClick_, std::nullopt)) {
+        dimensionClicked(*next);
     }
 }
 

@@ -13,6 +13,7 @@
 #include <cmath>
 #include <filesystem>
 #include <numbers>
+#include <optional>
 
 using namespace nuf;
 using namespace nuf::document;
@@ -50,25 +51,31 @@ FeatureId addCylinder(Document& doc, double x, double y, double z, double diamet
 // La cara plana de un cuerpo cuya normal mira hacia «z» (+1 arriba, −1 abajo).
 geometry::ElementRef flatFace(const geometry::Shape& shape, double z)
 {
-    for (int i = 0; i < shape.faceCount(); ++i) {
+    std::optional<geometry::ElementRef> found;
+    for (int i = 0; i < shape.faceCount() && !found; ++i) {
         if (const auto plane = shape.facePlane(i); plane && plane->normal.z * z > 0.9) {
-            return shape.faceRef(i);
+            found = shape.faceRef(i);
         }
     }
-    FAIL("no hay cara plana");
-    return {};
+    if (!found) {
+        FAIL("no hay cara plana");
+    }
+    return *found;
 }
 
 // La primera cara cilíndrica (la de eje).
 geometry::ElementRef roundFace(const geometry::Shape& shape)
 {
-    for (int i = 0; i < shape.faceCount(); ++i) {
+    std::optional<geometry::ElementRef> found;
+    for (int i = 0; i < shape.faceCount() && !found; ++i) {
         if (const auto frame = shape.faceFrame(i); frame && frame->kind == geometry::Frame::Kind::Axis) {
-            return shape.faceRef(i);
+            found = shape.faceRef(i);
         }
     }
-    FAIL("no hay cara cilíndrica");
-    return {};
+    if (!found) {
+        FAIL("no hay cara cilíndrica");
+    }
+    return *found;
 }
 
 const Body& body(const Document& doc, std::size_t index)
@@ -354,13 +361,16 @@ TEST_CASE("Duplicar copia varios cuerpos de una vez, con nombres y componente nu
     REQUIRE(doc.result().bodies.size() == 6);
     REQUIRE(duplicate.newKeys().size() == 3);
     const auto find = [&](const std::string& key) -> const Body& {
+        const Body* found = nullptr;
         for (const Body& x : doc.result().bodies) {
-            if (x.key == key) {
-                return x;
+            if (x.key == key && found == nullptr) {
+                found = &x;
             }
         }
-        FAIL("falta el cuerpo");
-        return doc.result().bodies.front();
+        if (found == nullptr) {
+            FAIL("falta el cuerpo");
+        }
+        return *found;
     };
     // Cada copia, desplazada 100 en Y, con el siguiente número en su nombre.
     CHECK_THAT(find(duplicate.newKeys()[0]).shape.bounds().min.y, WithinAbs(100.0, 1e-6));

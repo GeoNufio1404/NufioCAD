@@ -299,3 +299,20 @@ TEST_CASE("Cotas: el texto de una cota no cae sobre la línea de cota de otra", 
         }
     }
 }
+
+TEST_CASE("Cotas: arcos con el mismo centro (y círculos entre ellos) no se pisan", "[sketch][annotations]")
+{
+    Sketch s;
+    // Cuatro arcos concéntricos que cubren el mismo trozo de circunferencia, y un círculo con el mismo centro.
+    for (int i = 0; i < 4; ++i) {
+        const EntityId a = s.addArc({0.0, 0.0}, 10.0 + 0.4 * i, 0.2, 1.4);
+        s.addConstraint(Constraint::radius(a, 10.0 + 0.4 * i));
+    }
+    const EntityId c = s.addCircle({0.0, 0.0}, 14.0);
+    s.addConstraint(Constraint::diameter(c, 28.0));
+    for (const double px : {0.05, 0.2}) {
+        const auto notes = layoutAnnotations(s, px);
+        REQUIRE(notes.size() == 5);
+        REQUIRE(overlappingPairs(notes, px) == 0);
+    }
+}

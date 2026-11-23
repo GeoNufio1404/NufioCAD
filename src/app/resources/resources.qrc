@@ -33,6 +33,7 @@
         <file alias="ui/circle-tangent2.svg">icons/ui/circle-tangent2.svg</file>
         <file alias="ui/circle-tangent3.svg">icons/ui/circle-tangent3.svg</file>
         <file alias="ui/conic.svg">icons/ui/conic.svg</file>
+        <file alias="ui/point.svg">icons/ui/point.svg</file>
         <file alias="ui/construction.svg">icons/ui/construction.svg</file>
         <file alias="ui/copy.svg">icons/ui/copy.svg</file>
         <file alias="ui/create-sketch.svg">icons/ui/create-sketch.svg</file>
