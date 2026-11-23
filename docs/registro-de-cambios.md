@@ -11,6 +11,15 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 ---
 
 
+## Pendientes por categoría, P (parámetros y unidades) — 23 nov. 2026
+
+- **Qué:** la cota ligada lleva una «ƒ» y avisa si pierde su expresión; los nombres de parámetros se pueden intercambiar (a↔b); el valor de un parámetro da su longitud en la unidad elegida en el tooltip; las ayudas de los generadores y los mensajes de la geometría pasan los «mm» a la unidad elegida; el volumen de Interferencias sigue la unidad; el cuadro rápido de valor admite expresiones que empiecen por número. Antes, y ya en `develop`: el CI solo se ejecuta a mano (`workflow_dispatch`).
+- **Dónde:** `Annotations.cpp` (`formatDimension`), `SketchSession.cpp` (`editDimension`), `ParametersDialog.cpp` (`followRename`), `Units.cpp` y `Units.hpp` (`localize`, `formatVolume`), `FeatureTools.cpp`, `GeneratorTool.cpp`, `ModelPanels.cpp`, `MainWindowView.cpp`, `MainWindowFiles.cpp`, `InterferenceDialog.cpp`, `ValueInput` y `MainWindow.cpp` (`applyToolValue`). Prueba en `test_annotations_overlap.cpp`; manual: `REF.25` a `REF.32`.
+- **Volver atrás:** rama `feature/pendientes-p-parametros` sin fusionar: `git branch -D`; ya fusionada, `git revert` de la fusión. No cambia el formato de los archivos.
+
+---
+
+
 ## Fase 15, pendientes menores — 20 nov. 2026
 
 - **Qué:** secciones plegables en Lightbox, Caja con tapa y Letrero (`grouped` en `Generators.cpp`); el panel de comandos flotantes recuerda su posición y tamaño (`MainWindow.cpp`, ajuste `view/floatingCommandsGeometry`); el desfase del sketch admite una elipse, un arco de elipse o una spline sola (`offset` en `Edit.cpp`, con prueba en `test_sketch_edit.cpp`).
