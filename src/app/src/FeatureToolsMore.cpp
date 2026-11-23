@@ -1069,6 +1069,10 @@ void JointTool::afterPreview(const document::ModelState& state)
             }
         } else if (const auto hit = state.findFace(pick.ref)) {
             faces.emplace_back(state.bodies[hit->body].shape, hit->face);
+            // Y su contorno: el relleno translúcido no se ve cuando la cara es la del propio cuerpo; los bordes sí.
+            for (const int edge : state.bodies[hit->body].shape.faceEdges(hit->face)) {
+                edges.emplace_back(state.bodies[hit->body].shape, edge);
+            }
         }
     }
     viewport_.showToolPicks(faces, edges);

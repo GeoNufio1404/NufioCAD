@@ -476,8 +476,6 @@ void Viewport::Impl::showToolPicks(const std::vector<std::pair<geometry::Shape, 
         toolFaces->SetTransparency(0.45);
         toolFaces->Attributes()->SetFaceBoundaryDraw(false);
         context->Display(toolFaces, AIS_Shaded, -1, false);
-        // Las caras elegidas son las del propio cuerpo (en el mismo plano): en la capa de arriba se ven sobre él.
-        context->SetZLayer(toolFaces, Graphic3d_ZLayerId_Top);
     }
 }
 

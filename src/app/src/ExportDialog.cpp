@@ -18,6 +18,7 @@
 #include <QFormLayout>
 #include <QLabel>
 #include <QListWidget>
+#include <QUrl>
 #include <QPushButton>
 #include <QVBoxLayout>
 
@@ -172,6 +173,21 @@ ExportDialog::ExportDialog(const std::vector<document::Body>& bodies, const std:
     review_ = new QLabel(this);
     review_->setWordWrap(true);
     review_->setTextFormat(Qt::RichText);
+    // Los avisos que saben dónde están se pueden pulsar para verlos en la vista.
+    review_->setTextInteractionFlags(Qt::LinksAccessibleByMouse);
+    review_->setOpenExternalLinks(false);
+    connect(review_, &QLabel::linkActivated, this, [this](const QString& link) {
+        // «caras:<cuerpo codificado>|1,2»
+        const QStringList parts = link.mid(QStringLiteral("caras:").size()).split(QLatin1Char('|'));
+        if (parts.size() != 2) {
+            return;
+        }
+        std::vector<int> faces;
+        for (const QString& n : parts[1].split(QLatin1Char(','), Qt::SkipEmptyParts)) {
+            faces.push_back(n.toInt());
+        }
+        emit facesRequested(QUrl::fromPercentEncoding(parts[0].toUtf8()), faces);
+    });
     reviewTimer_ = new QTimer(this);
     reviewTimer_->setSingleShot(true);
     reviewTimer_->setInterval(250);
@@ -380,8 +396,18 @@ void ExportDialog::showReview(const std::vector<geometry::PrintIssue>& issues, c
         const QString icon = issue.level == geometry::PrintIssue::Level::Error ? QStringLiteral("⛔")
                              : issue.level == geometry::PrintIssue::Level::Warning ? QStringLiteral("⚠")
                                                                                    : QStringLiteral("ℹ");
-        lines << QStringLiteral("<span style='color:%1'>%2 %3</span>")
-                     .arg(color, icon, QString::fromStdString(issue.text).toHtmlEscaped());
+        QString line = QStringLiteral("<span style='color:%1'>%2 %3</span>")
+                           .arg(color, icon, QString::fromStdString(issue.text).toHtmlEscaped());
+        if (!issue.faces.empty()) {
+            QStringList numbers;
+            for (const int face : issue.faces) {
+                numbers << QString::number(face);
+            }
+            line += QStringLiteral(" <a href=\"caras:%1|%2\" style=\"color:%3\">ver en la vista</a>")
+                        .arg(QString::fromUtf8(QUrl::toPercentEncoding(QString::fromStdString(issue.body))), numbers.join(QLatin1Char(',')),
+                             toneColor(Tone::Muted));
+        }
+        lines << line;
     }
     review_->setText(lines.join(QStringLiteral("<br>")));
 }

@@ -823,6 +823,8 @@ Código: **INS**.
 | INS.9 | Cambiar de plano XY / XZ / YZ | El corte vuelve al centro de la pieza en ese eje |
 | INS.10 | «Ver el otro lado» | Se ve la mitad contraria |
 | INS.11 | Esc, o iniciar un sketch | La pieza vuelve entera; el modelo no cambió |
+| INS.12 | Una lámina fina (por ejemplo, una caja de 20 × 10 × 0,3) → Archivo › **Imprimir…** (o Exportar) y mira el aviso de la pared | El aviso «Pared de 0,3 mm…» lleva el enlace **«ver en la vista»**; al pulsarlo, se dibuja en azul el contorno de las dos caras de la pared sobre el modelo (mueve el diálogo si lo tapa). Al cerrar el diálogo se quita |
+| INS.13 | Sólido › **Medir** sobre una cara circular o dos caras (con el idioma del sistema en español) | Los números del panel salen con **coma** decimal («12,50 mm²») y Ctrl+C copia lo mismo |
 
 ---
 

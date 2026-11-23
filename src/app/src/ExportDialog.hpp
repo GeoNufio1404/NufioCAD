@@ -51,6 +51,10 @@ public:
     // Extensión sin punto: «stl», «obj» o «step».
     static QString extension(Format format);
 
+signals:
+    // Se hizo clic en un aviso que sabe dónde está: el cuerpo (su nombre) y las caras del problema.
+    void facesRequested(const QString& body, const std::vector<int>& faces);
+
 private:
     void updateSummary();
     // Cuenta los triángulos de los cuerpos marcados (en segundo plano; lo ya contado no se repite).
@@ -59,6 +63,7 @@ private:
     // Revisión para imprimir de los cuerpos marcados (solo con mallas), en segundo plano.
     void runReview();
     void showReview(const std::vector<geometry::PrintIssue>& issues, const std::string& failure);
+
     void savePrinterSettings() const;
 
     const std::vector<document::Body>& bodies_;

@@ -287,11 +287,12 @@ Rama `feature/pendientes-f-archivos` (23 nov. 2026, sin fusionar hasta la prueba
 - [ ] Guardar (Ctrl+S) sigue siendo síncrono: hacerlo en segundo plano encadenando cerrar y abrir; la espera de `replaceFile` si OneDrive bloquea (hasta 2,25 s) (A7 de la Fase 13, 4b).
 
 ### I — Impresión e inspección
-- [ ] Revisión para imprimir: paredes finas también entre cilindros y superficies curvas (y menos avisos de más en esquinas); señalar el problema en la vista 3D; orientación de impresión y detalles muy pequeños; con más de 1500 caras no revisa paredes; los solapes con una booleana pueden tardar (9a).
+Rama `feature/pendientes-i-impresion` (23 nov. 2026, sin fusionar hasta la prueba manual **INS.12 e INS.13** de la [guía](guia-de-pruebas.md)).
+- [~] **Revisión para imprimir: señalar el problema 🔶:** el aviso de una **pared fina** ahora sabe qué cuerpo y qué caras la forman (`PrintIssue::body` y `faces`) y lleva un enlace «ver en la vista» que dibuja en azul el contorno de esas caras (con el diálogo de Exportar o de Imprimir abierto). **Pendiente:** señalar también los voladizos, los solapes y las mallas abiertas; paredes finas entre cilindros y superficies curvas (y menos avisos de más en esquinas); orientación de impresión y detalles muy pequeños; con más de 1500 caras no revisa paredes; los solapes con una booleana pueden tardar (9a). **Descubierto de paso:** el relleno translúcido de caras (`Viewport::showToolFaces`) **no se ve** cuando la cara es la del propio cuerpo (una captura de una caja con su cara de arriba resaltada no muestra nada azul, ni con desplazamiento de polígono ni en la capa de arriba; los bordes sí); por eso los resaltados nuevos usan el contorno.
 - [ ] Soportes (hoy solo avisa de los voladizos) (O5).
 - [ ] Reparar la malla al exportar (hoy solo avisa) (G4).
 - [ ] Mandar el trabajo al laminador con perfil o filamento (hoy solo abre el archivo) (9b).
-- [ ] Medir: vértices y puntos libres; con más de dos elementos usar el orden de clic; coma decimal según el idioma (9c).
+- [~] **Medir: coma decimal ✅:** los números del panel de Medir (y lo que copia Ctrl+C) usan el separador decimal del idioma (coma en español). **Pendiente:** vértices y puntos libres (el kernel nombra caras y aristas, no vértices); con más de dos elementos se miden los dos últimos de la lista, no por orden de clic (9c).
 - [ ] Sección: más de un corte a la vez y guardarla en el archivo (9d).
 
 ### U — Interfaz y usabilidad

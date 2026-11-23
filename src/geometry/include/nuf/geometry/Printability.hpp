@@ -29,6 +29,10 @@ struct PrintIssue {
     };
     Level level = Level::Warning;
     std::string text;
+    // Dónde está el problema, si se sabe: el cuerpo (su nombre) y los índices de sus caras (en las paredes finas, las dos
+    // caras que la forman). La interfaz las resalta en la vista.
+    std::string body;
+    std::vector<int> faces;
 };
 
 // «bodies»: nombre y forma de cada cuerpo que se va a exportar.
