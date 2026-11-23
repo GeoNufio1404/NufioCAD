@@ -382,3 +382,104 @@ TEST_CASE("El surco central de la espina de pescado quita material solo entre la
     spec.herringboneGroove = 6.0;
     CHECK_THROWS_AS(geometry::gear("g", xy(), spec), geometry::GeometryError);
 }
+
+TEST_CASE("El surco central de la espina de pescado también va en la corona y en la cremallera", "[gear][herringbone]")
+{
+    const double helix = 20.0 * std::numbers::pi / 180.0;
+    // Corona: quita un anillo entre dentro de las cabezas y la raíz de sus dientes, a media altura.
+    geometry::GearSpec ring;
+    ring.type = geometry::GearType::Internal;
+    ring.teeth = 40;
+    ring.thickness = 10.0;
+    ring.helixAngle = helix;
+    ring.herringbone = true;
+    const geometry::Shape plainRing = geometry::gear("c", xy(), ring);
+    ring.herringboneGroove = 1.0;
+    const geometry::Shape grooveRing = geometry::gear("c", xy(), ring);
+    REQUIRE(grooveRing.isValid());
+    const double removedRing = plainRing.volume() - grooveRing.volume();
+    const double rp = ring.module * ring.teeth / 2.0;
+    const double band = std::numbers::pi * ((rp + 1.25 * ring.module) * (rp + 1.25 * ring.module) -
+                                            (rp - ring.module) * (rp - ring.module));
+    CHECK(removedRing > 0.2 * band);
+    CHECK(removedRing < 1.0 * band);
+
+    // Cremallera: una losa a media altura que quita los dientes de un extremo al otro.
+    geometry::GearSpec rack;
+    rack.type = geometry::GearType::Rack;
+    rack.teeth = 8;
+    rack.thickness = 10.0;
+    rack.helixAngle = helix;
+    rack.herringbone = true;
+    const geometry::Shape plainRack = geometry::gear("r", xy(), rack);
+    rack.herringboneGroove = 1.0;
+    const geometry::Shape grooveRack = geometry::gear("r", xy(), rack);
+    REQUIRE(grooveRack.isValid());
+    const double removedRack = plainRack.volume() - grooveRack.volume();
+    // Los dientes de 1 mm de alto de la barra: menos que la banda entera (largo × alto del diente × 1) y más que nada.
+    const double bar = rack.teeth * std::numbers::pi * rack.module * 2.25 * rack.module * 1.0;
+    CHECK(removedRack > 0.1 * bar);
+    CHECK(removedRack < 1.0 * bar);
+    CHECK(grooveRack.bounds().max.z == Catch::Approx(10.0).margin(1e-4));
+}
+
+TEST_CASE("Los generadores de engranajes con espina de pescado ofrecen el surco central", "[gear][herringbone][generator]")
+{
+    for (const char* id : {"par-engranajes", "engranaje-interno", "cremallera"}) {
+        const document::Generator* gen = document::findGenerator(id);
+        INFO(id);
+        REQUIRE(gen != nullptr);
+        document::GeneratorValues values = gen->defaults();
+        REQUIRE(values.count("surco") == 1);
+        values["helice"] = 20.0;
+        values["espina"] = 1.0;
+        values["surco"] = 0.0;
+        document::Document plain;
+        document::applyRecipe(plain, gen->make(values, ""));
+        values["surco"] = 1.0;
+        document::Document grooved;
+        document::applyRecipe(grooved, gen->make(values, ""));
+        REQUIRE(plain.result().bodies.size() == grooved.result().bodies.size());
+        double plainVolume = 0.0;
+        double groovedVolume = 0.0;
+        for (const auto& b : plain.result().bodies) {
+            plainVolume += b.shape.volume();
+        }
+        for (const auto& b : grooved.result().bodies) {
+            groovedVolume += b.shape.volume();
+        }
+        CHECK(groovedVolume < plainVolume);
+        // Sin espina de pescado el surco no cuenta (y no da error).
+        values["espina"] = 0.0;
+        document::Document single;
+        document::applyRecipe(single, gen->make(values, ""));
+        for (std::size_t i = 0; i < single.featureCount(); ++i) {
+            CHECK(single.status(single.feature(i).id()).health != document::Health::Error);
+        }
+    }
+}
+
+TEST_CASE("El par de engranajes puede salir con las ruedas separadas para imprimir", "[gear][generator]")
+{
+    const document::Generator* pair = document::findGenerator("par-engranajes");
+    REQUIRE(pair != nullptr);
+    document::GeneratorValues values = pair->defaults();
+    REQUIRE(values.count("colocacion") == 1);
+    values["helice"] = 0.0;
+
+    document::Document meshed;
+    document::applyRecipe(meshed, pair->make(values, ""));
+    REQUIRE(meshed.result().bodies.size() == 2);
+    // Engranadas: las cajas de las dos ruedas se pisan (los dientes entran en los huecos).
+    CHECK(meshed.result().bodies[1].shape.bounds().min.x < meshed.result().bodies[0].shape.bounds().max.x);
+
+    values["colocacion"] = 1.0;
+    document::Document apart;
+    document::applyRecipe(apart, pair->make(values, ""));
+    REQUIRE(apart.result().bodies.size() == 2);
+    const double gap = apart.result().bodies[1].shape.bounds().min.x - apart.result().bodies[0].shape.bounds().max.x;
+    CHECK(gap > 3.0);  // unos 5 mm de aire entre las puntas
+    CHECK(gap < 7.0);
+    // Las mismas ruedas: el volumen no cambia.
+    CHECK(apart.result().bodies[0].shape.volume() == Catch::Approx(meshed.result().bodies[0].shape.volume()).epsilon(1e-6));
+}
