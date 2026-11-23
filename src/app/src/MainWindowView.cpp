@@ -527,9 +527,32 @@ void MainWindow::exportBodies()
     const std::vector<std::size_t> chosen = dialog.selected();
     const QString suggested = QString::fromStdString(document_.name());
 
-    // Una lista de (archivo, cuerpos) según «un archivo por cuerpo».
+    // Una lista de (archivo, cuerpos) según «un archivo por cuerpo» o «por componente».
     std::vector<ExportJob> jobs;
-    if (dialog.onePerBody() && chosen.size() > 1) {
+    if (dialog.onePerComponent() && chosen.size() > 1) {
+        const QString folder = QFileDialog::getExistingDirectory(this, QStringLiteral("Carpeta donde exportar"));
+        if (folder.isEmpty()) {
+            return;
+        }
+        // Los cuerpos de un mismo componente van juntos (en el orden en que están); los sueltos, cada uno en su archivo.
+        std::vector<std::string> order;
+        std::map<std::string, ExportJob> byComponent;
+        for (std::size_t index : chosen) {
+            const std::string component = document_.componentOf(bodies[index].key);
+            const std::string name = component.empty() ? bodies[index].name : component;
+            const std::string key = component.empty() ? "cuerpo:" + bodies[index].key : "componente:" + component;
+            auto [it, inserted] = byComponent.try_emplace(key);
+            if (inserted) {
+                order.push_back(key);
+                it->second.path = QDir(folder).filePath(QString::fromStdString(name) + QLatin1Char('.') + extension);
+            }
+            it->second.shapes.push_back(bodies[index].shape);
+            it->second.names.push_back(bodies[index].name);
+        }
+        for (const std::string& key : order) {
+            jobs.push_back(std::move(byComponent.at(key)));
+        }
+    } else if (dialog.onePerBody() && chosen.size() > 1) {
         const QString folder = QFileDialog::getExistingDirectory(this, QStringLiteral("Carpeta donde exportar"));
         if (folder.isEmpty()) {
             return;

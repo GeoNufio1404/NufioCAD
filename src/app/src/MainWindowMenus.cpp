@@ -93,7 +93,7 @@ void MainWindow::createMenus()
             {QStringLiteral("Recientes…"), QStringLiteral("Lista los diseños abiertos hace poco")},
             {QStringLiteral("Guardar"), QStringLiteral("Guarda el diseño en su archivo")},
             {QStringLiteral("Guardar como…"), QStringLiteral("Guarda el diseño con otro nombre o en otra carpeta")},
-            {QStringLiteral("Importar STEP…"), QStringLiteral("Trae un cuerpo desde un archivo STEP")},
+            {QStringLiteral("Importar STEP, STL u OBJ…"), QStringLiteral("Trae un cuerpo desde un archivo STEP o desde una malla STL u OBJ hermética")},
             {QStringLiteral("Exportar…"), QStringLiteral("Saca los cuerpos a STL, OBJ u otros formatos")},
             {QStringLiteral("Imprimir…"), QStringLiteral("Revisa los cuerpos y los prepara para imprimir en 3D")},
             {QStringLiteral("Deshacer"), QStringLiteral("Quita el último cambio")},
@@ -183,7 +183,7 @@ void MainWindow::createMenus()
     addFile(QStringLiteral("Guardar &como…"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_S),
             QStringLiteral("file-save"), [this] { saveDocumentAs(); });
     file->addSeparator();
-    importAction_ = addFile(QStringLiteral("&Importar STEP…"), QKeySequence(Qt::CTRL | Qt::Key_I),
+    importAction_ = addFile(QStringLiteral("&Importar STEP, STL u OBJ…"), QKeySequence(Qt::CTRL | Qt::Key_I),
                             QStringLiteral("file-open"), &MainWindow::importStep);
     reimportAction_ = addFile(QStringLiteral("Actualizar &importación desde su archivo…"), QKeySequence(), QStringLiteral("file-open"),
                               &MainWindow::reimportStep);

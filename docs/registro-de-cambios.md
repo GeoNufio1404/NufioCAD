@@ -38,6 +38,15 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 ---
 
 
+## Pendientes por categoría, F (archivos) — 23 nov. 2026
+
+- **Qué:** **importar mallas STL (binario o de texto) y OBJ** como sólido si son herméticas; exportar **un archivo por componente**; «Guardar como» cambia también el nombre del diseño cuando seguía al del archivo. **Corrección de un efecto de la categoría A:** el resaltado de lo elegido en Alinear se pedía también en la rama «sin operación» de todas las herramientas y Mover redibujaba los anillos de más (hasta 9,5 s al abrirlo en la prueba de interfaz); ahora solo lo usan Alinear y Unión (`FeatureTool::afterEmptyPreview`).
+- **Dónde:** `Exchange.hpp`/`.cpp` (`readMesh`), `MainWindowFiles.cpp` (`isMeshFile`, filtros, arrastrar, `saveDocumentAs`), `MainWindowMenus.cpp`, `ExportDialog` (`onePerComponent`), `MainWindowView.cpp` (`exportBodies`). Pruebas en `test_exchange.cpp`; manual: `ARC.19` a `ARC.22`.
+- **Volver atrás:** rama `feature/pendientes-f-archivos` sin fusionar: `git branch -D`; ya fusionada, `git revert` de la fusión. No cambia el formato de los archivos (la malla importada se guarda como una importación de STEP).
+
+---
+
+
 ## Pendientes por categoría, A (ensamblar y componentes) — 23 nov. 2026
 
 - **Qué:** **corrección de un fallo real:** al aceptar o rehacer un generador, los cuerpos nuevos salían sin el nombre ni el componente de la receta (el comando leía el resultado antes de que acabara el cálculo en segundo plano, desde la Fase 13); el Navegador ya no muestra la carpeta «Cuerpos» vacía cuando todos los cuerpos están en componentes; Alinear y Unión resaltan en la vista las caras o aristas elegidas (sin confirmar a ojo).

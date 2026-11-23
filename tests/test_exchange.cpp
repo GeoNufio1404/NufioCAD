@@ -366,3 +366,108 @@ TEST_CASE("Voladizos: una caja apoyada no tiene; un escalón en voladizo sí", "
     const OverhangReport step = analyzeOverhang(both, MeshQuality::medium(), 45.0);
     CHECK(step.overhangArea == Catch::Approx(20.0 * 10.0).epsilon(1e-6));  // la parte de la placa que sobresale de la base
 }
+
+namespace {
+
+// Los 12 triángulos de una caja de 10 × 20 × 30 (con las caras hacia fuera).
+std::vector<std::array<std::array<double, 3>, 3>> boxTriangles()
+{
+    const double w = 10.0, d = 20.0, h = 30.0;
+    const std::array<double, 3> p[8] = {{0, 0, 0}, {w, 0, 0}, {w, d, 0}, {0, d, 0}, {0, 0, h}, {w, 0, h}, {w, d, h}, {0, d, h}};
+    const int quads[6][4] = {{0, 3, 2, 1}, {4, 5, 6, 7}, {0, 1, 5, 4}, {1, 2, 6, 5}, {2, 3, 7, 6}, {3, 0, 4, 7}};
+    std::vector<std::array<std::array<double, 3>, 3>> triangles;
+    for (const auto& q : quads) {
+        triangles.push_back({p[q[0]], p[q[1]], p[q[2]]});
+        triangles.push_back({p[q[0]], p[q[2]], p[q[3]]});
+    }
+    return triangles;
+}
+
+std::filesystem::path writeAsciiStl(const std::vector<std::array<std::array<double, 3>, 3>>& triangles, const char* name)
+{
+    const auto path = std::filesystem::temp_directory_path() / name;
+    std::ofstream out(path);
+    out << "solid caja\n";
+    for (const auto& t : triangles) {
+        out << "facet normal 0 0 0\nouter loop\n";
+        for (const auto& v : t) {
+            out << "vertex " << v[0] << ' ' << v[1] << ' ' << v[2] << "\n";
+        }
+        out << "endloop\nendfacet\n";
+    }
+    out << "endsolid caja\n";
+    return path;
+}
+
+} // namespace
+
+TEST_CASE("Una malla STL o OBJ hermética se importa como sólido", "[exchange][mesh]")
+{
+    const auto triangles = boxTriangles();
+    // STL de texto
+    const auto ascii = writeAsciiStl(triangles, "nuf_malla_texto.stl");
+    const StepImport fromText = readMesh(ascii);
+    std::filesystem::remove(ascii);
+    REQUIRE(fromText.solids == 1);
+    const std::vector<Shape> shapes = shapesFromBrep(fromText.brep, "f9");
+    REQUIRE(shapes.size() == 1);
+    CHECK(shapes[0].isValid());
+    CHECK(shapes[0].volume() == Catch::Approx(10.0 * 20.0 * 30.0).epsilon(1e-6));
+
+    // STL binario: el mismo sólido
+    const auto binary = std::filesystem::temp_directory_path() / "nuf_malla_binaria.stl";
+    {
+        std::ofstream out(binary, std::ios::binary);
+        const char header[80] = {};
+        out.write(header, 80);
+        const std::uint32_t count = std::uint32_t(triangles.size());
+        out.write(reinterpret_cast<const char*>(&count), 4);
+        for (const auto& t : triangles) {
+            const float normal[3] = {0, 0, 0};
+            out.write(reinterpret_cast<const char*>(normal), 12);
+            for (const auto& v : t) {
+                const float f[3] = {float(v[0]), float(v[1]), float(v[2])};
+                out.write(reinterpret_cast<const char*>(f), 12);
+            }
+            const std::uint16_t attribute = 0;
+            out.write(reinterpret_cast<const char*>(&attribute), 2);
+        }
+    }
+    const StepImport fromBinary = readMesh(binary);
+    std::filesystem::remove(binary);
+    REQUIRE(fromBinary.solids == 1);
+    CHECK(shapesFromBrep(fromBinary.brep, "f9")[0].volume() == Catch::Approx(6000.0).epsilon(1e-6));
+
+    // OBJ con caras de cuatro vértices (se abren en triángulos) e índices con «/»
+    const auto obj = std::filesystem::temp_directory_path() / "nuf_malla.obj";
+    {
+        std::ofstream out(obj);
+        out << "v 0 0 0\nv 10 0 0\nv 10 20 0\nv 0 20 0\nv 0 0 30\nv 10 0 30\nv 10 20 30\nv 0 20 30\n";
+        out << "f 1//1 4//1 3//1 2//1\nf 5/1 6/1 7/1 8/1\nf 1 2 6 5\nf 2 3 7 6\nf 3 4 8 7\nf 4 1 5 8\n";
+    }
+    const StepImport fromObj = readMesh(obj);
+    std::filesystem::remove(obj);
+    REQUIRE(fromObj.solids == 1);
+    CHECK(shapesFromBrep(fromObj.brep, "f9")[0].volume() == Catch::Approx(6000.0).epsilon(1e-6));
+    // Avisa de las unidades
+    CHECK_FALSE(fromObj.warnings.empty());
+}
+
+TEST_CASE("Una malla con huecos o sin triángulos no se importa y lo explica", "[exchange][mesh]")
+{
+    auto triangles = boxTriangles();
+    triangles.pop_back();  // falta un triángulo de la tapa: queda un hueco
+    const auto open = writeAsciiStl(triangles, "nuf_malla_abierta.stl");
+    try {
+        readMesh(open);
+        FAIL("debía rechazar la malla abierta");
+    } catch (const GeometryError& e) {
+        CHECK(std::string(e.what()).find("hermética") != std::string::npos);
+    }
+    std::filesystem::remove(open);
+
+    const auto empty = writeAsciiStl({}, "nuf_malla_vacia.stl");
+    CHECK_THROWS_AS(readMesh(empty), GeometryError);
+    std::filesystem::remove(empty);
+    CHECK_THROWS_AS(readMesh(std::filesystem::temp_directory_path() / "nuf_no_existe.stl"), GeometryError);
+}

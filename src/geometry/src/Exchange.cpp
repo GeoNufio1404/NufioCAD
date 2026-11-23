@@ -5,6 +5,11 @@
 #include "Naming.hpp"
 
 #include <BRepBuilderAPI_Copy.hxx>
+#include <BRepBuilderAPI_MakeFace.hxx>
+#include <BRepBuilderAPI_MakePolygon.hxx>
+#include <BRepBuilderAPI_MakeSolid.hxx>
+#include <BRepBuilderAPI_Sewing.hxx>
+#include <BRepLib.hxx>
 #include <BinTools.hxx>
 #include <BinTools_FormatVersion.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
@@ -622,6 +627,223 @@ StepImport readStep(const std::filesystem::path& path)
         throw GeometryError("No se pudo preparar el sólido importado");
     }
     return result;
+}
+
+namespace {
+
+constexpr std::size_t kMaxMeshTriangles = 30000;
+
+struct RawMesh {
+    std::vector<std::array<double, 3>> points;
+    std::vector<std::array<std::size_t, 3>> triangles;  // índices en points
+};
+
+// STL binario (80 bytes de cabecera, el número de triángulos y 50 bytes por triángulo) o de texto («vertex x y z»).
+RawMesh readStlFile(const std::filesystem::path& path)
+{
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        throw GeometryError("No se pudo abrir el archivo " + utf8(path));
+    }
+    std::string bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    RawMesh mesh;
+    std::map<std::array<long long, 3>, std::size_t> welded;
+    // Soldar: los vértices que coinciden (a 1e-5 mm) son uno solo, porque el STL repite cada vértice en cada triángulo.
+    const auto vertex = [&](double x, double y, double z) {
+        const std::array<long long, 3> key{std::llround(x * 1e5), std::llround(y * 1e5), std::llround(z * 1e5)};
+        const auto [it, inserted] = welded.try_emplace(key, mesh.points.size());
+        if (inserted) {
+            mesh.points.push_back({x, y, z});
+        }
+        return it->second;
+    };
+    const auto flush = [&](const std::array<std::size_t, 3>& t) {
+        if (t[0] != t[1] && t[1] != t[2] && t[0] != t[2]) {
+            mesh.triangles.push_back(t);
+        }
+    };
+    const auto floatAt = [&](std::size_t offset) {
+        float value = 0.0f;
+        std::memcpy(&value, bytes.data() + offset, sizeof(float));
+        return double(value);
+    };
+    bool binary = false;
+    if (bytes.size() >= 84) {
+        std::uint32_t count = 0;
+        std::memcpy(&count, bytes.data() + 80, sizeof(count));
+        binary = bytes.size() == 84 + std::size_t(count) * 50;
+        if (binary && count > kMaxMeshTriangles * 2) {
+            throw GeometryError("La malla tiene demasiados triángulos (" + std::to_string(count) +
+                                "): cada uno sería una cara del sólido. Simplifícala antes de importarla");
+        }
+    }
+    if (binary) {
+        std::uint32_t count = 0;
+        std::memcpy(&count, bytes.data() + 80, sizeof(count));
+        for (std::uint32_t i = 0; i < count; ++i) {
+            const std::size_t base = 84 + std::size_t(i) * 50 + 12;  // se salta la normal
+            std::array<std::size_t, 3> t{};
+            for (int k = 0; k < 3; ++k) {
+                const std::size_t at = base + std::size_t(k) * 12;
+                t[std::size_t(k)] = vertex(floatAt(at), floatAt(at + 4), floatAt(at + 8));
+            }
+            flush(t);
+        }
+    } else {
+        std::istringstream text(bytes);
+        std::string word;
+        std::array<std::size_t, 3> t{};
+        int filled = 0;
+        while (text >> word) {
+            if (word == "vertex") {
+                double x = 0.0, y = 0.0, z = 0.0;
+                if (!(text >> x >> y >> z)) {
+                    throw GeometryError("El archivo STL está dañado: un «vertex» sin sus tres coordenadas");
+                }
+                t[std::size_t(filled++)] = vertex(x, y, z);
+                if (filled == 3) {
+                    flush(t);
+                    filled = 0;
+                }
+            }
+        }
+    }
+    return mesh;
+}
+
+// OBJ: «v x y z» y «f a b c …» (índices desde 1, o negativos desde el final; con «/» se toma el primer número); un polígono
+// de más de tres vértices se abre en abanico.
+RawMesh readObjFile(const std::filesystem::path& path)
+{
+    std::ifstream in(path);
+    if (!in) {
+        throw GeometryError("No se pudo abrir el archivo " + utf8(path));
+    }
+    RawMesh mesh;
+    std::vector<std::array<double, 3>> raw;
+    std::map<std::array<long long, 3>, std::size_t> welded;
+    std::vector<std::size_t> mapped;  // índice del OBJ → índice soldado
+    std::string line;
+    while (std::getline(in, line)) {
+        std::istringstream words(line);
+        std::string kind;
+        words >> kind;
+        if (kind == "v") {
+            double x = 0.0, y = 0.0, z = 0.0;
+            words >> x >> y >> z;
+            const std::array<long long, 3> key{std::llround(x * 1e5), std::llround(y * 1e5), std::llround(z * 1e5)};
+            const auto [it, inserted] = welded.try_emplace(key, mesh.points.size());
+            if (inserted) {
+                mesh.points.push_back({x, y, z});
+            }
+            mapped.push_back(it->second);
+        } else if (kind == "f") {
+            std::vector<std::size_t> face;
+            std::string token;
+            while (words >> token) {
+                long index = std::strtol(token.c_str(), nullptr, 10);
+                if (index < 0) {
+                    index += long(mapped.size()) + 1;
+                }
+                if (index < 1 || std::size_t(index) > mapped.size()) {
+                    throw GeometryError("El archivo OBJ está dañado: una cara usa un vértice que no existe");
+                }
+                face.push_back(mapped[std::size_t(index) - 1]);
+            }
+            for (std::size_t i = 2; i < face.size(); ++i) {
+                const std::array<std::size_t, 3> t{face[0], face[i - 1], face[i]};
+                if (t[0] != t[1] && t[1] != t[2] && t[0] != t[2]) {
+                    mesh.triangles.push_back(t);
+                }
+            }
+        }
+    }
+    return mesh;
+}
+
+} // namespace
+
+StepImport readMesh(const std::filesystem::path& path)
+{
+    std::string extension = utf8(path.extension());
+    std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+    const RawMesh mesh = extension == ".obj" ? readObjFile(path) : readStlFile(path);
+    if (mesh.triangles.empty()) {
+        throw GeometryError("El archivo no tiene triángulos que se puedan importar");
+    }
+    if (mesh.triangles.size() > kMaxMeshTriangles) {
+        throw GeometryError("La malla tiene demasiados triángulos (" + std::to_string(mesh.triangles.size()) +
+                            "): cada uno sería una cara del sólido y el programa se pondría muy lento. Simplifícala antes de importarla");
+    }
+    try {
+        // El tamaño de la malla fija la tolerancia con que se cosen las caras.
+        double lo[3] = {1e300, 1e300, 1e300}, hi[3] = {-1e300, -1e300, -1e300};
+        for (const auto& p : mesh.points) {
+            for (int k = 0; k < 3; ++k) {
+                lo[k] = std::min(lo[k], p[std::size_t(k)]);
+                hi[k] = std::max(hi[k], p[std::size_t(k)]);
+            }
+        }
+        const double diagonal = std::sqrt((hi[0] - lo[0]) * (hi[0] - lo[0]) + (hi[1] - lo[1]) * (hi[1] - lo[1]) + (hi[2] - lo[2]) * (hi[2] - lo[2]));
+        BRepBuilderAPI_Sewing sewing(std::max(1e-6, diagonal * 1e-7));
+        int faces = 0;
+        for (const auto& t : mesh.triangles) {
+            const auto pnt = [&](std::size_t i) { return gp_Pnt(mesh.points[i][0], mesh.points[i][1], mesh.points[i][2]); };
+            BRepBuilderAPI_MakePolygon polygon(pnt(t[0]), pnt(t[1]), pnt(t[2]), true);
+            if (!polygon.IsDone()) {
+                continue;
+            }
+            BRepBuilderAPI_MakeFace face(polygon.Wire(), true);
+            if (face.IsDone()) {
+                sewing.Add(face.Face());
+                ++faces;
+            }
+        }
+        if (faces == 0) {
+            throw GeometryError("Los triángulos del archivo son todos degenerados (de área cero)");
+        }
+        sewing.Perform();
+        const TopoDS_Shape sewed = sewing.SewedShape();
+        TopoDS_Compound solids;
+        BRep_Builder builder;
+        builder.MakeCompound(solids);
+        StepImport result;
+        int open = 0;
+        for (TopExp_Explorer ex(sewed, TopAbs_SHELL); ex.More(); ex.Next()) {
+            const TopoDS_Shell shell = TopoDS::Shell(ex.Current());
+            if (!BRep_Tool::IsClosed(shell)) {
+                ++open;
+                continue;
+            }
+            BRepBuilderAPI_MakeSolid maker(shell);
+            if (!maker.IsDone()) {
+                ++open;
+                continue;
+            }
+            TopoDS_Solid solid = maker.Solid();
+            BRepLib::OrientClosedSolid(solid);
+            builder.Add(solids, solid);
+            ++result.solids;
+        }
+        if (result.solids == 0) {
+            throw GeometryError("La malla no es hermética (tiene huecos o aristas sueltas), así que no se puede convertir en un sólido. "
+                                "Repárala antes (por ejemplo, en el programa donde la hiciste)");
+        }
+        if (open > 0) {
+            result.warnings.push_back("Se ignoraron " + std::to_string(open) + " partes de la malla que no estaban cerradas.");
+        }
+        result.warnings.push_back("Una malla no lleva unidades: se tomó como milímetros. Cada triángulo es una cara del sólido (" +
+                                  std::to_string(faces) + " caras).");
+        std::ostringstream out(std::ios::binary);
+        BinTools::Write(solids, out, false, false, BinTools_FormatVersion_CURRENT);
+        result.brep = out.str();
+        if (result.brep.empty()) {
+            throw GeometryError("No se pudo preparar el sólido importado");
+        }
+        return result;
+    } catch (const Standard_Failure& e) {
+        throw GeometryError(std::string("No se pudo convertir la malla en un sólido: ") + e.what());
+    }
 }
 
 std::vector<Shape> shapesFromBrep(const std::string& brep, const std::string& tag)
