@@ -3684,3 +3684,34 @@ TEST_CASE("Una rosca trapezoidal baja medio paso, y el chaflán de entrada quita
     const FeatureId bid = bad.addFeature(std::move(b));
     CHECK(bad.status(bid).health == Health::Error);
 }
+
+TEST_CASE("El aviso de una pared fina dice qué caras la forman", "[print]")
+{
+    // Una lámina de 0,3 mm: las dos caras grandes son las de la pared (las de arriba y abajo).
+    Document doc = boxDocument(0.3);
+    const auto issues = geometry::checkPrintable(namedBodies(doc), {});
+    const geometry::PrintIssue* wall = nullptr;
+    for (const geometry::PrintIssue& issue : issues) {
+        if (issue.text.find("Pared de") != std::string::npos) {
+            wall = &issue;
+        }
+    }
+    REQUIRE(wall != nullptr);
+    CHECK(wall->body == doc.result().bodies.front().name);
+    REQUIRE(wall->faces.size() == 2);
+    const geometry::Shape& shape = doc.result().bodies.front().shape;
+    for (const int face : wall->faces) {
+        const auto plane = shape.facePlane(face);
+        REQUIRE(plane.has_value());
+        CHECK(std::abs(plane->normal.z) > 0.99);  // las caras de arriba y de abajo
+    }
+    // Un aviso que no sabe dónde está (cuerpos que no caben, solapados…) no lleva caras.
+    Document big = boxDocument(1.0);
+    geometry::PrintSettings tiny;
+    tiny.bedX = tiny.bedY = tiny.bedZ = 3.0;
+    for (const geometry::PrintIssue& issue : geometry::checkPrintable(namedBodies(big), tiny)) {
+        if (issue.text.find("no cabe") != std::string::npos) {
+            CHECK(issue.faces.empty());
+        }
+    }
+}

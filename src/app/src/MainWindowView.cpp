@@ -51,6 +51,7 @@
 #include <QLabel>
 #include <QSignalBlocker>
 #include <QLineEdit>
+#include <QRegularExpression>
 #include <QLocale>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -411,9 +412,13 @@ void MainWindow::updateMeasure()
             }
             QString html = QStringLiteral("<b>Medir</b> — ") + QString::fromStdString(outcome->measurement.title).toHtmlEscaped();
             lastMeasureText_ = QString::fromStdString(outcome->measurement.title);
-            for (const std::string& line : outcome->measurement.lines) {
-                html += QStringLiteral("<br>") + QString::fromStdString(line).toHtmlEscaped();
-                lastMeasureText_ += QLatin1Char('\n') + QString::fromStdString(line);
+            // La geometría escribe los números con punto; aquí se pasan al separador decimal del idioma (coma en español).
+            static const QRegularExpression decimalPoint(QStringLiteral(R"((?<=\d)\.(?=\d))"));
+            for (const std::string& rawLine : outcome->measurement.lines) {
+                QString line = QString::fromStdString(rawLine);
+                line.replace(decimalPoint, QString(QLocale().decimalPoint()));
+                html += QStringLiteral("<br>") + line.toHtmlEscaped();
+                lastMeasureText_ += QLatin1Char('\n') + line;
             }
             html += QStringLiteral("<br><i>Ctrl+C copia estos valores</i>");
             // La línea de la medida: el segmento más corto entre los dos elementos, dibujado en la vista.
@@ -449,7 +454,10 @@ void MainWindow::printBodies()
         }
     }
     ExportDialog dialog(bodies, shown, this, ExportDialog::Mode::Print);
-    if (dialog.exec() != QDialog::Accepted) {
+    connectReviewHighlight(dialog, bodies);
+    const bool printAccepted = dialog.exec() == QDialog::Accepted;
+    viewport_->clearToolPreview();
+    if (!printAccepted) {
         return;
     }
     std::vector<geometry::Shape> shapes;
@@ -501,6 +509,28 @@ void MainWindow::printBodies()
     updateBusyBadge();
 }
 
+// Un clic en un aviso de la revisión («ver en la vista») resalta en la vista las caras del problema.
+void MainWindow::connectReviewHighlight(ExportDialog& dialog, const std::vector<document::Body>& bodies)
+{
+    connect(&dialog, &ExportDialog::facesRequested, this, [this, &bodies](const QString& name, const std::vector<int>& faces) {
+        for (const document::Body& body : bodies) {
+            if (QString::fromStdString(body.name) == name) {
+                // El contorno de las caras (las caras translúcidas no se ven cuando coinciden con las del cuerpo).
+                std::vector<int> edges;
+                for (const int face : faces) {
+                    for (const int edge : body.shape.faceEdges(face)) {
+                        if (std::ranges::find(edges, edge) == edges.end()) {
+                            edges.push_back(edge);
+                        }
+                    }
+                }
+                viewport_->showToolEdges(body.shape, edges);
+                return;
+            }
+        }
+    });
+}
+
 void MainWindow::exportBodies()
 {
     if (modelBusy()) {
@@ -518,7 +548,10 @@ void MainWindow::exportBodies()
         }
     }
     ExportDialog dialog(bodies, shown, this);
-    if (dialog.exec() != QDialog::Accepted) {
+    connectReviewHighlight(dialog, bodies);
+    const bool exportAccepted = dialog.exec() == QDialog::Accepted;
+    viewport_->clearToolPreview();
+    if (!exportAccepted) {
         return;
     }
 

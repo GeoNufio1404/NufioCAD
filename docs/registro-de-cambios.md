@@ -38,6 +38,15 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 ---
 
 
+## Pendientes por categoría, I (impresión e inspección) — 23 nov. 2026
+
+- **Qué:** el aviso de una **pared fina** en la revisión para imprimir sabe qué caras la forman y lleva un enlace «ver en la vista» que resalta su contorno; Medir usa la coma decimal del idioma. Alinear y Unión resaltan también el contorno de las caras elegidas. **Descubierto:** el relleno translúcido de caras (`showToolFaces`) no se ve cuando la cara coincide con la del cuerpo.
+- **Dónde:** `Printability.hpp`/`.cpp` (`PrintIssue::body` y `faces`), `ExportDialog` (`facesRequested`, enlace), `MainWindowView.cpp` (`connectReviewHighlight`, decimales de Medir), `FeatureToolsMore.cpp` (`JointTool::afterPreview`), `Viewport` (`showToolPicks`). Prueba en `test_edge_ops.cpp` («El aviso de una pared fina…»); manual: `INS.12` e `INS.13`.
+- **Volver atrás:** rama `feature/pendientes-i-impresion` sin fusionar: `git branch -D`; ya fusionada, `git revert` de la fusión. No cambia el formato de los archivos.
+
+---
+
+
 ## Pendientes por categoría, F (archivos) — 23 nov. 2026
 
 - **Qué:** **importar mallas STL (binario o de texto) y OBJ** como sólido si son herméticas; exportar **un archivo por componente**; «Guardar como» cambia también el nombre del diseño cuando seguía al del archivo. **Corrección de un efecto de la categoría A:** el resaltado de lo elegido en Alinear se pedía también en la rama «sin operación» de todas las herramientas y Mover redibujaba los anillos de más (hasta 9,5 s al abrirlo en la prueba de interfaz); ahora solo lo usan Alinear y Unión (`FeatureTool::afterEmptyPreview`).

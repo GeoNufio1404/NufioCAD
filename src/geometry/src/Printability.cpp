@@ -45,17 +45,18 @@ bool hasOpenEdges(const Shape& shape)
 
 // Pared más fina entre caras planas paralelas que miran hacia fuera por lados opuestos.
 // Devuelve el grosor (0 si no encuentra ninguna por debajo de «below»).
-double thinnestWall(const Shape& shape, double below)
+double thinnestWall(const Shape& shape, double below, std::vector<int>* wallFaces = nullptr)
 {
     struct FacePlane {
         sketch::Vec3 normal;
         double offset = 0.0;  // normal · punto del plano
         Box box;
+        int index = 0;        // índice de la cara en la forma
     };
     std::vector<FacePlane> faces;
     for (int i = 0; i < shape.faceCount(); ++i) {
         if (const auto plane = shape.facePlane(i)) {
-            faces.push_back({plane->normal, dot(plane->normal, plane->origin), shape.faceBounds(i)});
+            faces.push_back({plane->normal, dot(plane->normal, plane->origin), shape.faceBounds(i), i});
         }
     }
     double thinnest = 0.0;
@@ -74,6 +75,9 @@ double thinnestWall(const Shape& shape, double below)
             }
             if (thinnest == 0.0 || thickness < thinnest) {
                 thinnest = thickness;
+                if (wallFaces != nullptr) {
+                    *wallFaces = {faces[i].index, faces[j].index};
+                }
             }
         }
     }
@@ -103,13 +107,22 @@ std::vector<PrintIssue> checkPrintable(const std::vector<std::pair<std::string, 
         }
         if (shape.faceCount() > kMaxFacesForWalls) {
             add(Level::Info, "«" + name + "» tiene demasiadas caras para revisar sus paredes");
-        } else if (const double wall = thinnestWall(shape, 2.0 * settings.nozzle); wall > 0.0) {
-            if (wall < settings.nozzle) {
-                add(Level::Warning, "Pared de " + display::length(wall) + " en «" + name + "»: es más fina que tu boquilla ("
-                                        + display::length(settings.nozzle, 1) + ") y no se imprimirá");
-            } else {
-                add(Level::Warning, "Pared de " + display::length(wall) + " en «" + name + "»: menos de dos líneas de boquilla ("
-                                        + display::length(2.0 * settings.nozzle, 1) + "), saldrá débil");
+        } else {
+            std::vector<int> wallFaces;
+            const double wall = thinnestWall(shape, 2.0 * settings.nozzle, &wallFaces);
+            if (wall > 0.0) {
+                const std::size_t before = issues.size();
+                if (wall < settings.nozzle) {
+                    add(Level::Warning, "Pared de " + display::length(wall) + " en «" + name + "»: es más fina que tu boquilla ("
+                                            + display::length(settings.nozzle, 1) + ") y no se imprimirá");
+                } else {
+                    add(Level::Warning, "Pared de " + display::length(wall) + " en «" + name + "»: menos de dos líneas de boquilla ("
+                                            + display::length(2.0 * settings.nozzle, 1) + "), saldrá débil");
+                }
+                if (issues.size() > before) {
+                    issues.back().body = name;
+                    issues.back().faces = wallFaces;
+                }
             }
         }
         // Voladizos: caras que miran hacia abajo más de 45° sin apoyarse en la cama; se avisa si pasan de 5 mm² (lo menor es ruido).
