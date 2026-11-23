@@ -232,9 +232,10 @@ Rama `feature/pendientes-p-parametros` (23 nov. 2026, sin fusionar hasta la prue
 - [ ] Rosca y Engranaje: flecha para arrastrar el largo en la vista; elegir la posición con el ratón (un punto, el centro de un agujero o círculo); planos, ejes y patrones sin posición propia; la holgura no se usa en un tornillo normal (Unir/Cuerpo nuevo) (colocación).
 
 ### R — Roscas y agujeros
-- [ ] Perfiles no métricos (trapezoidal, UNC) y chaflán de entrada (7b).
-- [ ] Unir o cortar con una rosca cuesta ~2 s en Debug (booleana contra la superficie spline): medir en Release y, si hace falta, rosca en 4 caras (cresta, flancos, fondo) (7b).
-- [ ] La flecha del ángulo de la cabeza del Agujero (flechas, U8).
+Rama `feature/pendientes-r-roscas` (23 nov. 2026, sin fusionar hasta la prueba manual **GEN.20 a GEN.24** de la [guía](guia-de-pruebas.md)).
+- [x] **Perfiles y medidas ✅:** la herramienta Rosca tiene **Perfil** (métrica o unificada de 60°, y **trapezoidal Tr** con flancos a 15°: cresta y fondo de 0,366 P, profundidad 0,5 P), medidas **UNC** (#6-32 a 3/4-10) y **Tr** (Tr8 a Tr24) en la lista de medidas, y **chaflán de entrada** (a 45°, solo en tornillos; en la rosca que se corta no se usa). `ThreadSpec::profile` y `entryChamfer`, `threadDepth`; se guardan en el archivo (los anteriores abren como métrica y sin chaflán) (7b). **Pendiente:** el perfil unificado usa el mismo dibujo que el métrico (60°, cresta P/8 y fondo P/4) aunque la norma UNC difiere un poco en los redondeos; Acme (29°) y roscas de tubo (BSP/NPT, cónicas) no existen; el chaflán de entrada no se ve aún en el visor con capturas (lo comprueban las pruebas de volumen y validez).
+- [ ] Unir o cortar con una rosca cuesta ~2 s en Debug (booleana contra la superficie spline): medir en Release y, si hace falta, rosca en 4 caras (cresta, flancos, fondo) (7b): **no se hizo** (hay que compilar Release en esta máquina para medir).
+- [x] **Flecha del ángulo del cono del Agujero ✅ (sin verla en pantalla):** `HoleTool::dimensionArc("headAngle")` dibuja el arco entre las dos generatrices del avellanado, con el vértice en el eje. **Pendiente de comprobar a mano (GEN.24):** el arco se calculó pero no se pudo capturar (la escena del Agujero con captura se quedó colgada en el arnés); si sale del lado equivocado, hay que invertir el eje.
 
 ### E — Engranajes
 - [ ] Redondeo de raíz y perfil de cicloide (7a).

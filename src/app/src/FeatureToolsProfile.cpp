@@ -1142,4 +1142,49 @@ std::optional<FeatureTool::Arrow> HoleTool::dimensionArrow(const std::string& ke
     return std::nullopt;
 }
 
+std::optional<FeatureTool::Arc> HoleTool::dimensionArc(const std::string& key) const
+{
+    // El ángulo del cono del avellanado: el que forman las dos generatrices opuestas, con el vértice del cono en el eje
+    // del agujero (por debajo del borde, a la profundidad donde el cono se cerraría).
+    if (key != "headAngle") {
+        return std::nullopt;
+    }
+    const auto out = before().sketches.find(sketch_);
+    if (out == before().sketches.end()) {
+        return std::nullopt;
+    }
+    std::optional<sketch::Vec2> center;
+    for (const sketch::Entity& e : out->second.sketch->entities()) {
+        if (e.reference) {
+            continue;
+        }
+        if (const auto* circle = std::get_if<sketch::Circle>(&e.geometry); circle && !e.construction) {
+            center = circle->center;
+            break;
+        }
+        if (const auto* point = std::get_if<sketch::Point>(&e.geometry)) {
+            center = point->position;
+            break;
+        }
+    }
+    if (!center) {
+        return std::nullopt;
+    }
+    const sketch::Plane& plane = out->second.plane;
+    const sketch::Vec3 c = plane.toWorld(*center);
+    const sketch::Vec3 up = flip_->isChecked() ? sketch::Vec3{-plane.normal.x, -plane.normal.y, -plane.normal.z} : plane.normal;
+    const double angle = headAngle_->value() * kDegree;
+    const double half = 0.5 * angle;
+    const double depthToApex = (headDiameter_->value() / 2.0) / std::tan(half);
+    const sketch::Vec3 apex = moved(c, up, -depthToApex);
+    // Las dos generatrices parten del vértice hacia el borde del cono: a la izquierda, −sen(½)·x + cos(½)·arriba.
+    const sketch::Vec3 left{-std::sin(half) * plane.xAxis.x + std::cos(half) * up.x,
+                            -std::sin(half) * plane.xAxis.y + std::cos(half) * up.y,
+                            -std::sin(half) * plane.xAxis.z + std::cos(half) * up.z};
+    const sketch::Vec3 axis{up.y * plane.xAxis.z - up.z * plane.xAxis.y, up.z * plane.xAxis.x - up.x * plane.xAxis.z,
+                            up.x * plane.xAxis.y - up.y * plane.xAxis.x};
+    const double radius = std::min(arcRadius(), 0.9 * depthToApex / std::cos(half));
+    return Arc{apex, axis, {apex.x + radius * left.x, apex.y + radius * left.y, apex.z + radius * left.z}, angle};
+}
+
 } // namespace nuf::app

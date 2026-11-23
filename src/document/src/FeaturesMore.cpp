@@ -297,7 +297,7 @@ std::vector<Feature::NumericField> ThreadFeature::numericFields()
 {
     return {field("x", "Posición X", x), field("y", "Posición Y", y), field("diameter", "Diámetro", spec.diameter),
             field("pitch", "Paso", spec.pitch), field("length", "Largo", spec.length),
-            field("clearance", "Holgura", clearance)};
+            field("clearance", "Holgura", clearance), field("entryChamfer", "Chaflán de entrada", spec.entryChamfer)};
 }
 
 // --- Barrido ---------------------------------------------------------------------

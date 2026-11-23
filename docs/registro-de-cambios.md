@@ -20,6 +20,15 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 ---
 
 
+## Pendientes por categoría, R (roscas y agujeros) — 23 nov. 2026
+
+- **Qué:** la rosca tiene perfil **trapezoidal (Tr)** además del métrico/unificado, medidas **UNC** y **Tr** en la lista, y **chaflán de entrada** para tornillos; el cuadro del ángulo del cono del Agujero (avellanado) dibuja su arco en la vista.
+- **Dónde:** `Modeling.hpp` y `Modeling.cpp` (`ThreadProfile`, `ThreadSpec::profile` y `entryChamfer`, `threadDepth`, `thread`, `threadOnCylinderTool`), `FeaturesMore.cpp` (campo `entryChamfer`), `DocumentFile.cpp` (`profile` y `entryChamfer`, opcionales), `FeatureToolsMore.cpp` y `FeatureTools.hpp` (`ThreadTool`), `FeatureToolsProfile.cpp` (`HoleTool::dimensionArc`). Prueba en `test_edge_ops.cpp` («Una rosca trapezoidal…»); manual: `GEN.20` a `GEN.24`.
+- **Volver atrás:** rama `feature/pendientes-r-roscas` sin fusionar: `git branch -D`; ya fusionada, `git revert` de la fusión. Los archivos nuevos con perfil trapezoidal o chaflán se abren en versiones anteriores como roscas métricas sin chaflán.
+
+---
+
+
 ## Pendientes por categoría, P (parámetros y unidades) — 23 nov. 2026
 
 - **Qué:** la cota ligada lleva una «ƒ» y avisa si pierde su expresión; los nombres de parámetros se pueden intercambiar (a↔b); el valor de un parámetro da su longitud en la unidad elegida en el tooltip; las ayudas de los generadores y los mensajes de la geometría pasan los «mm» a la unidad elegida; el volumen de Interferencias sigue la unidad; el cuadro rápido de valor admite expresiones que empiecen por número. Antes, y ya en `develop`: el CI solo se ejecuta a mano (`workflow_dispatch`).
