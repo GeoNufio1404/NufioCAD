@@ -1,9 +1,8 @@
 name: CI
 
-# Solo en develop (tiene la caché) y a mano desde la pestaña Actions: sin ramas feature ni pull requests para no gastar cuota.
+# Solo a mano (pestaña Actions › Run workflow, o `gh workflow run CI --ref develop`), para controlar cuándo se gasta la
+# cuota: ni push ni pull requests lo disparan. Conviene correrlo sobre develop (tiene la caché).
 on:
-  push:
-    branches: [develop]
   workflow_dispatch:
 
 jobs:
