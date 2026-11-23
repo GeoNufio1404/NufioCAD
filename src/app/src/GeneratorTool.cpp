@@ -1,4 +1,5 @@
 #include "GeneratorTool.hpp"
+#include "Units.hpp"
 #include "Theme.hpp"
 
 #include "ExpressionSpinBox.hpp"
@@ -131,7 +132,7 @@ void GeneratorTool::createFields(QFormLayout* form)
         column->addWidget(widget);
         // La ayuda sale como tooltip al dejar el ratón sobre el campo.
         if (!f.hint.empty()) {
-            widget->setToolTip(QString::fromStdString(f.hint));
+            widget->setToolTip(Units::instance().localize(QString::fromStdString(f.hint)));
         }
         // Sección plegable (U8): un encabezado cuando cambia el grupo; plegarlo oculta sus preguntas.
         if (!f.group.empty() && f.group != currentGroup) {
@@ -448,7 +449,7 @@ void GeneratorTool::showResult(const Calculation& calculation, bool first)
         showStatus(QString(), Mark::None, widgets);
         okButton_->setEnabled(true);
     } else {
-        showStatus(QString::fromStdString(problem), Mark::Error, widgets);
+        showStatus(Units::instance().localize(QString::fromStdString(problem)), Mark::Error, widgets);
         okButton_->setEnabled(false);
     }
 }

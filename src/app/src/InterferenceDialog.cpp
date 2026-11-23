@@ -41,7 +41,7 @@ InterferenceDialog::InterferenceDialog(const document::Document& document, rende
     layout->addWidget(summary_);
 
     table_ = new QTableWidget(0, 4);
-    table_->setHorizontalHeaderLabels({QStringLiteral("Cuerpo"), QStringLiteral("Con"), QStringLiteral("Volumen común (mm³)"),
+    table_->setHorizontalHeaderLabels({QStringLiteral("Cuerpo"), QStringLiteral("Con"), QStringLiteral("Volumen común (%1)").arg(Units::instance().volumeUnit()),
                                        QStringLiteral("Peor a (°)")});
     table_->horizontalHeader()->setSectionResizeMode(FirstColumn, QHeaderView::Stretch);
     table_->horizontalHeader()->setSectionResizeMode(SecondColumn, QHeaderView::Stretch);
@@ -122,7 +122,7 @@ void InterferenceDialog::showPairs(const std::vector<document::InterferencePair>
         table_->insertRow(row);
         table_->setItem(row, FirstColumn, new QTableWidgetItem(QString::fromStdString(pair.firstName)));
         table_->setItem(row, SecondColumn, new QTableWidgetItem(QString::fromStdString(pair.secondName)));
-        table_->setItem(row, VolumeColumn, new QTableWidgetItem(QString::number(pair.volume, 'f', 2)));
+        table_->setItem(row, VolumeColumn, new QTableWidgetItem(Units::instance().formatVolume(pair.volume)));
         table_->setItem(row, AtColumn,
                         new QTableWidgetItem(along ? QString::number(pair.at * 180.0 / std::numbers::pi, 'f', 1) : QStringLiteral("—")));
     }

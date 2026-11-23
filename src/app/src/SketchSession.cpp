@@ -1245,6 +1245,7 @@ void SketchSession::editDimension(sketch::ConstraintId id)
         return;
     }
     sketch::Sketch before = sketch_;
+    const std::string droppedExpression = edited.expression.empty() ? sketch_.constraint(id)->expression : std::string();
     sketch_.constraint(id)->value = edited.value;
     sketch_.constraint(id)->expression = edited.expression;
     if (solver_->solve(sketch_).status != sketch::SolveStatus::Solved) {
@@ -1255,6 +1256,10 @@ void SketchSession::editDimension(sketch::ConstraintId id)
     }
     remember(std::move(before));
     solveAndShow();
+    if (!droppedExpression.empty()) {
+        emit message(QStringLiteral("La cota ya no sigue a «%1»: ahora es un número fijo")
+                         .arg(QString::fromStdString(droppedExpression)));
+    }
 }
 
 void SketchSession::showSketch()

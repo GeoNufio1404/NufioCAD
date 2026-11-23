@@ -526,7 +526,7 @@ bool MainWindow::importStepFile(const std::filesystem::path& path)
             whenComputed([this, id = raw->id(), name, wasEmpty] {
                 const document::FeatureStatus status = document_.status(id);
                 if (status.health == document::Health::Error) {
-                    statusBar()->showMessage(QStringLiteral("La importación falló: %1").arg(QString::fromStdString(status.message)), 15000);
+                    statusBar()->showMessage(QStringLiteral("La importación falló: %1").arg(Units::instance().localize(QString::fromStdString(status.message))), 15000);
                     return;
                 }
                 if (wasEmpty) {

@@ -1,6 +1,7 @@
 #include "Units.hpp"
 
 #include <QLocale>
+#include <QRegularExpression>
 #include <QSettings>
 
 namespace nuf::app {
@@ -85,6 +86,42 @@ QString Units::format(double mm, int decimals) const
 QString Units::formatWithUnit(double mm, int decimals) const
 {
     return format(mm, decimals) + QLatin1Char(' ') + unit();
+}
+
+QString Units::formatVolume(double mm3, int decimals) const
+{
+    QLocale locale;
+    locale.setNumberOptions(QLocale::OmitGroupSeparator);
+    const double f = factor();
+    return locale.toString(mm3 / (f * f * f), 'f', decimals + 3 * extraDecimals());
+}
+
+QString Units::localize(const QString& text) const
+{
+    if (length_ == LengthUnit::Mm || !text.contains(QLatin1String("mm"))) {
+        return text;
+    }
+    // Un número (con coma o punto) y «mm» que no sea «mm²» ni «mm³» ni parte de una palabra.
+    static const QRegularExpression number(QStringLiteral(R"((\d+(?:[.,]\d+)?)(\s*)mm(?![\w²³]))"));
+    static const QRegularExpression bare(QStringLiteral(R"((?<![\w²³])mm(?![\w²³]))"));
+    QString out;
+    qsizetype last = 0;
+    for (auto it = number.globalMatch(text); it.hasNext();) {
+        const QRegularExpressionMatch m = it.next();
+        out += text.mid(last, m.capturedStart() - last);
+        QString digits = m.captured(1);
+        digits.replace(QLatin1Char(','), QLatin1Char('.'));
+        QString shown = QString::number(toDisplay(digits.toDouble()), 'f', 3);
+        while (shown.contains(QLatin1Char('.')) && (shown.endsWith(QLatin1Char('0')) || shown.endsWith(QLatin1Char('.')))) {
+            shown.chop(1);
+        }
+        shown.replace(QLatin1Char('.'), m.captured(1).contains(QLatin1Char('.')) ? QLatin1Char('.') : QLatin1Char(','));
+        out += shown + m.captured(2) + unit();
+        last = m.capturedEnd();
+    }
+    out += text.mid(last);
+    out.replace(bare, unit());
+    return out;
 }
 
 } // namespace nuf::app

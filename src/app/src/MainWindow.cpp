@@ -438,14 +438,21 @@ void MainWindow::applyToolValue()
     }
     const FeatureTool::PrimaryField primary = tool_->primaryField();
     const std::vector<std::optional<double>> typed = toolValueInput_->values();
+    const std::vector<QString> texts = toolValueInput_->texts();
     toolValueInput_->clear();
     toolValueInput_->hide();
     viewport_->setFocus();
+    auto* expression = qobject_cast<ExpressionSpinBox*>(primary.box);
+    if (primary.box != nullptr && (typed.empty() || !typed.front()) && expression != nullptr && !texts.empty()
+        && !texts.front().isEmpty()) {
+        // No es un número: una expresión con parámetros («2*grosor»); el cuadro la evalúa y la recuerda.
+        expression->setExpression(texts.front());
+        return;
+    }
     if (primary.box == nullptr || typed.empty() || !typed.front()) {
         return;
     }
     // Un número a secas se entiende en la unidad elegida (las longitudes) o tal cual (ángulos y cantidades).
-    const auto* expression = qobject_cast<ExpressionSpinBox*>(primary.box);
     const double value = expression != nullptr && expression->isLength() ? Units::instance().fromDisplay(*typed.front()) : *typed.front();
     primary.box->setValue(value);
 }

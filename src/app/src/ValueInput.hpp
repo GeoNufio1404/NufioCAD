@@ -29,6 +29,8 @@ public:
     void clear();
     // Valores escritos; nullopt en los campos vacíos o no numéricos.
     std::vector<std::optional<double>> values() const;
+    // Lo escrito tal cual en cada campo (para las expresiones con parámetros).
+    std::vector<QString> texts() const;
 
 signals:
     void accepted();

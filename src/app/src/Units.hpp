@@ -32,6 +32,12 @@ public:
     // El número en la unidad actual, sin la unidad («12.70»), o con ella («12.70 mm»).
     QString format(double mm, int decimals = 2) const;
     QString formatWithUnit(double mm, int decimals = 2) const;
+    // Volumen (mm³) como número en la unidad cúbica actual y su etiqueta («cm³»).
+    QString formatVolume(double mm3, int decimals = 2) const;
+    QString volumeUnit() const { return unit() + QStringLiteral("³"); }
+    // Un texto escrito en milímetros («un poste de 2,5 mm», «0,3 mm más ancho») pasado a la unidad elegida: cada
+    // número seguido de «mm» se convierte, y un «mm» suelto se cambia por la unidad. No toca «mm²» ni «mm³».
+    QString localize(const QString& text) const;
 
 signals:
     void changed();

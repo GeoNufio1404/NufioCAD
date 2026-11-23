@@ -1,6 +1,7 @@
 #include "ParametersDialog.hpp"
 #include "DialogSize.hpp"
 #include "Theme.hpp"
+#include "Units.hpp"
 
 #include <nuf/document/Expression.hpp>
 
@@ -142,32 +143,41 @@ std::map<std::string, std::string> ParametersDialog::renames() const
     return result;
 }
 
-void ParametersDialog::followRename(int row)
+void ParametersDialog::followRename(int /*row*/)
 {
-    QTableWidgetItem* item = table_->item(row, NameColumn);
-    const std::string last = item->data(LastNameRole).toString().toStdString();
-    const std::string current = item->text().trimmed().toStdString();
-    if (last == current || !document::isValidParameterName(current) || !document::isValidParameterName(last)) {
-        return;
+    // Los cambios de nombre se propagan todos a la vez y solo cuando todos los nombres son válidos y distintos: así
+    // se pueden intercambiar dos nombres (a↔b), que mientras se escribe el primero quedan repetidos un momento.
+    std::set<std::string> names;
+    for (int row = 0; row < table_->rowCount(); ++row) {
+        const std::string current = table_->item(row, NameColumn)->text().trimmed().toStdString();
+        if (!document::isValidParameterName(current) || !names.insert(current).second) {
+            return;  // inválido o repetido: se avisa en refresh(), y se propaga cuando se corrija
+        }
     }
-    for (int other = 0; other < table_->rowCount(); ++other) {
-        if (other != row && table_->item(other, NameColumn)->text().trimmed().toStdString() == current) {
-            return;  // nombre repetido: se avisa en refresh(), y se propaga cuando se corrija
+    std::map<std::string, std::string> renames;
+    for (int row = 0; row < table_->rowCount(); ++row) {
+        const QTableWidgetItem* item = table_->item(row, NameColumn);
+        const std::string last = item->data(LastNameRole).toString().toStdString();
+        const std::string current = item->text().trimmed().toStdString();
+        if (last != current && document::isValidParameterName(last)) {
+            renames[last] = current;
         }
     }
     refreshing_ = true;
-    for (int other = 0; other < table_->rowCount(); ++other) {
-        if (other == row) {
-            continue;
-        }
-        QTableWidgetItem* expression = table_->item(other, ExpressionColumn);
-        const QString updated = QString::fromStdString(
-            document::renameInExpression(expression->text().toStdString(), {{last, current}}));
-        if (updated != expression->text()) {
-            expression->setText(updated);
+    if (!renames.empty()) {
+        for (int other = 0; other < table_->rowCount(); ++other) {
+            QTableWidgetItem* expression = table_->item(other, ExpressionColumn);
+            const QString updated =
+                QString::fromStdString(document::renameInExpression(expression->text().toStdString(), renames));
+            if (updated != expression->text()) {
+                expression->setText(updated);
+            }
         }
     }
-    item->setData(LastNameRole, QString::fromStdString(current));
+    for (int row = 0; row < table_->rowCount(); ++row) {
+        QTableWidgetItem* item = table_->item(row, NameColumn);
+        item->setData(LastNameRole, item->text().trimmed());
+    }
     refreshing_ = false;
 }
 
@@ -200,7 +210,16 @@ void ParametersDialog::refresh()
         }
         QTableWidgetItem* item = table_->item(row, ValueColumn);
         item->setText(error.isEmpty() ? shown : QStringLiteral("⚠"));
-        item->setToolTip(error);
+        // Un parámetro puede ser una longitud, un ángulo o una cantidad: el número se muestra tal cual y, por si es una
+        // longitud (en milímetros), el tooltip la da en la unidad elegida.
+        QString tip = error;
+        if (error.isEmpty() && Units::instance().length() != LengthUnit::Mm) {
+            const auto value = scratch.parameterValue(p.name);
+            if (value.value) {
+                tip = QStringLiteral("Si es una longitud: %1").arg(Units::instance().formatWithUnit(*value.value, 3));
+            }
+        }
+        item->setToolTip(tip);
         if (!error.isEmpty() && problem.isEmpty()) {
             problem = error;
         }

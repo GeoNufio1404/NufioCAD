@@ -214,13 +214,13 @@ Rama `feature/pendientes-s-sketch` (23 nov. 2026, sin fusionar hasta la prueba m
 - [ ] Inferencias: que las guías de las curvas tengan su sitio en la lista de prioridad (I1): **no se hizo**: no está claro qué caso falla; se retoma si la prueba manual (SKI) enseña uno concreto.
 
 ### P — Parámetros y unidades
-- [ ] La **cota ligada a un parámetro** no se distingue en el sketch (marca «ƒ»); escribir un número suelto en ella **quita la expresión sin avisar** (6c).
-- [ ] El diálogo de Parámetros no deja intercambiar dos nombres a la vez (a↔b se bloquea por «repetido»; la función de renombrar ya lo admite) (6c).
-- [ ] Solo las cotas con valor se ligan a parámetros (no restricciones como la curvatura) (6c).
-- [ ] La columna de valores de la lista de parámetros sin unidad (un parámetro puede ser longitud, ángulo o cantidad) (U3).
-- [ ] Siguen en mm: los mensajes de error de la geometría, las unidades de volumen, las ayudas de Lightbox, Caja con tapa y Letrero («M3: 2,5»); el paso de la rejilla del sketch no lleva etiqueta de unidad (U3, unidades).
-- [ ] Una expresión con parámetros en cm exige poner la unidad (`grosor + 2 cm`) (unidades).
-- [ ] El cuadro rápido de valor (escribir un número con la herramienta abierta) no admite expresiones con parámetros (U7).
+Rama `feature/pendientes-p-parametros` (23 nov. 2026, sin fusionar hasta la prueba manual **REF.25 a REF.32** de la [guía](guia-de-pruebas.md)).
+- [x] **Cota ligada ✅:** la cota que sigue a un parámetro o expresión lleva una **ƒ** delante en el sketch, y escribir un número suelto en ella avisa de que ya no sigue a la expresión (6c).
+- [x] **Intercambiar nombres a↔b ✅:** el diálogo de Parámetros propaga los cambios de nombre todos a la vez y solo cuando todos son válidos y distintos; mientras están repetidos un momento, avisa y no deja aceptar (6c).
+- [ ] Solo las cotas con valor se ligan a parámetros (no restricciones como la curvatura): **no se hizo** (la curvatura no tiene un valor que ligar).
+- [x] **Unidades de lo que faltaba ✅ (casi):** el valor de un parámetro muestra en el tooltip la longitud en la unidad elegida (el número sigue a secas: puede ser un ángulo o una cantidad); las **ayudas de los generadores** y los **mensajes de error y aviso de la geometría** pasan sus «2,5 mm» a la unidad elegida (`Units::localize`); el volumen común de Interferencias sale en cm³ o in³ (`Units::formatVolume`) (U3, unidades). **Pendiente:** el paso de la rejilla del sketch no lleva etiqueta de unidad (no hay un sitio donde se muestre); las unidades de los textos ya mostrados no se actualizan al cambiar la unidad con la herramienta abierta.
+- [ ] Una expresión con parámetros en cm exige poner la unidad (`grosor + 2 cm`): **decisión: no se hace**; un número suelto puede ser una longitud o un factor (`grosor * 2`), y adivinarlo daría resultados distintos a los escritos.
+- [x] **Cuadro rápido con expresiones ✅:** con una herramienta abierta, escribir una expresión que **empiece por número, «-» o «.»** (`2*grosor`) abre el cuadro del valor principal y se aplica como expresión (U7). Las que empiezan por letra no, porque las letras son atajos.
 
 ### M — Operaciones de modelado
 - [ ] Redondeo con dos radios asimétricos (cuerda): `BRepFilletAPI_MakeFillet` no lo ofrece (O2).

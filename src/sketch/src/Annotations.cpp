@@ -429,6 +429,10 @@ std::string formatDimension(const Constraint& c)
         text = trimmed(c.value / gLengthScale, gLengthDecimals);
         break;
     }
+    // Una cota ligada a un parámetro o a una expresión lleva una «ƒ» delante.
+    if (!c.expression.empty()) {
+        text = "ƒ" + text;
+    }
     return c.driving ? text : "(" + text + ")";
 }
 
