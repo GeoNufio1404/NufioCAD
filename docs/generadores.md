@@ -397,8 +397,9 @@ un componente. Se registra en `generators()` y aparece solo en la cinta y en el 
 
 ## Pendiente
 
-Ver la hoja de ruta. Lo más cercano: el canal para la tira LED, poner tu SVG sobre la cara central (relieve o corte) y los demás
-generadores (caja con tapa, letreros, par de engranajes).
+Lo que queda de los generadores está en la hoja de ruta, «[Pendientes por categoría](hoja-de-ruta.md#pendientes-por-categoría)»
+(categorías G — Generadores y E — Engranajes). Lo más cercano: poner tu SVG sobre la cara central de la Lightbox (relieve o
+corte), avisar antes de perder lo editado a mano al reabrir un generador, y la Caja con tapa redonda con bisagra y clips.
 
 ## Tornillo sin fin y rueda
 
