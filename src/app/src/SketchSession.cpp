@@ -12,6 +12,7 @@
 #include <nuf/sketch/Svg.hpp>
 #include <nuf/sketch/Edit.hpp>
 
+#include <QCoreApplication>
 #include <QCursor>
 #include <QFileDialog>
 #include <QGuiApplication>
@@ -36,6 +37,7 @@
 
 #include <algorithm>
 #include <map>
+#include <utility>
 #include <cmath>
 #include <numbers>
 
@@ -47,11 +49,13 @@ namespace {
 // clic fuera de él) termina la espera.
 class InlineEditorKeys final : public QObject {
 public:
-    InlineEditorKeys(QWidget* popup, QEventLoop* loop, bool* accepted)
+    // «outside», si se da, guarda dónde se hizo un clic fuera del recuadro (el filtro va en toda la aplicación).
+    InlineEditorKeys(QWidget* popup, QEventLoop* loop, bool* accepted, std::optional<QPoint>* outside = nullptr)
         : QObject(popup)
         , popup_(popup)
         , loop_(loop)
         , accepted_(accepted)
+        , outside_(outside)
     {
     }
 
@@ -70,6 +74,11 @@ public:
             }
         } else if (event->type() == QEvent::Hide && watched == popup_) {
             loop_->quit();
+        } else if (event->type() == QEvent::MouseButtonPress && outside_ != nullptr) {
+            const QPoint global = static_cast<QMouseEvent*>(event)->globalPosition().toPoint();
+            if (!popup_->frameGeometry().contains(global)) {
+                *outside_ = global;
+            }
         }
         return false;
     }
@@ -78,6 +87,7 @@ private:
     QWidget* popup_;
     QEventLoop* loop_;
     bool* accepted_;
+    std::optional<QPoint>* outside_;
 };
 
 QString dimensionCaption(sketch::ConstraintType type)
@@ -252,7 +262,7 @@ void SketchSession::setTool(Tool tool)
         emit hintChanged(QStringLiteral("Clic donde va la esquina inferior izquierda de la imagen"));
     } else if (tool == Tool::Dimension) {
         emit hintChanged(QStringLiteral("Cota: clic en un círculo, arco o línea y escribe el valor · dos clics para una distancia o un ángulo · "
-                                        "clic en una cota para editarla · Esc para terminar"));
+                                        "Mayús + clic: cota de referencia · clic en una cota para editarla · Esc para terminar"));
     } else {
         emit hintChanged(tool_ ? QString::fromStdString(tool_->hint()) : QString());
     }
@@ -434,7 +444,7 @@ void SketchSession::clicked(double x, double y, Qt::KeyboardModifiers modifiers)
         return;
     }
     if (toolKind_ == Tool::Dimension) {
-        dimensionClicked({x, y});
+        dimensionClicked({x, y}, (modifiers & Qt::ShiftModifier) != 0);
         return;
     }
     if (!tool_) {
@@ -1087,7 +1097,12 @@ bool SketchSession::askDimensionValue(sketch::Constraint& dimension)
 
     QEventLoop loop;
     bool accepted = false;
-    auto* keys = new InlineEditorKeys(&popup, &loop, &accepted);
+    pendingClick_.reset();
+    std::optional<QPoint> outside;
+    auto* keys = new InlineEditorKeys(&popup, &loop, &accepted, &outside);
+    // El clic que cierra el recuadro lo atiende la sesión (no se reenvía solo a la vista).
+    popup.setAttribute(Qt::WA_NoMouseReplay);
+    qApp->installEventFilter(keys);
     popup.installEventFilter(keys);
     box->installEventFilter(keys);
     if (QLineEdit* edit = box->findChild<QLineEdit*>()) {
@@ -1105,7 +1120,13 @@ bool SketchSession::askDimensionValue(sketch::Constraint& dimension)
     box->setFocus();
     box->selectAll();
     loop.exec();
+    qApp->removeEventFilter(keys);
     if (!accepted) {
+        double x = 0.0;
+        double y = 0.0;
+        if (outside && viewport_.sketchPointAtGlobal(*outside, x, y)) {
+            pendingClick_ = sketch::Vec2{x, y};
+        }
         return false;
     }
     box->interpretText();
@@ -1117,7 +1138,7 @@ bool SketchSession::askDimensionValue(sketch::Constraint& dimension)
     return true;
 }
 
-bool SketchSession::addDimension()
+bool SketchSession::addDimension(bool reference)
 {
     if (selection_.empty() && toolKind_ != Tool::Dimension) {
         // Sin nada elegido: se entra en el modo Cota y se hace clic en lo que se quiere acotar.
@@ -1130,7 +1151,11 @@ bool SketchSession::addDimension()
                                     "un punto y una línea, o dos líneas"));
         return false;
     }
-    if (!askDimensionValue(*dimension)) {
+    if (reference) {
+        // Mayús + clic: solo muestra la medida, no la fija.
+        dimension->driving = false;
+        dimension->expression.clear();
+    } else if (!askDimensionValue(*dimension)) {
         return false;
     }
     sketch::Sketch before = sketch_;
@@ -1151,8 +1176,9 @@ bool SketchSession::addDimension()
     return true;
 }
 
-void SketchSession::dimensionClicked(sketch::Vec2 point)
+void SketchSession::dimensionClicked(sketch::Vec2 point, bool reference)
 {
+    pendingClick_.reset();
     // Un clic sobre una cota existente: se edita su valor.
     if (const sketch::ConstraintId id = annotationAt(point)) {
         const sketch::Constraint* c = sketch_.constraint(id);
@@ -1192,7 +1218,7 @@ void SketchSession::dimensionClicked(sketch::Vec2 point)
         }
     }
     const bool single = selection_.size() == 1;
-    const bool created = addDimension();
+    const bool created = addDimension(reference);
     if (!created && single && selection_.size() == 1 && sketch_.entity(selection_[0].entity) != nullptr &&
         !std::holds_alternative<sketch::Line>(sketch_.entity(selection_[0].entity)->geometry)) {
         // Se canceló en un círculo, arco o elipse: no hay con qué emparejarlo, se empieza de nuevo. (Una línea
@@ -1200,6 +1226,11 @@ void SketchSession::dimensionClicked(sketch::Vec2 point)
         selection_.clear();
         showSketch();
         emit selectionChanged();
+    }
+    // El campo de valor se cerró con un clic en otro sitio de la vista: ese clic no se pierde. Con una línea elegida y
+    // un clic en otra, sale el ángulo o la distancia entre las dos sin tener que repetirlo.
+    if (const std::optional<sketch::Vec2> next = std::exchange(pendingClick_, std::nullopt)) {
+        dimensionClicked(*next);
     }
 }
 

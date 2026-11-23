@@ -539,6 +539,22 @@ void Viewport::grabSketchDrag()
 
 double Viewport::sketchPixelSize() const { return impl_->pixelSize(); }
 
+bool Viewport::sketchPointAtGlobal(const QPoint& globalPos, double& x, double& y) const
+{
+    const QPoint local = mapFromGlobal(globalPos);
+    if (!rect().contains(local)) {
+        return false;
+    }
+    const qreal ratio = devicePixelRatioF();
+    const auto p = impl_->sketchPointAt(Vec2i(int(local.x() * ratio), int(local.y() * ratio)));
+    if (!p) {
+        return false;
+    }
+    x = p->x;
+    y = p->y;
+    return true;
+}
+
 std::vector<sketch::Annotation> Viewport::sketchAnnotations(const sketch::Sketch& sketch)
 {
     return sketch::layoutAnnotations(sketch, impl_->pixelSize(), &impl_->layoutMemory);

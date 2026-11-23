@@ -11,6 +11,15 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 ---
 
 
+## Pendientes por categoría, S (sketch y cotas) — 23 nov. 2026
+
+- **Qué:** herramienta **Punto**; recortar, extender y partir contra **elipses, arcos de elipse y splines**; extender un arco de elipse y una spline, y recortar una spline; las cotas y restricciones ligadas a las letras de un texto se vuelven a ligar al editar solo su altura; el clic que cierra el campo de una cota se atiende (ángulo con un solo clic más), **Mayús + clic** crea una cota de referencia y los arcos concéntricos reparten sus cotas. Además, `test_assembly.cpp` ya compila con Catch2 3.16 (aviso C4702 tras `FAIL`).
+- **Dónde:** `ShapeTools.cpp` y `Tools.hpp` (`PointTool`, `makePointTool`), `SketchSession` (herramienta `Point`, `pendingClick_`, Mayús + clic, rehacer lo ligado al editar texto), `MainWindowMenus.cpp` y `resources.qrc` (familia y icono Punto), `Edit.cpp` y `Edit.hpp` (`isPolylineCurve`, `polylineIntersections`, `trimSpline`, `extendSpline`, `extendEllipseArc`, `constraintsOn`, `restoreConstraints`), `Annotations.cpp` (`concentricRank`), `Viewport` (`sketchPointAtGlobal`). Pruebas en `test_sketch_point_tool.cpp`, `test_sketch_edit_curves.cpp` y `test_annotations_overlap.cpp`; la prueba manual es `SKS.1` a `SKS.14`.
+- **Volver atrás:** rama `feature/pendientes-s-sketch` sin fusionar: se borra con `git branch -D`; ya fusionada, `git revert` de la fusión. No cambia el formato de los archivos.
+
+---
+
+
 ## Fase 15, pendientes menores — 20 nov. 2026
 
 - **Qué:** secciones plegables en Lightbox, Caja con tapa y Letrero (`grouped` en `Generators.cpp`); el panel de comandos flotantes recuerda su posición y tamaño (`MainWindow.cpp`, ajuste `view/floatingCommandsGeometry`); el desfase del sketch admite una elipse, un arco de elipse o una spline sola (`offset` en `Edit.cpp`, con prueba en `test_sketch_edit.cpp`).

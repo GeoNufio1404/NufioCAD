@@ -34,6 +34,7 @@ Va en el mismo orden que el programa: **1. General**, **2. Sketch**, **3. Sólid
 | 2.4 Cotas | `SKC` |
 | 2.5 Restricciones e iconos | `SKR` |
 | 2.6 Rendimiento del sketch | `SKP` |
+| 2.7 Pendientes del sketch (categoría S) | `SKS` |
 | 3.1 Extruir y modelado básico | `EXT` |
 | 3.2 Operaciones de acabado (modificar) | `ACA` |
 | 3.3 Flecha de la medida que se edita (todas las herramientas con medidas) | `FLE` |
@@ -470,6 +471,27 @@ Rama `feature/auditoria-sketch`. Hace falta un sketch grande: dibuja una **rejil
 | SKP.1 | Con el sketch grande y **sin herramienta**, pasa el cursor por encima | El resaltado sigue al cursor sin tirones |
 | SKP.2 | Termina el sketch y extruye el perfil | Los perfiles salen sin esperas largas |
 | SKP.3 | Acerca y aleja la vista con muchas cotas en pantalla | Las cotas se recolocan con fluidez |
+
+### 2.7 Pendientes del sketch (categoría S de la hoja de ruta)
+
+Código: **SKS**. Estado: **sin probar** (rama `feature/pendientes-s-sketch`, sin fusionar hasta que se pruebe). Cada prueba tiene su prueba automática, pero ninguna se ha hecho con el ratón.
+
+| ID | Haz esto | Debe pasar |
+|---|---|---|
+| SKS.1 | Con un sketch abierto, usa **Punto** (familia Punto, en CREAR) y haz clic en tres sitios libres | Aparece un punto en cada clic y la herramienta sigue activa; Esc sale. Los puntos se ven como en el resto del sketch |
+| SKS.2 | Con **Punto**, haz clic sobre una línea, y luego sobre un extremo que ya existe | En la línea queda un punto unido a ella (arrástrala o muévela: el punto la sigue); sobre el extremo no se pone otro encima |
+| SKS.3 | Pon un punto, termina el sketch y abre **Agujero**; elige ese sketch | El agujero queda donde pusiste el punto (los puntos valen como los centros de círculos) |
+| SKS.4 | Dibuja una **elipse** y una **línea** que la cruce; con **Recortar**, haz clic en el trozo de línea de fuera de la elipse | La línea se acorta justo hasta el borde de la elipse y queda unida a ella |
+| SKS.5 | Con una línea corta apuntando a una elipse, usa **Extender** haciendo clic junto a su extremo | La línea se alarga hasta tocar la elipse |
+| SKS.6 | Dibuja un **arco de elipse** y una línea que cruce la elipse más allá de su final; con **Extender**, haz clic junto a ese final | El arco crece hasta la línea (por el extremo que tocaste) |
+| SKS.7 | Dibuja una **spline** y una línea vertical más allá de su final; con **Extender**, haz clic junto a ese final | La spline se prolonga con su misma curvatura hasta la línea y queda unida a ella. Repite por el otro extremo |
+| SKS.8 | Cruza una spline con dos líneas verticales; con **Recortar**, haz clic en el tramo del medio | Quedan dos splines, cada una acabada en su línea. Con una sola línea, queda el tramo del otro lado |
+| SKS.9 | Una spline por puntos (con sus puntos de paso) recortada: mira los puntos de paso | Los puntos de paso del tramo que se quitó dejan de sujetar la curva; los del tramo que queda siguen sobre ella |
+| SKS.10 | Pon un **texto**, une un punto suelto a una letra (coincidente) y edita el texto (**Sketch › Editar texto…**) solo cambiando la altura | El punto sigue unido a la letra equivalente. Si cambias el texto o la fuente, el estado avisa de cuántas restricciones o cotas se perdieron |
+| SKS.11 | En **Cota**, haz clic en una línea (se abre el campo de valor) y luego, **sin cerrar el campo**, haz clic en otra línea | El campo se cierra y a la vez se elige la segunda línea: se abre el campo del ángulo (o de la distancia, si son paralelas) con un solo clic más |
+| SKS.12 | En **Cota**, haz clic en un círculo, cancela con Esc y haz clic en otra cosa | No pasa nada raro: el clic en el vacío limpia la selección |
+| SKS.13 | En **Cota**, **Mayús + clic** en una línea | Se crea una cota de referencia (entre paréntesis) sin preguntar el valor, y sigue la medida si la pieza cambia |
+| SKS.14 | Dibuja varios **arcos con el mismo centro** (por ejemplo, una ranura curva) y acótalos con radio | Cada cota va a un ángulo distinto: los textos no se pisan |
 
 ---
 

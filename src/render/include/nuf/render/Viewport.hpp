@@ -253,6 +253,9 @@ public:
     void grabSketchDrag();
     // Tamaño de un píxel en el plano del sketch (mm) y paso de la rejilla.
     double sketchPixelSize() const;
+    // El punto del plano del sketch que hay bajo una posición global de la pantalla; false si cae fuera de la vista o el
+    // sketch no está abierto.
+    bool sketchPointAtGlobal(const QPoint& globalPos, double& x, double& y) const;
     // Las anotaciones (cotas e iconos) tal como se dibujan: con la memoria del
     // visor, para que lo que se pinta y lo que se pica coincidan y no salten.
     std::vector<sketch::Annotation> sketchAnnotations(const sketch::Sketch& sketch);
