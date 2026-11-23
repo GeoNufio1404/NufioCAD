@@ -1,6 +1,7 @@
 #include <nuf/sketch/Edit.hpp>
 
 #include <nuf/sketch/Pick.hpp>
+#include <nuf/sketch/Solver.hpp>
 #include <nuf/sketch/Tools.hpp>
 
 #include "Curves2d.hpp"
@@ -1287,6 +1288,57 @@ std::vector<EntityId> chainOf(const Sketch& sketch, EntityId id)
         }
     }
     return {chain.begin(), chain.end()};
+}
+
+std::vector<Constraint> constraintsOn(const Sketch& sketch, const std::vector<EntityId>& entities)
+{
+    const std::set<EntityId> wanted(entities.begin(), entities.end());
+    std::vector<Constraint> found;
+    for (const Constraint& c : sketch.constraints()) {
+        if (wanted.contains(c.first.entity) || wanted.contains(c.second.entity) || wanted.contains(c.third.entity)) {
+            found.push_back(c);
+        }
+    }
+    return found;
+}
+
+std::size_t restoreConstraints(Sketch& sketch, const std::vector<Constraint>& saved,
+                               const std::map<EntityId, EntityId>& remap)
+{
+    const std::unique_ptr<ISolver> solver = makePlaneGcsSolver();
+    std::size_t kept = 0;
+    for (Constraint c : saved) {
+        bool usable = true;
+        bool allFixed = true;  // solo fijas o bloqueadas: el solver no las comprueba, así que no se sabe si caben
+        for (Ref* r : {&c.first, &c.second, &c.third}) {
+            if (r->empty()) {
+                continue;
+            }
+            if (const auto it = remap.find(r->entity); it != remap.end()) {
+                r->entity = it->second;
+            }
+            const Entity* target = sketch.entity(r->entity);
+            if (target == nullptr) {
+                usable = false;  // lo que tocaba ya no existe y no tiene pareja
+            } else if (!target->reference && !target->locked) {
+                allFixed = false;
+            }
+        }
+        if (!usable || allFixed || !sketch.canAdd(c)) {
+            continue;
+        }
+        const ConstraintId id = sketch.addConstraint(c);
+        const SolveResult result = solver->solve(sketch);
+        const bool rejected = result.status != SolveStatus::Solved
+                              || std::ranges::find(result.conflicting, id) != result.conflicting.end()
+                              || std::ranges::find(result.redundant, id) != result.redundant.end();
+        if (rejected) {
+            sketch.removeConstraint(id);
+        } else {
+            ++kept;
+        }
+    }
+    return kept;
 }
 
 std::vector<EntityId> offset(Sketch& sketch, const std::vector<EntityId>& chain, double distance)

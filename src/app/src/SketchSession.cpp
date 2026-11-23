@@ -35,6 +35,7 @@
 #include <fstream>
 
 #include <algorithm>
+#include <map>
 #include <cmath>
 #include <numbers>
 
@@ -610,14 +611,22 @@ void SketchSession::placeText(sketch::Vec2 at, sketch::EntityId editing)
     // Las letras quedan como curvas unidas y fijas (se mueven juntas con la
     // herramienta Mover; se pueden extruir o grabar).
     remember(sketch_);
-    // Al editar, las letras de antes se quitan (con lo que estuviera ligado a ellas) y las nuevas ocupan su sitio.
+    // Al editar, las letras de antes se quitan y las nuevas ocupan su sitio. Si el texto y la fuente siguen siendo los
+    // mismos (solo cambió la altura), las letras salen en el mismo orden y lo que estuviera ligado a ellas (cotas,
+    // coincidencias…) se vuelve a ligar a las nuevas; si no, no hay manera de saber qué letra es cuál y se pierde.
+    std::vector<sketch::EntityId> old;
+    std::vector<sketch::Constraint> bound;
+    bool sameLetters = false;
     if (editing != 0) {
-        std::vector<sketch::EntityId> old;
+        const sketch::Entity* owner = sketch_.entity(editing);
+        sameLetters = owner != nullptr && owner->text && owner->text->text == textEdit->text().toStdString()
+                      && owner->text->family == textFamily_.toStdString();
         for (const sketch::Entity& e : sketch_.entities()) {
             if (e.textOwner == editing) {
                 old.push_back(e.id);
             }
         }
+        bound = sketch::constraintsOn(sketch_, old);
         for (const sketch::EntityId id : old) {
             sketch_.removeEntity(id);
         }
@@ -632,7 +641,25 @@ void SketchSession::placeText(sketch::Vec2 at, sketch::EntityId editing)
         sketch_.entity(created.front())->text = sketch::TextInfo{textEdit->text().toStdString(), textFamily_.toStdString(),
                                                                  heightBox->value(), at};
     }
+    // Se vuelven a poner las que el solver admita (una cota entre dos letras que ya no mide lo mismo no cabe).
+    QString lostNote;
+    if (!bound.empty()) {
+        std::map<sketch::EntityId, sketch::EntityId> remap;
+        if (sameLetters && created.size() == old.size()) {
+            for (std::size_t i = 0; i < old.size(); ++i) {
+                remap[old[i]] = created[i];
+            }
+        }
+        const std::size_t kept = sketch::restoreConstraints(sketch_, bound, remap);
+        if (kept < bound.size()) {
+            lostNote = QStringLiteral(" · se perdieron %1 restricciones o cotas ligadas a las letras de antes")
+                           .arg(bound.size() - kept);
+        }
+    }
     solveAndShow();
+    if (!lostNote.isEmpty()) {
+        emit message(QStringLiteral("Texto editado") + lostNote);
+    }
 }
 
 void SketchSession::placeImage(sketch::Vec2 at)

@@ -161,3 +161,36 @@ TEST_CASE("Recortar una spline contra una elipse", "[sketch][edit][s]")
     REQUIRE(trim(sketch, spline, {0.0, 0.5}));
     REQUIRE(countSplines(sketch) == 2);
 }
+
+TEST_CASE("Volver a ligar lo que tocaba a unas entidades sustituidas (texto editado)", "[sketch][edit][s]")
+{
+    Sketch sketch;
+    // Dos «letras» y un punto suelto de fuera, coincidente con el extremo de la primera; una cota entre las dos letras.
+    const EntityId a = sketch.addLine({0.0, 0.0}, {10.0, 0.0});
+    const EntityId b = sketch.addLine({20.0, 0.0}, {30.0, 0.0});
+    const EntityId free = sketch.addPoint({10.0, 0.0});
+    sketch.addConstraint(Constraint::coincident(Ref::of(free), Ref::end(a)));
+    sketch.addConstraint(Constraint::distance(Ref::start(a), Ref::start(b), 20.0));
+
+    const std::vector<Constraint> saved = constraintsOn(sketch, {a, b});
+    REQUIRE(saved.size() == 2);
+    sketch.removeEntity(a);
+    sketch.removeEntity(b);
+    REQUIRE(sketch.constraints().empty());
+
+    // Letras nuevas (más grandes: la cota entre ellas ya no mide 20 y no cabe; la coincidencia sí).
+    sketch.entity(free)->locked = false;
+    const EntityId a2 = sketch.addLine({0.0, 0.0}, {14.0, 0.0});
+    const EntityId b2 = sketch.addLine({30.0, 0.0}, {44.0, 0.0});
+    sketch.entity(a2)->locked = true;
+    sketch.entity(b2)->locked = true;
+    const std::size_t kept = restoreConstraints(sketch, saved, {{a, a2}, {b, b2}});
+    REQUIRE(kept == 1);
+    REQUIRE(count(sketch, ConstraintType::Coincident) == 1);
+    REQUIRE(count(sketch, ConstraintType::Distance) == 0);
+    // El punto de fuera sigue al extremo de la letra nueva.
+    REQUIRE_THAT(sketch.point(Ref::of(free))->x, WithinAbs(14.0, 1e-6));
+
+    // Sin pareja, nada se vuelve a ligar.
+    REQUIRE(restoreConstraints(sketch, saved, {}) == 0);
+}

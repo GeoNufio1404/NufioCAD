@@ -6,6 +6,7 @@
 
 #include <nuf/sketch/Sketch.hpp>
 
+#include <map>
 #include <optional>
 #include <vector>
 
@@ -39,6 +40,16 @@ std::vector<EntityId> chainOf(const Sketch& sketch, EntityId curve);
 // quedan paralelas a su original y acotadas a esa distancia; arcos y
 // círculos, concéntricos. Devuelve las curvas nuevas.
 std::vector<EntityId> offset(Sketch& sketch, const std::vector<EntityId>& chain, double distance);
+
+// Restricciones y cotas que tocan alguna de «entities» (con sus referencias tal como están): se guardan antes de
+// sustituir esas entidades (por ejemplo, las letras de un texto que se edita) para volver a ponerlas después.
+std::vector<Constraint> constraintsOn(const Sketch& sketch, const std::vector<EntityId>& entities);
+
+// Vuelve a poner las restricciones guardadas con las entidades nuevas (antigua → nueva). Se descarta la que toca una
+// entidad sin pareja, la que no se puede poner y la que el solver no admite (en conflicto, redundante o sin
+// resolver: por ejemplo, una cota entre dos letras que ya no mide lo mismo). Devuelve cuántas se conservaron.
+std::size_t restoreConstraints(Sketch& sketch, const std::vector<Constraint>& saved,
+                               const std::map<EntityId, EntityId>& remap);
 
 // Copia simétrica respecto a una línea, con restricciones de simetría.
 std::vector<EntityId> mirror(Sketch& sketch, const std::vector<EntityId>& entities, EntityId axis);
