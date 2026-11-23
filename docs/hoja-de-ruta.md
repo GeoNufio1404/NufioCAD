@@ -205,7 +205,7 @@ Para que otra persona pueda instalar NufioCAD en Windows sin que SmartScreen, De
 Lo que **sí bloquea la v0.2.0** no está aquí: es la Fase 14 (pruebas manuales P1, medir en Linux P3, publicar P4) y, de la Fase 19, la licencia de NufioCAD (D7), el certificado de firma (D3) y probar los instaladores (D1). Lo que solo falta **probar a mano** tampoco: va en P1 con su ID de la [guía de pruebas](guia-de-pruebas.md).
 
 ### S — Sketch y cotas
-Rama `feature/pendientes-s-sketch` (23 nov. 2026, sin fusionar hasta la prueba manual **SKS.1 a SKS.14** de la [guía](guia-de-pruebas.md#27-pendientes-del-sketch-categoría-s-de-la-hoja-de-ruta)).
+Rama `feature/pendientes-s-sketch` (23 nov. 2026, fusionada en `develop` sin probar a mano: prueba manual **SKS.1 a SKS.14** de la [guía](guia-de-pruebas.md#27-pendientes-del-sketch-categoría-s-de-la-hoja-de-ruta)).
 - [x] **Herramienta Punto ✅** en la familia Punto de CREAR (`makePointTool`): cada clic deja un punto unido a lo que haya debajo (curva, punto medio…) y no pone otro encima de un punto que ya existe; sigue activa hasta Esc. Sin atajo de teclado (el punto `.` se usa para escribir decimales). (5c)
 - [x] **Extender y recortar con elipses y splines ✅:** las líneas, arcos y círculos se recortan, extienden y parten contra **elipses, arcos de elipse y splines** (cruces sobre su polilínea; el extremo queda con «punto sobre objeto»); un **arco de elipse** se alarga hasta la primera curva que encuentra; una **spline** se **recorta** (el tramo que queda se rehace con una spline que pasa por puntos de él, y si se quita el del medio salen dos) y se **alarga** (prolongación natural de su último tramo hasta la primera curva). Los puntos de paso de una spline por puntos se reparten entre los tramos. **Pendiente:** una spline recortada o alargada queda como spline por puntos (pierde su estructura de polos y las restricciones que dependían de ella: igualdad, tangencia…; se conservan lo apoyado en ella y lo unido a sus extremos); extender una elipse entera no tiene sentido (U9).
 - [ ] Desfasar cadenas que mezclan elipses o splines con líneas y arcos, y quitar la pequeña discontinuidad de tangente de la elipse cerrada desfasada (UI.8): **no se hizo** (hay que cortar y empalmar las curvas desfasadas en cada esquina).
@@ -214,7 +214,7 @@ Rama `feature/pendientes-s-sketch` (23 nov. 2026, sin fusionar hasta la prueba m
 - [ ] Inferencias: que las guías de las curvas tengan su sitio en la lista de prioridad (I1): **no se hizo**: no está claro qué caso falla; se retoma si la prueba manual (SKI) enseña uno concreto.
 
 ### P — Parámetros y unidades
-Rama `feature/pendientes-p-parametros` (23 nov. 2026, sin fusionar hasta la prueba manual **REF.25 a REF.32** de la [guía](guia-de-pruebas.md)).
+Rama `feature/pendientes-p-parametros` (23 nov. 2026, fusionada en `develop` sin probar a mano: prueba manual **REF.25 a REF.32** de la [guía](guia-de-pruebas.md)).
 - [x] **Cota ligada ✅:** la cota que sigue a un parámetro o expresión lleva una **ƒ** delante en el sketch, y escribir un número suelto en ella avisa de que ya no sigue a la expresión (6c).
 - [x] **Intercambiar nombres a↔b ✅:** el diálogo de Parámetros propaga los cambios de nombre todos a la vez y solo cuando todos son válidos y distintos; mientras están repetidos un momento, avisa y no deja aceptar (6c).
 - [ ] Solo las cotas con valor se ligan a parámetros (no restricciones como la curvatura): **no se hizo** (la curvatura no tiene un valor que ligar).
