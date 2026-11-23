@@ -222,6 +222,10 @@ Código: **ARC**. Las pruebas **31–38** están en la hoja de ruta («Pruebas m
 | ARC.16 | «Elegir…» y señalar el `.exe` de tu slicer (Bambu Studio, Orca…) | El botón se activa; se recuerda la próxima vez |
 | ARC.17 | Pulsar «Imprimir» | Tu slicer se abre con la pieza ya cargada (el STL queda en `%TEMP%\NufioCAD`) |
 | ARC.18 | Imprimir con un cuerpo oculto desmarcado | Solo se manda lo marcado |
+| ARC.19 | Exporta un cubo y un par de engranajes a STL y vuelve a traer el STL con Archivo › **Importar STEP, STL u OBJ…** (o arrastrándolo a la ventana) | El cubo aparece como un cuerpo con su volumen y las caras planas; el aviso dice que se tomó en milímetros. Sobre una cara plana grande se puede hacer un sketch y cortar |
+| ARC.20 | Importa un STL con **huecos** (borra una cara en un programa de mallas) y uno de más de 30 000 triángulos | Un mensaje explica que no es hermética o que es demasiado grande; el diseño no cambia |
+| ARC.21 | Exportar con la casilla **Un archivo por componente** (con un Lightbox y un cuerpo suelto en el diseño) | Elige una carpeta; salen `Lightbox 1.stl` con la caja y la tapa juntas y un archivo aparte para el cuerpo suelto; «Un archivo por cuerpo» y esta se desmarcan entre sí |
+| ARC.22 | Guarda un diseño como `uno.nuf`, y luego **Guardar como** `dos.nuf` | El título pasa a «dos» y en Recientes sale «dos»; si antes le habías puesto otro nombre (Renombrar diseño), se queda con el tuyo |
 
 **Fíjate en:** ¿los avisos se entienden sin explicación? ¿Hay falsos avisos (te avisa de una pared que no existe)? ¿Echas de menos que señale dónde está el problema en la vista? ¿Los valores de tu impresora son los correctos (anota tu modelo)?
 

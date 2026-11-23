@@ -39,6 +39,8 @@ public:
     Format format() const;
     geometry::MeshQuality quality() const;
     bool onePerBody() const;
+    // Un archivo por componente (con todos sus cuerpos); los cuerpos que no están en ninguno salen uno por archivo.
+    bool onePerComponent() const;
     // El programa de laminado elegido (solo en el modo Imprimir).
     QString slicerPath() const;
     // Las medidas de la impresora (boquilla y cama) que se usan en la revisión.
@@ -66,6 +68,7 @@ private:
     QDoubleSpinBox* customAngular_ = nullptr;  // y angular (grados)
     QListWidget* list_ = nullptr;
     QCheckBox* onePerBody_ = nullptr;
+    QCheckBox* onePerComponent_ = nullptr;
     QLabel* summary_ = nullptr;
     QLabel* review_ = nullptr;
     QWidget* printer_ = nullptr;

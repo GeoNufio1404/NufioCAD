@@ -73,6 +73,20 @@ ExportDialog::ExportDialog(const std::vector<document::Body>& bodies, const std:
     }
 
     onePerBody_ = new QCheckBox(QStringLiteral("Un archivo por cuerpo"), this);
+    onePerComponent_ = new QCheckBox(QStringLiteral("Un archivo por componente"), this);
+    onePerComponent_->setToolTip(QStringLiteral("Cada componente (por ejemplo, un Lightbox con su caja y su tapa) va en su archivo con todos sus "
+                                                "cuerpos; los cuerpos que no están en ningún componente salen cada uno en el suyo"));
+    // Una cosa o la otra.
+    connect(onePerBody_, &QCheckBox::toggled, this, [this](bool on) {
+        if (on) {
+            onePerComponent_->setChecked(false);
+        }
+    });
+    connect(onePerComponent_, &QCheckBox::toggled, this, [this](bool on) {
+        if (on) {
+            onePerBody_->setChecked(false);
+        }
+    });
     summary_ = new QLabel(this);
     summary_->setForegroundRole(QPalette::PlaceholderText);
     summary_->setWordWrap(true);
@@ -91,6 +105,7 @@ ExportDialog::ExportDialog(const std::vector<document::Body>& bodies, const std:
     connect(quality_, &QComboBox::currentIndexChanged, this, showCustom);
     form->addRow(QStringLiteral("Cuerpos:"), list_);
     form->addRow(QString(), onePerBody_);
+    form->addRow(QString(), onePerComponent_);
 
     // La impresora del usuario: con sus medidas se calcula la revisión.
     QSettings settings;
@@ -186,6 +201,7 @@ ExportDialog::ExportDialog(const std::vector<document::Body>& bodies, const std:
         format_->setCurrentIndex(0);  // siempre STL
         format_->setEnabled(false);
         onePerBody_->hide();
+        onePerComponent_->hide();
     }
     connect(format_, &QComboBox::currentIndexChanged, this, &ExportDialog::updateSummary);
     connect(quality_, &QComboBox::currentIndexChanged, this, &ExportDialog::updateSummary);
@@ -227,6 +243,11 @@ geometry::MeshQuality ExportDialog::quality() const
 bool ExportDialog::onePerBody() const
 {
     return mode_ == Mode::Export && onePerBody_->isEnabled() && onePerBody_->isChecked();
+}
+
+bool ExportDialog::onePerComponent() const
+{
+    return mode_ == Mode::Export && onePerComponent_->isEnabled() && onePerComponent_->isChecked();
 }
 
 QString ExportDialog::slicerPath() const
@@ -445,6 +466,7 @@ void ExportDialog::updateSummary()
         reviewTimer_->start();
     }
     onePerBody_->setEnabled(count > 1);
+    onePerComponent_->setEnabled(count > 1);
     ok_->setEnabled(count > 0 && (mode_ != Mode::Print || QFileInfo(slicerPath()).isFile()));
 
     if (count == 0) {

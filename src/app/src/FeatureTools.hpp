@@ -95,6 +95,8 @@ protected:
     virtual void selectionChanged(const render::ModelSelection& selection) = 0;
     // Tras calcular la vista previa (para colocar la flecha, etc.).
     virtual void afterPreview(const document::ModelState& /*before*/) {}
+    // Lo mismo cuando todavía no hay operación que previsualizar (por ejemplo, Alinear con una sola cara elegida).
+    virtual void afterEmptyPreview(const document::ModelState& /*before*/) {}
     // Texto de las entradas («2 perfiles»…), para el panel.
     virtual QString inputsText() const = 0;
     virtual bool removesMaterial() const = 0;
@@ -749,6 +751,7 @@ protected:
     void createFields(QFormLayout* form) override;
     void selectionChanged(const render::ModelSelection& selection) override;
     void afterPreview(const document::ModelState& before) override;
+    void afterEmptyPreview(const document::ModelState& before) override { afterPreview(before); }
     QString inputsText() const override;
     std::optional<Arrow> dimensionArrow(const std::string& key) const override;
     std::optional<Arc> dimensionArc(const std::string& key) const override;

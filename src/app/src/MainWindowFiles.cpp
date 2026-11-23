@@ -75,10 +75,19 @@ bool isDesign(const QString& file)
     return file.endsWith(QLatin1String(".nuf"), Qt::CaseInsensitive);
 }
 
+// Lo que se puede importar: STEP (sólidos exactos) y mallas STL u OBJ (se convierten a sólido si son herméticas).
 bool isStep(const QString& file)
 {
     return file.endsWith(QLatin1String(".step"), Qt::CaseInsensitive)
-        || file.endsWith(QLatin1String(".stp"), Qt::CaseInsensitive);
+        || file.endsWith(QLatin1String(".stp"), Qt::CaseInsensitive)
+        || file.endsWith(QLatin1String(".stl"), Qt::CaseInsensitive)
+        || file.endsWith(QLatin1String(".obj"), Qt::CaseInsensitive);
+}
+
+bool isMeshFile(const std::filesystem::path& path)
+{
+    const QString name = QString::fromStdWString(path.wstring());
+    return name.endsWith(QLatin1String(".stl"), Qt::CaseInsensitive) || name.endsWith(QLatin1String(".obj"), Qt::CaseInsensitive);
 }
 
 } // namespace
@@ -281,7 +290,20 @@ bool MainWindow::saveDocumentAs()
     if (QFileInfo(file).suffix().isEmpty()) {
         file += QLatin1Char('.') + QLatin1String(kExtension);
     }
-    return writeTo(toPath(file));
+    // El nombre del diseño sigue al del archivo mientras no se haya puesto uno propio (vacío, o el del archivo de antes): así
+    // «Guardar como» con otro nombre cambia también el título y lo que muestra la lista de recientes.
+    const std::string previous = document_.name();
+    const std::string newStem = QFileInfo(file).completeBaseName().toStdString();
+    const std::string oldStem = path_.empty() ? std::string() : QFileInfo(fromPath(path_)).completeBaseName().toStdString();
+    const bool followsFile = previous.empty() || previous == oldStem;
+    if (followsFile && !newStem.empty() && newStem != previous) {
+        document_.setName(newStem);
+    }
+    if (!writeTo(toPath(file))) {
+        document_.setName(previous);
+        return false;
+    }
+    return true;
 }
 
 // Imagen del visor para la lista de recientes (PNG); vacía si no se pudo.
@@ -372,8 +394,9 @@ void MainWindow::importStep()
     if (isEditing()) {
         return;
     }
-    const QString file = QFileDialog::getOpenFileName(this, QStringLiteral("Importar STEP"), lastDirectory(),
-                                                      QStringLiteral("Archivos STEP (*.step *.stp);;Todos los archivos (*)"));
+    const QString file = QFileDialog::getOpenFileName(this, QStringLiteral("Importar STEP, STL u OBJ"), lastDirectory(),
+                                                      QStringLiteral("Sólidos y mallas (*.step *.stp *.stl *.obj);;Archivos STEP (*.step *.stp);;"
+                                                                     "Mallas (*.stl *.obj);;Todos los archivos (*)"));
     if (!file.isEmpty()) {
         importStepFile(toPath(file));
     }
@@ -417,7 +440,8 @@ void MainWindow::reimportStep()
     std::error_code ignored;
     if (path.empty() || !std::filesystem::exists(path, ignored)) {
         const QString file = QFileDialog::getOpenFileName(this, QStringLiteral("¿Dónde está ahora «%1»?").arg(QString::fromStdString(chosen->source)),
-                                                          lastDirectory(), QStringLiteral("Archivos STEP (*.step *.stp);;Todos los archivos (*)"));
+                                                          lastDirectory(),
+                                                          QStringLiteral("Sólidos y mallas (*.step *.stp *.stl *.obj);;Todos los archivos (*)"));
         if (file.isEmpty()) {
             return;
         }
@@ -435,7 +459,7 @@ void MainWindow::reimportStep()
     importRun_.start(
         [outcome, path] {
             try {
-                outcome->imported = geometry::readStep(path);
+                outcome->imported = isMeshFile(path) ? geometry::readMesh(path) : geometry::readStep(path);
             } catch (const std::exception& e) {
                 outcome->error = QString::fromUtf8(e.what());
             } catch (...) {
@@ -488,7 +512,7 @@ bool MainWindow::importStepFile(const std::filesystem::path& path)
     importRun_.start(
         [outcome, path] {
             try {
-                outcome->imported = geometry::readStep(path);
+                outcome->imported = isMeshFile(path) ? geometry::readMesh(path) : geometry::readStep(path);
             } catch (const std::exception& e) {
                 outcome->error = QString::fromUtf8(e.what());
             } catch (...) {

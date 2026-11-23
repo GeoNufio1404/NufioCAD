@@ -84,6 +84,12 @@ struct StepImport {
 // Lanza GeometryError si no se puede leer o no hay ningún sólido.
 StepImport readStep(const std::filesystem::path& path);
 
+// Una malla (STL, binario o de texto, u OBJ) convertida a sólido: cada triángulo pasa a ser una cara plana, se cosen entre sí
+// y los vértices iguales se sueldan. Solo vale si la malla es hermética (cerrada); las unidades no vienen en el archivo, se
+// toman como milímetros. Con más de 30000 triángulos se rechaza (cada uno sería una cara). Lanza GeometryError si no se puede
+// leer, no es hermética o es demasiado grande. Se parece a readStep: el resultado se guarda y se abre igual.
+StepImport readMesh(const std::filesystem::path& path);
+
 // Los cuerpos de un BREP guardado, uno por sólido, con sus caras nombradas
 // «<tag>:?<n>» (o «<tag>:c<k>:?<n>» si son varios sólidos, para que no se
 // repitan). Mismos nombres cada vez que se llama con los mismos datos.
