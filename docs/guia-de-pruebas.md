@@ -491,7 +491,7 @@ Código: **SKS**. Estado: **sin probar** (rama `feature/pendientes-s-sketch`, si
 | SKS.11 | En **Cota**, haz clic en una línea (se abre el campo de valor) y luego, **sin cerrar el campo**, haz clic en otra línea | El campo se cierra y a la vez se elige la segunda línea: se abre el campo del ángulo (o de la distancia, si son paralelas) con un solo clic más |
 | SKS.12 | En **Cota**, haz clic en un círculo, cancela con Esc y haz clic en otra cosa | No pasa nada raro: el clic en el vacío limpia la selección |
 | SKS.13 | En **Cota**, **Mayús + clic** en una línea | Se crea una cota de referencia (entre paréntesis) sin preguntar el valor, y sigue la medida si la pieza cambia |
-| SKS.14 | Dibuja varios **arcos con el mismo centro** (por ejemplo, una ranura curva) y acótalos con radio | Cada cota va a un ángulo distinto: los textos no se pisan |
+| SKS.14 | Dibuja varios **arcos con el mismo centro** (por ejemplo, una ranura curva) y acótalos con radio | Cada cota va a un ángulo distinto: los textos no se pisan. Las cotas de **radio y diámetro se ven siempre**, aunque el cursor esté lejos (antes se ocultaban) |
 
 ---
 

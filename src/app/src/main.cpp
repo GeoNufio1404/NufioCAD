@@ -69,6 +69,7 @@ int main(int argc, char* argv[])
     bool interfaceCheck = false;
     QString captureFolder;  // --captura-temas carpeta: capturas del tema claro y oscuro
     QString inventoryFolder;  // --inventario carpeta [--tamano WxH] [--escala F]: Fase 20, R1
+    QString sketchFolder;     // --captura-sketch carpeta: casos del sketch, uno por imagen
     QSize requestedSize;
     QString reportPath;
     int thresholdMs = 20000;  // en Debug, OpenCASCADE es lento: sirve para detectar paradas de decenas de segundos
@@ -79,6 +80,9 @@ int main(int argc, char* argv[])
         } else if (argument == "--captura-temas" && i + 1 < argc) {
             interfaceCheck = true;
             captureFolder = QString::fromLocal8Bit(argv[i + 1]);
+        } else if (argument == "--captura-sketch" && i + 1 < argc) {
+            interfaceCheck = true;
+            sketchFolder = QString::fromLocal8Bit(argv[i + 1]);
         } else if (argument == "--inventario" && i + 1 < argc) {
             interfaceCheck = true;
             inventoryFolder = QString::fromLocal8Bit(argv[i + 1]);
@@ -130,9 +134,10 @@ int main(int argc, char* argv[])
     }
     window.show();
     if (interfaceCheck) {
-        QTimer::singleShot(800, &window, [&window, reportPath, thresholdMs, captureFolder, inventoryFolder] {
+        QTimer::singleShot(800, &window, [&window, reportPath, thresholdMs, captureFolder, inventoryFolder, sketchFolder] {
             nuf::app::InterfaceCheck check(window, reportPath, thresholdMs);
-            const int code = !inventoryFolder.isEmpty() ? check.captureInventory(inventoryFolder)
+            const int code = !sketchFolder.isEmpty() ? check.captureSketchCases(sketchFolder)
+                             : !inventoryFolder.isEmpty() ? check.captureInventory(inventoryFolder)
                              : captureFolder.isEmpty() ? check.run() : check.captureThemes(captureFolder);
             window.close();
             QApplication::exit(code);

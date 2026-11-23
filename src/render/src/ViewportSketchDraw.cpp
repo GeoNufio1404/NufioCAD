@@ -225,12 +225,12 @@ void Viewport::Impl::rebuildSketch()
         }
         return x1 < x0 ? 1e300 : std::hypot(x1 - x0, y1 - y0) / annotationScale;
     };
-    // Lo que mide la anotación: la línea de cota si la hay, si no lo que ocupan sus líneas.
+    // Lo que mide la anotación: lo que acota (la línea de cota, el radio, el arco…) si la capa de las cotas lo calculó, si no
+    // lo que ocupan sus líneas. (Antes se tomaba la tercera línea como la de cota: en un radio o un diámetro es una flecha,
+    // y esas cotas se ocultaban por «diminutas».)
     const auto extentPx = [&](const sketch::Annotation& note) {
-        if (note.lines.size() >= 3) {
-            if (const auto* base = std::get_if<sketch::Line>(&note.lines[2])) {
-                return std::hypot(base->end.x - base->start.x, base->end.y - base->start.y) / annotationScale;
-            }
+        if (note.extent > 0.0) {
+            return note.extent / annotationScale;
         }
         std::vector<sketch::Vec2> points;
         for (const sketch::Geometry& g : note.lines) {

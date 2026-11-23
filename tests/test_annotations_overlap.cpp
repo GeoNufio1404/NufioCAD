@@ -329,3 +329,23 @@ TEST_CASE("Cotas: la que sigue a una expresión lleva una ƒ delante", "[sketch]
     reference.driving = false;
     REQUIRE(formatDimension(reference) == "(12)");
 }
+
+TEST_CASE("Cotas: cada una dice cuánto mide lo que acota (para ocultar las diminutas, no las de radio)", "[sketch][annotations]")
+{
+    Sketch s;
+    const EntityId circle = s.addCircle({0, 0}, 10.0);
+    s.addConstraint(Constraint::radius(circle, 10.0));
+    const EntityId line = s.addLine({-20, -20}, {20, -20});
+    s.addConstraint(Constraint::length(line, 40.0));
+    const auto notes = layoutAnnotations(s, 0.05);
+    REQUIRE(notes.size() == 2);
+    for (const Annotation& n : notes) {
+        REQUIRE(n.dimension);
+        if (n.text == "R10") {
+            // El radio entero (la línea del centro al borde y sus flechas), no el trazo de una flecha.
+            REQUIRE(n.extent > 9.0);
+        } else {
+            REQUIRE(std::abs(n.extent - 40.0) < 1e-9);
+        }
+    }
+}

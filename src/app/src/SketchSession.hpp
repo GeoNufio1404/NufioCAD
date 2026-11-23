@@ -105,6 +105,8 @@ public:
     void undo();
     void redo();
 
+    friend class InterfaceCheck;  // las capturas de casos del sketch (--captura-sketch)
+
 signals:
     void toolChanged(nuf::app::SketchSession::Tool tool);
     // Indicación de la herramienta para la barra de estado (vacía sin herramienta).

@@ -20,6 +20,15 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 ---
 
 
+## Corrección: cotas de radio y diámetro ocultas, y capturas de casos del sketch — 23 nov. 2026
+
+- **Qué:** las cotas de **radio y diámetro se ocultaban siempre** salvo con el cursor encima o seleccionadas: el visor medía «lo que acotan» con la tercera línea de la cota, que en un radio es el trazo de una flecha, y las daba por diminutas. Ahora cada cota trae `Annotation::extent` (lo que acota, en mm) y el visor usa ese. Los arcos concéntricos reparten además sus cotas dentro del propio arco antes de girarlas. Nuevo modo `NufioCAD --captura-sketch carpeta` que arma casos del sketch (punto, recortar y extender con elipse y spline, cota con ƒ, arcos concéntricos) y guarda una captura de cada uno, para mirarlos.
+- **Dónde:** `Annotations.hpp`/`.cpp` (`extent`), `ViewportSketchDraw.cpp` (`extentPx`), `InterfaceCheck.cpp` (`captureSketchCases`), `SketchSession.hpp` (amiga de `InterfaceCheck`), `main.cpp`. Pruebas: `test_annotations_overlap.cpp`.
+- **Volver atrás:** `git revert` del commit; no cambia el formato de los archivos.
+
+---
+
+
 ## Pendientes por categoría, M (operaciones de modelado) — 23 nov. 2026
 
 - **Qué:** en el patrón por trayectoria, la copia que cae justo en una esquina viva se orienta con la bisectriz de las dos curvas; en Combinar cuerpos, un clic en un cuerpo de la vista lo marca o desmarca como herramienta.
