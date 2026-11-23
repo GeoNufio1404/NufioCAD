@@ -790,6 +790,8 @@ Código: **MUL**.
 | MUL.17 | Clic en una cara ya elegida | La quita de la elección |
 | MUL.18 | Elegir dos caras del mismo cuerpo | Error claro en el panel |
 | MUL.19 | Cambiar la altura de la caja fija y volver a la Unión | La caja móvil sube con ella |
+| MUL.20 | Con dos cuerpos, Sólido › **Alinear**: elige una cara de uno y una cara del otro | Cada cara elegida se ve **resaltada en azul** sobre su cuerpo (también la primera, antes de elegir la segunda); al quitar una (otro clic en ella) deja de verse. **Sin confirmar:** las capturas automáticas no lo vieron; dime si no sale |
+| MUL.21 | Herramientas › **Lightbox** (o la Caja con tapa, o el Par de engranajes) y mira el Navegador | Salen **«Lightbox 1»** con sus cuerpos **«Caja»** y **«Tapa»** dentro (no «Caja 1» y «Caja 2» sueltos), y no hay una carpeta «Cuerpos» vacía. Rehacerlo con clic derecho › Reabrir mantiene los nombres y el componente |
 
 **Fíjate en:** ¿se entiende qué cuerpo se mueve y cuál es la pieza fija y cuál la móvil en una unión? ¿Las caras elegidas se distinguen en la vista (hoy no se resaltan)? ¿Mover con números es suficiente o echas de menos arrastrar con el ratón? (ver «Pendiente de 8a–8c»).
 

@@ -168,6 +168,8 @@ public:
     void showPendingTool();
 
     void showToolEdges(const geometry::Shape& body, const std::vector<int>& edges);
+    void showToolPicks(const std::vector<std::pair<geometry::Shape, int>>& faces,
+                       const std::vector<std::pair<geometry::Shape, int>>& edges);
 
     void showToolFaces(const geometry::Shape& body, const std::vector<int>& faces);
 

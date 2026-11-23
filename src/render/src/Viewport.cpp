@@ -295,6 +295,14 @@ void Viewport::showToolFaces(const geometry::Shape& body, const std::vector<int>
     update();
 }
 
+void Viewport::showToolPicks(const std::vector<std::pair<geometry::Shape, int>>& faces,
+                             const std::vector<std::pair<geometry::Shape, int>>& edges)
+{
+    impl_->showToolPicks(faces, edges);
+    impl_->view->Invalidate();
+    update();
+}
+
 void Viewport::clearToolPreview()
 {
     impl_->clearToolPreview();

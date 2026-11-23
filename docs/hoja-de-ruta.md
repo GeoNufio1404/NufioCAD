@@ -253,8 +253,10 @@ Rama `feature/pendientes-e-engranajes` (23 nov. 2026, sin fusionar hasta la prue
 - [ ] Las flechas que faltan: holgura de los engranajes, presión y hélice del Par (flechas, U8).
 
 ### A — Mover, ensamblar y componentes
+Rama `feature/pendientes-a-ensamblar` (23 nov. 2026, sin fusionar hasta la prueba manual **MUL.20 y MUL.21** de la [guía](guia-de-pruebas.md)). **Corregido de paso, y era un fallo real:** al aceptar un generador (o rehacerlo), los cuerpos nuevos se quedaban **sin el nombre ni el componente de la receta** («Caja 1», «Caja 2» en vez de «Caja» y «Tapa» dentro de «Lightbox 1»): `AddRecipe` y `ReplaceRecipe` leían el resultado antes de que terminara el cálculo en segundo plano (Fase 13). Ahora esperan el cálculo (`Document::waitForCompute`) antes de buscar los cuerpos nuevos. Comprobado con una captura del Navegador.
 - [ ] **Componentes con origen propio**, componentes dentro de componentes e **instancias** (el mismo componente varias veces) (A3, 8b).
-- [ ] Vértices y puntos de un sketch como origen en Alinear y en las uniones (A4, A6, 8c); resaltar en la vista los dos elementos elegidos (A4, A6, 8c).
+- [ ] Vértices y puntos de un sketch como origen en Alinear y en las uniones (A4, A6, 8c): **no se hizo** (el kernel nombra caras y aristas, no vértices).
+- [~] **Resaltar en la vista los dos elementos elegidos 🔶:** Alinear y Unión llaman a `Viewport::showToolPicks` (caras y aristas de cuerpos distintos, en la capa de arriba) con lo elegido, también cuando aún no hay operación que previsualizar. **Sin confirmar a ojo:** las capturas del arnés no mostraron píxeles del resaltado (tampoco con `showToolFaces`, que ya existía); falta verlo a mano (MUL.20).
 - [ ] Pasador y ranura con ranuras curvas (A6); arrastrar libre las uniones plana y esférica (A7).
 - [ ] Enlaces de movimiento con una expresión (no solo razón entre uniones); revisión de interferencias barriendo el movimiento continuo (A8).
 - [ ] Arrastrar piezas: siempre activo como en Fusion (hoy es un modo) y plano de arrastre elegible (suelo o un plano) (A5).
@@ -262,7 +264,7 @@ Rama `feature/pendientes-e-engranajes` (23 nov. 2026, sin fusionar hasta la prue
 - [ ] Ajuste del movimiento a otros cuerpos (U8, mover/girar).
 - [ ] Gizmo: tamaño constante sin rehacerlo al hacer zoom (`Graphic3d_TransformPers`; hoy desaparece mientras se hace zoom y tarda ~230 ms en volver); gizmo también en Patrón, Espejo y Unión (U8, 8a).
 - [ ] Gizmo de mover/girar: arrastre en un plano y giro libre en pantalla; ángulo junto al cursor; el 0° del anillo es una dirección fija del mundo; la recta de alineación es la misma para 90° y 270° y no lleva el ángulo; softblock no configurable; la sombra de un cuerpo con rosca es su caja y se superpone a la pieza con dientes de sierra; no se ve bien con la sección; no hay opción para dejar los tres anillos visibles (8a).
-- [ ] Crear un componente arrastrando cuerpos en el navegador; la carpeta «Cuerpos» queda vacía cuando todos están en componentes (8b).
+- [x] **Carpeta «Cuerpos» vacía ✅:** cuando todos los cuerpos están en componentes, el Navegador ya no muestra la carpeta vacía (se comprobó con una captura del Navegador tras crear una Lightbox). **Pendiente:** crear un componente arrastrando cuerpos en el navegador (8b).
 
 ### G — Generadores
 - [ ] **Reabrir un generador:** lo editado a mano dentro del grupo se pierde **sin avisar**; los diseños anteriores no traen el origen; sin marca en el historial de «viene de un generador» (reabrir).
