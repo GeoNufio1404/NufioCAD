@@ -501,3 +501,31 @@ TEST_CASE("EXPLORAR la bisagra", "[.hinge-explore]")
     const geometry::Box b = common.bounds();
     std::printf("comun %.2f en x %.2f..%.2f y %.2f..%.2f z %.2f..%.2f\n", common.volume(), b.min.x, b.max.x, b.min.y, b.max.y, b.min.z, b.max.z);
 }
+
+TEST_CASE("El muro del canal LED se agujerea por donde sale el cable", "[generator][box]")
+{
+    const document::Generator* generator = document::findGenerator("lightbox");
+    REQUIRE(generator != nullptr);
+    const auto volume = [&](const document::GeneratorValues& values) {
+        document::Document doc;
+        document::applyRecipe(doc, generator->make(values, ""));
+        for (std::size_t i = 0; i < doc.featureCount(); ++i) {
+            INFO(doc.feature(i).name());
+            REQUIRE(doc.status(doc.feature(i).id()).health != document::Health::Error);
+        }
+        return doc.result().bodies[0].shape.volume();
+    };
+    document::GeneratorValues values = generator->defaults();
+    values["canal"] = 1.0;
+    values["canal_alto"] = 30.0;  // un muro alto, que sí estorba al cable a media profundidad
+    values["cable"] = 0.0;
+    const double withoutCable = volume(values);
+    values["cable"] = 6.0;
+    values["pared_cable"] = 4.0;  // pared derecha: el cable cruza la pared (2 mm), la tira (aire) y el muro (1,2 mm)
+    const double withCable = volume(values);
+    const double r = 3.0;
+    const double removed = withoutCable - withCable;
+    // Sin el paso por el muro solo se quitaría la pared (π·r²·2 ≈ 56,5); con él, también el muro (π·r²·3,2 ≈ 90,5).
+    CHECK(removed > std::numbers::pi * r * r * (2.0 + 0.9 * 1.2));
+    CHECK(removed < std::numbers::pi * r * r * (2.0 + 1.2) * 1.05);
+}

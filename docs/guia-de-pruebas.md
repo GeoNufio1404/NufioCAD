@@ -844,6 +844,7 @@ Código: **LIG**.
 | LIG.12 | Aceptar y selecciona la tapa en el Navegador o con un clic en ella | Se marca **toda** la tapa (placa y labio) como un solo cuerpo; no hay marco, labio ni cara sueltos |
 | LIG.13 | Forma «Redonda», Aceptar | También salen solo «Caja» y «Tapa»; Ctrl+Z lo deshace todo de una vez |
 | LIG.14 | Cambia «Frente», «Alto del labio» y «Grosor del labio» con el formulario abierto | La flecha turquesa mide la placa de la tapa, el labio desde su borde de arriba y el grosor de su pared |
+| LIG.15 | Lightbox con **Canal para tira LED** y un **Alto del muro del canal** grande (por ejemplo 30), y «Salida del cable» en una pared (derecha, por ejemplo) con un agujero de 6 | El cable sale por la pared **y** el muro del canal tiene un agujero en ese mismo sitio (no queda tapado); con el muro bajo (8) no cambia nada porque el agujero está más arriba |
 
 ### 4.2 Caja con tapa
 

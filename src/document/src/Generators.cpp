@@ -261,6 +261,26 @@ public:
             recipe.features.push_back(shapeAt("Lightbox: muro del canal", Operation::Join, ringW, ringH, fondo + " - 0.01", highP + " + 0.01", "", ""));
             recipe.features.push_back(shapeAt("Lightbox: hueco del muro", Operation::Cut, ringW + " - 2*" + wallP, ringH + " - 2*" + wallP,
                                               fondo, highP + " + 1", "", ""));
+            // El cable tiene que poder pasar: el muro del canal se agujerea por donde sale el cable (si no se cruzan, no quita nada).
+            if (hasCable) {
+                auto pass = addCylinder("Lightbox: paso del cable por el muro", Operation::Cut);
+                if (wall == 0) {
+                    pass->expressions = {{"diameter", cable}, {"y", "-(" + H + ")/4"}, {"z", "-1"}, {"height", fondo + " + " + highP + " + 2"}};
+                } else {
+                    const bool alongY = wall <= 2;
+                    pass->base.origin = alongY ? OriginPlane::XZ : OriginPlane::YZ;
+                    pass->symmetric = true;
+                    // Desde 1 mm fuera de la pared hasta 1 mm más allá del muro: pared + canal + muro + 2 de largo.
+                    const std::string reach = pared + " + " + stripP + " + " + wallP + " + 2";
+                    const std::string centre = (alongY ? H : W) + "/2 + 1 - (" + reach + ")/2";
+                    const bool positive = wall == 1 || wall == 4;
+                    pass->expressions = {{"diameter", cable},
+                                         {"y", fondo + " + (" + profundidad + " - " + fondo + ")/2"},
+                                         {"z", positive ? centre : "-(" + centre + ")"},
+                                         {"height", reach}};
+                }
+                recipe.features.push_back(std::move(pass));
+            }
         }
         // 4. La tapa, un solo cuerpo: la placa del tamaño de la caja (marco y cara central juntos)...
         recipe.features.push_back(shapeAt("Lightbox: tapa", Operation::NewBody, W, H, "0", frente, beside, esquina));

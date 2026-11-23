@@ -267,9 +267,11 @@ Rama `feature/pendientes-a-ensamblar` (23 nov. 2026, sin fusionar hasta la prueb
 - [x] **Carpeta «Cuerpos» vacía ✅:** cuando todos los cuerpos están en componentes, el Navegador ya no muestra la carpeta vacía (se comprobó con una captura del Navegador tras crear una Lightbox). **Pendiente:** crear un componente arrastrando cuerpos en el navegador (8b).
 
 ### G — Generadores
+Rama `feature/pendientes-g-generadores` (23 nov. 2026, sin fusionar hasta la prueba manual **LIG.15** de la [guía](guia-de-pruebas.md)).
+- [x] **Lightbox: el canal LED deja pasar el cable ✅:** cuando hay canal y agujero del cable, el muro del canal se agujerea por donde sale el cable (por la pared elegida o por el fondo; si el muro no llega a la altura del agujero, no quita nada) (G2).
 - [ ] **Reabrir un generador:** lo editado a mano dentro del grupo se pierde **sin avisar**; los diseños anteriores no traen el origen; sin marca en el historial de «viene de un generador» (reabrir).
 - [ ] Los generadores crean las piezas alrededor del origen (el hueco de una caja puede cortar lo que ya esté ahí); sin miniatura ni dibujo explicativo en el formulario (10a/10b).
-- [ ] Lightbox: **tu SVG sobre la cara central** (relieve o corte; el importador de SVG ya existe, G1); otro filamento para la cara central (modo como el del Letrero); muesca para el cable en la tapa; que el canal LED deje pasar el agujero del cable; flecha del cable; comparar la forma redonda con una referencia (Lightbox, G2, U8).
+- [ ] Lightbox: **tu SVG sobre la cara central** (relieve o corte; el importador de SVG ya existe, G1); otro filamento para la cara central (modo como el del Letrero); muesca para el cable en la tapa; flecha del cable; comparar la forma redonda con una referencia (Lightbox, G2, U8).
 - [ ] Caja con tapa: divisiones, bisagra, clips y ranuras en las paredes también en la caja redonda; bisagra con tope y apertura de más de 90°; clips con chaflán en el resalte y holgura configurable; soportes y carcasas con aberturas (USB, interruptor) (G2, 10c).
 - [ ] Letrero: letras en curva, en círculo o sobre un cilindro; interlineado en porcentaje; tamaños distintos por línea; SVG, imagen o logotipo en lugar del texto; comprobar fuentes con letras que se solapan; flecha del tamaño del texto y de «Relieve» en el modo de un solo cuerpo (G3, 10d, U8).
 
