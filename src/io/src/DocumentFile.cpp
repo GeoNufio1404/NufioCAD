@@ -647,6 +647,12 @@ FeatureRow rowOf(const Feature& f)
                   {"diameter", t.spec.diameter}, {"pitch", t.spec.pitch},
                   {"length", t.spec.length}, {"leftHanded", t.spec.leftHanded},
                   {"operation", nameOf(kOperations, t.operation)}};
+        if (t.spec.profile == geometry::ThreadProfile::Trapezoidal) {
+            params["profile"] = "trapezoidal";
+        }
+        if (t.spec.entryChamfer > 0.0) {
+            params["entryChamfer"] = t.spec.entryChamfer;
+        }
         if (t.onCylinder) {
             params["onCylinder"] = true;
             params["cylinderFace"] = toJson(t.cylinderFace);
@@ -953,6 +959,10 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         t->spec.pitch = number(p, "pitch");
         t->spec.length = number(p, "length");
         t->spec.leftHanded = p.at("leftHanded").get<bool>();
+        // Los archivos anteriores no traen perfil ni chaflán: métrica y sin chaflán.
+        t->spec.profile = p.value("profile", std::string("metric")) == "trapezoidal" ? geometry::ThreadProfile::Trapezoidal
+                                                                                      : geometry::ThreadProfile::Metric;
+        t->spec.entryChamfer = p.value("entryChamfer", 0.0);
         t->operation = parseEnum(kOperations, text(p, "operation"), "operación");
         feature = std::move(t);
     } else if (row.type == "gear") {

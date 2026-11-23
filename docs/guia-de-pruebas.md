@@ -725,6 +725,11 @@ Código: **GEN**.
 | ASM.16 | En el tren planetario: Sólido › **Enlace de movimiento** › elige el enlace › **▶ Animar** | Gira el sol, los planetas giran sobre su eje y el portasatélites con ellos, y los dientes engranan sin pisarse; Interferencias › Revisar el giro no encuentra nada |
 | ASM.17 | Tren planetario con 5 planetas (12, 12 y 36 dientes) | El formulario avisa de que (dientes del sol + de la corona) ÷ planetas no es entero |
 | GEN.9 | **Rosca interior**: caja, agujero de Ø 6.47 con la herramienta Agujero, y rosca M8 con operación «Cortar» | El agujero queda roscado |
+| GEN.20 | Sólido › **Rosca**; abre la lista «Medida» | Además de las M, salen las **UNC** (#6-32 a 3/4-10) y las **Tr** (Tr8 a Tr24). Al elegir una UNC o una M, el perfil queda en «Métrica / unificada»; al elegir una Tr, en «Trapezoidal» |
+| GEN.21 | Medida **Tr10 × 2**, largo `12`, y compara con la misma M10 × 1.5 | La trapezoidal tiene los dientes más anchos y cuadrados (cresta y fondo planos de casi la misma anchura); el panel dice Ø menor 8 mm (Ø − paso) |
+| GEN.22 | Rosca M8 con **Chaflán de entrada** `1` (cuerpo nuevo) | La punta de la varilla por donde empieza la rosca queda achaflanada a 45°, sin crestas afiladas; el otro extremo no cambia. La varilla sigue siendo un solo sólido |
+| GEN.23 | Rosca con operación **Cortar (rosca interior)** | La fila «Chaflán de entrada» desaparece (no se usa al cortar) y aparece «Holgura» |
+| GEN.24 | Agujero › **Avellanado**: pasa por «Ángulo del cono» con el cuadro enfocado; guarda y abre la rosca trapezoidal con chaflán (GEN.21 y GEN.22) | Sale un arco entre las dos paredes del cono, con el vértice en el eje del agujero (si sale del lado equivocado, avísame); la rosca guardada se abre con su perfil y su chaflán |
 
 #### 3.6.3 Barrido y loft
 

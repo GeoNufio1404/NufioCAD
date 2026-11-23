@@ -3611,3 +3611,76 @@ TEST_CASE("Patrón por trayectoria: en una esquina viva la dirección es la bise
     CHECK(tangents[0].x == Catch::Approx(1.0).margin(1e-6));
     CHECK(tangents[2].y == Catch::Approx(1.0).margin(1e-6));
 }
+
+TEST_CASE("Una rosca trapezoidal baja medio paso, y el chaflán de entrada quita material del extremo", "[thread][io]")
+{
+    // Trapezoidal: la profundidad es 0,5 P (la métrica, 0,6134 P) y el diámetro menor es D − P.
+    geometry::ThreadSpec metric;
+    metric.diameter = 10.0;
+    metric.pitch = 2.0;
+    geometry::ThreadSpec trap = metric;
+    trap.profile = geometry::ThreadProfile::Trapezoidal;
+    CHECK(geometry::threadDepth(metric) == Catch::Approx(0.6134 * 2.0));
+    CHECK(geometry::threadDepth(trap) == Catch::Approx(1.0));
+    CHECK(geometry::threadMinorDiameter(trap) == Catch::Approx(8.0));
+
+    Document doc;
+    auto t = std::make_unique<ThreadFeature>();
+    t->base.origin = OriginPlane::XY;
+    t->spec = trap;
+    t->spec.length = 12.0;
+    const FeatureId plain = doc.addFeature(std::move(t));
+    INFO(doc.status(plain).message);
+    REQUIRE(doc.status(plain).health == Health::Ok);
+    const geometry::Shape& rod = doc.result().bodies.front().shape;
+    REQUIRE(rod.isValid());
+    // Entre el cilindro del diámetro menor y el del mayor, y con más material que la métrica (el fondo está menos hondo).
+    CHECK(rod.volume() > kPi * 4.0 * 4.0 * 12.0);
+    CHECK(rod.volume() < kPi * 5.0 * 5.0 * 12.0);
+    Document metricDoc;
+    auto m = std::make_unique<ThreadFeature>();
+    m->base.origin = OriginPlane::XY;
+    m->spec = metric;
+    m->spec.length = 12.0;
+    metricDoc.addFeature(std::move(m));
+    CHECK(rod.volume() > metricDoc.result().bodies.front().shape.volume());
+
+    // Chaflán de entrada de 1 mm: la varilla sigue válida con el mismo largo y pesa menos; guardar y abrir lo conserva.
+    Document chamfered;
+    auto c = std::make_unique<ThreadFeature>();
+    c->base.origin = OriginPlane::XY;
+    c->spec = trap;
+    c->spec.length = 12.0;
+    c->spec.entryChamfer = 1.0;
+    const FeatureId cid = chamfered.addFeature(std::move(c));
+    INFO(chamfered.status(cid).message);
+    REQUIRE(chamfered.status(cid).health == Health::Ok);
+    const geometry::Shape& cut = chamfered.result().bodies.front().shape;
+    REQUIRE(cut.isValid());
+    CHECK(cut.volume() < rod.volume());
+    CHECK(cut.volume() > rod.volume() - 40.0);  // quita solo un anillo del extremo
+    CHECK_THAT(cut.bounds().min.z, Catch::Matchers::WithinAbs(0.0, 1e-4));
+    CHECK_THAT(cut.bounds().max.z, Catch::Matchers::WithinAbs(12.0, 1e-4));
+
+    const auto path = std::filesystem::temp_directory_path() / "nuf_rosca_perfil.nuf";
+    std::filesystem::remove(path);
+    io::saveDocument(path, chamfered, {});
+    Document reopened;
+    io::ViewState view;
+    io::loadDocument(path, reopened, view);
+    std::filesystem::remove(path);
+    const auto* back = static_cast<const ThreadFeature*>(reopened.findFeature(cid));
+    REQUIRE(back != nullptr);
+    CHECK(back->spec.profile == geometry::ThreadProfile::Trapezoidal);
+    CHECK(back->spec.entryChamfer == Catch::Approx(1.0));
+    CHECK_THAT(reopened.result().bodies.front().shape.volume(), WithinRel(cut.volume(), 1e-9));
+
+    // Un chaflán imposible da error claro.
+    Document bad;
+    auto b = std::make_unique<ThreadFeature>();
+    b->base.origin = OriginPlane::XY;
+    b->spec = metric;
+    b->spec.entryChamfer = 6.0;  // mayor que el radio
+    const FeatureId bid = bad.addFeature(std::move(b));
+    CHECK(bad.status(bid).health == Health::Error);
+}

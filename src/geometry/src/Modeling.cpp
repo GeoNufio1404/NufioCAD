@@ -30,6 +30,7 @@
 #include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepAlgoAPI_Splitter.hxx>
 #include <BRepBuilderAPI_MakeEdge.hxx>
+#include <BRepBuilderAPI_MakePolygon.hxx>
 #include <BRepBuilderAPI_MakeWire.hxx>
 #include <GCPnts_UniformAbscissa.hxx>
 #include <BRepAdaptor_CompCurve.hxx>
@@ -2265,9 +2266,14 @@ Shape cylinder(std::string_view tagView, const sketch::Plane& plane, double diam
     }
 }
 
+double threadDepth(const ThreadSpec& spec)
+{
+    return (spec.profile == ThreadProfile::Trapezoidal ? 0.5 : 0.6134) * spec.pitch;
+}
+
 double threadMinorDiameter(const ThreadSpec& spec)
 {
-    return spec.diameter - 2.0 * 0.6134 * spec.pitch;
+    return spec.diameter - 2.0 * threadDepth(spec);
 }
 
 // Varilla cuya sección es una curva r(φ) que gira al avanzar (un tornillo de una o más entradas): a cada altura la
@@ -2452,20 +2458,24 @@ Shape thread(std::string_view tagView, const sketch::Plane& plane, const ThreadS
     if (spec.pitch <= kTiny) {
         throw GeometryError("El paso de la rosca debe ser mayor que cero");
     }
-    if (spec.diameter <= 4.0 * spec.pitch * 0.6134 * 0.5 + kTiny || threadMinorDiameter(spec) <= 0.2) {
+    if (spec.diameter <= 2.0 * threadDepth(spec) + kTiny || threadMinorDiameter(spec) <= 0.2) {
         throw GeometryError("El diámetro es demasiado pequeño para ese paso");
     }
     if (std::abs(spec.length) < spec.pitch) {
         throw GeometryError("La rosca debe medir al menos un paso de largo");
     }
+    if (spec.entryChamfer < 0.0 || spec.entryChamfer > spec.diameter / 2.0 - kTiny) {
+        throw GeometryError("El chaflán de entrada debe ser positivo y menor que el radio de la rosca");
+    }
     const double rMax = spec.diameter / 2.0;
     const double rMin = threadMinorDiameter(spec) / 2.0;
     const double pitch = spec.pitch;
     // Radio de la rosca a lo largo de un paso: cresta, flanco, fondo, flanco.
+    const bool trapezoidal = spec.profile == ThreadProfile::Trapezoidal;
     const auto profile = [&](double s) {
         s -= pitch * std::floor(s / pitch);
-        const double crest = pitch / 8.0;
-        const double root = pitch / 4.0;
+        const double crest = trapezoidal ? 0.366 * pitch : pitch / 8.0;
+        const double root = trapezoidal ? 0.366 * pitch : pitch / 4.0;
         const double flank = (pitch - crest - root) / 2.0;
         if (s < crest) {
             return rMax;
@@ -2478,8 +2488,38 @@ Shape thread(std::string_view tagView, const sketch::Plane& plane, const ThreadS
         }
         return rMin + (rMax - rMin) * (s - crest - flank - root) / flank;
     };
-    return twistedRod(tag, plane, profile, pitch, spec.length, spec.leftHanded, 32, 8, pitch / 12.0, "rosca", "la rosca",
-                      "revisa el paso y el diámetro: el diámetro menor (diámetro − 1,23 × paso) debe ser positivo");
+    const Shape rod = twistedRod(tag, plane, profile, pitch, spec.length, spec.leftHanded, 32, 8, pitch / 12.0, "rosca", "la rosca",
+                                 "revisa el paso y el diámetro: el diámetro menor (diámetro − 1,23 × paso, o diámetro − paso en la trapezoidal) debe ser positivo");
+    if (spec.entryChamfer <= kTiny) {
+        return rod;
+    }
+    // Chaflán de entrada: se queda con lo que cabe en una envolvente cilíndrica con el extremo inicial en cono a 45°
+    // (el cono sigue más allá de las crestas para no rozarlas, y el cilindro es algo más ancho que la rosca).
+    try {
+        const gp_Pnt origin = toPnt(plane.origin);
+        const gp_Dir along = spec.length >= 0.0 ? toDir(plane.normal) : toDir(plane.normal).Reversed();
+        const gp_Dir across = toDir(plane.xAxis);
+        const double c = spec.entryChamfer;
+        const double wide = rMax + 0.5;
+        const double length = std::abs(spec.length);
+        const auto at = [&](double r, double z) {
+            return gp_Pnt(origin.XYZ() + r * gp_Vec(across).XYZ() + z * gp_Vec(along).XYZ());
+        };
+        BRepBuilderAPI_MakePolygon outline;
+        outline.Add(at(0.0, 0.0));
+        outline.Add(at(rMax - c, 0.0));
+        outline.Add(at(wide, c + (wide - rMax)));
+        outline.Add(at(wide, length));
+        outline.Add(at(0.0, length));
+        outline.Close();
+        const BRepBuilderAPI_MakeFace face(outline.Wire());
+        BRepPrimAPI_MakeRevol envelope(face.Face(), gp_Ax1(origin, along), 2.0 * std::numbers::pi);
+        Namer namer(envelope.Shape());
+        namer.nameUnnamed(tag + ":entrada");
+        return boolean(BooleanOp::Common, rod, namer.finish(tag));
+    } catch (const Standard_Failure& e) {
+        throw kernelFailure("achaflanar la entrada de la rosca", "prueba con un chaflán más pequeño", e);
+    }
 }
 
 Shape threadOnCylinderTool(std::string_view tag, const Shape::CylinderInfo& info, const ThreadSpec& spec)
@@ -2488,7 +2528,7 @@ Shape threadOnCylinderTool(std::string_view tag, const Shape::CylinderInfo& info
     ThreadSpec used = spec;
     used.length = info.length;
     if (info.hole) {
-        used.diameter = 2.0 * info.radius + 2.0 * 0.6134 * spec.pitch;
+        used.diameter = 2.0 * info.radius + 2.0 * threadDepth(spec);
         return thread(tag, plane, used);
     }
     used.diameter = 2.0 * info.radius;

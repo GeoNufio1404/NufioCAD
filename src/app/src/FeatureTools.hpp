@@ -357,6 +357,7 @@ protected:
     void selectionChanged(const render::ModelSelection& selection) override;
     QString inputsText() const override;
     std::optional<Arrow> dimensionArrow(const std::string& key) const override;
+    std::optional<Arc> dimensionArc(const std::string& key) const override;
     bool removesMaterial() const override { return true; }
 
 private:
@@ -856,6 +857,8 @@ private:
     double cylinderLength_ = 0.0;
     QDoubleSpinBox* clearance_ = nullptr;
     QComboBox* standard_ = nullptr;
+    QComboBox* profile_ = nullptr;
+    QDoubleSpinBox* entryChamfer_ = nullptr;
     QDoubleSpinBox* diameter_ = nullptr;
     QDoubleSpinBox* pitch_ = nullptr;
     QDoubleSpinBox* length_ = nullptr;

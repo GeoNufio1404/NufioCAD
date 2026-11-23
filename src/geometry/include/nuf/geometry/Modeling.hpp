@@ -233,12 +233,23 @@ Shape box(std::string_view tag, const sketch::Plane& plane, double width, double
 // da el sentido). Caras: «tag:cara:lado», «+z» y «-z».
 Shape cylinder(std::string_view tag, const sketch::Plane& plane, double diameter, double height);
 
+// Perfil de la rosca: métrico ISO (y unificado, UNC/UNF: los dos son de 60°; cresta P/8, fondo P/4, profundidad
+// 0,6134 P) o trapezoidal (Tr, flancos a 15°: cresta y fondo de 0,366 P, flancos de 0,134 P, profundidad 0,5 P).
+enum class ThreadProfile { Metric, Trapezoidal };
+
 struct ThreadSpec {
     double diameter = 8.0;     // mm, diámetro exterior (mayor)
     double pitch = 1.25;       // mm de avance por vuelta
     double length = 20.0;      // mm a lo largo de la normal (el signo da el sentido)
     bool leftHanded = false;   // rosca a izquierdas
+    ThreadProfile profile = ThreadProfile::Metric;
+    // Chaflán de entrada (mm, a 45°): quita las crestas del extremo por donde empieza la rosca para que entre sola. Solo
+    // en roscas exteriores (tornillos); en una rosca que se corta (interior) no se usa.
+    double entryChamfer = 0.0;
 };
+
+// Lo que baja la rosca de la cresta al fondo (mm): 0,6134 P en el perfil métrico y 0,5 P en el trapezoidal.
+double threadDepth(const ThreadSpec& spec);
 
 // Varilla roscada (rosca métrica ISO aproximada: cresta P/8, fondo P/4,
 // profundidad 0,6134 P) con su eje a lo largo de la normal del plano, desde el

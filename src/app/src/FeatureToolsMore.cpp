@@ -1454,15 +1454,22 @@ QString MotionLinkTool::inputsText() const
 
 namespace {
 
-struct MetricThread {
+struct StandardThread {
     const char* name;
     double diameter;
     double pitch;
+    bool trapezoidal = false;
 };
-// Roscas métricas de paso normal.
-constexpr MetricThread kMetric[] = {{"M3", 3.0, 0.5},   {"M4", 4.0, 0.7},   {"M5", 5.0, 0.8},   {"M6", 6.0, 1.0},
-                                    {"M8", 8.0, 1.25},  {"M10", 10.0, 1.5}, {"M12", 12.0, 1.75}, {"M16", 16.0, 2.0},
-                                    {"M20", 20.0, 2.5}, {"M24", 24.0, 3.0}};
+// Medidas normalizadas: métricas de paso normal (M), unificadas gruesas en pulgadas (UNC: el paso es 25,4 / hilos por
+// pulgada) y trapezoidales (Tr, para husillos).
+constexpr StandardThread kMetric[] = {
+    {"M3", 3.0, 0.5},        {"M4", 4.0, 0.7},         {"M5", 5.0, 0.8},          {"M6", 6.0, 1.0},
+    {"M8", 8.0, 1.25},       {"M10", 10.0, 1.5},       {"M12", 12.0, 1.75},       {"M16", 16.0, 2.0},
+    {"M20", 20.0, 2.5},      {"M24", 24.0, 3.0},       {"UNC #6-32", 3.505, 0.794}, {"UNC #8-32", 4.166, 0.794},
+    {"UNC #10-24", 4.826, 1.058}, {"UNC 1/4-20", 6.35, 1.27}, {"UNC 5/16-18", 7.938, 1.411}, {"UNC 3/8-16", 9.525, 1.588},
+    {"UNC 1/2-13", 12.7, 1.954}, {"UNC 5/8-11", 15.875, 2.309}, {"UNC 3/4-10", 19.05, 2.54},
+    {"Tr8", 8.0, 1.5, true},  {"Tr10", 10.0, 2.0, true}, {"Tr12", 12.0, 3.0, true},  {"Tr16", 16.0, 4.0, true},
+    {"Tr20", 20.0, 4.0, true}, {"Tr24", 24.0, 5.0, true}};
 
 } // namespace
 
@@ -1484,9 +1491,13 @@ void ThreadTool::createFields(QFormLayout* form)
     createPlacement(form, placement_, original != nullptr ? &original->base : nullptr, original != nullptr ? original->x : 0.0,
                     original != nullptr ? original->y : 0.0);
     standard_ = combo({QStringLiteral("Personalizada")});
-    for (const MetricThread& m : kMetric) {
+    for (const StandardThread& m : kMetric) {
         standard_->addItem(QStringLiteral("%1 × %2").arg(QLatin1String(m.name)).arg(m.pitch));
     }
+    profile_ = combo({QStringLiteral("Métrica / unificada (60°)"), QStringLiteral("Trapezoidal (Tr, 30°)")});
+    entryChamfer_ = lengthBox(0.0);
+    entryChamfer_->setMinimum(0.0);
+    field("entryChamfer", entryChamfer_);
     standard_->setCurrentIndex(5);  // M8
     diameter_ = lengthBox(8.0);
     diameter_->setMinimum(1.0);
@@ -1507,6 +1518,8 @@ void ThreadTool::createFields(QFormLayout* form)
         pitch_->setValue(original->spec.pitch);
         length_->setValue(original->spec.length);
         clearance_->setValue(original->clearance);
+        profile_->setCurrentIndex(original->spec.profile == geometry::ThreadProfile::Trapezoidal ? 1 : 0);
+        entryChamfer_->setValue(original->spec.entryChamfer);
         left_->setChecked(original->spec.leftHanded);
         operation_->setCurrentIndex(original->operation == document::Operation::Join  ? 1
                                     : original->operation == document::Operation::Cut ? 2
@@ -1516,11 +1529,14 @@ void ThreadTool::createFields(QFormLayout* form)
     form->addRow(QStringLiteral("Medida"), standard_);
     form->addRow(QStringLiteral("Diámetro"), diameter_);
     form->addRow(QStringLiteral("Paso"), pitch_);
+    form->addRow(QStringLiteral("Perfil"), profile_);
     form->addRow(QStringLiteral("Largo (±)"), length_);
     form->addRow(QString(), left_);
     form->addRow(QStringLiteral("Operación"), operation_);
     form->addRow(QStringLiteral("Holgura"), clearance_);
+    form->addRow(QStringLiteral("Chaflán de entrada"), entryChamfer_);
     form->setRowVisible(clearance_, operation_->currentIndex() == 2);
+    form->setRowVisible(entryChamfer_, operation_->currentIndex() != 2);
     if (cylinderMode_) {
         // Al editar una rosca puesta sobre un cilindro: se saca su medida de la cara.
         if (const auto hit = before().findFace(cylinderFace_)) {
@@ -1536,6 +1552,7 @@ void ThreadTool::createFields(QFormLayout* form)
         if (index > 0) {
             diameter_->setValue(kMetric[index - 1].diameter);
             pitch_->setValue(kMetric[index - 1].pitch);
+            profile_->setCurrentIndex(kMetric[index - 1].trapezoidal ? 1 : 0);
         }
     });
     for (QDoubleSpinBox* box : {diameter_, pitch_}) {
@@ -1550,11 +1567,13 @@ void ThreadTool::createFields(QFormLayout* form)
     }
     connect(operation_, &QComboBox::currentIndexChanged, this, [this] {
         form_->setRowVisible(clearance_, operation_->currentIndex() == 2);
+        form_->setRowVisible(entryChamfer_, operation_->currentIndex() != 2);
         adjustDirection();
         updatePreview();
     });
+    connect(profile_, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
     connect(left_, &QCheckBox::toggled, this, [this] { updatePreview(); });
-    for (QDoubleSpinBox* box : {diameter_, pitch_, length_, clearance_}) {
+    for (QDoubleSpinBox* box : {diameter_, pitch_, length_, clearance_, entryChamfer_}) {
         connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
     }
 }
@@ -1633,6 +1652,7 @@ std::unique_ptr<document::Feature> ThreadTool::build() const
         f->spec.leftHanded = left_->isChecked();
         f->spec.diameter = diameter_->value();
         f->spec.length = length_->value();
+        f->spec.profile = profile_->currentIndex() == 1 ? geometry::ThreadProfile::Trapezoidal : geometry::ThreadProfile::Metric;
         f->operation = document::Operation::Cut;
         return f;
     }
@@ -1644,7 +1664,9 @@ std::unique_ptr<document::Feature> ThreadTool::build() const
     f->spec.pitch = pitch_->value();
     f->spec.length = length_->value();
     f->spec.leftHanded = left_->isChecked();
+    f->spec.profile = profile_->currentIndex() == 1 ? geometry::ThreadProfile::Trapezoidal : geometry::ThreadProfile::Metric;
     const int op = operation_->currentIndex();
+    f->spec.entryChamfer = op == 2 ? 0.0 : entryChamfer_->value();  // el chaflán es del tornillo, no de la rosca que se corta
     f->operation = op == 1 ? document::Operation::Join : op == 2 ? document::Operation::Cut : document::Operation::NewBody;
     return f;
 }
