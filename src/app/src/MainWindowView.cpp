@@ -739,7 +739,7 @@ void MainWindow::refreshModel()
         if (problems++ == 0) {
             problem = QStringLiteral("%1 %2: %3")
                           .arg(st.health == document::Health::Error ? QStringLiteral("⛔") : QStringLiteral("⚠"),
-                               QString::fromStdString(f.name()), QString::fromStdString(st.message));
+                               QString::fromStdString(f.name()), Units::instance().localize(QString::fromStdString(st.message)));
         }
     }
     if (problems > 1) {

@@ -463,7 +463,7 @@ void FeatureTool::showPreview(const document::Feature& feature, const document::
         viewport_.showToolPreview(tool, true);
     }
 
-    const QString text = QString::fromStdString(result.status.message);
+    const QString text = Units::instance().localize(QString::fromStdString(result.status.message));
     switch (result.status.health) {
     case document::Health::Error:
         showStatus(text, Mark::Error, markableFields());

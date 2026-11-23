@@ -299,3 +299,16 @@ TEST_CASE("Cotas: el texto de una cota no cae sobre la línea de cota de otra", 
         }
     }
 }
+
+TEST_CASE("Cotas: la que sigue a una expresión lleva una ƒ delante", "[sketch][annotations]")
+{
+    Constraint plain = Constraint::length(2, 12.0);
+    REQUIRE(formatDimension(plain) == "12");
+    Constraint linked = plain;
+    linked.expression = "grosor * 2";
+    REQUIRE(formatDimension(linked) == "ƒ12");
+    // Una cota de referencia no se liga a nada: sigue entre paréntesis.
+    Constraint reference = plain;
+    reference.driving = false;
+    REQUIRE(formatDimension(reference) == "(12)");
+}

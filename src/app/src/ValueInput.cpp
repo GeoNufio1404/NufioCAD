@@ -92,6 +92,15 @@ void ValueInput::clear()
     }
 }
 
+std::vector<QString> ValueInput::texts() const
+{
+    std::vector<QString> result;
+    for (const QLineEdit* edit : edits_) {
+        result.push_back(edit->text().trimmed());
+    }
+    return result;
+}
+
 std::vector<std::optional<double>> ValueInput::values() const
 {
     std::vector<std::optional<double>> result;

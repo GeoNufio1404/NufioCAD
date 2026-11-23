@@ -1,4 +1,5 @@
 #include "ModelPanels.hpp"
+#include "Units.hpp"
 #include "Icons.hpp"
 #include "Theme.hpp"
 
@@ -88,9 +89,9 @@ QString statusText(const document::FeatureStatus& status)
     case document::Health::Ok:
         return {};
     case document::Health::Warning:
-        return QStringLiteral("Aviso: %1").arg(QString::fromStdString(status.message));
+        return QStringLiteral("Aviso: %1").arg(Units::instance().localize(QString::fromStdString(status.message)));
     case document::Health::Error:
-        return QStringLiteral("Error: %1").arg(QString::fromStdString(status.message));
+        return QStringLiteral("Error: %1").arg(Units::instance().localize(QString::fromStdString(status.message)));
     case document::Health::Suppressed:
         return QStringLiteral("Suprimida");
     case document::Health::RolledBack:
@@ -495,7 +496,7 @@ void NavigatorWidget::refresh(const document::Document& document, const document
         checkable(item, visibleSketches.contains(f.id()), SketchItem, QVariant::fromValue<qulonglong>(f.id()));
         const document::FeatureStatus& status = document.status(f.id());
         if (status.health == document::Health::Warning || status.health == document::Health::Error) {
-            item->setToolTip(0, QString::fromStdString(status.message));
+            item->setToolTip(0, Units::instance().localize(QString::fromStdString(status.message)));
             item->setForeground(0, QColor(toneColor(Tone::Warning)));
         }
     }

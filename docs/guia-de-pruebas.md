@@ -615,6 +615,14 @@ Código: **REF**.
 | REF.22 | Poner `radio = -2` (o un valor que haga imposible el sketch) | La operación del sketch queda en «!» con el motivo («debe ser mayor que cero» o «no tiene solución»); al corregir, vuelve a la normalidad |
 | REF.23 | Cota angular con `ang = 30` y expresión `ang` (o `ang + 15`) | Se entiende en grados; guardar y reabrir conserva la expresión |
 | REF.24 | Renombrar `radio` a `r` en Parámetros | La cota sigue ligada (reabrirla muestra `r`) y la pieza no cambia |
+| REF.25 | Con una cota ligada a un parámetro (REF.20), mira el sketch | El texto de la cota lleva una **ƒ** delante («ƒ10»); las cotas de número fijo no |
+| REF.26 | Doble clic en una cota ligada y escribe un número suelto | Al aceptar, el estado dice «La cota ya no sigue a «…»: ahora es un número fijo» y la ƒ desaparece |
+| REF.27 | En Parámetros, crea `a = 5` y `b = 7`, y `c = a + b*2`; cambia el nombre de `a` a `b` y luego el de `b` a `a` | Mientras están repetidos sale «repetido» y Aceptar se desactiva; al terminar, los nombres quedan intercambiados y la expresión de `c` pasa a `b + a*2` (siguen las mismas operaciones de antes) |
+| REF.28 | Con la unidad en cm o in (Configuración), pasa el ratón por el valor de un parámetro | El tooltip dice «Si es una longitud: …» con el valor en esa unidad |
+| REF.29 | Abre Extruir (o Caja) y, con la vista enfocada, escribe `2*` seguido del nombre de un parámetro (por ejemplo `2*grosor`) y Enter | El cuadro de la distancia toma esa expresión (se ve el valor y se recuerda la expresión); al cambiar el parámetro, se recalcula |
+| REF.30 | Con la unidad en cm, abre una **Caja con tapa** y pasa el ratón por la ayuda del pasador de la bisagra y por la de los tornillos | Los tooltips hablan en cm («0,03 cm más ancho»), no en mm |
+| REF.31 | Con la unidad en in, provoca un error de geometría con una medida (por ejemplo, un redondeo de radio enorme) | El mensaje da las medidas en pulgadas |
+| REF.32 | Con la unidad en cm, abre **Interferencias** con dos cuerpos que se pisen | La columna dice «Volumen común (cm³)» y el número está en cm³ |
 
 **Fíjate en:** ¿se entiende que un cuadro «tiene una expresión»? ¿Escribir un nombre de parámetro es natural? ¿Falta algo (las cotas del sketch aún no se ligan; ver «Pendiente de 6c»)?
 
