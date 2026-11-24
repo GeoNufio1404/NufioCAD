@@ -17,6 +17,12 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 - Prueba de interfaz en Release: 59 pasos, 0 fallidos, parada máxima 133 ms (el bote de rosca acepta en 53 ms).
 - **Volver atrás:** revertir la fusión de `feature/aceptar-sin-esperar`.
 
+## Instalador NSIS: arreglo de la asociación de `.nuf` (24 nov. 2026)
+
+- `cmake/Packaging.cmake`: las órdenes de registro de `.nuf` (instalar y desinstalar) van entre corchetes de CMake y con comillas simples de NSIS; con comillas dobles escapadas, CPack las estropeaba y NSIS no compilaba el instalador.
+- Probado: con NSIS 3.13 se generan el instalador (65 MB) y el ZIP; el ZIP descomprimido pasa la prueba de interfaz. La instalación del `.exe` queda por probar (pide administrador).
+- **Volver atrás:** revertir la fusión de `feature/instalador-nsis`.
+
 ---
 
 ## Licencia MIT (24 nov. 2026)
