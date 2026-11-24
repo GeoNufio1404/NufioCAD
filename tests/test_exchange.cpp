@@ -1,3 +1,4 @@
+#include <nuf/geometry/Cancel.hpp>
 #include <nuf/geometry/Exchange.hpp>
 #include <nuf/geometry/Modeling.hpp>
 #include <nuf/sketch/Profiles.hpp>
@@ -7,6 +8,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -470,4 +472,26 @@ TEST_CASE("Una malla con huecos o sin triángulos no se importa y lo explica", "
     CHECK_THROWS_AS(readMesh(empty), GeometryError);
     std::filesystem::remove(empty);
     CHECK_THROWS_AS(readMesh(std::filesystem::temp_directory_path() / "nuf_no_existe.stl"), GeometryError);
+}
+
+TEST_CASE("Una exportación cancelada se para y no deja el archivo a medias", "[exchange][cancel]")
+{
+    const std::vector<Shape> shapes{extrudedRectangle(20, 10, 5)};
+    const MeshQuality quality;
+    const auto path = std::filesystem::temp_directory_path() / "nufiocad_cancelada.stl";
+    std::filesystem::remove(path);
+
+    std::atomic<bool> flag{true};
+    {
+        CancelScope scope(flag);
+        CHECK_THROWS_AS(countTriangles(shapes, quality), GeometryError);
+        CHECK_THROWS_AS(writeStl(path, shapes, quality), GeometryError);
+    }
+    CHECK_FALSE(std::filesystem::exists(path));
+
+    // Sin cancelar, el mismo trabajo se completa.
+    CHECK(countTriangles(shapes, quality) > 0);
+    writeStl(path, shapes, quality);
+    CHECK(std::filesystem::exists(path));
+    std::filesystem::remove(path);
 }

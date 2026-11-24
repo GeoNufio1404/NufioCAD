@@ -10,6 +10,15 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Fluidez (categoría V): cancelar exportar, importar y medir
+
+- `Exchange.cpp`: `forEachMeshedFace` comprueba `cancelRequested()` entre cuerpos y caras (lanza «Exportación cancelada»; los escritores borran el archivo a medias).
+- `MainWindow.cpp`: el botón Cancelar de la insignia cancela primero `exportRun_`, `importRun_` y `measureRun_` si alguno corre; si no, deshace o cierra la herramienta como antes.
+- Prueba: `test_exchange.cpp` («Una exportación cancelada…»).
+- **Volver atrás:** revertir la fusión de `feature/pendientes-v-fluidez`.
+
+---
+
 
 ## Pendientes por categoría, S (sketch y cotas) — 23 nov. 2026
 

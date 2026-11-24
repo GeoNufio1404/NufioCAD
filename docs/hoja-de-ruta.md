@@ -309,7 +309,7 @@ Rama `feature/pendientes-u-interfaz` (23 nov. 2026, sin fusionar hasta la prueba
 ### V — Fluidez y rendimiento
 - [ ] **M1** — Aceptar sin recalcular lo que la vista previa ya calculó (número de revisión del documento) y **M6** — validez de la booleana comprobada una vez (Fase 13).
 - [ ] El navegador se rehace entero en cada refresco (M8); la selección de caras al mostrar un cuerpo (`activateBody`) sigue en el hilo de la interfaz; precalentar el gestor de fuentes (F3).
-- [ ] Exportar: cancelar a mitad, no esperar al cerrar la app y reutilizar la malla del conteo (F2); mallar por caras para no tener nunca la malla entera de una forma enorme (F6).
+- [ ] Exportar: ~~cancelar a mitad~~ ✅ (V: el botón Cancelar de la insignia de «ocupado» para exportar, importar o medir; el mallado comprueba la cancelación entre cuerpos y caras y el archivo a medias se borra; falta la prueba manual FLU.31). **Pendiente de V:** un solo OCCT mallando una cara enorme no se interrumpe hasta terminarla; no esperar al cerrar la app y reutilizar la malla del conteo (F2); mallar por caras para no tener nunca la malla entera de una forma enorme (F6).
 - [ ] Construcciones sin progreso en OCCT (`UnifySameDomain`, `Sewing`, ajuste de la rosca) solo se cancelan entre pasos; el grupo de hilos no crece si están ocupados por tareas canceladas (F4).
 - [ ] Medir por el camino real el diálogo de Exportar, Medir (M3), la pantalla de inicio con archivos grandes y la nube (A8), el sketch grande al arrastrar (M4), el anillo tras el zoom y el giro en Release (F1, F3, 8a).
 

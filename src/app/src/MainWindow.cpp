@@ -123,6 +123,15 @@ MainWindow::MainWindow(QWidget* parent)
         cancelButton->move(base + 6 > 0 ? busyBadge_->width() - cancelButton->width() - 10 : 0,
                            (busyBadge_->height() - cancelButton->height()) / 2);
         connect(cancelButton, &QToolButton::clicked, this, [this] {
+            // Una exportación, una importación o una medida en curso se paran sin tocar el diseño (un archivo a medias se borra).
+            if (exportRun_.running() || importRun_.running() || measureRun_.running()) {
+                exportRun_.cancel();
+                importRun_.cancel();
+                measureRun_.cancel();
+                updateBusyBadge();
+                statusBar()->showMessage(QStringLiteral("Cancelado: el diseño no cambió"), 5000);
+                return;
+            }
             if (tool_) {
                 finishTool(false);
             } else if (commands_.canUndo()) {
