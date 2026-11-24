@@ -18,9 +18,9 @@ se firma**, qué esperar de SmartScreen y Defender, y la lista de lo que hay que
 
 ## Antes de publicar: lo que decides tú
 
-1. **La licencia de NufioCAD.** El repositorio todavía **no declara una licencia** para el código propio. Hay que elegirla
-   (MIT, Apache-2.0, GPL, propietaria…) y añadir el archivo `LICENSE` en la raíz, citarla en el README y en los avisos. Las
-   bibliotecas que se usan permiten cualquier opción (LGPL: Qt y OpenCASCADE se enlazan de forma dinámica y PlaneGCS de forma
+1. ~~**La licencia de NufioCAD.**~~ ✅ 24 nov. 2026: **MIT** (código abierto), archivo `LICENSE` en la raíz; es la página de
+   licencia del instalador y se instala junto al programa. Es una licencia aprobada por la OSI, así que cumple lo que pide
+   SignPath Foundation para firmar gratis. Las bibliotecas que se usan permiten cualquier opción (LGPL: Qt y OpenCASCADE se enlazan de forma dinámica y PlaneGCS de forma
    estática, por lo que hay que ofrecer su código y permitir reenlazar: ya se dice en los avisos).
 2. **El firmante** (ver «Firma»). Sin firma, la versión se puede publicar igual, pero Windows 11 con Smart App Control en
    modo estricto **no la deja ejecutar**.

@@ -5,9 +5,8 @@ NufioCAD usa las bibliotecas libres que se listan abajo. Este archivo viaja con 
 repositorio (packaging/AVISOS-DE-TERCEROS.txt). El texto completo de cada licencia está en la carpeta «licencias» de la
 instalación y en las páginas de cada proyecto.
 
-IMPORTANTE (lectura de la licencia del propio NufioCAD): al preparar esta versión, el repositorio no declara todavía una
-licencia para el código de NufioCAD. Quien publique el programa debe elegirla y añadir el archivo LICENSE (ver
-docs/distribucion.md, «Antes de publicar»).
+El código de NufioCAD es de código abierto, con licencia MIT (archivo LICENSE, que viaja con el instalador). Las
+bibliotecas de abajo mantienen cada una su propia licencia.
 
 
 1. Qt 6 (Widgets, OpenGLWidgets, Svg) — LGPL v3
