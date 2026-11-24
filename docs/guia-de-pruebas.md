@@ -306,6 +306,15 @@ Código: **USA**. Rama `feature/fase-15-usabilidad`.
 | USA.32 | Archivo › Exportar o Imprimir: mira la sección «Mi impresora» | Los tres cuadros de la cama (X, Y, Z) tienen sitio para «256.00 mm» y sus flechas, sin apretarse |
 | FLU.32 | Herramientas › Bote con tapa (rosca) y Aceptar; justo después mira el Navegador | La ventana no se congela al aceptar; los cuerpos salen primero como «Cuerpo1», «Cuerpo2» y, en cuanto termina el cálculo, pasan a «Bote» y «Tapa» dentro del componente «Bote con tapa». Deshacer enseguida (antes de que termine) no deja nombres sueltos |
 | FLU.33 | Clic derecho en la vista, a unos píxeles del borde (arriba a la izquierda, abajo a la derecha, junto a un panel) | El centro del menú radial queda justo bajo el cursor, sin correrse; solo se corre si no cabe en la pantalla |
+| TL.1 | Con muchas operaciones (unas 20 o más), mira la timeline | Aparece una barra de desplazamiento abajo; la rueda del ratón también la mueve; con la última ficha a la vista se ve el marcador naranja |
+| TL.2 | Añade una operación con la timeline desplazada a la izquierda | La timeline se mueve sola para dejar a la vista el marcador |
+| TL.3 | Clic en una ficha, Mayús+clic en otra | Se eligen todas las de en medio (resaltadas); Ctrl+clic en la ficha de al lado suma o quita una del extremo; Ctrl+A elige todas; Esc las suelta |
+| TL.4 | Con varias elegidas, pulsa Supr | Se borran juntas (si algo que se queda depende de ellas, pregunta antes) y un solo Deshacer las devuelve todas en su sitio |
+| TL.5 | Arrastra una de las elegidas a otro hueco; o Alt+← / Alt+→ | Se mueve el bloque entero, en su orden; con un solo Deshacer vuelve. Si quedaría antes de lo que necesita, avisa en la barra de estado y no mueve |
+| TL.6 | Clic derecho sobre una de varias elegidas | Menú con «Suprimir/Reactivar las N», «Mover el marcador tras la última» y «Borrar las N» |
+| TL.7 | Arrastra una ficha hasta el borde derecho o izquierdo de lo visible | La timeline se desplaza sola mientras sigues cerca del borde |
+| TL.8 | Mira los iconos de las fichas | Cada ficha lleva el mismo dibujo que su herramienta (Extruir, Redondeo, Caja…), con los colores del tema, y su número de orden arriba a la izquierda |
+| TL.9 | Mira los botones de inicio, atrás, reproducir, adelante y final sobre la timeline; pulsa reproducir | Llevan iconos del mismo estilo que las herramientas; al reproducir el icono pasa a pausa y vuelve a reproducir al parar |
 | FLU.31 | Diseño con piezas grandes: Archivo › Exportar › STL y, con la insignia «ocupado» visible, pulsa su botón Cancelar | La exportación se para, sale «Cancelado: el diseño no cambió», no queda archivo a medias y el diseño sigue igual |
 
 ## 2. Sketch

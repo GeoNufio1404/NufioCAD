@@ -36,6 +36,9 @@
 #include <QDateTime>
 #include <QDir>
 #include <QWheelEvent>
+#include <QAbstractScrollArea>
+#include <QKeyEvent>
+#include <QScrollBar>
 #include <QLabel>
 #include <QDockWidget>
 #include <QRegularExpression>
@@ -1645,6 +1648,78 @@ int InterfaceCheck::run()
             }
             waitFor([this] { return window_.tool_ == nullptr; }, 10000);
         }
+        undoAll();
+    });
+
+    // Timeline con muchas operaciones: la barra deja ver las de la derecha, y varias seguidas se borran o se mueven juntas
+    // (un solo Deshacer las devuelve).
+    step(QStringLiteral("Timeline: barra de desplazamiento y varias operaciones a la vez"), [&] {
+        // Los botones de reproducción llevan los iconos de la interfaz (no símbolos de texto).
+        for (const char* name : {"timelineStart", "timelinePrevious", "timelinePlay", "timelineNext", "timelineEnd"}) {
+            const auto* button = window_.findChild<QToolButton*>(QString::fromLatin1(name));
+            expect(button != nullptr && !button->icon().isNull() && button->text().isEmpty(),
+                   QStringLiteral("el botón %1 no lleva un icono").arg(QString::fromLatin1(name)));
+        }
+        constexpr int kCount = 24;
+        for (int i = 0; i < kCount; ++i) {
+            auto box = std::make_unique<document::BoxFeature>();
+            box->base.origin = document::OriginPlane::XY;
+            box->x = 12.0 * i;
+            blocking(QStringLiteral("agregar una caja"),
+                     [&] { window_.commands_.push(std::make_unique<commands::AddFeature>(std::move(box))); });
+        }
+        settle(100);
+        const auto idAt = [&](std::size_t i) { return window_.document_.feature(i).id(); };
+        const auto order = [&] {
+            std::vector<document::FeatureId> ids;
+            for (std::size_t i = 0; i < window_.document_.featureCount(); ++i) {
+                ids.push_back(idAt(i));
+            }
+            return ids;
+        };
+        const std::vector<document::FeatureId> original = order();
+        expect(original.size() == std::size_t(kCount), QStringLiteral("no hay %1 operaciones").arg(kCount));
+        if (original.size() != std::size_t(kCount)) {
+            undoAll();
+            return;
+        }
+        // La timeline más ancha que la ventana: hay barra y llega hasta la última ficha.
+        auto* area = qobject_cast<QAbstractScrollArea*>(window_.timeline_->parentWidget()->parentWidget());
+        expect(area != nullptr && area->horizontalScrollBar()->maximum() > 0,
+               QStringLiteral("la timeline no tiene barra de desplazamiento con %1 operaciones").arg(kCount));
+        if (area != nullptr) {
+            area->horizontalScrollBar()->setValue(area->horizontalScrollBar()->maximum());
+            settle(50);
+            expect(window_.timeline_->width() >= 2 * 10 + kCount * 82,
+                   QStringLiteral("la timeline no cabe entera en su desplazamiento (%1)").arg(window_.timeline_->width()));
+        }
+        window_.timeline_->select({original[5], original[6], original[7]});
+        // Borrar tres seguidas con Supr: un paso, y deshacer las devuelve en su sitio.
+        window_.timeline_->select({original[5], original[6], original[7]});
+        QKeyEvent del(QEvent::KeyPress, Qt::Key_Delete, Qt::NoModifier);
+        QApplication::sendEvent(window_.timeline_, &del);
+        settle(100);
+        expect(window_.document_.featureCount() == std::size_t(kCount - 3), QStringLiteral("Supr no borró las tres"));
+        window_.commands_.undo();
+        settle(100);
+        expect(order() == original, QStringLiteral("un Deshacer no devolvió las tres operaciones en su sitio"));
+        // Mover un bloque de tres a la derecha (hueco 12) y a la izquierda (hueco 0); cada vez un solo Deshacer.
+        window_.moveFeatures({original[2], original[3], original[4]}, 12);
+        settle(100);
+        std::vector<document::FeatureId> expected = original;
+        std::rotate(expected.begin() + 2, expected.begin() + 5, expected.begin() + 12);
+        expect(order() == expected, QStringLiteral("el bloque no quedó en el hueco de la derecha, en su orden"));
+        window_.commands_.undo();
+        settle(100);
+        expect(order() == original, QStringLiteral("deshacer el movimiento no restauró el orden"));
+        window_.moveFeatures({original[10], original[11], original[12]}, 0);
+        settle(100);
+        expected = original;
+        std::rotate(expected.begin(), expected.begin() + 10, expected.begin() + 13);
+        expect(order() == expected, QStringLiteral("el bloque no quedó al principio, en su orden"));
+        window_.commands_.undo();
+        settle(100);
+        expect(order() == original, QStringLiteral("deshacer el segundo movimiento no restauró el orden"));
         undoAll();
     });
 

@@ -10,6 +10,18 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Timeline: barra de desplazamiento, selección múltiple e iconos nuevos (24 nov. 2026)
+
+- `ModelPanels.cpp/.hpp` (`TimelineWidget`): el ancho mínimo es el de todas las fichas, así que el área de desplazamiento saca su barra horizontal (antes las de la derecha se perdían); rueda del ratón de lado, desplazamiento automático al arrastrar cerca de un borde y al añadir operaciones.
+- Selección de varias fichas **seguidas** (Mayús+clic rango, Ctrl+clic suma o quita un extremo, Ctrl+A, flechas, Esc); Supr las borra, arrastrar o Alt+←/→ las mueve juntas y el menú del clic derecho actúa sobre todas.
+- `FeatureCommands`: `Batch` (varias órdenes como un solo paso de Deshacer). `MainWindow`: `deleteFeatures`, `moveFeatures` (comprueba que el bloque no cruce lo que necesita o lo que lo usa), `showSelectionMenu`.
+- Los botones de reproducción (inicio, atrás, reproducir/pausa, adelante, final) usan iconos SVG nuevos (`timeline-*.svg`) en vez de símbolos de texto.
+- Iconos: cada ficha usa el icono de su herramienta (`resources/icons/ui`) en vez de un símbolo de texto, más su número de orden. Solo se pintan las fichas visibles.
+- Pruebas: `Batch` en `test_command_stack.cpp`; en la interfaz, un paso con 24 operaciones (barra, borrar y mover bloques con un solo Deshacer).
+- **Volver atrás:** revertir la fusión de `feature/timeline-mejoras`.
+
+---
+
 ## Hotfix: el menú radial se abre centrado en el cursor (24 nov. 2026)
 
 - `RadialMenu.cpp`: ahora es una ventana emergente propia; como hijo de la vista se corría para no salirse de ella (a menos de ~142 px de un borde), y se veía desfasado del cursor. Solo lo limita la pantalla.
