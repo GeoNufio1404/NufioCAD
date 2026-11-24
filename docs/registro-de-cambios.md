@@ -17,6 +17,13 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Pruebas (categoría T, 2.ª parte): flechas de Redondeo y Vaciado
+
+- `InterfaceCheck.cpp`: `arrowCheck` acepta una elección de cara; dos pasos nuevos (58 en total). `FeatureTools.hpp`: `EdgeTool` y `ShellTool` declaran amiga a `InterfaceCheck`.
+- Solo pruebas. **Volver atrás:** revertir la fusión de `feature/pendientes-t-flechas`.
+
+---
+
 ## Fluidez (categoría V): cancelar exportar, importar y medir
 
 - `Exchange.cpp`: `forEachMeshedFace` comprueba `cancelRequested()` entre cuerpos y caras (lanza «Exportación cancelada»; los escritores borran el archivo a medias).

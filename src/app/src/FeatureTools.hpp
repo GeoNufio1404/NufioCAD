@@ -307,6 +307,7 @@ protected:
     void afterPreview(const document::ModelState& before) override;
 
 private:
+    friend class InterfaceCheck;  // la prueba de interfaz elige una cara sin ratón (flechas de Redondeo)
     Style style_;
     std::vector<geometry::ElementRef> edges_;
     QDoubleSpinBox* size_ = nullptr;
@@ -337,6 +338,7 @@ protected:
     bool removesMaterial() const override { return false; }
 
 private:
+    friend class InterfaceCheck;  // la prueba de interfaz elige una cara sin ratón (flechas de Vaciado)
     std::vector<geometry::ElementRef> faces_;
     QDoubleSpinBox* thickness_ = nullptr;
     QCheckBox* closed_ = nullptr;

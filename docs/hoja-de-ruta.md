@@ -315,7 +315,7 @@ Rama `feature/pendientes-u-interfaz` (23 nov. 2026, sin fusionar hasta la prueba
 
 ### T — Pruebas automáticas
 - [ ] Que la prueba de interfaz compare cómo se ve (imágenes), pulse con el ratón de verdad y vigile las pilas también en Linux (prueba de interfaz, F1).
-- [ ] Paso de la prueba de interfaz para Redondeo, Vaciado y Agujero (flechas; necesitan una selección de aristas o caras en la prueba). Las cotas que no se pisan (S6) ya tienen su paso (círculos concéntricos).
+- [ ] Pasos de flechas para Redondeo y Vaciado ✅ (T: eligen una cara sin ratón llamando a `selectionChanged`; 58 pasos, 0 fallidos). **Pendiente de T:** Agujero (necesita un sketch con un círculo o punto sobre el cuerpo). Las cotas que no se pisan (S6) ya tienen su paso (círculos concéntricos).
 - [x] Prueba automática de la recuperación (4f) ✅ (T: paso «Recuperación: copia huérfana, ofrecida y descartada» en la prueba de interfaz: escribe la copia, comprueba que una ventana viva no la ofrece, que la muerta sí con su origen, y que se descarta). **Pendiente de T:** no cubre el aviso visual de recuperación ni abrir el diseño recuperado.
 - [ ] El inventario de pantallas no cubre el aviso de recuperación, los diálogos del sistema ni la pantalla de inicio; quitar el `continue-on-error` del paso de Xvfb si se ve estable (Fase 20; cambiar el CI pide tu permiso).
 
