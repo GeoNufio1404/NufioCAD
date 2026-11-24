@@ -636,14 +636,14 @@ FeatureRow rowOf(const Feature& f)
         const auto& c = static_cast<const CylinderFeature&>(f);
         row.type = "cylinder";
         params = {{"base", toJson(c.base)}, {"x", c.x}, {"y", c.y}, {"z", c.z}, {"diameter", c.diameter},
-                  {"height", c.height}, {"symmetric", c.symmetric},
+                  {"height", c.height}, {"symmetric", c.symmetric}, {"baseRound", c.baseRound},
                   {"operation", nameOf(kOperations, c.operation)}};
         break;
     }
     case FeatureKind::Thread: {
         const auto& t = static_cast<const ThreadFeature&>(f);
         row.type = "thread";
-        params = {{"base", toJson(t.base)}, {"x", t.x}, {"y", t.y}, {"clearance", t.clearance},
+        params = {{"base", toJson(t.base)}, {"x", t.x}, {"y", t.y}, {"z", t.z}, {"clearance", t.clearance},
                   {"diameter", t.spec.diameter}, {"pitch", t.spec.pitch},
                   {"length", t.spec.length}, {"leftHanded", t.spec.leftHanded},
                   {"operation", nameOf(kOperations, t.operation)}};
@@ -943,6 +943,7 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         c->diameter = number(p, "diameter");
         c->height = number(p, "height");
         c->symmetric = p.at("symmetric").get<bool>();
+        c->baseRound = p.value("baseRound", 0.0);
         c->operation = parseEnum(kOperations, text(p, "operation"), "operación");
         feature = std::move(c);
     } else if (row.type == "thread") {
@@ -954,6 +955,7 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         }
         t->x = p.value("x", 0.0);  // los archivos anteriores no lo traen
         t->y = p.value("y", 0.0);
+        t->z = p.value("z", 0.0);
         t->clearance = p.value("clearance", 0.0);
         t->spec.diameter = number(p, "diameter");
         t->spec.pitch = number(p, "pitch");

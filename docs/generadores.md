@@ -12,7 +12,7 @@ La pestaña **HERRAMIENTAS** y el menú Herramientas agrupan los generadores por
 
 | Familia | Generadores |
 |---|---|
-| **Cajas** | Lightbox, Caja con tapa |
+| **Cajas** | Lightbox, Caja con tapa, Bote con tapa |
 | **Letreros** | Letrero o llavero |
 | **Engranajes** | Par de engranajes, Engranaje interno, Cremallera, Tornillo sin fin y rueda, Engranajes cónicos, Tren planetario |
 
@@ -143,6 +143,24 @@ generados con «Creador de LightBox» / MakerLab «Light Box V0.0.1» y guardado
 La tapa se imprime cara abajo (la imagen contra la cama) y la caja con el fondo en la cama y la boca hacia arriba.
 Aguilar lleva además un agujero cilíndrico de Ø26 mm que el usuario le añadió a mano (un «negative part» de Bambu
 Studio); la caja de MakerLab no trae agujero para el cable.
+
+## Bote con tapa
+
+Un bote con tapa que se elige por su **forma**: la **redonda** cierra con **rosca** o con **bayoneta**, y la **rectangular**
+con una **tapa deslizante**. La tapa sale aparte, al lado, con la cara de arriba sobre la cama. Una sola **holgura de
+ajuste** (0,3 mm por cada lado por defecto) manda en los tres cierres; cámbiala según cómo imprima tu impresora.
+
+- **Rosca:** el cuello es una varilla roscada (paso y alto a tu gusto; el paso grande imprime mejor) y la boca queda un poco
+  más estrecha que el bote para que la pared del cuello no se quede fina. La tapa es un vaso con la rosca por dentro, más la holgura.
+- **Bayoneta:** cuatro pines en el cuello (diámetro, cuánto salen y a qué altura). La tapa lleva una guía redonda a esa altura
+  con cuatro entradas hasta el borde: se alinean, se empuja y se gira, y los pines quedan bajo el labio.
+- **Deslizante:** guías en las paredes largas (hondo de la guía y labio que sujeta la tapa por arriba) y una ranura en la pared
+  de delante para meter la tapa; la pared de atrás hace de tope.
+- **Redondeo del fondo por dentro** (forma redonda): la unión de la pared con el fondo es un arco, no una esquina viva, que la
+  refuerza donde más fuerza se aplica. El mismo campo está en la Caja con tapa redonda.
+
+La tapa deslizante también cabe como cierre de la Caja con tapa y del Lightbox (las paredes ya existen; haría falta la ranura
+de entrada y las guías): queda como mejora, ver «Pendiente de BOT» en la hoja de ruta.
 
 ## Caja con tapa
 

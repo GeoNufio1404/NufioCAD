@@ -295,6 +295,7 @@ public:
     double diameter = 10.0;
     double height = 10.0;
     bool symmetric = false;
+    double baseRound = 0.0;  // redondea el borde de la base (el círculo del plano): al cortarlo, deja el fondo redondeado
     Operation operation = Operation::NewBody;
 
     FeatureKind kind() const override { return FeatureKind::Cylinder; }
@@ -332,6 +333,7 @@ public:
     // Holgura radial (mm) con «Cortar»: el agujero sale más ancho que el tornillo para que éste entre
     // (impreso, un agujero exacto no deja pasar el tornillo).
     double clearance = 0.0;
+    double z = 0.0;          // dónde empieza la rosca a lo largo de la normal (mm, desde el plano)
     geometry::ThreadSpec spec;
     Operation operation = Operation::NewBody;
     // Rosca sobre una cara cilíndrica que ya existe (un agujero o un cilindro macizo): se corta del cuerpo en todo el largo de

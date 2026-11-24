@@ -396,6 +396,9 @@ public:
                 length("alto", "Alto de la caja", 40.0, 10.0, 500.0, "Sin la tapa"),
                 length("pared", "Pared", 2.0, 0.8, 20.0, "Un múltiplo del ancho de la boquilla"),
                 length("base", "Base", 2.0, 0.8, 20.0, "Grosor del fondo"),
+                length("interior", "Redondeo del fondo por dentro", 2.0, 0.0, 10.0,
+                       "Redondea por dentro la unión de la pared con el fondo: refuerza donde más fuerza se aplica (0 = esquina viva)",
+                       "forma", 1),
                 length("esquina", "Radio de esquinas", 3.0, 0.0, 30.0),
                 length("tapa", "Grosor de la tapa", 2.0, 0.8, 20.0),
                 closure,
@@ -492,6 +495,10 @@ public:
         param(pared, v("pared"));
         param(base, v("base"));
         param(tapa, v("tapa"));
+        const std::string interior = p("interior");
+        if (round && opt("interior") > 0.0) {
+            param(interior, opt("interior"));
+        }
         if (screws) {
             param(poste, v("poste"));
             param(tornillo, v("tornillo"));
@@ -571,6 +578,10 @@ public:
         // 1. La caja y su hueco (abierta por arriba).
         recipe.features.push_back(piece("Caja: cuerpo", Operation::NewBody, W, D, "0", alto, "", esquina));
         recipe.features.push_back(piece("Caja: hueco", Operation::Cut, inW, inD, base, alto, "", ""));
+        if (round && opt("interior") > 0.0) {
+            // El hueco redondo con el borde de su fondo redondeado: al cortarlo, la unión pared-fondo queda reforzada.
+            recipe.features.back()->expressions["baseRound"] = "min(" + interior + "; min((" + inW + ")/2 - 0.1; " + alto + " - " + base + " - 0.1))";
+        }
 
         // Los postes de las cuatro esquinas, tangentes a la pared por dentro (con 0,5 mm metidos en ella para que se unan),
         // con su agujero para roscar; en la caja redonda van sobre la circunferencia, a 45°.
@@ -2102,10 +2113,236 @@ std::unique_ptr<Feature> instantiate(const Feature& feature, FeatureId recipeSke
     return copy;
 }
 
+// --- Bote con tapa --------------------------------------------------------------------------
+// Un bote redondo con tapa de rosca o de bayoneta, o una caja rectangular con tapa deslizante. La tapa sale aparte,
+// al lado, y se imprime con la cara de arriba sobre la cama. Una sola holgura de ajuste manda en todos los cierres.
+class JarWithLid final : public Generator {
+public:
+    std::string category() const override { return "Cajas"; }
+    std::string id() const override { return "bote-con-tapa"; }
+    std::string title() const override { return "Bote con tapa"; }
+    std::string icon() const override { return "box-solid"; }
+    std::string description() const override
+    {
+        return "Bote redondo con tapa de rosca o de bayoneta, o caja rectangular con tapa deslizante. La holgura de "
+               "ajuste es la misma para todos y se puede cambiar según tu impresora.";
+    }
+
+    std::vector<GeneratorField> fields() const override
+    {
+        using K = GeneratorField::Kind;
+        const auto length = [](std::string key, std::string label, double value, double min, double max, std::string hint = {},
+                               std::string showKey = {}, int showIndex = 0) {
+            GeneratorField f;
+            f.key = std::move(key);
+            f.label = std::move(label);
+            f.kind = K::Length;
+            f.value = value;
+            f.min = min;
+            f.max = max;
+            f.hint = std::move(hint);
+            f.showKey = std::move(showKey);
+            f.showIndex = showIndex;
+            return f;
+        };
+        const auto choice = [](std::string key, std::string label, std::vector<std::string> choices, std::string hint,
+                               std::string showKey = {}, int showIndex = 0) {
+            GeneratorField f;
+            f.key = std::move(key);
+            f.label = std::move(label);
+            f.kind = K::Choice;
+            f.choices = std::move(choices);
+            f.hint = std::move(hint);
+            f.showKey = std::move(showKey);
+            f.showIndex = showIndex;
+            return f;
+        };
+        return grouped({choice("forma", "Forma", {"Redonda", "Rectangular"}, "La redonda cierra con rosca o bayoneta; la rectangular, con una tapa que se desliza"),
+                        length("diametro", "Diámetro (exterior)", 60.0, 20.0, 500.0, {}, "forma", 0),
+                        length("ancho", "Ancho (exterior)", 80.0, 20.0, 500.0, {}, "forma", 1),
+                        length("fondo", "Fondo (exterior)", 50.0, 20.0, 500.0, "Hacia donde se desliza la tapa", "forma", 1),
+                        length("alto", "Alto total", 50.0, 15.0, 500.0, "Con la rosca o el cuello incluidos"),
+                        length("pared", "Pared", 2.4, 1.2, 20.0, "Un múltiplo del ancho de la boquilla"),
+                        length("base", "Base", 2.0, 0.8, 20.0, "Grosor del fondo"),
+                        length("interior", "Redondeo del fondo por dentro", 2.0, 0.0, 10.0,
+                               "Redondea por dentro la unión de la pared con el fondo: la refuerza (0 = esquina viva)", "forma", 0),
+                        length("esquina", "Radio de esquinas", 3.0, 0.0, 30.0, {}, "forma", 1),
+                        length("tapa", "Grosor de la tapa", 2.4, 0.8, 20.0),
+                        length("holgura", "Holgura de ajuste", 0.3, 0.0, 2.0,
+                               "Aire entre las piezas que encajan, por cada lado: sube si queda apretado, baja si baila"),
+                        choice("cierre", "Cierre", {"Rosca", "Bayoneta"}, "Rosca: se enrosca varias vueltas. Bayoneta: entra y gira un poco", "forma", 0),
+                        length("paso", "Paso de la rosca", 3.0, 1.0, 8.0, "Avance por vuelta: más grande imprime mejor", "cierre", 0),
+                        length("rosca_alto", "Alto de la rosca", 10.0, 4.0, 40.0, "Lo que sube el cuello roscado", "cierre", 0),
+                        length("pin_diametro", "Diámetro de los pines", 4.0, 2.0, 12.0, "Cuatro pines en el cuello", "cierre", 1),
+                        length("pin_sale", "Lo que salen los pines", 2.5, 1.0, 8.0, {}, "cierre", 1),
+                        length("pin_baja", "Altura de los pines", 6.0, 3.0, 40.0, "Desde el borde del bote hacia abajo", "cierre", 1),
+                        length("cuello", "Alto del cuello", 12.0, 6.0, 40.0, "Lo que entra la tapa", "cierre", 1),
+                        length("ranura", "Hondo de la guía", 1.2, 0.6, 6.0, "Cuánto entra en la pared; deja al menos 0,8 mm", "forma", 1),
+                        length("labio", "Labio sobre la tapa", 1.6, 0.8, 6.0, "El borde de pared que sujeta la tapa por arriba", "forma", 1)},
+                       {{"forma", "Medidas"}, {"tapa", "Tapa y ajuste"}, {"cierre", "Cierre"}});
+    }
+
+    Recipe make(const GeneratorValues& values, const std::string& suffix) const override
+    {
+        const bool round = values.at("forma") < 0.5;
+        const bool bayonet = round && values.at("cierre") >= 0.5;
+        const auto p = [&](const char* name) { return std::string(name) + suffix; };
+        const auto v = [&](const char* key) { return values.at(key); };
+        Recipe recipe;
+        recipe.component = "Bote con tapa";
+        recipe.bodyNames = {"Bote", "Tapa"};
+        const auto param = [&](const std::string& name, double value) { recipe.parameters.push_back({name, number(value)}); };
+        const std::string alto = p("alto"), pared = p("pared"), base = p("base"), tapa = p("tapa"), holgura = p("holgura"),
+                          diametro = p("diametro"), ancho = p("ancho"), fondo = p("fondo"), esquina = p("esquina"),
+                          interior = p("interior"), paso = p("paso"), roscaAlto = p("rosca_alto"), pinD = p("pin_diametro"),
+                          pinSale = p("pin_sale"), pinBaja = p("pin_baja"), cuello = p("cuello"), ranura = p("ranura"),
+                          labio = p("labio");
+        param(alto, v("alto"));
+        param(pared, v("pared"));
+        param(base, v("base"));
+        param(tapa, v("tapa"));
+        param(holgura, v("holgura"));
+        const auto box = [&](const std::string& name, Operation op, const std::string& w, const std::string& d, const std::string& z,
+                             const std::string& h, const std::string& x, const std::string& y, const std::string& radius) {
+            auto f = std::make_unique<BoxFeature>();
+            f->setName(name);
+            f->base.origin = OriginPlane::XY;
+            f->centered = true;
+            f->operation = op;
+            f->expressions = {{"width", w}, {"depth", d}, {"z", z}, {"height", h}};
+            if (!x.empty()) {
+                f->expressions["x"] = x;
+            }
+            if (!y.empty()) {
+                f->expressions["y"] = y;
+            }
+            if (!radius.empty()) {
+                f->expressions["radius"] = radius;
+            }
+            return f;
+        };
+        const auto cylinder = [&](const std::string& name, Operation op, const std::string& diameter, const std::string& z,
+                                  const std::string& h, const std::string& x, OriginPlane plane = OriginPlane::XY,
+                                  const std::string& y = {}) {
+            auto f = std::make_unique<CylinderFeature>();
+            f->setName(name);
+            f->base.origin = plane;
+            f->operation = op;
+            f->expressions = {{"diameter", diameter}, {"z", z}, {"height", h}};
+            if (!x.empty()) {
+                f->expressions["x"] = x;
+            }
+            if (!y.empty()) {
+                f->expressions["y"] = y;
+            }
+            return f;
+        };
+        const auto thread = [&](const std::string& name, Operation op, const std::string& diameter, const std::string& z,
+                                const std::string& length, const std::string& x) {
+            auto f = std::make_unique<ThreadFeature>();
+            f->setName(name);
+            f->base.origin = OriginPlane::XY;
+            f->operation = op;
+            f->expressions = {{"diameter", diameter}, {"pitch", paso}, {"length", length}, {"z", z}, {"x", x}};
+            if (op == Operation::Cut) {
+                f->expressions["clearance"] = holgura;
+            } else {
+                f->expressions["entryChamfer"] = "0.6*" + paso;
+            }
+            return f;
+        };
+
+        if (round) {
+            param(diametro, v("diametro"));
+            const std::string inD = diametro + " - 2*" + pared;
+            const std::string beside = diametro + " + " + pared + " + 12";
+            if (!bayonet) {
+                // Rosca: el cuello es una varilla roscada del diámetro del bote, con la boca un poco más estrecha.
+                param(paso, v("paso"));
+                param(roscaAlto, v("rosca_alto"));
+                const std::string depth = "0.6134*" + paso;
+                const std::string bodyH = alto + " - " + roscaAlto;
+                const std::string mouth = diametro + " - 2*(" + depth + " + " + pared + ")";
+                recipe.features.push_back(cylinder("Bote: cuerpo", Operation::NewBody, diametro, "0", bodyH, ""));
+                recipe.features.push_back(thread("Bote: rosca", Operation::Join, diametro, alto, "-(" + roscaAlto + " + 0.5)", "0"));
+                auto hollow = cylinder("Bote: hueco", Operation::Cut, inD, base, bodyH + " - " + base, "");
+                if (v("interior") > 0.0) {
+                    param(interior, v("interior"));
+                    hollow->expressions["baseRound"] = "min(" + interior + "; min((" + inD + ")/2 - 0.1; " + bodyH + " - " + base + " - 0.1))";
+                }
+                recipe.features.push_back(std::move(hollow));
+                recipe.features.push_back(cylinder("Bote: boca", Operation::Cut, mouth, bodyH + " - 0.5", roscaAlto + " + 1", ""));
+                // La tapa: un vaso con la rosca por dentro (la misma rosca, más la holgura).
+                recipe.features.push_back(cylinder("Tapa: cuerpo", Operation::NewBody, diametro + " + 2*" + pared, "0",
+                                                   tapa + " + " + roscaAlto + " + 1", beside));
+                recipe.features.push_back(thread("Tapa: rosca", Operation::Cut, diametro, tapa, roscaAlto + " + 2", beside));
+            } else {
+                // Bayoneta: cuatro pines en el cuello y, en la tapa, una guía redonda con cuatro entradas.
+                param(pinD, v("pin_diametro"));
+                param(pinSale, v("pin_sale"));
+                param(pinBaja, v("pin_baja"));
+                param(cuello, v("cuello"));
+                const std::string span = diametro + " + 2*" + pinSale;
+                const std::string pinZ = alto + " - " + pinBaja;
+                recipe.features.push_back(cylinder("Bote: cuerpo", Operation::NewBody, diametro, "0", alto, ""));
+                // Dos barras que cruzan el bote por la altura de los pines (en X y en Y); el hueco las deja en cuatro pines.
+                // En los planos YZ y XZ la «y» del plano es la altura; centrados sobre el plano (simétricos), de lado a lado.
+                for (const auto& [name, plane] : {std::pair<const char*, OriginPlane>{"Bote: pines en X", OriginPlane::YZ},
+                                                  std::pair<const char*, OriginPlane>{"Bote: pines en Y", OriginPlane::XZ}}) {
+                    auto pins = cylinder(name, Operation::Join, pinD, "0", span, "0", plane, "(" + pinZ + ")");
+                    pins->symmetric = true;
+                    recipe.features.push_back(std::move(pins));
+                }
+                auto hollow = cylinder("Bote: hueco", Operation::Cut, inD, base, alto + " - " + base + " + 1", "");
+                if (v("interior") > 0.0) {
+                    param(interior, v("interior"));
+                    hollow->expressions["baseRound"] = "min(" + interior + "; min((" + inD + ")/2 - 0.1; " + alto + " - " + base + " - 0.1))";
+                }
+                recipe.features.push_back(std::move(hollow));
+                // La tapa: un vaso con la guía (un anillo de la altura del pin más holgura) y cuatro entradas hasta el borde.
+                const std::string capD = span + " + 2*" + pared;
+                const std::string capH = tapa + " + " + cuello;
+                const std::string groove = pinD + " + 2*" + holgura;
+                const std::string grooveZ = tapa + " + " + pinBaja + " - (" + groove + ")/2";
+                recipe.features.push_back(cylinder("Tapa: cuerpo", Operation::NewBody, capD, "0", capH, beside));
+                recipe.features.push_back(cylinder("Tapa: hueco", Operation::Cut, diametro + " + 2*" + holgura, tapa, cuello + " + 1", beside));
+                recipe.features.push_back(cylinder("Tapa: guía de los pines", Operation::Cut, span + " + 2*" + holgura, grooveZ, groove, beside));
+                recipe.features.push_back(box("Tapa: entradas en X", Operation::Cut, span + " + 2*" + pared + " + 2", groove, grooveZ,
+                                              capH + " - (" + grooveZ + ") + 1", beside, "", ""));
+                recipe.features.push_back(box("Tapa: entradas en Y", Operation::Cut, groove, span + " + 2*" + pared + " + 2", grooveZ,
+                                              capH + " - (" + grooveZ + ") + 1", beside, "", ""));
+            }
+        } else {
+            // Tapa deslizante: guías en las paredes largas y una ranura en la pared de delante para meter la tapa.
+            param(ancho, v("ancho"));
+            param(fondo, v("fondo"));
+            param(esquina, v("esquina"));
+            param(ranura, v("ranura"));
+            param(labio, v("labio"));
+            const std::string inW = ancho + " - 2*" + pared, inD = fondo + " - 2*" + pared;
+            const std::string slotH = tapa + " + 2*" + holgura;                     // alto de la guía
+            const std::string slotZ = alto + " - " + labio + " - (" + slotH + ")";  // dónde empieza
+            const std::string beside = ancho + " + 10";
+            recipe.features.push_back(box("Bote: cuerpo", Operation::NewBody, ancho, fondo, "0", alto, "", "", esquina));
+            recipe.features.push_back(box("Bote: hueco", Operation::Cut, inW, inD, base, alto, "", "", ""));
+            // La guía: una ranura a lo ancho (más ancha que el hueco), del frente hasta la pared de atrás, que queda cerrada.
+            recipe.features.push_back(box("Bote: guías de la tapa", Operation::Cut, inW + " + 2*" + ranura,
+                                          fondo + " - " + pared + " + 1", slotZ, slotH, "", "-(1 + " + pared + ")/2", ""));
+            // La tapa: una placa que entra por delante, apoyada en las guías (más estrecha por la holgura).
+            const std::string lidW = inW + " + 2*(" + ranura + " - " + holgura + ")";
+            const std::string lidD = fondo + " - " + pared + " - " + holgura;
+            recipe.features.push_back(box("Tapa: placa", Operation::NewBody, lidW, lidD, "0", tapa, beside,
+                                          "-(" + pared + " + " + holgura + ")/2", ""));
+        }
+        return recipe;
+    }
+};
+
 const std::vector<const Generator*>& generators()
 {
     static const Lightbox lightbox;
     static const BoxWithLid boxWithLid;
+    static const JarWithLid jarWithLid;
     static const Sign sign;
     static const GearPair gearPair;
     static const InternalGear internalGear;
@@ -2113,7 +2350,7 @@ const std::vector<const Generator*>& generators()
     static const WormAndWheel wormAndWheel;
     static const BevelPair bevelPair;
     static const PlanetaryGear planetaryGear;
-    static const std::vector<const Generator*> all = {&lightbox, &boxWithLid, &sign, &gearPair, &internalGear,
+    static const std::vector<const Generator*> all = {&lightbox, &boxWithLid, &jarWithLid, &sign, &gearPair, &internalGear,
                                                       &rackAndPinion, &wormAndWheel, &bevelPair, &planetaryGear};
     return all;
 }

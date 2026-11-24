@@ -3715,3 +3715,168 @@ TEST_CASE("El aviso de una pared fina dice qué caras la forman", "[print]")
         }
     }
 }
+
+TEST_CASE("La caja redonda redondea por dentro la unión de la pared con el fondo", "[generator]")
+{
+    const document::Generator* generator = document::findGenerator("caja-con-tapa");
+    REQUIRE(generator != nullptr);
+    const auto box = [&](double inside) {
+        document::GeneratorValues values = generator->defaults();
+        values["forma"] = 1.0;
+        values["interior"] = inside;
+        auto doc = std::make_unique<Document>();
+        document::applyRecipe(*doc, generator->make(values, ""));
+        for (std::size_t i = 0; i < doc->featureCount(); ++i) {
+            INFO(doc->feature(i).name());
+            REQUIRE(doc->status(doc->feature(i).id()).health != Health::Error);
+        }
+        return doc;
+    };
+    const auto sharp = box(0.0);
+    const auto rounded = box(3.0);
+    // El relleno de la esquina es un anillo de sección (1 − π/4)·r² alrededor del hueco (radio 48): ~ 0,2146·9·2π·(48 − 0,22·3).
+    const double fillet = (1.0 - std::numbers::pi / 4.0) * 9.0 * 2.0 * std::numbers::pi * (48.0 - 0.2234 * 3.0);
+    const double extra = rounded->result().bodies[0].shape.volume() - sharp->result().bodies[0].shape.volume();
+    REQUIRE_THAT(extra, Catch::Matchers::WithinRel(fillet, 0.03));
+    // La tapa no cambia.
+    REQUIRE_THAT(rounded->result().bodies[1].shape.volume(), Catch::Matchers::WithinRel(sharp->result().bodies[1].shape.volume(), 1e-6));
+}
+
+TEST_CASE("El bote con tapa se arma con rosca, bayoneta y tapa deslizante", "[generator][jar]")
+{
+    const document::Generator* generator = document::findGenerator("bote-con-tapa");
+    REQUIRE(generator != nullptr);
+    const auto build = [&](double shape, double closure) {
+        document::GeneratorValues values = generator->defaults();
+        values["forma"] = shape;
+        values["cierre"] = closure;
+        auto doc = std::make_unique<Document>();
+        document::applyRecipe(*doc, generator->make(values, ""));
+        for (std::size_t i = 0; i < doc->featureCount(); ++i) {
+            INFO(doc->feature(i).name());
+            INFO(doc->status(doc->feature(i).id()).message);
+            REQUIRE(doc->status(doc->feature(i).id()).health != Health::Error);
+        }
+        REQUIRE(doc->result().bodies.size() == 2);
+        return doc;
+    };
+    // Las dos piezas quedan una al lado de la otra, sin tocarse.
+    const auto apart = [](const Document& doc) {
+        const geometry::Box a = doc.result().bodies[0].shape.bounds();
+        const geometry::Box b = doc.result().bodies[1].shape.bounds();
+        return b.min.x > a.max.x - 2.0;  // las cotas del visor pueden pasarse un poco en superficies curvas
+    };
+
+    SECTION("rosca")
+    {
+        const auto doc = build(0.0, 0.0);
+        CHECK(apart(*doc));
+        const double jar = doc->result().bodies[0].shape.volume();
+        const double lid = doc->result().bodies[1].shape.volume();
+        CHECK(jar > 20000.0);
+        CHECK(lid > 3000.0);
+        CHECK(doc->result().bodies[0].shape.solidCount() == 1);
+        CHECK(doc->result().bodies[1].shape.solidCount() == 1);
+    }
+    SECTION("bayoneta")
+    {
+        const auto doc = build(0.0, 1.0);
+        CHECK(apart(*doc));
+        CHECK(doc->result().bodies[0].shape.solidCount() == 1);
+        CHECK(doc->result().bodies[1].shape.solidCount() == 1);
+        // El bote lleva los pines por fuera: es más ancho que su cilindro.
+        const geometry::Box b = doc->result().bodies[0].shape.bounds();
+        CHECK(b.max.x - b.min.x > 60.0 + 2.0 * 2.0);
+    }
+    SECTION("deslizante")
+    {
+        const auto doc = build(1.0, 0.0);
+        CHECK(apart(*doc));
+        const geometry::Box lid = doc->result().bodies[1].shape.bounds();
+        CHECK_THAT(lid.max.z - lid.min.z, Catch::Matchers::WithinAbs(2.4, 1e-6));
+        // La tapa cabe en las guías: es más ancha que el hueco y más estrecha que el bote.
+        const geometry::Box box = doc->result().bodies[0].shape.bounds();
+        CHECK(lid.max.x - lid.min.x > 80.0 - 2.0 * 2.4);
+        CHECK(lid.max.x - lid.min.x < 80.0);
+        // Las guías no deben cortar el bote en dos.
+        CHECK(doc->result().bodies[0].shape.solidCount() == 1);
+        CHECK(box.max.z == Catch::Approx(50.0).margin(1e-6));
+    }
+}
+
+TEST_CASE("La tapa de rosca del bote encaja en el cuello al girarla", "[generator][jar][.fit]")
+{
+    const document::Generator* generator = document::findGenerator("bote-con-tapa");
+    REQUIRE(generator != nullptr);
+    document::GeneratorValues values = generator->defaults();
+    values["forma"] = 0.0;
+    values["cierre"] = 0.0;
+    Document doc;
+    document::applyRecipe(doc, generator->make(values, ""));
+    const geometry::Shape& jar = doc.result().bodies[0].shape;
+    const geometry::Shape& lid = doc.result().bodies[1].shape;
+    const double capH = 2.4 + 10.0 + 1.0;
+    const double lidX = (lid.bounds().min.x + lid.bounds().max.x) / 2.0;
+    double best = 1e18;
+    for (int step = 0; step < 6; ++step) {
+        // La tapa se da la vuelta (se imprime boca arriba) y se baja sobre el cuello, girada un poco más cada vez.
+        const geometry::Shape flipped =
+            geometry::moveBody("t", lid, {0.0, 0.0, 0.0}, {{lidX, 0.0, capH / 2.0}, {1.0, 0.0, 0.0}}, std::numbers::pi, false);
+        const geometry::Shape placed = geometry::moveBody("t", flipped, {-lidX, 0.0, 50.0 - capH + 2.4},
+                                                          {{lidX, 0.0, 0.0}, {0.0, 0.0, 1.0}}, 0.0, false,
+                                                          {0.0, 0.0, step * std::numbers::pi / 3.0}, {lidX, 0.0, 0.0});
+        const double overlap = std::abs(geometry::boolean(geometry::BooleanOp::Common, jar, placed).volume());
+        best = std::min(best, overlap);
+    }
+    INFO("el menor solape entre el bote y la tapa: " << best << " mm3");
+    CHECK(best < 5.0);
+}
+
+TEST_CASE("La tapa de bayoneta entra por las entradas, gira y queda retenida", "[generator][jar][.fit]")
+{
+    const document::Generator* generator = document::findGenerator("bote-con-tapa");
+    REQUIRE(generator != nullptr);
+    document::GeneratorValues values = generator->defaults();
+    values["forma"] = 0.0;
+    values["cierre"] = 1.0;
+    Document doc;
+    document::applyRecipe(doc, generator->make(values, ""));
+    const geometry::Shape& jar = doc.result().bodies[0].shape;
+    const geometry::Shape& lid = doc.result().bodies[1].shape;
+    const double capH = 2.4 + 12.0;
+    const double lidX = (lid.bounds().min.x + lid.bounds().max.x) / 2.0;
+    // La tapa boca abajo sobre el bote, girada «turn» y subida «lift» respecto de su sitio cerrado.
+    const auto overlap = [&](double turn, double lift) {
+        const geometry::Shape flipped =
+            geometry::moveBody("t", lid, {0.0, 0.0, 0.0}, {{lidX, 0.0, capH / 2.0}, {1.0, 0.0, 0.0}}, std::numbers::pi, false);
+        const geometry::Shape placed = geometry::moveBody("t", flipped, {-lidX, 0.0, 50.0 - capH + 2.4 + lift},
+                                                          {{lidX, 0.0, 0.0}, {0.0, 0.0, 1.0}}, 0.0, false, {0.0, 0.0, turn}, {lidX, 0.0, 0.0});
+        return std::abs(geometry::boolean(geometry::BooleanOp::Common, jar, placed).volume());
+    };
+    CHECK(overlap(0.0, 0.0) < 1.0);                          // entra por las entradas
+    CHECK(overlap(std::numbers::pi / 4.0, 0.0) < 1.0);       // gira libre por la guía
+    CHECK(overlap(std::numbers::pi / 4.0, 3.0) > 5.0);       // girada, no se puede levantar: los pines topan
+    CHECK(overlap(0.0, 3.0) < 1.0);                          // alineada, sí sale
+}
+
+TEST_CASE("La tapa deslizante entra en las guías y no se levanta", "[generator][jar][.fit]")
+{
+    const document::Generator* generator = document::findGenerator("bote-con-tapa");
+    REQUIRE(generator != nullptr);
+    document::GeneratorValues values = generator->defaults();
+    values["forma"] = 1.0;
+    Document doc;
+    document::applyRecipe(doc, generator->make(values, ""));
+    const geometry::Shape& box = doc.result().bodies[0].shape;
+    const geometry::Shape& lid = doc.result().bodies[1].shape;
+    const double lidX = (lid.bounds().min.x + lid.bounds().max.x) / 2.0;
+    // La tapa en su sitio (z = arranque de la guía + holgura) y desplazada hacia arriba o hacia atrás.
+    const auto overlap = [&](double lift, double back) {
+        const geometry::Shape placed = geometry::moveBody("t", lid, {-lidX, back, 45.7 + lift}, {{0.0, 0.0, 0.0}, {0.0, 0.0, 1.0}}, 0.0, false);
+        return std::abs(geometry::boolean(geometry::BooleanOp::Common, box, placed).volume());
+    };
+    CHECK(overlap(0.0, 0.0) < 1.0);   // cabe en las guías sin tocar nada
+    CHECK(overlap(1.5, 0.0) > 5.0);   // levantada, topa con el labio
+    CHECK(overlap(0.0, 2.0) > 5.0);   // empujada hacia el fondo, topa con la pared de atrás
+    CHECK(overlap(0.0, -30.0) < 1.0); // sacada por delante
+}

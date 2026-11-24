@@ -10,6 +10,16 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Bote con tapa y redondeo del fondo (24 nov. 2026)
+
+- `Generators.cpp`: generador nuevo **Bote con tapa** (`JarWithLid`): forma redonda (rosca o bayoneta) o rectangular (tapa deslizante) con holgura de ajuste editable; y el campo «Redondeo del fondo por dentro» (`interior`) en la Caja con tapa redonda.
+- `Features.hpp` / `FeaturesMore.cpp` / `DocumentFile.cpp`: el cilindro redondea el borde de su base (`baseRound`) y la rosca se puede empezar a una altura (`z`); los archivos anteriores abren igual.
+- `GeneratorTool.cpp`: las preguntas dependen unas de otras en cadena (forma, luego cierre, luego sus medidas).
+- Pruebas: `test_edge_ops.cpp` (estructura de las tres formas, redondeo del fondo y, ocultas con `[.fit]`, el ajuste real: la rosca sin solape con una fase de giro, la bayoneta que entra, gira y queda retenida, y la deslizante que entra en las guías y topa).
+- **Volver atrás:** revertir la fusión de `feature/bote-con-tapa`.
+
+---
+
 ## Fluidez (categoría V): cancelar exportar, importar y medir
 
 - `Exchange.cpp`: `forEachMeshedFace` comprueba `cancelRequested()` entre cuerpos y caras (lanza «Exportación cancelada»; los escritores borran el archivo a medias).

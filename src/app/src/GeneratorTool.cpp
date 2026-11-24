@@ -235,15 +235,21 @@ void GeneratorTool::resetValues()
 
 void GeneratorTool::updateVisibility()
 {
-    for (const Row& row : rows_) {
-        bool visible = true;
-        if (!row.field.showKey.empty()) {
-            for (const Row& other : rows_) {
-                if (other.field.key == row.field.showKey) {
-                    visible = static_cast<QComboBox*>(other.widget)->currentIndex() == row.field.showIndex;
-                }
+    // Una pregunta se ve si la elección de la que depende vale lo que toca y esa elección se ve también (las
+    // preguntas pueden depender unas de otras: la forma, luego el cierre, luego las medidas del cierre).
+    const std::function<bool(const Row&)> shown = [&](const Row& row) {
+        if (row.field.showKey.empty()) {
+            return true;
+        }
+        for (const Row& other : rows_) {
+            if (other.field.key == row.field.showKey) {
+                return static_cast<QComboBox*>(other.widget)->currentIndex() == row.field.showIndex && shown(other);
             }
         }
+        return true;
+    };
+    for (const Row& row : rows_) {
+        const bool visible = shown(row);
         form_->setRowVisible(row.container, visible && !collapsedGroups_.contains(row.field.group));
     }
 }
