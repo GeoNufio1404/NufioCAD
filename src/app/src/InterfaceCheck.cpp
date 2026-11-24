@@ -877,6 +877,10 @@ int InterfaceCheck::run()
         expect(menu != nullptr && menu->isVisible(), QStringLiteral("no se abrió el menú radial"));
         if (menu != nullptr) {
             expect(menu->count() == 8, QStringLiteral("el menú radial debería tener 8 sectores"));
+            // El centro del anillo cae sobre el cursor.
+            const QPoint ringCenter = menu->mapToGlobal(QPoint(menu->width() / 2, menu->height() / 2));
+            expect((ringCenter - window_.viewport_->mapToGlobal(at.toPoint())).manhattanLength() <= 1,
+                   QStringLiteral("el menú radial no está centrado en el cursor"));
             // El sector de la Caja (el cuarto): se elige y abre la herramienta.
             const int boxSector = 3;
             expect(menu->choose(boxSector), QStringLiteral("elegir un sector no lanzó la acción"));
@@ -904,6 +908,30 @@ int InterfaceCheck::run()
         {
             const auto* left = window_.viewport_->findChild<RadialMenu*>();
             expect(left == nullptr || !left->isVisible(), QStringLiteral("el menú radial no se cerró"));
+        }
+        // Cerca del borde de la vista el anillo sigue centrado en el cursor (no se corre para no salirse de la vista).
+        {
+            const QPointF edge(20.0, 20.0);
+            QMouseEvent edgePress(QEvent::MouseButtonPress, edge, edge, Qt::RightButton, Qt::RightButton, Qt::NoModifier);
+            QMouseEvent edgeRelease(QEvent::MouseButtonRelease, edge, edge, Qt::RightButton, Qt::NoButton, Qt::NoModifier);
+            QApplication::sendEvent(window_.viewport_, &edgePress);
+            QApplication::sendEvent(window_.viewport_, &edgeRelease);
+            settle(100);
+            RadialMenu* near = nullptr;
+            for (RadialMenu* m : window_.viewport_->findChildren<RadialMenu*>()) {
+                if (m->isVisible()) {
+                    near = m;
+                }
+            }
+            expect(near != nullptr && near->isVisible(), QStringLiteral("no se abrió el menú radial junto al borde"));
+            if (near != nullptr) {
+                const QPoint ringCenter = near->mapToGlobal(QPoint(near->width() / 2, near->height() / 2));
+                expect((ringCenter - window_.viewport_->mapToGlobal(edge.toPoint())).manhattanLength() <= 1,
+                       QStringLiteral("junto al borde el menú radial se corrió del cursor"));
+                near->hide();
+                near->deleteLater();
+                settle(100);
+            }
         }
     });
 
