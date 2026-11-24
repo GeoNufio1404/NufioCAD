@@ -1,4 +1,5 @@
 #include "InterfaceCheck.hpp"
+#include "Recovery.hpp"
 #include "StallWatch.hpp"
 #include "Theme.hpp"
 
@@ -1809,6 +1810,44 @@ int InterfaceCheck::run()
             undoAll();
         } else {
             undoAll();
+        }
+    });
+
+    // Categoría T (4f): la copia de recuperación se escribe, la ve como huérfana otra ejecución cuando la ventana muere sin
+    // borrarla (aquí: un objeto que se destruye sin `discard`) y desaparece al descartarla.
+    step(QStringLiteral("Recuperación: copia huérfana, ofrecida y descartada"), [&] {
+        const auto has = [](const QString& id) {
+            for (const Recovery::Orphan& orphan : Recovery::orphans()) {
+                if (orphan.id == id) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        QString copy;
+        {
+            Recovery session;
+            expect(session.writeAsync(window_.document_, window_.currentView(), QStringLiteral("C:/prueba/diseno.nuf")),
+                   QStringLiteral("no se escribió la copia"));
+            // Mientras la ventana vive, su copia no se ofrece como huérfana.
+            std::size_t mine = 0;
+            for (const Recovery::Orphan& orphan : Recovery::orphans()) {
+                mine += orphan.original == QStringLiteral("C:/prueba/diseno.nuf") ? 1 : 0;
+            }
+            expect(mine == 0, QStringLiteral("la copia de una ventana viva se ofreció como huérfana"));
+        }
+        // La ventana «murió» sin borrar su copia: ahora sí se ofrece, con su origen.
+        std::optional<Recovery::Orphan> found;
+        for (const Recovery::Orphan& orphan : Recovery::orphans()) {
+            if (orphan.original == QStringLiteral("C:/prueba/diseno.nuf")) {
+                found = orphan;
+            }
+        }
+        expect(found.has_value(), QStringLiteral("la copia huérfana no se encontró"));
+        if (found) {
+            expect(std::filesystem::exists(found->file), QStringLiteral("falta el archivo de la copia"));
+            Recovery::remove(*found);
+            expect(!has(found->id), QStringLiteral("la copia sigue ahí tras descartarla"));
         }
     });
 
