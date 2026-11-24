@@ -10,6 +10,13 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Versión 0.2.0 y primera Release (24 nov. 2026)
+
+- `CMakeLists.txt` y `vcpkg.json` pasan a 0.2.0; los instaladores de Windows (`.exe` y `.zip`) se publican como Release de GitHub con sus SHA-256.
+- **Volver atrás:** revertir la fusión de `feature/version-0-2-0` y borrar la etiqueta `v0.2.0`.
+
+---
+
 ## Aceptar un generador sin esperar el cálculo (24 nov. 2026)
 
 - `Document::afterCompute`: una acción que se hace cuando el resultado ya es el vigente (en el acto si no hay cálculo en curso).

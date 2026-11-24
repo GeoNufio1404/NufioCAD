@@ -8,8 +8,8 @@ se firma**, qué esperar de SmartScreen y Defender, y la lista de lo que hay que
 | Pieza | Estado |
 |---|---|
 | Reglas de instalación de Windows (`src/app/CMakeLists.txt`): el programa, las DLL de OpenCASCADE y de vcpkg, Qt con `windeployqt` (DLL y plugins), `qt.conf`, avisos de licencias | ✅ **Probado el 19 nov. 2026**: `cmake --install` deja una copia que arranca y pasa la prueba de interfaz (113 MB) |
-| Paquete ZIP portátil (`cpack -G ZIP`) | ✅ Probado: `NufioCAD-0.1.0-win64.zip`, 44,7 MB |
-| Instalador NSIS (`cpack -G NSIS`): menú Inicio, escritorio, asociación de `.nuf`, desinstalador, avisos de terceros | ⚠️ **Compila** (24 nov. 2026, NSIS 3.13: `NufioCAD-0.1.0-win64.exe`, 65 MB; las órdenes de asociación de `.nuf` fallaban y se corrigieron). **Falta probar la instalación**: pide administrador (UAC) y no se puede aprobar sin ti. El ZIP del mismo paquete, en una carpeta limpia y sin Qt en el PATH, pasa la prueba de interfaz (59 pasos, 0 fallidos) |
+| Paquete ZIP portátil (`cpack -G ZIP`) | ✅ Probado: `NufioCAD-0.2.0-win64.zip`, 44,7 MB |
+| Instalador NSIS (`cpack -G NSIS`): menú Inicio, escritorio, asociación de `.nuf`, desinstalador, avisos de terceros | ✅ **Probado** (24 nov. 2026, NSIS 3.13: `NufioCAD-0.2.0-win64.exe`, 65 MB; las órdenes de asociación de `.nuf` fallaban y se corrigieron). Instalado y probado por Geonufio (24 nov. 2026). El ZIP del mismo paquete, en una carpeta limpia y sin Qt en el PATH, pasa la prueba de interfaz (59 pasos, 0 fallidos) |
 | Linux: `.tar.gz`, `.deb`, `.rpm` (`cpack`) y AppImage (`packaging/linux/crear-appimage.sh`) | ⚠️ Configurado, **sin probar**; el CI de Linux ya comprueba que el `.tar.gz` se genera |
 | Firma (`packaging/windows/firmar.ps1` y `cmake/FirmarPaquete.cmake`) | ⚠️ Listo, pero **hace falta un certificado** (decisión tuya, ver abajo) |
 | Flujo `.github/workflows/publicar.yml` (etiqueta `vX.Y.Z`): compila, empaqueta, firma si hay certificado, SHA-256 y versión en borrador | ⚠️ **Sin ejecutar**: la primera vez, lanzarlo a mano (Actions › Publicar › Run workflow) y mirar el resultado |
