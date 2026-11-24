@@ -135,6 +135,10 @@ ExportDialog::ExportDialog(const std::vector<document::Body>& bodies, const std:
     auto* printerForm = new QFormLayout(printerBox);
     printerForm->addRow(QStringLiteral("Boquilla:"), nozzle_);
     auto* bed = new QHBoxLayout();
+    // Cada cuadro de la cama necesita sitio para «2000.00 mm» y sus flechas: sin un ancho mínimo salían apretados.
+    for (QDoubleSpinBox* box : {bedX_, bedY_, bedZ_}) {
+        box->setMinimumWidth(112);
+    }
     bed->addWidget(bedX_);
     bed->addWidget(bedY_);
     bed->addWidget(bedZ_);

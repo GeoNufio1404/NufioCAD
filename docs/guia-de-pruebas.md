@@ -300,6 +300,10 @@ Código: **USA**. Rama `feature/fase-15-usabilidad`.
 | USA.26 | Lo mismo con la pared de un loft suave entre dos círculos | La extrusión llega a la pared libre y se queda en ella |
 | USA.27 | Cambia el tema a claro y abre una herramienta (por ejemplo Caja) | La vista previa translúcida se ve en un azul más profundo que en el tema oscuro; al cambiar de tema con la herramienta abierta, cambia de color |
 | USA.28 | Provoca un error del kernel (por ejemplo, un redondeo con un radio enorme) | El mensaje del historial dice qué se intentaba, «Causa probable: …» en español y, al final, el detalle técnico |
+| USA.29 | Con la ventana a 1366 × 768 (con una herramienta abierta, que ocupa el lado derecho), mira la cinta de Sólido | Se ven **todos los grupos** (Crear, Modificar, Organizar, Construir, Generar e Inspeccionar) solo con iconos, sin el botón «Más »» |
+| USA.30 | Pon varios pasos en el historial y pulsa **▶** de la línea de tiempo; deja que llegue al final (o pulsa ⏸); luego **Ctrl+Z** | El marcador vuelve **de una vez** a donde estaba al empezar (un solo paso de Deshacer para toda la reproducción) |
+| USA.31 | Reduce la ventana a unos 560 px de alto | La barra de acceso rápido (guardar, deshacer, rehacer, nombre del diseño) **sigue a la vista**; por debajo de 520 px se esconde |
+| USA.32 | Archivo › Exportar o Imprimir: mira la sección «Mi impresora» | Los tres cuadros de la cama (X, Y, Z) tienen sitio para «256.00 mm» y sus flechas, sin apretarse |
 
 ## 2. Sketch
 

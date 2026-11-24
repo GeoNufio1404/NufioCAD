@@ -38,6 +38,15 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 ---
 
 
+## Pendientes por categoría, U (interfaz) — 23 nov. 2026
+
+- **Qué:** a 1366 px caben todos los grupos de la cinta (se medían mal, un 50 % de más); reproducir la línea de tiempo es un solo paso de Deshacer; la barra de acceso rápido solo se esconde con menos de 520 px de alto; los cuadros de la cama en Exportar tienen ancho mínimo; el kernel explica en español más errores.
+- **Dónde:** `Ribbon.cpp` (`iconsWidth` en `adapt`), `MainWindow.cpp` y `MainWindow.hpp` (`stopPlayback`, `playStartMarker_`, `adaptToSize`), `ExportDialog.cpp`, `Modeling.cpp` (`explainKernelError`). Manual: `USA.29` a `USA.32`; comprobado con capturas (`--captura-temas --tamano 1366x768`) y con `--inventario` a tres tamaños.
+- **Volver atrás:** rama `feature/pendientes-u-interfaz` sin fusionar: `git branch -D`; ya fusionada, `git revert` de la fusión. No cambia el formato de los archivos.
+
+---
+
+
 ## Pendientes por categoría, I (impresión e inspección) — 23 nov. 2026
 
 - **Qué:** el aviso de una **pared fina** en la revisión para imprimir sabe qué caras la forman y lleva un enlace «ver en la vista» que resalta su contorno; Medir usa la coma decimal del idioma. Alinear y Unión resaltan también el contorno de las caras elegidas. **Descubierto:** el relleno translúcido de caras (`showToolFaces`) no se ve cuando la cara coincide con la del cuerpo.

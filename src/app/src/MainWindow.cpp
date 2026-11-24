@@ -552,9 +552,10 @@ void MainWindow::adaptToSize()
         timelineAutoHidden_ = false;
     }
     ribbon_->setCompact(low);
-    // En una ventana baja la barra de acceso rápido se esconde (deshacer y guardar siguen en el menú y con sus teclas).
+    // Solo en una ventana muy baja la barra de acceso rápido se esconde (deshacer y guardar siguen en el menú y con sus teclas):
+    // hasta 520 px de alto cabe, y guardar y deshacer son lo que más se usa.
     if (auto* quick = findChild<QToolBar*>(QStringLiteral("quickToolbar"))) {
-        quick->setVisible(!low);
+        quick->setVisible(height() >= 520);
     }
 }
 
@@ -653,24 +654,39 @@ void MainWindow::createDocks()
     connect(toEnd, &QToolButton::clicked, this, [this, moveMarker] { moveMarker(long(document_.featureCount())); });
     timelinePlayer_ = new QTimer(this);
     timelinePlayer_->setInterval(700);
-    connect(timelinePlayer_, &QTimer::timeout, this, [this, moveMarker] {
-        if (sketch_ || tool_ || document_.marker() >= document_.featureCount()) {
-            timelinePlayer_->stop();
-            timelinePlay_->setText(QStringLiteral("▶"));
+    // Al reproducir el marcador avanza sin dejar un paso de Deshacer por cada paso; al parar, el recorrido entero (de donde
+    // empezó a donde llegó) queda como un solo paso.
+    const auto stopPlayback = [this] {
+        timelinePlayer_->stop();
+        timelinePlay_->setText(QStringLiteral("▶"));
+        if (!playStartMarker_) {
             return;
         }
-        moveMarker(long(document_.marker()) + 1);
+        const std::size_t start = *playStartMarker_;
+        playStartMarker_.reset();
+        const std::size_t reached = document_.marker();
+        if (reached != start && !sketch_ && !tool_) {
+            document_.setMarker(start);
+            commands_.push(std::make_unique<commands::SetMarker>(reached));
+        }
+    };
+    connect(timelinePlayer_, &QTimer::timeout, this, [this, stopPlayback] {
+        if (sketch_ || tool_ || document_.marker() >= document_.featureCount()) {
+            stopPlayback();
+            return;
+        }
+        document_.setMarker(document_.marker() + 1);
     });
-    connect(timelinePlay_, &QToolButton::clicked, this, [this, moveMarker] {
+    connect(timelinePlay_, &QToolButton::clicked, this, [this, moveMarker, stopPlayback] {
         if (timelinePlayer_->isActive()) {
-            timelinePlayer_->stop();
-            timelinePlay_->setText(QStringLiteral("▶"));
+            stopPlayback();
             return;
         }
         // Si el marcador ya está al final, se vuelve al principio para ver todo el historial.
         if (document_.marker() >= document_.featureCount()) {
             moveMarker(0);
         }
+        playStartMarker_ = document_.marker();
         timelinePlayer_->start();
         timelinePlay_->setText(QStringLiteral("⏸"));
     });
