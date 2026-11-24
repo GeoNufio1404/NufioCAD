@@ -1072,13 +1072,30 @@ int InterfaceCheck::run()
     // del engranaje) suma unos 35.
     constexpr long kMinArrowPixels = 15;
     const auto arrowCheck = [&](const QString& name, QAction* action, int spinIndex, bool needsBody = false,
-                                std::optional<double> preset = std::nullopt) {
+                                std::optional<double> preset = std::nullopt,
+                                const std::function<void(const render::ModelSelection&)>& choose = {}) {
         step(QStringLiteral("Flecha de la medida que se edita: %1").arg(name), [&] {
             if (needsBody) {
                 expect(openChangeAccept(window_.boxAction_, 3) == 1, QStringLiteral("no se creó la caja de apoyo"));
             }
             blocking(QStringLiteral("abrir la herramienta"), [&] { action->trigger(); });
             waitIdle();
+            if (choose) {
+                // Redondeo y Vaciado: la flecha sale de lo elegido, así que se elige una cara del cuerpo sin ratón.
+                const auto& bodies = window_.document_.result().bodies;
+                expect(!bodies.empty(), QStringLiteral("no hay cuerpo donde elegir"));
+                if (!bodies.empty()) {
+                    render::ModelSelection selection;
+                    for (int face = 0; face < bodies.front().shape.faceCount(); ++face) {
+                        if (bodies.front().shape.facePlane(face)) {
+                            selection.faces.push_back({bodies.front().key, bodies.front().shape.faceRef(face)});
+                            break;
+                        }
+                    }
+                    blocking(QStringLiteral("elegir una cara"), [&] { choose(selection); });
+                    waitIdle();
+                }
+            }
             // Píxeles turquesa de la flecha: «amplio» (cualquier turquesa, también el de un plano de construcción o un
             // arco medio tapado) y «exacto» (el color de la flecha, 3FD0E0, sin mezclar con nada: solo lo que dibuja la
             // flecha, aunque el fondo ya sea turquesa).
@@ -1180,6 +1197,16 @@ int InterfaceCheck::run()
     arrowCheck(QStringLiteral("Engranaje (ángulo de presión)"), window_.gearAction_, 5);
     arrowCheck(QStringLiteral("Engranaje (giro inicial)"), window_.gearAction_, 4, false, 30.0);
     arrowCheck(QStringLiteral("Engranaje (ángulo de hélice)"), window_.gearAction_, 8, false, 15.0);
+    arrowCheck(QStringLiteral("Redondeo (radio)"), window_.filletAction_, 0, true, 2.0, [&](const render::ModelSelection& s) {
+        if (auto* tool = dynamic_cast<EdgeTool*>(window_.tool_.get())) {
+            tool->selectionChanged(s);
+        }
+    });
+    arrowCheck(QStringLiteral("Vaciado (espesor)"), window_.shellAction_, 0, true, 2.0, [&](const render::ModelSelection& s) {
+        if (auto* tool = dynamic_cast<ShellTool*>(window_.tool_.get())) {
+            tool->selectionChanged(s);
+        }
+    });
     for (QAction* action : generators) {
         const QString name = action->text();
         if (name.contains(QStringLiteral("Caja con tapa")) || name.contains(QStringLiteral("Lightbox"))) {
