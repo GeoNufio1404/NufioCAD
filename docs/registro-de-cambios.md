@@ -10,6 +10,14 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Instalador NSIS: arreglo de la asociación de `.nuf` (24 nov. 2026)
+
+- `cmake/Packaging.cmake`: las órdenes de registro de `.nuf` (instalar y desinstalar) van entre corchetes de CMake y con comillas simples de NSIS; con comillas dobles escapadas, CPack las estropeaba y NSIS no compilaba el instalador.
+- Probado: con NSIS 3.13 se generan el instalador (65 MB) y el ZIP; el ZIP descomprimido pasa la prueba de interfaz. La instalación del `.exe` queda por probar (pide administrador).
+- **Volver atrás:** revertir la fusión de `feature/instalador-nsis`.
+
+---
+
 ## Licencia MIT (24 nov. 2026)
 
 - `LICENSE` (MIT) en la raíz; se instala junto al programa (`LICENSE.txt` en Windows, en la carpeta de documentación en Linux) y es la página de licencia del instalador (`cmake/Packaging.cmake`). README, avisos de terceros y `distribucion.md` la citan.

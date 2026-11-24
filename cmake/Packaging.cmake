@@ -35,18 +35,20 @@ if(WIN32)
     set(CPACK_NSIS_URL_INFO_ABOUT "https://github.com/GeoNufio1404/NufioCAD")
     set(CPACK_NSIS_HELP_LINK "https://github.com/GeoNufio1404/NufioCAD/issues")
     # Asociación de los archivos .nuf (con su icono y «Abrir con NufioCAD») y su limpieza al desinstalar.
-    set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS "
-        WriteRegStr SHCTX \"Software\\\\Classes\\\\.nuf\" \"\" \"NufioCAD.Documento\"
-        WriteRegStr SHCTX \"Software\\\\Classes\\\\NufioCAD.Documento\" \"\" \"Diseño de NufioCAD\"
-        WriteRegStr SHCTX \"Software\\\\Classes\\\\NufioCAD.Documento\\\\DefaultIcon\" \"\" \"$INSTDIR\\\\bin\\\\NufioCAD.exe,0\"
-        WriteRegStr SHCTX \"Software\\\\Classes\\\\NufioCAD.Documento\\\\shell\\\\open\\\\command\" \"\" '\\\"$INSTDIR\\\\bin\\\\NufioCAD.exe\\\" \\\"%1\\\"'
+    # Las órdenes van entre corchetes (sin escapes de CMake) y con comillas simples de NSIS: con comillas dobles escapadas,
+    # CPack las estropeaba al pasarlas al guion del instalador y NSIS no lo compilaba.
+    set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS [=[
+        WriteRegStr SHCTX 'Software\Classes\.nuf' '' 'NufioCAD.Documento'
+        WriteRegStr SHCTX 'Software\Classes\NufioCAD.Documento' '' 'Diseño de NufioCAD'
+        WriteRegStr SHCTX 'Software\Classes\NufioCAD.Documento\DefaultIcon' '' '$INSTDIR\bin\NufioCAD.exe,0'
+        WriteRegStr SHCTX 'Software\Classes\NufioCAD.Documento\shell\open\command' '' '"$INSTDIR\bin\NufioCAD.exe" "%1"'
         System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
-    ")
-    set(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS "
-        DeleteRegKey SHCTX \"Software\\\\Classes\\\\.nuf\"
-        DeleteRegKey SHCTX \"Software\\\\Classes\\\\NufioCAD.Documento\"
+    ]=])
+    set(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS [=[
+        DeleteRegKey SHCTX 'Software\Classes\.nuf'
+        DeleteRegKey SHCTX 'Software\Classes\NufioCAD.Documento'
         System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
-    ")
+    ]=])
 elseif(UNIX AND NOT APPLE)
     set(CPACK_GENERATOR "TGZ;DEB;RPM")
     set(CPACK_DEBIAN_PACKAGE_SECTION "graphics")
