@@ -319,6 +319,8 @@ Rama `feature/pendientes-u-interfaz` (23 nov. 2026, sin fusionar hasta la prueba
 - [x] Prueba automática de la recuperación (4f) ✅ (T: paso «Recuperación: copia huérfana, ofrecida y descartada» en la prueba de interfaz: escribe la copia, comprueba que una ventana viva no la ofrece, que la muerta sí con su origen, y que se descarta). **Pendiente de T:** no cubre el aviso visual de recuperación ni abrir el diseño recuperado.
 - [ ] El inventario de pantallas no cubre el aviso de recuperación, los diálogos del sistema ni la pantalla de inicio; quitar el `continue-on-error` del paso de Xvfb si se ve estable (Fase 20; cambiar el CI pide tu permiso).
 
+- [x] **Bote con tapa ✅ (24 nov. 2026, rama `feature/bote-con-tapa`; falta la prueba manual BOT.1–BOT.8 y CAJ.7):** rosca, bayoneta y tapa deslizante en un generador con holgura de ajuste editable, y redondeo del fondo por dentro en la caja redonda. **Pendiente de BOT:** **Aceptar el bote de rosca espera al cálculo** (la varilla roscada tarda ~6 s cada una y unirla al cuerpo ~8 s en Debug, unas 8 veces menos en Release sin medir) porque `AddRecipe` espera el resultado para nombrar los cuerpos: hay que ponerles el nombre cuando llegue el resultado, sin esperar; la prueba de interfaz prueba el bote con la bayoneta por eso; la tapa deslizante como cierre de la Caja con tapa y del Lightbox; bisagra y snap-fit en el bote; ajustar la holgura por defecto con tu impresora (hoy 0,3 mm); el redondeo del fondo en la caja rectangular; flechas de medida de las medidas nuevas.
+
 ### D — Distribución (después de la v0.2.0)
 - [ ] Flatpak (D1); winget y Microsoft Store (MSIX) con una versión firmada (D6); reputación de SmartScreen con descargas reales (D4).
 

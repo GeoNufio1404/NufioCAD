@@ -164,8 +164,27 @@ std::optional<std::string> CylinderFeature::compute(ModelState& state) const
     std::optional<std::string> warning;
     const sketch::Plane plane = resolvePlane(state, base, "del cilindro", "se usa su última posición", warning);
     try {
-        const geometry::Shape cylinder =
-            geometry::cylinder(tag(), primitivePlane(plane, x, y, z, symmetric, height), diameter, height);
+        const sketch::Plane at = primitivePlane(plane, x, y, z, symmetric, height);
+        geometry::Shape cylinder = geometry::cylinder(tag(), at, diameter, height);
+        if (baseRound > 1e-9) {
+            // El borde de la base: la arista circular cuyo centro está en el origen del plano de la base.
+            std::optional<int> edge;
+            double best = 1e-6;
+            for (int i = 0; i < cylinder.edgeCount(); ++i) {
+                if (const auto frame = cylinder.edgeFrame(i)) {
+                    const double dx = frame->origin.x - at.origin.x, dy = frame->origin.y - at.origin.y,
+                                 dz = frame->origin.z - at.origin.z;
+                    const double distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+                    if (distance < best && frame->kind == geometry::Frame::Kind::Axis) {
+                        best = distance;
+                        edge = i;
+                    }
+                }
+            }
+            if (edge) {
+                cylinder = geometry::fillet(tag(), cylinder, {*edge}, std::min(baseRound, std::min(diameter, std::abs(height)) / 2.0 - 0.01));
+            }
+        }
         if (auto extra = applyOperation(state, *this, operation, cylinder)) {
             warning = warning ? *warning + " " + *extra : *extra;
         }
@@ -185,7 +204,8 @@ std::vector<FeatureId> CylinderFeature::dependencies() const
 std::vector<Feature::NumericField> CylinderFeature::numericFields()
 {
     return {field("x", "Posición X", x), field("y", "Posición Y", y), field("z", "Posición Z", z),
-            field("diameter", "Diámetro", diameter), field("height", "Alto", height)};
+            field("diameter", "Diámetro", diameter), field("height", "Alto", height),
+            field("baseRound", "Redondeo de la base", baseRound)};
 }
 
 // --- Engranaje -----------------------------------------------------------------
@@ -267,6 +287,7 @@ std::optional<std::string> ThreadFeature::compute(ModelState& state) const
     std::optional<std::string> warning;
     sketch::Plane plane = resolvePlane(state, base, "de la rosca", "se usa su última posición", warning);
     plane.origin = plane.toWorld({x, y});
+    plane.origin = {plane.origin.x + plane.normal.x * z, plane.origin.y + plane.normal.y * z, plane.origin.z + plane.normal.z * z};
     try {
         geometry::ThreadSpec used = spec;
         if (operation == Operation::Cut) {
@@ -295,8 +316,8 @@ std::vector<FeatureId> ThreadFeature::dependencies() const
 
 std::vector<Feature::NumericField> ThreadFeature::numericFields()
 {
-    return {field("x", "Posición X", x), field("y", "Posición Y", y), field("diameter", "Diámetro", spec.diameter),
-            field("pitch", "Paso", spec.pitch), field("length", "Largo", spec.length),
+    return {field("x", "Posición X", x), field("y", "Posición Y", y), field("z", "Posición Z", z),
+            field("diameter", "Diámetro", spec.diameter), field("pitch", "Paso", spec.pitch), field("length", "Largo", spec.length),
             field("clearance", "Holgura", clearance), field("entryChamfer", "Chaflán de entrada", spec.entryChamfer)};
 }
 

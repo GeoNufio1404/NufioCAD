@@ -870,6 +870,22 @@ Código: **CAJ**.
 | CAJ.5 | Prueba un tornillo M3 en un poste y en la tapa | Se enrosca en el poste (Ø2,5) y pasa libre por la tapa (Ø3,4) |
 | CAJ.6 | Aceptar con cada cierre y mira el Navegador | Solo hay dos cuerpos, «Caja» y «Tapa»; la tapa (placa, labio y agujeros) es uno solo. No cambia nada respecto a antes (la Caja con tapa ya era así) |
 
+### 4.2b Bote con tapa y redondeo del fondo (`BOT`)
+
+Código: **BOT**. Imprime con tu impresora: la holgura de ajuste por defecto (0,3 mm) es solo un punto de partida.
+
+| ID | Haz esto | Debe pasar |
+|---|---|---|
+| BOT.1 | Herramientas › **Bote con tapa** | Un bote redondo con cuello roscado y su tapa (un vaso) al lado; el formulario pide Forma, medidas, tapa y ajuste, y cierre |
+| BOT.2 | Cambia «Forma» a Rectangular | Desaparecen el diámetro y el cierre; salen ancho, fondo, radio de esquinas, hondo de la guía y labio |
+| BOT.3 | Forma redonda, «Cierre» Bayoneta | Salen los campos de los pines y el cuello, y desaparecen los de la rosca; el bote lleva cuatro pines y la tapa una guía redonda con cuatro entradas |
+| BOT.4 | Imprime bote y tapa de rosca y enrosca la tapa | Entra y gira sin forzar; si queda dura sube la «Holgura de ajuste» (0,4), si baila bájala |
+| BOT.5 | Imprime la de bayoneta: alinea los pines con las entradas, empuja y gira | Entra, gira y queda retenida; al volver a alinear sale |
+| BOT.6 | Imprime la rectangular y mete la tapa por delante | Entra por la ranura de delante, desliza por las guías y topa con la pared de atrás; levantada no sale |
+| BOT.7 | Cambia «Holgura de ajuste» y mira la tapa | La tapa cambia en las tres formas (el hueco es más ancho con más holgura) |
+| BOT.8 | Forma redonda: «Redondeo del fondo por dentro» a 4 y mira un corte (Sólido › Sección) | La unión de la pared con el fondo es un arco, no una esquina viva; con 0 vuelve la esquina |
+| CAJ.7 | Caja con tapa, forma Redonda: mira el campo «Redondeo del fondo por dentro» | Sale solo con la forma redonda (2 mm por defecto); la caja rectangular no lo muestra |
+
 ### 4.3 Letrero o llavero
 
 Código: **LET**.

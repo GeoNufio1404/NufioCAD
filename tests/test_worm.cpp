@@ -410,6 +410,7 @@ TEST_CASE("La caja con tapa redonda, con bisagra, con ranuras en las paredes y c
     {   // Redonda: un cilindro de 100 de diámetro, hueco por dentro, y la tapa aparte
         document::GeneratorValues round = plain;
         round["forma"] = 1.0;
+        round["interior"] = 0.0;  // el redondeo del fondo tiene su propia prueba
         const auto doc = build(round);
         REQUIRE(doc->result().bodies.size() == 2);
         const geometry::Box b = doc->result().bodies[0].shape.bounds();
