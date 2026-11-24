@@ -2,10 +2,12 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QGuiApplication>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QScreen>
 
 #include <algorithm>
 #include <cmath>
@@ -18,6 +20,9 @@ RadialMenu::RadialMenu(const std::vector<QAction*>& actions, QWidget* parent)
     , actions_(actions)
 {
     setObjectName(QStringLiteral("radialMenu"));
+    // Ventana emergente propia: así el anillo queda centrado en el cursor aunque esté cerca del borde de la vista (como hijo
+    // de la vista se corría para no salirse de ella, y se veía desfasado).
+    setWindowFlags(Qt::Popup | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
     setAttribute(Qt::WA_TranslucentBackground);
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);
@@ -27,10 +32,14 @@ RadialMenu::RadialMenu(const std::vector<QAction*>& actions, QWidget* parent)
 
 void RadialMenu::openAt(const QPoint& center)
 {
-    const QSize area = parentWidget() != nullptr ? parentWidget()->size() : QSize(2 * kOuter, 2 * kOuter);
-    QPoint at = center - QPoint(width() / 2, height() / 2);
-    at.setX(std::clamp(at.x(), 0, std::max(0, area.width() - width())));
-    at.setY(std::clamp(at.y(), 0, std::max(0, area.height() - height())));
+    const QPoint global = parentWidget() != nullptr ? parentWidget()->mapToGlobal(center) : center;
+    QPoint at = global - QPoint(width() / 2, height() / 2);
+    // Solo la pantalla limita: dentro de ella el centro del anillo coincide con el cursor.
+    if (const QScreen* screen = QGuiApplication::screenAt(global); screen != nullptr) {
+        const QRect area = screen->availableGeometry();
+        at.setX(std::clamp(at.x(), area.left(), std::max(area.left(), area.right() - width() + 1)));
+        at.setY(std::clamp(at.y(), area.top(), std::max(area.top(), area.bottom() - height() + 1)));
+    }
     move(at);
     hover_ = -1;
     show();

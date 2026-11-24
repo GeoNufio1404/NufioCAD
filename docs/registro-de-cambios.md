@@ -10,6 +10,14 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Hotfix: el menú radial se abre centrado en el cursor (24 nov. 2026)
+
+- `RadialMenu.cpp`: ahora es una ventana emergente propia; como hijo de la vista se corría para no salirse de ella (a menos de ~142 px de un borde), y se veía desfasado del cursor. Solo lo limita la pantalla.
+- `InterfaceCheck.cpp`: el centro del anillo coincide con el cursor, en el centro y junto al borde (59 pasos, 0 fallidos en Release).
+- **Volver atrás:** revertir la fusión de `feature/hotfix-menu-radial`.
+
+---
+
 ## Versión 0.2.0 y primera Release (24 nov. 2026)
 
 - `CMakeLists.txt` y `vcpkg.json` pasan a 0.2.0; los instaladores de Windows (`.exe` y `.zip`) se publican como Release de GitHub con sus SHA-256.
