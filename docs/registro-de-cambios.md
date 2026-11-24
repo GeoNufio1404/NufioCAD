@@ -10,6 +10,13 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Pruebas (categoría T): recuperación en la prueba de interfaz
+
+- `InterfaceCheck.cpp`: paso nuevo «Recuperación: copia huérfana, ofrecida y descartada» (56 pasos).
+- Solo pruebas; no cambia el programa. **Volver atrás:** revertir la fusión de `feature/pendientes-t-pruebas`.
+
+---
+
 
 ## Pendientes por categoría, S (sketch y cotas) — 23 nov. 2026
 
