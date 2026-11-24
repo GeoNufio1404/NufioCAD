@@ -183,38 +183,47 @@ void ReplaceRecipe::execute(document::Document& doc)
                 parameters);
 
     // Los cuerpos nuevos de la receta (sin nombre propio todavía) reciben los nombres y el componente de la receta.
-    // (Con el cálculo en segundo plano hay que esperarlo: si no, el resultado es el de antes y no se los encuentra.)
-    doc.waitForCompute();
+    // (Con el cálculo en segundo plano se hace cuando llega el resultado, sin dejar la interfaz esperando.)
+    naming_ = std::make_shared<bool>(true);
+    doc.afterCompute([&doc, naming = naming_, ids = ids_, names = recipe_.bodyNames, fixed = recipe_.fixedBodies,
+                      componentBase = recipe_.component, keptComponent] {
+    if (!*naming) {
+        return;
+    }
     std::map<std::string, document::BodyInfo> info = doc.bodyInfo();
     // El componente que ya tienen los cuerpos de la receta (con su número); si no tienen, uno nuevo numerado.
     std::string component;
     for (const document::Body& body : doc.result().bodies) {
-        const bool ours = std::ranges::any_of(ids_, [&](document::FeatureId id) { return hasTag(body.key, *doc.findFeature(id)); });
+        const bool ours = std::ranges::any_of(ids, [&](document::FeatureId id) { const document::Feature* f = doc.findFeature(id); return f != nullptr && hasTag(body.key, *f); });
         if (ours && info.contains(body.key) && !info.at(body.key).component.empty()) {
             component = info.at(body.key).component;
             break;
         }
     }
     if (component.empty()) {
-        component = !keptComponent.empty() ? keptComponent : document::numberedComponent(info, recipe_.component);
+        component = !keptComponent.empty() ? keptComponent : document::numberedComponent(info, componentBase);
     }
     std::size_t next = 0;
     for (const document::Body& body : doc.result().bodies) {
-        const bool ours = std::ranges::any_of(ids_, [&](document::FeatureId id) { return hasTag(body.key, *doc.findFeature(id)); });
+        const bool ours = std::ranges::any_of(ids, [&](document::FeatureId id) { const document::Feature* f = doc.findFeature(id); return f != nullptr && hasTag(body.key, *f); });
         if (!ours) {
             continue;
         }
         if (!info.contains(body.key)) {
-            info[body.key] = {next < recipe_.bodyNames.size() ? recipe_.bodyNames[next] : std::string(), component, std::string(),
-                              std::ranges::find(recipe_.fixedBodies, int(next)) != recipe_.fixedBodies.end()};
+            info[body.key] = {next < names.size() ? names[next] : std::string(), component, std::string(),
+                              std::ranges::find(fixed, int(next)) != fixed.end()};
         }
         ++next;
     }
     doc.setBodyInfo(info);
+    });
 }
 
 void ReplaceRecipe::undo(document::Document& doc)
 {
+    if (naming_) {
+        *naming_ = false;
+    }
     std::vector<std::unique_ptr<document::Feature>> features;
     for (const auto& f : oldFeatures_) {
         features.push_back(f->clone());

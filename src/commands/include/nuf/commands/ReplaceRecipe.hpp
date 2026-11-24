@@ -37,6 +37,7 @@ private:
     std::size_t oldMarker_ = 0;
     std::vector<document::Parameter> oldParameters_;
     std::map<std::string, document::BodyInfo> oldInfo_;
+    std::shared_ptr<bool> naming_;  // el nombrado que espera al cálculo; deshacer lo anula
 };
 
 } // namespace nuf::commands

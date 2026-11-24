@@ -53,25 +53,35 @@ void AddRecipe::execute(document::Document& doc)
         ids_.push_back(id);
     }
 
-    // Con el cálculo en segundo plano el resultado todavía es el de antes: sin esperarlo, los cuerpos nuevos no se
-    // encuentran y se quedan sin el nombre ni el componente de la receta.
-    doc.waitForCompute();
-    std::map<std::string, document::BodyInfo> info = doc.bodyInfo();
-    const std::string component = document::numberedComponent(info, recipe_.component);
-    std::size_t next = 0;
-    for (const document::Body& body : doc.result().bodies) {
-        if (std::ranges::find(before, body.key) != before.end()) {
-            continue;
+    // Con el cálculo en segundo plano el resultado todavía es el de antes: los cuerpos nuevos se nombran (con el nombre y
+    // el componente de la receta) cuando llega el resultado, sin dejar la interfaz esperando. Deshacer antes de que llegue
+    // lo anula.
+    naming_ = std::make_shared<bool>(true);
+    doc.afterCompute([&doc, naming = naming_, before, names = recipe_.bodyNames, fixed = recipe_.fixedBodies,
+                      componentBase = recipe_.component] {
+        if (!*naming) {
+            return;
         }
-        info[body.key] = {next < recipe_.bodyNames.size() ? recipe_.bodyNames[next] : std::string(), component, std::string(),
-                          std::ranges::find(recipe_.fixedBodies, int(next)) != recipe_.fixedBodies.end()};
-        ++next;
-    }
-    doc.setBodyInfo(info);
+        std::map<std::string, document::BodyInfo> info = doc.bodyInfo();
+        const std::string component = document::numberedComponent(info, componentBase);
+        std::size_t next = 0;
+        for (const document::Body& body : doc.result().bodies) {
+            if (std::ranges::find(before, body.key) != before.end()) {
+                continue;
+            }
+            info[body.key] = {next < names.size() ? names[next] : std::string(), component, std::string(),
+                              std::ranges::find(fixed, int(next)) != fixed.end()};
+            ++next;
+        }
+        doc.setBodyInfo(info);
+    });
 }
 
 void AddRecipe::undo(document::Document& doc)
 {
+    if (naming_) {
+        *naming_ = false;
+    }
     for (auto it = ids_.rbegin(); it != ids_.rend(); ++it) {
         doc.removeFeature(*it);
     }

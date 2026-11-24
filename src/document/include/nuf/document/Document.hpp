@@ -153,6 +153,9 @@ public:
     void waitForCompute();
     // Cancela lo que corre, espera a que los hilos paren y vuelve al cálculo inmediato (al cerrar).
     void stopBackground();
+    // Hace «action» cuando el resultado ya es el de los últimos cambios: en el acto si no hay nada calculándose, y si no,
+    // en cuanto termine el cálculo (en el hilo del documento, sin bloquear). Las que quedan pendientes se descartan al cerrar.
+    void afterCompute(std::function<void()> action);
     // Al empezar (true) y al acabar (false) un cálculo en segundo plano.
     Signal<bool> computingChanged;
 
@@ -164,6 +167,8 @@ private:
     void finishBackground(std::uint64_t generation);
     void retireJob();
     void reapRetired();
+    void runAfterCompute();
+    std::vector<std::function<void()>> afterCompute_;
     void evaluateParameters();
     void applyBodyInfo();
 

@@ -198,6 +198,7 @@ void Document::stopBackground()
     // las que aún esperaban en la cola se descartan y se espera a las que corrían (las construcciones largas se
     // interrumpen a media operación, así que cerrar no espera a que termine una rosca).
     post_ = nullptr;
+    afterCompute_.clear();
     for (auto& job : retired_) {
         job->task->cancel();
     }
@@ -675,6 +676,24 @@ void Document::enableBackgroundCompute(Poster post)
     post_ = std::move(post);
 }
 
+void Document::afterCompute(std::function<void()> action)
+{
+    if (!job_) {
+        action();
+        return;
+    }
+    afterCompute_.push_back(std::move(action));
+}
+
+void Document::runAfterCompute()
+{
+    std::vector<std::function<void()>> actions = std::move(afterCompute_);
+    afterCompute_.clear();
+    for (auto& action : actions) {
+        action();
+    }
+}
+
 void Document::waitForCompute()
 {
     if (job_) {
@@ -707,6 +726,7 @@ void Document::startBackground(std::size_t index)
         // Nada que calcular (se quitó lo último): lo mostrado ya es lo correcto.
         dirty_.reset();
         applyBodyInfo();
+        runAfterCompute();
         markChanged();
         if (wasComputing) {
             computingChanged.notify(false);
@@ -789,6 +809,9 @@ void Document::finishBackground(std::uint64_t generation)
         dirty_.reset();
     }
     applyBodyInfo();
+    if (!dirty_) {
+        runAfterCompute();  // el resultado ya es el vigente: lo que esperaba (nombrar los cuerpos nuevos) se hace ahora
+    }
     markChanged();
     computingChanged.notify(false);
 }
