@@ -10,6 +10,13 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Licencia MIT (24 nov. 2026)
+
+- `LICENSE` (MIT) en la raíz; se instala junto al programa (`LICENSE.txt` en Windows, en la carpeta de documentación en Linux) y es la página de licencia del instalador (`cmake/Packaging.cmake`). README, avisos de terceros y `distribucion.md` la citan.
+- **Volver atrás:** revertir la fusión de `feature/licencia-mit`.
+
+---
+
 ## Fluidez (categoría V): cancelar exportar, importar y medir
 
 - `Exchange.cpp`: `forEachMeshedFace` comprueba `cancelRequested()` entre cuerpos y caras (lanza «Exportación cancelada»; los escritores borran el archivo a medias).

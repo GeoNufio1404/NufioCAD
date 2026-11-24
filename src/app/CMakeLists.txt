@@ -113,6 +113,7 @@ if(WIN32)
     install(SCRIPT ${nuf_qt_deploy_script})
     install(FILES "${PROJECT_SOURCE_DIR}/packaging/AVISOS-DE-TERCEROS.txt"
             DESTINATION .)
+    install(FILES "${PROJECT_SOURCE_DIR}/LICENSE" DESTINATION . RENAME LICENSE.txt)
     install(FILES "${PROJECT_SOURCE_DIR}/third_party/planegcs/LICENSE"
             DESTINATION licencias RENAME PlaneGCS-LICENSE.txt)
 endif()
@@ -127,6 +128,7 @@ if(UNIX AND NOT APPLE)
             DESTINATION ${CMAKE_INSTALL_DATADIR}/mime/packages RENAME nufiocad.xml)
     install(FILES "${PROJECT_SOURCE_DIR}/packaging/AVISOS-DE-TERCEROS.txt"
             DESTINATION ${CMAKE_INSTALL_DOCDIR})
+    install(FILES "${PROJECT_SOURCE_DIR}/LICENSE" DESTINATION ${CMAKE_INSTALL_DOCDIR})
     install(FILES "${PROJECT_SOURCE_DIR}/third_party/planegcs/LICENSE"
             DESTINATION ${CMAKE_INSTALL_DOCDIR}/licencias RENAME PlaneGCS-LICENSE.txt)
     foreach(size 16 24 32 48 64 128 256)

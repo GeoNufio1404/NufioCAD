@@ -79,6 +79,10 @@ NufioCAD/
 Empieza por el [índice de `docs/`](docs/README.md). Los diagramas están en [Mermaid](https://mermaid.js.org) y GitHub
 los dibuja solos.
 
+## Licencia
+
+NufioCAD es de código abierto, con licencia [MIT](LICENSE).
+
 ## Licencias de terceros
 
 - **PlaneGCS:** LGPL-2.1 o posterior, enlazado estáticamente (`third_party/planegcs/LICENSE`).
