@@ -304,6 +304,7 @@ Código: **USA**. Rama `feature/fase-15-usabilidad`.
 | USA.30 | Pon varios pasos en el historial y pulsa **▶** de la línea de tiempo; deja que llegue al final (o pulsa ⏸); luego **Ctrl+Z** | El marcador vuelve **de una vez** a donde estaba al empezar (un solo paso de Deshacer para toda la reproducción) |
 | USA.31 | Reduce la ventana a unos 560 px de alto | La barra de acceso rápido (guardar, deshacer, rehacer, nombre del diseño) **sigue a la vista**; por debajo de 520 px se esconde |
 | USA.32 | Archivo › Exportar o Imprimir: mira la sección «Mi impresora» | Los tres cuadros de la cama (X, Y, Z) tienen sitio para «256.00 mm» y sus flechas, sin apretarse |
+| FLU.31 | Diseño con piezas grandes: Archivo › Exportar › STL y, con la insignia «ocupado» visible, pulsa su botón Cancelar | La exportación se para, sale «Cancelado: el diseño no cambió», no queda archivo a medias y el diseño sigue igual |
 
 ## 2. Sketch
 

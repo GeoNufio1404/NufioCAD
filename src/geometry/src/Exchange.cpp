@@ -1,5 +1,6 @@
 #include <nuf/geometry/Exchange.hpp>
 
+#include <nuf/geometry/Cancel.hpp>
 #include <nuf/geometry/Occt.hpp>
 
 #include "Naming.hpp"
@@ -65,12 +66,19 @@ void forEachMeshedFace(const std::vector<Shape>& shapes, const MeshQuality& qual
         if (shape.isNull()) {
             continue;
         }
+        // Una exportación en un hilo de trabajo se puede cancelar: se mira entre cuerpos y entre caras.
+        if (cancelRequested()) {
+            throw GeometryError("Exportación cancelada");
+        }
         // La copia no lleva la malla del visor, y la que se calcule aquí no
         // se queda en la forma original.
         BRepBuilderAPI_Copy copy(occtShape(shape), true, false);
         BRepMesh_IncrementalMesh mesher(copy.Shape(), quality.linearDeflection, false,
                                         quality.angularDeflection, true);
         for (TopExp_Explorer faces(copy.Shape(), TopAbs_FACE); faces.More(); faces.Next()) {
+            if (cancelRequested()) {
+                throw GeometryError("Exportación cancelada");
+            }
             const TopoDS_Face face = TopoDS::Face(faces.Current());
             TopLoc_Location location;
             const auto mesh = BRep_Tool::Triangulation(face, location);
