@@ -129,6 +129,11 @@ std::string explainKernelError(const std::string& detail)
         {"NotDone", "el kernel no pudo terminar el cálculo (la geometría es muy ajustada, tangente o se solapa consigo misma)"},
         {"command not done", "el kernel no pudo terminar el cálculo (la geometría es muy ajustada, tangente o se solapa consigo misma)"},
         {"Overflow", "una medida es tan grande que el cálculo se desborda"},
+        {"NullMagnitude", "dos puntos coinciden y la dirección que forman tiene longitud cero (una arista o un eje de largo cero)"},
+        {"NumericError", "un cálculo numérico se salió de rango (medidas enormes, minúsculas o casi iguales entre sí)"},
+        {"NegativeValue", "hay una medida negativa donde la operación necesita una positiva"},
+        {"UndefinedDerivative", "una curva o una superficie tiene un punto singular (un pico o una esquina viva que no se puede seguir)"},
+        {"NotImplemented", "esa combinación de formas todavía no está soportada por el kernel"},
         {"DimensionError", "las formas que se combinan no son compatibles (por ejemplo, un perfil abierto)"}};
     for (const Cause& cause : causes) {
         if (detail.find(cause.marker) != std::string::npos) {

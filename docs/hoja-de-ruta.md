@@ -296,13 +296,14 @@ Rama `feature/pendientes-i-impresion` (23 nov. 2026, sin fusionar hasta la prueb
 - [ ] Sección: más de un corte a la vez y guardarla en el archivo (9d).
 
 ### U — Interfaz y usabilidad
+Rama `feature/pendientes-u-interfaz` (23 nov. 2026, sin fusionar hasta la prueba manual **USA.29 a USA.32** de la [guía](guia-de-pruebas.md)).
 - [ ] Barra de progreso real (el kernel no informa del avance; hoy hay spinner y Cancelar) (U8, F4).
 - [ ] Selector de espacio de trabajo; comandos flotantes como panel dentro del lienzo (hoy una ventana flotante de Qt) (U5).
-- [ ] Reproducir la línea de tiempo deja cada paso en Deshacer; la barra de acceso rápido se esconde con la ventana baja (< 640 px) (U5).
-- [ ] Errores: sugerencias que distingan la causa concreta del kernel y el detalle técnico traducido (Fase 11).
+- [x] **Reproducir la línea de tiempo ✅:** al reproducir, el marcador avanza sin dejar un paso de Deshacer por cada paso; al parar, el recorrido entero queda como **un solo paso** (U5). **Barra de acceso rápido ✅:** ya no se esconde con la ventana baja (< 640 px), solo con menos de 520 px de alto (U5).
+- [~] **Errores 🔶:** se añadieron explicaciones en español para más excepciones del kernel (vector de longitud cero, error numérico, valor negativo, punto singular, no soportado). **Pendiente:** las sugerencias siguen siendo fijas por operación y el detalle técnico que sigue entre paréntesis sigue en inglés (Fase 11).
 - [ ] Opción para ver opaca la vista previa de los generadores; el distintivo «Calculando…» no dice cuánto falta (Fase 11).
-- [ ] Cuadros estrechos de la cama en Exportar (Fase 11).
-- [ ] Pantallas: apretar la cinta a 1366 px (hoy recoge 2 grupos en «Más »»); recordar por pantalla la disposición de los paneles; medir el sketch a escalas altas (Fase 20).
+- [x] **Cuadros de la cama en Exportar ✅:** cada cuadro tiene un ancho mínimo (se comprobó con una captura del diálogo) (Fase 11).
+- [~] **Cinta a 1366 px ✅:** la cinta decidía cuántos grupos recoger con un ancho de grupo desactualizado (un 50 % mayor que el real); ahora mide los grupos solo con iconos por lo que piden sus botones y a 1366 px caben los 6 grupos sin «Más »» (antes quedaban 2 a la vista), comprobado con capturas y con el inventario a 960×540, 1024×768 y 1366×768. **Pendiente:** recordar por pantalla la disposición de los paneles; medir el sketch a escalas altas (Fase 20).
 - [ ] El dibujo antiguo se ve unos instantes mientras se prepara el nuevo; el borde de las caras de una rosca sin la malla de aristas (segundo plano del dibujo).
 
 ### V — Fluidez y rendimiento

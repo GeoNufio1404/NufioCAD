@@ -227,6 +227,8 @@ private:
     QLabel* docTitle_ = nullptr;
     QToolButton* timelinePlay_ = nullptr;
     QTimer* timelinePlayer_ = nullptr;
+    // Dónde estaba el marcador al empezar a reproducir: al parar, todo el recorrido es un solo paso de Deshacer.
+    std::optional<std::size_t> playStartMarker_;
     QAction* undoAction_ = nullptr;
     QAction* redoAction_ = nullptr;
     QAction* filletAction_ = nullptr;

@@ -188,10 +188,26 @@ void Ribbon::adapt()
             }
         }
     };
-    const auto needed = [&](int firstHidden) {
+    // Lo que mide un grupo solo con iconos: lo que piden sus botones (36 px, 48 con la flecha del menú) más lo que separa y
+    // rodea a los botones. Es lo que el grupo acaba midiendo; lo que dice su sizeHint en ese momento sigue siendo el de antes de
+    // cambiar el estilo de los botones (la petición de rehacer el diseño llega más tarde) y llegaba a ser un 50 % mayor, así que
+    // la cinta recogía grupos de más (a 1366 px quedaban 2 grupos a la vista y cabían todos).
+    const auto iconsWidth = [&](const Group& group) {
+        int total = 0;
+        for (const Entry& entry : group.entries) {
+            total += entry.button->sizeHint().width();
+        }
+        const QLayout* layout = group.widget->layout();
+        const int gaps = std::max(0, int(group.entries.size()) - 1);
+        const int margins = layout != nullptr ? layout->contentsMargins().left() + layout->contentsMargins().right() : 8;
+        const int spacing = layout != nullptr ? std::max(0, layout->spacing()) : 1;
+        return std::max(total + gaps * spacing + margins, group.label != nullptr ? group.label->sizeHint().width() : 0);
+    };
+    const auto needed = [&](int firstHidden, bool icons = false) {
         int total = 0;
         for (int i = 0; i < int(page.groups.size()) && i < firstHidden; ++i) {
-            total += widthOf(page.groups[std::size_t(i)].widget) + (page.groups[std::size_t(i)].separator != nullptr ? 3 : 0);
+            const Group& group = page.groups[std::size_t(i)];
+            total += (icons ? iconsWidth(group) : widthOf(group.widget)) + (group.separator != nullptr ? 3 : 0);
         }
         return total;
     };
@@ -206,11 +222,11 @@ void Ribbon::adapt()
         page.widget->layout()->activate();
         fit_ = Fit::IconsOnly;
     }
-    if (fit_ == Fit::IconsOnly && needed(count) > available) {
+    if (fit_ == Fit::IconsOnly && needed(count, true) > available) {
         // Se recogen los últimos grupos hasta que el resto quepa con el botón «Más».
         const int reserve = overflow_->sizeHint().width() + 8;
         int visible = count;
-        while (visible > 1 && needed(visible) > available - reserve) {
+        while (visible > 1 && needed(visible, true) > available - reserve) {
             --visible;
         }
         for (int i = visible; i < count; ++i) {
