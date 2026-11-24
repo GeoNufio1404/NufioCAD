@@ -10,6 +10,15 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Aceptar un generador sin esperar el cálculo (24 nov. 2026)
+
+- `Document::afterCompute`: una acción que se hace cuando el resultado ya es el vigente (en el acto si no hay cálculo en curso).
+- `AddRecipe` y `ReplaceRecipe` nombran los cuerpos nuevos con ella en vez de `waitForCompute` (bloqueaba la interfaz hasta 53 s en Debug con el bote de rosca); deshacer antes de que llegue el resultado anula el nombrado.
+- Prueba de interfaz en Release: 59 pasos, 0 fallidos, parada máxima 133 ms (el bote de rosca acepta en 53 ms).
+- **Volver atrás:** revertir la fusión de `feature/aceptar-sin-esperar`.
+
+---
+
 ## Licencia MIT (24 nov. 2026)
 
 - `LICENSE` (MIT) en la raíz; se instala junto al programa (`LICENSE.txt` en Windows, en la carpeta de documentación en Linux) y es la página de licencia del instalador (`cmake/Packaging.cmake`). README, avisos de terceros y `distribucion.md` la citan.

@@ -911,9 +911,7 @@ int InterfaceCheck::run()
     const std::vector<QAction*> generators = window_.generatorActions_;
     for (QAction* action : generators) {
         step(QStringLiteral("Generador «%1»").arg(action->text()), [&] {
-            // El bote con tapa se prueba con la bayoneta: la rosca por defecto tarda decenas de segundos en Debug (la
-            // varilla roscada y su unión con el cuerpo) y aceptar espera al cálculo (AddRecipe).
-            const int added = openChangeAccept(action, 0, action->text().contains(QStringLiteral("Bote")) ? QStringLiteral("Bayoneta") : QString());
+            const int added = openChangeAccept(action, 0);
             expect(added >= 1, QStringLiteral("no añadió operaciones"));
             waitIdle();
             expect(!window_.document_.result().bodies.empty(), QStringLiteral("no creó cuerpos"));
