@@ -47,5 +47,5 @@ y no mostraba la flecha turquesa de la medida que se edita. Se revisó de ahí h
 - Sin flecha: redondear una arista curva; los ángulos de los generadores; las holguras de décimas (juego, adelgazar el diente).
 - La cara del chaflán de entrada de una rosca ya no es una cara aparte: un diseño antiguo que la citara dirá que no existe.
 - Las flechas turquesa de los generadores nuevos se comprobaron por coordenadas (a menos de 3 mm de la pieza) y dos a ojo; falta la
-  prueba manual (REN.1–REN.8).
+  prueba manual (REN.1–REN.10).
 - «Cada medida tiene su flecha» no recorre las herramientas que necesitan elegir algo (Extruir, Revolución, Agujero, Unión).

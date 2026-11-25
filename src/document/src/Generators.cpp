@@ -2609,8 +2609,11 @@ public:
                 const std::string outerR = "min(" + guideR + " + 0.3; (" + capD + ")/2 - 0.1)";
                 const std::string g = "(" + groove + ")";
                 const std::string stopW = "(0.8*" + pinD + ")";
-                const std::string midR = "((" + neckR + " + " + outerR + ")/2)";
-                const std::string lenR = "(" + outerR + " - " + neckR + ")";
+                // El tope llega un poco más allá de la guía (para unirse a la pared), sin que su esquina asome por fuera de la tapa.
+                const std::string stopEnd = "(" + g + "/2 + " + stopW + ")";
+                const std::string stopR = "min(" + outerR + "; sqrt(((" + capD + ")/2)*((" + capD + ")/2) - " + stopEnd + "*" + stopEnd + ") - 0.05)";
+                const std::string midR = "((" + neckR + " + " + stopR + ")/2)";
+                const std::string lenR = "(" + stopR + " - " + neckR + ")";
                 // El hueco de cierre empieza más adentro: el pin, ya girado, entra en él inclinado respecto del radio.
                 const std::string pocketR0 = "(0.9*" + neckR + ")";
                 const std::string pocketMid = "((" + pocketR0 + " + " + outerR + ")/2)";
@@ -2653,14 +2656,19 @@ public:
                         }
                     }
                 }
-                // Las entradas y los huecos de cierre bajan hasta el suelo hondo, y se cortan después de poner los topes.
+                // Las gradas y las entradas bajan hasta el suelo hondo, y se cortan después de poner los topes.
+                for (auto& part : later) {
+                    recipe.features.push_back(std::move(part));
+                }
+                // Las gradas son rectas y sus esquinas llegan más afuera que la guía, que es redonda (con algunos pines, hasta
+                // atravesar la pared): la pared vuelve a ponerse entera por fuera, así la grada acaba justo en el fondo del carril.
+                auto wall = cylinder("Tapa: pared de la guía", Operation::Join, capD, grooveZ, groove + " + " + lift, beside);
+                wall->expressions["innerDiameter"] = span + " + 2*" + holgura;
+                recipe.features.push_back(std::move(wall));
                 recipe.features.push_back(box("Tapa: entradas en X", Operation::Cut, span + " + 2*" + pared + " + 2", groove, grooveZ,
                                               capH + " - (" + grooveZ + ") + 1", beside, "", ""));
                 recipe.features.push_back(box("Tapa: entradas en Y", Operation::Cut, groove, span + " + 2*" + pared + " + 2", grooveZ,
                                               capH + " - (" + grooveZ + ") + 1", beside, "", ""));
-                for (auto& part : later) {
-                    recipe.features.push_back(std::move(part));
-                }
             }
         } else {
             // Tapa deslizante: guías en las paredes largas y una ranura en la pared de delante para meter la tapa.

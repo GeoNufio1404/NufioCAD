@@ -333,6 +333,8 @@ Código: **USA**. Rama `feature/fase-15-usabilidad`.
 | REN.6 | Abre Redondeo y, sin cerrarlo, pulsa Chaflán | Las aristas se siguen marcando en naranja al acercar el cursor |
 | REN.7 | Un cilindro grande y, dentro de él, otro más pequeño con «Cortar» que no llegue a ninguna cara | Se corta (hueco cerrado) sin el aviso «No corta ningún cuerpo» |
 | REN.8 | En el bote de bayoneta pon «Alto del cuello» 6 | Un mensaje dice que el cuello es corto y qué cambiar |
+| REN.9 | Bote de bayoneta con pines de 4 mm (y con otros): mira la tapa por fuera y por dentro junto a las entradas | La pared no tiene agujeros ni cavidades más hondas que el carril; la grada y el tope siguen igual |
+| REN.10 | Cilindro con «Diámetro interior» 12 y diámetro 20 | Sale un tubo, con la flecha en el diámetro interior; con 25 dice que debe ser menor que el diámetro |
 | TL.9 | Mira los botones de inicio, atrás, reproducir, adelante y final sobre la timeline; pulsa reproducir | Llevan iconos del mismo estilo que las herramientas; al reproducir el icono pasa a pausa y vuelve a reproducir al parar |
 | FLU.31 | Diseño con piezas grandes: Archivo › Exportar › STL y, con la insignia «ocupado» visible, pulsa su botón Cancelar | La exportación se para, sale «Cancelado: el diseño no cambió», no queda archivo a medias y el diseño sigue igual |
 

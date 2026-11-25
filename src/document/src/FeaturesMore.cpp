@@ -194,6 +194,17 @@ std::optional<std::string> CylinderFeature::compute(ModelState& state) const
                 cylinder = geometry::chamfer(tag(), cylinder, {*edge}, std::min(topChamfer, most));
             }
         }
+        if (innerDiameter > 1e-9) {
+            if (innerDiameter >= diameter - 1e-6) {
+                throw FeatureError("El diámetro interior debe ser menor que el diámetro");
+            }
+            // Un poco más largo que el tubo, para que el agujero salga limpio por los dos lados.
+            sketch::Plane below = at;
+            const double over = height < 0.0 ? -1.0 : 1.0;
+            below.origin = {at.origin.x - at.normal.x * over, at.origin.y - at.normal.y * over, at.origin.z - at.normal.z * over};
+            cylinder = geometry::boolean(geometry::BooleanOp::Cut, cylinder,
+                                         geometry::cylinder(tag() + ":interior", below, innerDiameter, height + 2.0 * over));
+        }
         if (auto extra = applyOperation(state, *this, operation, cylinder)) {
             warning = warning ? *warning + " " + *extra : *extra;
         }
@@ -214,7 +225,8 @@ std::vector<Feature::NumericField> CylinderFeature::numericFields()
 {
     return {field("x", "Posición X", x), field("y", "Posición Y", y), field("z", "Posición Z", z),
             field("diameter", "Diámetro", diameter), field("height", "Alto", height),
-            field("baseRound", "Redondeo de la base", baseRound), field("topChamfer", "Chaflán de arriba", topChamfer)};
+            field("baseRound", "Redondeo de la base", baseRound), field("topChamfer", "Chaflán de arriba", topChamfer),
+            field("innerDiameter", "Diámetro interior", innerDiameter)};
 }
 
 // --- Engranaje -----------------------------------------------------------------

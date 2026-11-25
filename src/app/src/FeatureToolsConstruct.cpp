@@ -1168,6 +1168,10 @@ void CylinderTool::createFields(QFormLayout* form)
     topChamfer_ = lengthBox(original != nullptr ? original->topChamfer : 0.0);
     topChamfer_->setMinimum(0.0);
     field("topChamfer", topChamfer_);
+    innerDiameter_ = lengthBox(original != nullptr ? original->innerDiameter : 0.0);
+    innerDiameter_->setMinimum(0.0);
+    innerDiameter_->setToolTip(QStringLiteral("0 = macizo; si no, un tubo con ese agujero"));
+    field("innerDiameter", innerDiameter_);
     symmetric_ = new QCheckBox(QStringLiteral("Alto repartido a los dos lados del plano"));
     symmetric_->setChecked(original != nullptr && original->symmetric);
     operation_ = combo({QStringLiteral("Cuerpo nuevo"), QStringLiteral("Unir"), QStringLiteral("Cortar"), QStringLiteral("Intersecar")});
@@ -1175,11 +1179,12 @@ void CylinderTool::createFields(QFormLayout* form)
     form->addRow(QStringLiteral("Posición Z"), z_);
     form->addRow(QStringLiteral("Diámetro"), diameter_);
     form->addRow(QStringLiteral("Alto (±)"), height_);
+    form->addRow(QStringLiteral("Diámetro interior"), innerDiameter_);
     form->addRow(QStringLiteral("Redondeo de la base"), baseRound_);
     form->addRow(QStringLiteral("Chaflán de arriba"), topChamfer_);
     form->addRow(QString(), symmetric_);
     form->addRow(QStringLiteral("Operación"), operation_);
-    for (QDoubleSpinBox* box : {z_, diameter_, height_, baseRound_, topChamfer_}) {
+    for (QDoubleSpinBox* box : {z_, diameter_, height_, baseRound_, topChamfer_, innerDiameter_}) {
         connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
     }
     connect(symmetric_, &QCheckBox::toggled, this, [this] { updatePreview(); });
@@ -1207,6 +1212,7 @@ std::unique_ptr<document::Feature> CylinderTool::build() const
     f->height = height_->value();
     f->baseRound = baseRound_->value();
     f->topChamfer = topChamfer_->value();
+    f->innerDiameter = innerDiameter_->value();
     f->symmetric = symmetric_->isChecked();
     f->operation = primitiveOperation(operation_->currentIndex());
     return f;
@@ -1229,6 +1235,9 @@ std::optional<FeatureTool::Arrow> CylinderTool::dimensionArrow(const std::string
     }
     if (key == "height") {
         return arrowAlong(center, plane.normal, height);
+    }
+    if (key == "innerDiameter") {
+        return arrowAlong(moved(center, plane.xAxis, -innerDiameter_->value() / 2.0), plane.xAxis, innerDiameter_->value());
     }
     // El redondeo sube desde el borde de la base; el chaflán baja desde el borde de arriba.
     const double up = height < 0.0 ? -1.0 : 1.0;

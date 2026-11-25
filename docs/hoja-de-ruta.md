@@ -329,7 +329,7 @@ Rama `feature/pendientes-u-interfaz` (23 nov. 2026, sin fusionar hasta la prueba
 
 ### AU4 — Auditoría 4: rendimiento, fiabilidad y consistencia ✅ (25 nov. 2026)
 - [x] **Hecho:** 13 hallazgos corregidos (ver [auditoría 4](auditorias/auditoria-4-rendimiento-consistencia.md)): el bote de rosca, `touches`, las expresiones al editar, las flechas de todas las medidas.
-- [ ] **Pendiente de AU4:** que Aceptar un generador no recalcule lo que la vista previa ya calculó (M1); flecha al redondear aristas curvas; revisar con la prueba de interfaz las medidas de Extruir, Revolución, Agujero y Unión; la prueba manual REN.1–REN.8.
+- [ ] **Pendiente de AU4:** que Aceptar un generador no recalcule lo que la vista previa ya calculó (M1); flecha al redondear aristas curvas; revisar con la prueba de interfaz las medidas de Extruir, Revolución, Agujero y Unión; la prueba manual REN.1–REN.10.
 
 ### D — Distribución (después de la v0.2.0)
 - [ ] Flatpak (D1); winget y Microsoft Store (MSIX) con una versión firmada (D6); reputación de SmartScreen con descargas reales (D4).

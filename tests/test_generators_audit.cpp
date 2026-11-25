@@ -389,6 +389,80 @@ TEST_CASE("El bote avisa con palabras de las medidas con las que no puede funcio
     // El sufijo libre también lanza (arma la receta): por eso la interfaz lo busca en el hilo de trabajo.
 }
 
+TEST_CASE("La grada de la bayoneta acaba en el fondo del carril: no abre la pared de la tapa", "[generator][jar]")
+{
+    const document::Generator* generator = document::findGenerator("bote-con-tapa");
+    REQUIRE(generator != nullptr);
+    struct Sizes {
+        double pin, wall, gap, diameter, out;
+    };
+    for (const Sizes& s : {Sizes{4.0, 2.4, 0.3, 60.0, 2.5}, Sizes{2.5, 1.2, 0.3, 60.0, 2.5}, Sizes{6.0, 2.4, 0.3, 80.0, 3.0},
+                           Sizes{4.0, 1.2, 0.2, 60.0, 2.5}, Sizes{4.0, 1.6, 0.5, 40.0, 2.5}, Sizes{8.0, 2.0, 0.3, 100.0, 4.0}}) {
+        document::GeneratorValues values = generator->defaults();
+        values["cierre"] = 1.0;
+        values["pin_diametro"] = s.pin;
+        values["pared"] = s.wall;
+        values["holgura"] = s.gap;
+        values["diametro"] = s.diameter;
+        values["pin_sale"] = s.out;
+        values["pin_baja"] = 8.0;
+        values["cuello"] = 20.0;
+        INFO("pin " << s.pin << ", pared " << s.wall << ", holgura " << s.gap << ", bote " << s.diameter);
+        document::Document doc;
+        document::applyRecipe(doc, generator->make(values, ""));
+        for (std::size_t i = 0; i < doc.featureCount(); ++i) {
+            INFO(doc.feature(i).name() << ": " << doc.status(doc.feature(i).id()).message);
+            CHECK(doc.status(doc.feature(i).id()).health == document::Health::Ok);
+        }
+        REQUIRE(doc.result().bodies.size() == 2);
+        const geometry::Shape& lid = doc.result().bodies[1].shape;
+        CHECK(lid.isValid());
+        CHECK(lid.solidCount() == 1);
+        const double guide = s.diameter / 2.0 + s.out + s.gap;          // el fondo del carril
+        const double cap = s.diameter / 2.0 + s.out + s.wall;           // por fuera de la tapa
+        const double lidX = s.diameter + s.wall + 12.0;
+        // Nada asoma por fuera de la tapa (los topes).
+        CHECK(lid.bounds().max.y == Catch::Approx(cap).margin(0.01));
+        // La pared, entre el fondo del carril y la cara de fuera, está entera salvo las cuatro entradas, a lo alto de la guía.
+        const double groove = s.pin + 2.0 * s.gap;
+        const double z0 = 2.4 + 8.0 - groove / 2.0;
+        const double height = groove + s.gap + 1.5;
+        sketch::Plane at = sketch::Plane::xy();
+        at.origin = {lidX, 0.0, z0 + 0.01};
+        sketch::Plane low = sketch::Plane::xy();
+        low.origin = {lidX, 0.0, z0 - 1.0};
+        const double h = height - 0.02;
+        geometry::Shape ring = geometry::boolean(geometry::BooleanOp::Cut, geometry::cylinder("a", at, 2.0 * (cap - 0.01), h),
+                                                 geometry::cylinder("b", low, 2.0 * (guide + 0.01), h + 10.0));
+        const double whole = ring.volume();
+        const double kept = geometry::boolean(geometry::BooleanOp::Common, lid, ring).volume();
+        // Cada entrada quita una tira de ancho «groove» (exacta: integral entre los dos círculos).
+        const auto strip = [&](double r) { return r * r * std::asin(groove / 2.0 / r) + groove / 2.0 * std::sqrt(r * r - groove * groove / 4.0); };
+        const double entries = 4.0 * (strip(cap - 0.01) - strip(guide + 0.01)) * h;
+        CHECK(kept == Catch::Approx(whole - entries).epsilon(2e-3));
+    }
+}
+
+TEST_CASE("Un cilindro con diámetro interior es un tubo, se guarda y avisa si no cabe", "[document]")
+{
+    document::Document doc;
+    auto f = std::make_unique<document::CylinderFeature>();
+    f->base.origin = document::OriginPlane::XY;
+    f->diameter = 20.0;
+    f->innerDiameter = 12.0;
+    f->height = 10.0;
+    const auto id = doc.addFeature(std::move(f));
+    REQUIRE(doc.status(id).health == document::Health::Ok);
+    const double pi = std::numbers::pi;
+    CHECK(doc.result().bodies.front().shape.volume() == Catch::Approx(pi * (100.0 - 36.0) * 10.0).epsilon(1e-9));
+    document::Document bad;
+    auto g = std::make_unique<document::CylinderFeature>();
+    g->base.origin = document::OriginPlane::XY;
+    g->innerDiameter = 12.0;  // mayor que el diámetro (10)
+    const auto gid = bad.addFeature(std::move(g));
+    CHECK(bad.status(gid).health == document::Health::Error);
+}
+
 TEST_CASE("Auditoría: medidas sin flecha", "[.audit4]")
 {
     for (const document::Generator* generator : document::generators()) {

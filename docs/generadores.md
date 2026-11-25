@@ -158,7 +158,7 @@ ajuste** (0,3 mm por cada lado por defecto) manda en los tres cierres; cámbiala
   **levantar la tapa un poco**, porque la guía va un escalón más arriba que las entradas (la **altura de la grada**, 1,5 mm
   por defecto, es lo que hay que levantar). Se gira hasta un **tope** (un muro junto a cada entrada, que impide seguir hasta
   la entrada siguiente) y, al soltar, los pines bajan a la **grada de cierre**: un escalón más hondo que la guía, del ancho
-  justo de un pin, donde descansan. Para abrir hay que volver a levantar la tapa por encima del escalón y girar de vuelta;
+  justo de un pin y hasta el fondo del carril (no entra más en la pared de la tapa), donde descansan. Para abrir hay que volver a levantar la tapa por encima del escalón y girar de vuelta;
   solo girando no se abre. El ajuste está comprobado con una prueba de volúmenes (`test_edge_ops.cpp`, «La tapa de bayoneta…»).
 - **Deslizante:** guías en las paredes largas (hondo de la guía y labio que sujeta la tapa por arriba) y una ranura en la pared
   de delante para meter la tapa; la pared de atrás hace de tope.

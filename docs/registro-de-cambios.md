@@ -19,6 +19,7 @@ Detalle y medidas en [`auditorias/auditoria-4-rendimiento-consistencia.md`](audi
 - **Flechas en todas las medidas** (`Generator::ArrowSpec` con puntos del diseño, `GeneratorTool::dimensionArrow`; Engranaje, Dividir, Agujero, Redondeo, Cilindro y Rosca).
 - **Herramientas:** `leaveViewport` al cerrar; el sufijo de parámetros se busca en el hilo de trabajo; los cuerpos fijos no se pierden al aceptar; el bote avisa de las medidas imposibles.
 - **Pruebas:** `tests/test_generators_audit.cpp` y tres pasos en la prueba de interfaz (65 en total). La comprobación de las flechas con foco se omite, y lo dice, si Windows no da el primer plano a la ventana.
+- **La grada de la bayoneta ya no abre la pared de la tapa** (pedido en la prueba): era una caja recta cuyas esquinas llegaban más afuera que el carril, que es redondo (con pines de 4 mm quedaban 0,05 mm de pared, y con otras medidas, un agujero). Ahora acaba justo en el fondo del carril («Tapa: pared de la guía»); la grada, el tope y las entradas no cambian. Para eso el Cilindro tiene **Diámetro interior** (un tubo; 0 = macizo), también en su panel, con su flecha y guardado en el archivo. Prueba con seis tamaños de pin, pared y bote, que falla con el código anterior.
 - **Volver atrás:** revertir la fusión de `feature/auditoria-rendimiento-consistencia`.
 
 ---
