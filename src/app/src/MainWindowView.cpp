@@ -804,7 +804,7 @@ void MainWindow::refreshModel()
     modelStatusLabel_->setText(problem);
     modelStatusLabel_->setToolTip(problem);
     timeline_->updateGeometry();
-    timeline_->update();
+    timeline_->historyChanged();
 }
 
 void MainWindow::clearNavigation()

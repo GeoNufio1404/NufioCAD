@@ -155,6 +155,28 @@ std::string MoveFeature::label() const
     return "Mover " + name_;
 }
 
+// --- Batch -------------------------------------------------------------------
+
+Batch::Batch(std::string label, std::vector<std::unique_ptr<Command>> commands)
+    : label_(std::move(label))
+    , commands_(std::move(commands))
+{
+}
+
+void Batch::execute(document::Document& doc)
+{
+    for (auto& command : commands_) {
+        command->execute(doc);
+    }
+}
+
+void Batch::undo(document::Document& doc)
+{
+    for (auto it = commands_.rbegin(); it != commands_.rend(); ++it) {
+        (*it)->undo(doc);
+    }
+}
+
 // --- SetMarker ---------------------------------------------------------------
 
 SetMarker::SetMarker(std::size_t marker)

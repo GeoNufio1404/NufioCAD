@@ -10,6 +10,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace nuf::commands {
 
@@ -88,6 +89,21 @@ private:
     std::size_t to_;
     std::size_t from_ = 0;
     std::string name_;
+};
+
+// Varias órdenes que se hacen y se deshacen como una sola (borrar o mover varias operaciones a la vez): un solo
+// Deshacer las devuelve todas.
+class Batch final : public Command {
+public:
+    Batch(std::string label, std::vector<std::unique_ptr<Command>> commands);
+
+    void execute(document::Document& doc) override;
+    void undo(document::Document& doc) override;
+    std::string label() const override { return label_; }
+
+private:
+    std::string label_;
+    std::vector<std::unique_ptr<Command>> commands_;
 };
 
 // Mueve el marcador del timeline (volver atrás en el historial).

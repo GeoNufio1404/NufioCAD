@@ -4,8 +4,12 @@
 
 #include <nuf/document/Document.hpp>
 
+#include <QScrollBar>
+#include <QTimer>
 #include <QTreeWidget>
 #include <QWidget>
+
+#include <utility>
 
 #include <map>
 #include <optional>
@@ -18,7 +22,9 @@ namespace nuf::app {
 // Una ficha por operación, en orden, y el marcador (barra naranja) tras la
 // última activa. Doble clic edita; clic derecho abre el menú de la ficha;
 // arrastrar el marcador vuelve atrás en el historial; arrastrar una ficha la
-// mueve de sitio.
+// mueve de sitio. Se pueden elegir varias fichas SEGUIDAS (Mayús+clic para un rango, Ctrl+clic para sumar o quitar una
+// del extremo, Ctrl+A para todas) y borrarlas (Supr) o moverlas juntas (arrastrando, o Alt+←/→). Si hay más fichas de las
+// que caben, se desplaza con la rueda, la barra o las flechas.
 class TimelineWidget final : public QWidget {
     Q_OBJECT
 
@@ -31,15 +37,28 @@ public:
     // Resalta la operación que se está editando (o ninguna).
     void setEditing(std::optional<document::FeatureId> id);
 
+    // Las operaciones elegidas, en el orden del historial.
+    std::vector<document::FeatureId> selection() const;
+    void select(const std::vector<document::FeatureId>& ids);
+    void clearSelection();
+    // Tras un cambio del historial: quita de la elección lo que ya no existe y, si hay fichas nuevas, deja a la vista el
+    // marcador.
+    void historyChanged();
+
 signals:
     void featureActivated(nuf::document::FeatureId id);
     void featureMenuRequested(nuf::document::FeatureId id, const QPoint& globalPos);
+    // Clic derecho sobre una de varias fichas elegidas.
+    void selectionMenuRequested(const std::vector<nuf::document::FeatureId>& ids, const QPoint& globalPos);
     void markerMoved(std::size_t marker);
-    // Soltar la ficha «id» en la posición «index» (contada sin ella).
-    void featureMoved(nuf::document::FeatureId id, std::size_t index);
+    // Soltar el bloque de fichas «ids» (seguidas, en orden) en la separación «gap» del historial (0..n, contada con ellas).
+    void blockMoved(const std::vector<nuf::document::FeatureId>& ids, std::size_t gap);
+    void deleteRequested(const std::vector<nuf::document::FeatureId>& ids);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
+    void wheelEvent(QWheelEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
@@ -56,12 +75,31 @@ private:
     // Separación (0..n) más cercana a la x.
     std::size_t gapAt(int x) const;
 
+    bool isSelected(std::size_t index) const;
+    std::vector<std::size_t> selectedIndices() const;
+    // El rango (primera, última) si lo elegido es seguido.
+    std::optional<std::pair<std::size_t, std::size_t>> selectionRange() const;
+    void selectRange(std::size_t from, std::size_t to);
+    void toggleContiguous(std::size_t index);
+    void setCurrent(std::size_t index);  // la ficha activa para el teclado; la deja a la vista
+    void revealRange(int left, int right);
+    void emitBlockMove(std::size_t gap);
+    void autoScrollStep();
+    QScrollBar* scrollBar() const;
+    int viewportWidth() const;
+
     const document::Document& document_;
     std::optional<document::FeatureId> editing_;
     bool draggingMarker_ = false;
     std::optional<std::size_t> draggedChip_;
     QPoint pressPos_;
     std::optional<std::size_t> dropGap_;  // marcador o ficha arrastrados
+    std::set<document::FeatureId> selected_;
+    std::optional<document::FeatureId> anchor_;   // desde dónde se extiende con Mayús
+    std::optional<document::FeatureId> current_;  // la última tocada
+    bool collapseOnRelease_ = false;              // se pulsó dentro de varias elegidas: si no se arrastra, queda solo esa
+    std::size_t lastCount_ = 0;
+    QTimer* autoScroll_ = nullptr;
 };
 
 // Árbol con los cuerpos y los sketches; la casilla muestra u oculta.

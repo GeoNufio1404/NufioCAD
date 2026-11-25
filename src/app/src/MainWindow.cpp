@@ -78,7 +78,9 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <functional>
 #include <memory>
+#include <set>
 #include <tuple>
 #include <utility>
 
@@ -215,18 +217,9 @@ MainWindow::MainWindow(QWidget* parent)
             commands_.push(std::make_unique<commands::SetMarker>(marker));
         }
     });
-    connect(timeline_, &TimelineWidget::featureMoved, this, [this](document::FeatureId id, std::size_t index) {
-        if (sketch_ || tool_) {
-            return;
-        }
-        if (!document_.canMoveFeature(id, index)) {
-            statusBar()->showMessage(QStringLiteral("No se puede mover ahí: quedaría antes de lo que necesita o "
-                                                    "después de lo que la usa"),
-                                     6000);
-            return;
-        }
-        commands_.push(std::make_unique<commands::MoveFeature>(id, index));
-    });
+    connect(timeline_, &TimelineWidget::blockMoved, this, &MainWindow::moveFeatures);
+    connect(timeline_, &TimelineWidget::deleteRequested, this, &MainWindow::deleteFeatures);
+    connect(timeline_, &TimelineWidget::selectionMenuRequested, this, &MainWindow::showSelectionMenu);
     ExpressionSpinBox::setDocument(&document_);
     // Los generadores con texto piden el contorno de las letras a la vista (que es la que conoce las fuentes).
     document::setTextOutliner([this](const std::string& text, double height, const std::string& family) {
@@ -619,7 +612,8 @@ void MainWindow::createDocks()
     scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     scroll->setFrameShape(QFrame::NoFrame);
     // La línea de tiempo puede encoger (hasta una franja) si la ventana es baja; no crece más de lo que necesita.
-    scroll->setMaximumHeight(timeline_->sizeHint().height() + 16);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);  // con muchas operaciones, la barra deja ver las de la derecha
+    scroll->setMaximumHeight(timeline_->sizeHint().height() + scroll->horizontalScrollBar()->sizeHint().height() + 4);
     scroll->setMinimumHeight(56);
     // Controles de reproducción (U5): inicio, anterior, reproducir, siguiente y final; mueven el marcador del historial.
     auto* timelineBox = new QWidget();
@@ -629,21 +623,22 @@ void MainWindow::createDocks()
     auto* controls = new QHBoxLayout();
     controls->setContentsMargins(6, 2, 6, 0);
     controls->setSpacing(2);
-    const auto control = [&](const QString& text, const QString& tip, const char* name) {
+    const auto control = [&](const QString& icon, const QString& tip, const char* name) {
         auto* button = new QToolButton(timelineBox);
         button->setObjectName(QString::fromLatin1(name));
-        button->setText(text);
+        button->setIcon(uiIcon(icon));  // los mismos iconos de trazo que el resto de la interfaz
+        button->setIconSize(QSize(18, 18));
         button->setToolTip(tip);
         button->setAutoRaise(true);
         button->setFocusPolicy(Qt::NoFocus);
         controls->addWidget(button);
         return button;
     };
-    auto* toStart = control(QStringLiteral("⏮"), QStringLiteral("Marcador al principio del historial"), "timelineStart");
-    auto* previous = control(QStringLiteral("◀"), QStringLiteral("Marcador un paso hacia atrás"), "timelinePrevious");
-    timelinePlay_ = control(QStringLiteral("▶"), QStringLiteral("Reproducir el historial paso a paso desde el marcador"), "timelinePlay");
-    auto* next = control(QStringLiteral("▶|"), QStringLiteral("Marcador un paso hacia delante"), "timelineNext");
-    auto* toEnd = control(QStringLiteral("⏭"), QStringLiteral("Marcador al final del historial"), "timelineEnd");
+    auto* toStart = control(QStringLiteral("timeline-start"), QStringLiteral("Marcador al principio del historial"), "timelineStart");
+    auto* previous = control(QStringLiteral("timeline-prev"), QStringLiteral("Marcador un paso hacia atrás"), "timelinePrevious");
+    timelinePlay_ = control(QStringLiteral("timeline-play"), QStringLiteral("Reproducir el historial paso a paso desde el marcador"), "timelinePlay");
+    auto* next = control(QStringLiteral("timeline-next"), QStringLiteral("Marcador un paso hacia delante"), "timelineNext");
+    auto* toEnd = control(QStringLiteral("timeline-end"), QStringLiteral("Marcador al final del historial"), "timelineEnd");
     controls->addStretch();
     timelineColumn->addLayout(controls);
     timelineColumn->addWidget(scroll, 1);
@@ -667,7 +662,8 @@ void MainWindow::createDocks()
     // empezó a donde llegó) queda como un solo paso.
     const auto stopPlayback = [this] {
         timelinePlayer_->stop();
-        timelinePlay_->setText(QStringLiteral("▶"));
+        timelinePlay_->setIcon(uiIcon(QStringLiteral("timeline-play")));
+        timelinePlay_->setToolTip(QStringLiteral("Reproducir el historial paso a paso desde el marcador"));
         if (!playStartMarker_) {
             return;
         }
@@ -697,7 +693,8 @@ void MainWindow::createDocks()
         }
         playStartMarker_ = document_.marker();
         timelinePlayer_->start();
-        timelinePlay_->setText(QStringLiteral("⏸"));
+        timelinePlay_->setIcon(uiIcon(QStringLiteral("timeline-pause")));
+        timelinePlay_->setToolTip(QStringLiteral("Pausar la reproducción"));
     });
     timelineDock_->setWidget(timelineBox);
     timelineDock_->setFeatures(QDockWidget::NoDockWidgetFeatures);
@@ -1131,24 +1128,132 @@ void MainWindow::showFeatureMenu(document::FeatureId id, const QPoint& globalPos
         }
     });
     menu.addSeparator();
-    menu.addAction(QStringLiteral("Borrar"), this, [this, id, name] {
-        const std::vector<document::FeatureId> users = document_.dependents(id);
-        if (!users.empty()) {
-            QStringList names;
-            for (document::FeatureId user : users) {
-                names << QString::fromStdString(document_.findFeature(user)->name());
-            }
-            const auto answer = QMessageBox::question(
-                this, QStringLiteral("Borrar %1").arg(name),
-                QStringLiteral("Estas operaciones dependen de %1 y quedarán con error:\n\n%2\n\n¿Borrarla igualmente?")
-                    .arg(name, names.join(QStringLiteral(", "))));
-            if (answer != QMessageBox::Yes) {
-                return;
+    menu.addAction(QStringLiteral("Borrar"), this, [this, id] { deleteFeatures({id}); });
+    menu.exec(globalPos);
+}
+
+void MainWindow::showSelectionMenu(const std::vector<document::FeatureId>& ids, const QPoint& globalPos)
+{
+    if (ids.empty() || sketch_ || tool_) {
+        return;
+    }
+    QMenu menu(this);
+    const QString count = QStringLiteral("%1 operaciones").arg(ids.size());
+    menu.addSection(count);
+    const bool anyActive = std::ranges::any_of(ids, [this](document::FeatureId id) {
+        const document::Feature* f = document_.findFeature(id);
+        return f != nullptr && !f->suppressed();
+    });
+    menu.addAction(anyActive ? QStringLiteral("Suprimir las %1").arg(ids.size()) : QStringLiteral("Reactivar las %1").arg(ids.size()),
+                   this, [this, ids, anyActive] {
+                       std::vector<std::unique_ptr<commands::Command>> steps;
+                       for (const document::FeatureId id : ids) {
+                           steps.push_back(std::make_unique<commands::SuppressFeature>(id, anyActive));
+                       }
+                       commands_.push(std::make_unique<commands::Batch>(
+                           (anyActive ? "Suprimir " : "Reactivar ") + std::to_string(ids.size()) + " operaciones", std::move(steps)));
+                   });
+    menu.addAction(QStringLiteral("Mover el marcador tras la última"), this, [this, last = ids.back()] {
+        if (const auto index = document_.indexOf(last)) {
+            commands_.push(std::make_unique<commands::SetMarker>(*index + 1));
+        }
+    });
+    menu.addSeparator();
+    menu.addAction(QStringLiteral("Borrar las %1").arg(ids.size()), this, [this, ids] { deleteFeatures(ids); });
+    menu.exec(globalPos);
+}
+
+void MainWindow::deleteFeatures(const std::vector<document::FeatureId>& ids)
+{
+    if (ids.empty() || sketch_ || tool_) {
+        return;
+    }
+    const std::set<document::FeatureId> chosen(ids.begin(), ids.end());
+    // Lo que depende de lo borrado y no se borra con ello queda con error: se avisa antes.
+    std::vector<document::FeatureId> users;
+    for (const document::FeatureId id : ids) {
+        for (const document::FeatureId user : document_.dependents(id)) {
+            if (!chosen.contains(user) && std::ranges::find(users, user) == users.end()) {
+                users.push_back(user);
             }
         }
-        commands_.push(std::make_unique<commands::DeleteFeature>(id));
-    });
-    menu.exec(globalPos);
+    }
+    const QString what = ids.size() == 1 ? QString::fromStdString(document_.findFeature(ids.front())->name())
+                                         : QStringLiteral("las %1 operaciones").arg(ids.size());
+    if (!users.empty()) {
+        QStringList names;
+        for (const document::FeatureId user : users) {
+            names << QString::fromStdString(document_.findFeature(user)->name());
+        }
+        const auto answer = QMessageBox::question(
+            this, QStringLiteral("Borrar %1").arg(what),
+            QStringLiteral("Estas operaciones dependen de lo que se borra y quedarán con error:\n\n%1\n\n¿Borrar igualmente?")
+                .arg(names.join(QStringLiteral(", "))));
+        if (answer != QMessageBox::Yes) {
+            return;
+        }
+    }
+    if (ids.size() == 1) {
+        commands_.push(std::make_unique<commands::DeleteFeature>(ids.front()));
+        return;
+    }
+    // De la última a la primera: cada borrado deja intactos los lugares de las que faltan, y un Deshacer las devuelve todas.
+    std::vector<std::pair<std::size_t, document::FeatureId>> ordered;
+    for (const document::FeatureId id : ids) {
+        if (const auto index = document_.indexOf(id)) {
+            ordered.emplace_back(*index, id);
+        }
+    }
+    std::ranges::sort(ordered, std::greater<>());
+    std::vector<std::unique_ptr<commands::Command>> steps;
+    for (const auto& entry : ordered) {
+        steps.push_back(std::make_unique<commands::DeleteFeature>(entry.second));
+    }
+    commands_.push(std::make_unique<commands::Batch>("Borrar " + std::to_string(ids.size()) + " operaciones", std::move(steps)));
+}
+
+void MainWindow::moveFeatures(const std::vector<document::FeatureId>& ids, std::size_t gap)
+{
+    if (ids.empty() || sketch_ || tool_) {
+        return;
+    }
+    const auto first = document_.indexOf(ids.front());
+    const auto last = document_.indexOf(ids.back());
+    if (!first || !last || *last - *first + 1 != ids.size() || (gap >= *first && gap <= *last + 1)) {
+        return;
+    }
+    // El bloque conserva su orden interno; solo cambia lo que cruza. Pasar a la izquierda: nada de lo cruzado puede ser
+    // necesario para el bloque. Pasar a la derecha: nada de lo cruzado puede necesitar al bloque.
+    bool ok = true;
+    if (gap < *first) {
+        for (std::size_t i = gap; i < *first && ok; ++i) {
+            const auto users = document_.dependents(document_.feature(i).id());
+            ok = std::ranges::none_of(ids, [&](document::FeatureId id) { return std::ranges::find(users, id) != users.end(); });
+        }
+    } else {
+        for (const document::FeatureId id : ids) {
+            const auto users = document_.dependents(id);
+            for (std::size_t i = *last + 1; i < gap && ok; ++i) {
+                ok = std::ranges::find(users, document_.feature(i).id()) == users.end();
+            }
+        }
+    }
+    if (!ok) {
+        statusBar()->showMessage(QStringLiteral("No se puede mover ahí: quedaría antes de lo que necesita o "
+                                                "después de lo que la usa"),
+                                 6000);
+        return;
+    }
+    if (ids.size() == 1) {
+        commands_.push(std::make_unique<commands::MoveFeature>(ids.front(), gap > *first ? gap - 1 : gap));
+        return;
+    }
+    std::vector<std::unique_ptr<commands::Command>> steps;
+    for (std::size_t i = 0; i < ids.size(); ++i) {
+        // A la izquierda, cada una a su lugar nuevo, en orden; a la derecha, la primera una y otra vez al final del hueco.
+        steps.push_back(std::make_unique<commands::MoveFeature>(ids[i], gap < *first ? gap + i : gap - 1));
+    }
+    commands_.push(std::make_unique<commands::Batch>("Mover " + std::to_string(ids.size()) + " operaciones", std::move(steps)));
 }
 
 } // namespace nuf::app
