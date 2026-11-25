@@ -29,7 +29,8 @@ class ExportDialog final : public QDialog {
 
 public:
     enum class Format { Stl, Obj, Step, ThreeMf };
-    // Exportar a un archivo, o Imprimir: lo mismo pero siempre STL y, al aceptar, se abre en el slicer.
+    // Exportar a un archivo (sin nada de impresión 3D: hay quien solo modela), o Imprimir: siempre STL, con la revisión para
+    // imprimir y «Mi impresora», y al aceptar se abre en el slicer.
     enum class Mode { Export, Print };
 
     // `bodies` son los cuerpos del modelo; `checkedKeys` los que se marcan al abrir.
@@ -60,7 +61,8 @@ private:
     // Cuenta los triángulos de los cuerpos marcados (en segundo plano; lo ya contado no se repite).
     void refreshTriangleCount();
     void showTriangleCount();
-    // Revisión para imprimir de los cuerpos marcados (solo con mallas), en segundo plano.
+    // Revisión de los cuerpos marcados (solo con mallas), en segundo plano. Al exportar, solo los defectos de la malla (abierta,
+    // con triángulos al revés…), y solo se ve si hay alguno; al imprimir, además, la revisión para imprimir.
     void runReview();
     void showReview(const std::vector<geometry::PrintIssue>& issues, const std::string& failure);
 
