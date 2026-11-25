@@ -100,7 +100,12 @@ public:
         std::function<std::array<double, 3>(const GeneratorValues&)> at{};
         // Si la medida no es el valor de la pregunta sino un cálculo con las respuestas (el Ø primitivo de un engranaje).
         std::function<double(const GeneratorValues&)> length{};
+        // El eje, si depende de las respuestas (el agujero del cable va por una pared u otra).
+        std::function<char(const GeneratorValues&)> axisOf{};
     };
+    // Con «body» = kWorld, «at» da el punto en coordenadas del diseño (el generador coloca sus piezas en el origen): no
+    // depende de la caja de ningún cuerpo, que se corre si la pieza lleva patas, clips o bisagra.
+    static constexpr int kWorld = -1;
     static constexpr double kCenter = std::numeric_limits<double>::quiet_NaN();
     virtual std::map<std::string, ArrowSpec> arrows() const { return {}; }
     // «suffix» se agrega a los nombres de los parámetros (« », «_2», «_3»…) para no chocar con los que ya haya.
@@ -120,6 +125,8 @@ const Generator* findGenerator(const std::string& id);
 
 // El primer sufijo («», «_2», «_3»…) con el que ningún parámetro de la receta choca con los del documento.
 std::string freeSuffix(const Document& doc, const Generator& generator, const GeneratorValues& values);
+// Lo mismo con una copia de los parámetros del documento: para un hilo de trabajo (arma la receta, que puede tardar).
+std::string freeSuffix(const std::vector<Parameter>& used, const Generator& generator, const GeneratorValues& values);
 
 // Las operaciones que salieron de un mismo generador (las que tienen ese «lead»), en el orden del historial.
 std::vector<FeatureId> generatedGroup(const Document& doc, FeatureId lead);

@@ -327,6 +327,10 @@ Rama `feature/pendientes-u-interfaz` (23 nov. 2026, sin fusionar hasta la prueba
 - [x] **Bayoneta con tope y grada ✅:** guía un escalón más arriba, tope junto a cada entrada y grada de cierre donde descansan los pines; campo «Altura de la grada». **Pendiente de AJ:** la prueba manual AJU.4 y AJU.7 (la comprobación hecha es geométrica, de volúmenes); imprimirla para ver si el ajuste y la altura de la grada se sienten bien; el deslizante de la Caja con tapa sigue sin una grada parecida.
 - [x] **Capturas de la interfaz en la documentación ✅:** `docs/capturas/` con la ventana (herramienta Caja con sus flechas) y el menú Sólido, generadas con `--captura-temas`. **Pendiente de AJ:** capturas de la bayoneta y de la timeline (el programa no genera aún capturas de un generador ni de una timeline llena).
 
+### AU4 — Auditoría 4: rendimiento, fiabilidad y consistencia ✅ (25 nov. 2026)
+- [x] **Hecho:** 13 hallazgos corregidos (ver [auditoría 4](auditorias/auditoria-4-rendimiento-consistencia.md)): el bote de rosca, `touches`, las expresiones al editar, las flechas de todas las medidas.
+- [ ] **Pendiente de AU4:** que Aceptar un generador no recalcule lo que la vista previa ya calculó (M1); flecha al redondear aristas curvas; revisar con la prueba de interfaz las medidas de Extruir, Revolución, Agujero y Unión; la prueba manual REN.1–REN.8.
+
 ### D — Distribución (después de la v0.2.0)
 - [ ] Flatpak (D1); winget y Microsoft Store (MSIX) con una versión firmada (D6); reputación de SmartScreen con descargas reales (D4).
 

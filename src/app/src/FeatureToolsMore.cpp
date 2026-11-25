@@ -226,10 +226,7 @@ MoveTool::MoveTool(document::Document& document, render::Viewport& viewport,
 
 MoveTool::~MoveTool()
 {
-    viewport_.hideGizmo();
-    viewport_.hideGhost();
-    viewport_.hideAngleSweep();
-    viewport_.hideAlignmentLine();
+    leaveViewport();
 }
 
 void MoveTool::stopPreview()
@@ -1516,6 +1513,9 @@ void ThreadTool::createFields(QFormLayout* form)
     const auto* original = dynamic_cast<const document::ThreadFeature*>(original_.get());
     createPlacement(form, placement_, original != nullptr ? &original->base : nullptr, original != nullptr ? original->x : 0.0,
                     original != nullptr ? original->y : 0.0);
+    z_ = lengthBox(original != nullptr ? original->z : 0.0);
+    field("z", z_);
+    form->addRow(QStringLiteral("Posición Z"), z_);
     standard_ = combo({QStringLiteral("Personalizada")});
     for (const StandardThread& m : kMetric) {
         standard_->addItem(QStringLiteral("%1 × %2").arg(QLatin1String(m.name)).arg(m.pitch));
@@ -1599,7 +1599,7 @@ void ThreadTool::createFields(QFormLayout* form)
     });
     connect(profile_, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
     connect(left_, &QCheckBox::toggled, this, [this] { updatePreview(); });
-    for (QDoubleSpinBox* box : {diameter_, pitch_, length_, clearance_, entryChamfer_}) {
+    for (QDoubleSpinBox* box : {z_, diameter_, pitch_, length_, clearance_, entryChamfer_}) {
         connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
     }
 }
@@ -1608,7 +1608,7 @@ void ThreadTool::showCylinderMode(bool on)
 {
     cylinderMode_ = on;
     for (QWidget* w : {static_cast<QWidget*>(placement_.base), static_cast<QWidget*>(placement_.x), static_cast<QWidget*>(placement_.y),
-                       static_cast<QWidget*>(diameter_), static_cast<QWidget*>(length_), static_cast<QWidget*>(operation_)}) {
+                       static_cast<QWidget*>(z_), static_cast<QWidget*>(diameter_), static_cast<QWidget*>(length_), static_cast<QWidget*>(operation_)}) {
         form_->setRowVisible(w, !on);
     }
     form_->setRowVisible(clearance_, !on && operation_->currentIndex() == 2);
@@ -1679,12 +1679,14 @@ std::unique_ptr<document::Feature> ThreadTool::build() const
         f->spec.diameter = diameter_->value();
         f->spec.length = length_->value();
         f->spec.profile = profile_->currentIndex() == 1 ? geometry::ThreadProfile::Trapezoidal : geometry::ThreadProfile::Metric;
+        f->spec.entryChamfer = entryChamfer_->value();
         f->operation = document::Operation::Cut;
         return f;
     }
     f->base = placementAttachment(placement_);
     f->x = placement_.x->value();
     f->y = placement_.y->value();
+    f->z = z_->value();
     f->clearance = clearance_->value();
     f->spec.diameter = diameter_->value();
     f->spec.pitch = pitch_->value();
@@ -1725,12 +1727,19 @@ std::optional<FeatureTool::Arrow> ThreadTool::dimensionArrow(const std::string& 
     if (key == "x" || key == "y") {
         return placementArrow(placement_, key);
     }
-    if (key == "pitch") {
-        const sketch::Plane plane = document::attachmentPlane(before(), placementAttachment(placement_));
-        return arrowAlong(plane.toWorld({placement_.x->value(), placement_.y->value()}), plane.normal, pitch_->value());
-    }
     const sketch::Plane plane = document::attachmentPlane(before(), placementAttachment(placement_));
-    const sketch::Vec3 origin = plane.toWorld({placement_.x->value(), placement_.y->value()});
+    const sketch::Vec3 onPlane = plane.toWorld({placement_.x->value(), placement_.y->value()});
+    if (key == "z") {
+        return arrowAlong(onPlane, plane.normal, z_->value());
+    }
+    const sketch::Vec3 origin = moved(onPlane, plane.normal, z_->value());
+    const double along = length_->value() < 0.0 ? -1.0 : 1.0;
+    if (key == "pitch") {
+        return arrowAlong(origin, plane.normal, along * pitch_->value());
+    }
+    if (key == "entryChamfer") {
+        return arrowAlong(moved(origin, plane.xAxis, diameter_->value() / 2.0), plane.normal, along * entryChamfer_->value());
+    }
     if (key == "length") {
         return arrowAlong(origin, plane.normal, length_->value());
     }

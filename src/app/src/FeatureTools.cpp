@@ -57,18 +57,27 @@ FeatureTool::FeatureTool(document::Document& document, render::Viewport& viewpor
 
 FeatureTool::~FeatureTool()
 {
-    viewport_.clearToolPreview();
-    viewport_.hideDistanceHandle();
-    viewport_.hideDimensionArrow();
-    if (movable_ != nullptr) {
-        viewport_.hideGhost();
-        viewport_.hideGizmo();
-    }
-    viewport_.setAdditiveSelection(false);
-    viewport_.setEdgeAssist(false);
+    leaveViewport();
     if (panel_) {
         panel_->deleteLater();
     }
+}
+
+void FeatureTool::leaveViewport()
+{
+    if (left_) {
+        return;
+    }
+    left_ = true;
+    viewport_.clearToolPreview();
+    viewport_.hideDistanceHandle();
+    viewport_.hideDimensionArrow();
+    viewport_.hideGhost();
+    viewport_.hideGizmo();
+    viewport_.hideAngleSweep();
+    viewport_.hideAlignmentLine();
+    viewport_.setAdditiveSelection(false);
+    viewport_.setEdgeAssist(false);
 }
 
 FeatureTool::PrimaryField FeatureTool::primaryField() const
@@ -203,6 +212,22 @@ std::unique_ptr<document::Feature> FeatureTool::make() const
         for (const auto& [key, box] : fields_) {
             if (const auto* e = dynamic_cast<const ExpressionSpinBox*>(box); e != nullptr && !e->expression().isEmpty()) {
                 feature->expressions[key] = e->expression().toStdString();
+            }
+        }
+        // Lo ligado a parámetros que este panel no muestra (o muestra sin expresión) se conserva mientras su valor no se
+        // haya cambiado aquí: editar el diámetro de un hueco generado no puede quitarle el redondeo del fondo.
+        if (original_ && original_->kind() == feature->kind()) {
+            const auto numbers = feature->numericFields();
+            for (const auto& [key, expression] : original_->expressions) {
+                if (std::ranges::any_of(fields_, [&](const auto& f) { return f.first == key; })) {
+                    continue;
+                }
+                const auto now = std::ranges::find_if(numbers, [&](const auto& f) { return f.key == key; });
+                const auto old = original_->numericFields();
+                const auto before = std::ranges::find_if(old, [&](const auto& f) { return f.key == key; });
+                if (now != numbers.end() && before != old.end() && std::abs(now->get() - before->get()) < 1e-9) {
+                    feature->expressions[key] = expression;
+                }
             }
         }
     }

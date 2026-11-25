@@ -325,6 +325,14 @@ Código: **USA**. Rama `feature/fase-15-usabilidad`.
 | AJU.5 | Abre Engranaje y arrastra la flecha roja o la verde | Aparece una sombra azul (la caja del engranaje) que sigue al cursor; al soltar vuelve a dibujarse el engranaje en su sitio, con la posición X/Y de los cuadros |
 | AJU.6 | Mira el menú «Sólido» de la barra superior | Tiene cinco submenús (Crear, Modificar, Organizar, Construir, Inspeccionar) y todas las herramientas siguen funcionando, también con su atajo (así se ve: [captura](capturas/menu-solido.png)) |
 | AJU.7 | Bote con tapa de bayoneta: junta la tapa y gírala hasta el tope, suéltala, e intenta abrir solo girando | Los pines descansan en la grada junto al tope; girando sin levantar no se abre, hay que levantar la tapa (la «Altura de la grada») y girar de vuelta |
+| REN.1 | Herramientas › Bote con tapa, con «Restablecer valores» | La vista previa sale en torno a un segundo, sin avisos; con Sección se ve hueco y con un hombro inclinado bajo el cuello |
+| REN.2 | En el bote, entra en cada cuadro (diámetro, pared, base, rosca, pines, grada…), con los tres cierres | Aparece la flecha turquesa sobre esa medida |
+| REN.3 | En Caja con tapa con patas, bisagra o clips, entra en sus medidas | La flecha cae sobre la pata, la bisagra o el clip |
+| REN.4 | Doble clic en una operación generada (por ejemplo «Bote: cuerpo»), mira sus cuadros y acepta sin tocar nada | Los cuadros muestran la expresión (`diametro`, `alto - rosca_alto`) y siguen ligados: al cambiar el parámetro, la pieza cambia |
+| REN.5 | Edita «Bote: hueco» y cambia el diámetro | Conserva el redondeo del fondo y el chaflán de arriba, que ahora salen en el panel |
+| REN.6 | Abre Redondeo y, sin cerrarlo, pulsa Chaflán | Las aristas se siguen marcando en naranja al acercar el cursor |
+| REN.7 | Un cilindro grande y, dentro de él, otro más pequeño con «Cortar» que no llegue a ninguna cara | Se corta (hueco cerrado) sin el aviso «No corta ningún cuerpo» |
+| REN.8 | En el bote de bayoneta pon «Alto del cuello» 6 | Un mensaje dice que el cuello es corto y qué cambiar |
 | TL.9 | Mira los botones de inicio, atrás, reproducir, adelante y final sobre la timeline; pulsa reproducir | Llevan iconos del mismo estilo que las herramientas; al reproducir el icono pasa a pausa y vuelve a reproducir al parar |
 | FLU.31 | Diseño con piezas grandes: Archivo › Exportar › STL y, con la insignia «ocupado» visible, pulsa su botón Cancelar | La exportación se para, sale «Cancelado: el diseño no cambió», no queda archivo a medias y el diseño sigue igual |
 

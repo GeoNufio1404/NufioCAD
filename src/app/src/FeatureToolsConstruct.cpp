@@ -240,6 +240,24 @@ void SplitTool::createFields(QFormLayout* form)
     connect(offset_, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
 }
 
+std::optional<FeatureTool::Arrow> SplitTool::dimensionArrow(const std::string& key) const
+{
+    const std::unique_ptr<document::Feature> made = build();
+    const auto* split = dynamic_cast<const document::SplitFeature*>(made.get());
+    if (key != "offset" || split == nullptr || split->byFace) {
+        return std::nullopt;
+    }
+    // Desde el plano elegido, a la altura del centro del cuerpo, hasta donde se corta.
+    const sketch::Plane plane = document::attachmentPlane(before(), split->plane);
+    sketch::Vec3 from = plane.origin;
+    if (const auto center = bodyCenter(body_)) {
+        const sketch::Vec3 v{center->x - from.x, center->y - from.y, center->z - from.z};
+        const double away = v.x * plane.normal.x + v.y * plane.normal.y + v.z * plane.normal.z;
+        from = moved(*center, plane.normal, -away);
+    }
+    return arrowAlong(from, plane.normal, offset_->value());
+}
+
 void SplitTool::selectionChanged(const render::ModelSelection& selection)
 {
     // Una cara plana elegida en la vista es el plano de corte; una curva (o de otro cuerpo, si «Cara de otro cuerpo» está
@@ -863,6 +881,22 @@ std::optional<FeatureTool::Arrow> GearTool::dimensionArrow(const std::string& ke
     if (key == "bore") {
         return arrowAlong(moved(origin, plane.xAxis, -bore_->value() / 2.0), plane.xAxis, bore_->value());
     }
+    const double pitchRadius = module_->value() * teeth_->value() / 2.0;
+    if (key == "rim" && type_->currentIndex() == 1) {
+        // La corona: el aro, por fuera de los huecos de los dientes.
+        return arrowAlong(moved(origin, plane.xAxis, pitchRadius + 1.25 * module_->value()), plane.xAxis, rim_->value());
+    }
+    if (key == "rim" && type_->currentIndex() == 2) {
+        // La cremallera: la base, por debajo de los huecos.
+        return arrowAlong(moved(origin, plane.yAxis, -1.25 * module_->value()), plane.yAxis, -rim_->value());
+    }
+    const sketch::Vec3 onTooth = moved(origin, plane.xAxis, type_->currentIndex() == 2 ? 0.0 : pitchRadius);
+    if (key == "baseChamfer") {
+        return arrowAlong(onTooth, plane.normal, (thickness_->value() < 0.0 ? -1.0 : 1.0) * baseChamfer_->value());
+    }
+    if (key == "herringboneGroove") {
+        return arrowAlong(moved(onTooth, plane.normal, thickness_->value() / 2.0 - groove_->value() / 2.0), plane.normal, groove_->value());
+    }
     if (type_->currentIndex() == 3) {
         if (key == "wormDiameter") {
             return arrowAlong(moved(origin, plane.xAxis, -wormDiameter_->value() / 2.0), plane.xAxis, wormDiameter_->value());
@@ -1128,6 +1162,12 @@ void CylinderTool::createFields(QFormLayout* form)
     field("diameter", diameter_);
     height_ = lengthBox(original != nullptr ? original->height : 10.0);
     field("height", height_);
+    baseRound_ = lengthBox(original != nullptr ? original->baseRound : 0.0);
+    baseRound_->setMinimum(0.0);
+    field("baseRound", baseRound_);
+    topChamfer_ = lengthBox(original != nullptr ? original->topChamfer : 0.0);
+    topChamfer_->setMinimum(0.0);
+    field("topChamfer", topChamfer_);
     symmetric_ = new QCheckBox(QStringLiteral("Alto repartido a los dos lados del plano"));
     symmetric_->setChecked(original != nullptr && original->symmetric);
     operation_ = combo({QStringLiteral("Cuerpo nuevo"), QStringLiteral("Unir"), QStringLiteral("Cortar"), QStringLiteral("Intersecar")});
@@ -1135,9 +1175,11 @@ void CylinderTool::createFields(QFormLayout* form)
     form->addRow(QStringLiteral("Posición Z"), z_);
     form->addRow(QStringLiteral("Diámetro"), diameter_);
     form->addRow(QStringLiteral("Alto (±)"), height_);
+    form->addRow(QStringLiteral("Redondeo de la base"), baseRound_);
+    form->addRow(QStringLiteral("Chaflán de arriba"), topChamfer_);
     form->addRow(QString(), symmetric_);
     form->addRow(QStringLiteral("Operación"), operation_);
-    for (QDoubleSpinBox* box : {z_, diameter_, height_}) {
+    for (QDoubleSpinBox* box : {z_, diameter_, height_, baseRound_, topChamfer_}) {
         connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
     }
     connect(symmetric_, &QCheckBox::toggled, this, [this] { updatePreview(); });
@@ -1163,6 +1205,8 @@ std::unique_ptr<document::Feature> CylinderTool::build() const
     f->z = z_->value();
     f->diameter = diameter_->value();
     f->height = height_->value();
+    f->baseRound = baseRound_->value();
+    f->topChamfer = topChamfer_->value();
     f->symmetric = symmetric_->isChecked();
     f->operation = primitiveOperation(operation_->currentIndex());
     return f;
@@ -1185,6 +1229,15 @@ std::optional<FeatureTool::Arrow> CylinderTool::dimensionArrow(const std::string
     }
     if (key == "height") {
         return arrowAlong(center, plane.normal, height);
+    }
+    // El redondeo sube desde el borde de la base; el chaflán baja desde el borde de arriba.
+    const double up = height < 0.0 ? -1.0 : 1.0;
+    const sketch::Vec3 side = moved(center, plane.xAxis, diameter_->value() / 2.0);
+    if (key == "baseRound") {
+        return arrowAlong(side, plane.normal, up * baseRound_->value());
+    }
+    if (key == "topChamfer") {
+        return arrowAlong(moved(side, plane.normal, height), plane.normal, -up * topChamfer_->value());
     }
     return std::nullopt;
 }

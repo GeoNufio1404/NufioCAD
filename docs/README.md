@@ -39,7 +39,8 @@ docs/
 │   └── mediciones.md          tiempos medidos (Debug y Release, Fedora y Windows)
 └── auditorias/
     ├── auditoria-2.md         segunda auditoría (6 nov. 2026)
-    └── auditoria-3-fluidez.md tercera auditoría: que la ventana no se congele (16 nov. 2026)
+    ├── auditoria-3-fluidez.md tercera auditoría: que la ventana no se congele (16 nov. 2026)
+    └── auditoria-4-rendimiento-consistencia.md cuarta: el bote, las flechas y editar sin perder nada (25 nov. 2026)
 ```
 
 ## Convenciones

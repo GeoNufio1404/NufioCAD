@@ -296,6 +296,7 @@ public:
     double height = 10.0;
     bool symmetric = false;
     double baseRound = 0.0;  // redondea el borde de la base (el círculo del plano): al cortarlo, deja el fondo redondeado
+    double topChamfer = 0.0;  // chaflán a 45° en el borde de arriba: al cortarlo, deja un hombro cónico que se imprime sin soportes
     Operation operation = Operation::NewBody;
 
     FeatureKind kind() const override { return FeatureKind::Cylinder; }

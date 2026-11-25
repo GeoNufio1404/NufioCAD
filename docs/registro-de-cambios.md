@@ -10,6 +10,19 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Auditoría 4: rendimiento, fiabilidad y consistencia (25 nov. 2026)
+
+Detalle y medidas en [`auditorias/auditoria-4-rendimiento-consistencia.md`](auditorias/auditoria-4-rendimiento-consistencia.md).
+
+- **El bote de rosca salía macizo y tardaba 5,3 s:** ahora sale hueco, con un hombro a 45° y en 0,83 s. La causa (`touches`, en `Modeling.cpp`) afectaba a cualquier operación con una rosca y a cualquier hueco cerrado. El chaflán de entrada de las roscas se hace en la propia superficie (5 ms en vez de 623).
+- **Editar no desliga de los parámetros** (`ExpressionSpinBox`) ni pierde campos (`FeatureTool::make`, Cilindro y Rosca con sus campos completos; `CylinderFeature::topChamfer` nuevo, se guarda en el archivo).
+- **Flechas en todas las medidas** (`Generator::ArrowSpec` con puntos del diseño, `GeneratorTool::dimensionArrow`; Engranaje, Dividir, Agujero, Redondeo, Cilindro y Rosca).
+- **Herramientas:** `leaveViewport` al cerrar; el sufijo de parámetros se busca en el hilo de trabajo; los cuerpos fijos no se pierden al aceptar; el bote avisa de las medidas imposibles.
+- **Pruebas:** `tests/test_generators_audit.cpp` y tres pasos en la prueba de interfaz (65 en total). La comprobación de las flechas con foco se omite, y lo dice, si Windows no da el primer plano a la ventana.
+- **Volver atrás:** revertir la fusión de `feature/auditoria-rendimiento-consistencia`.
+
+---
+
 ## Segunda tanda de ajustes: menú Sólido, grada de la bayoneta y sombra al colocar (25 nov. 2026)
 
 - **Menú «Sólido» de la barra superior en submenús** (`MainWindowMenus.cpp`): Crear, Modificar, Organizar, Construir e Inspeccionar, en vez de treinta entradas seguidas. Las acciones y sus atajos son los mismos.

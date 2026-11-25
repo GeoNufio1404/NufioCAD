@@ -166,14 +166,14 @@ std::optional<std::string> CylinderFeature::compute(ModelState& state) const
     try {
         const sketch::Plane at = primitivePlane(plane, x, y, z, symmetric, height);
         geometry::Shape cylinder = geometry::cylinder(tag(), at, diameter, height);
-        if (baseRound > 1e-9) {
-            // El borde de la base: la arista circular cuyo centro está en el origen del plano de la base.
+        // Un borde del cilindro: la arista circular con el centro a «along» de la base.
+        const auto rim = [&](double along) {
+            const sketch::Vec3 target{at.origin.x + at.normal.x * along, at.origin.y + at.normal.y * along, at.origin.z + at.normal.z * along};
             std::optional<int> edge;
             double best = 1e-6;
             for (int i = 0; i < cylinder.edgeCount(); ++i) {
                 if (const auto frame = cylinder.edgeFrame(i)) {
-                    const double dx = frame->origin.x - at.origin.x, dy = frame->origin.y - at.origin.y,
-                                 dz = frame->origin.z - at.origin.z;
+                    const double dx = frame->origin.x - target.x, dy = frame->origin.y - target.y, dz = frame->origin.z - target.z;
                     const double distance = std::sqrt(dx * dx + dy * dy + dz * dz);
                     if (distance < best && frame->kind == geometry::Frame::Kind::Axis) {
                         best = distance;
@@ -181,8 +181,17 @@ std::optional<std::string> CylinderFeature::compute(ModelState& state) const
                     }
                 }
             }
-            if (edge) {
-                cylinder = geometry::fillet(tag(), cylinder, {*edge}, std::min(baseRound, std::min(diameter, std::abs(height)) / 2.0 - 0.01));
+            return edge;
+        };
+        const double most = std::min(diameter, std::abs(height)) / 2.0 - 0.01;
+        if (baseRound > 1e-9) {
+            if (const auto edge = rim(0.0)) {
+                cylinder = geometry::fillet(tag(), cylinder, {*edge}, std::min(baseRound, most));
+            }
+        }
+        if (topChamfer > 1e-9) {
+            if (const auto edge = rim(height)) {
+                cylinder = geometry::chamfer(tag(), cylinder, {*edge}, std::min(topChamfer, most));
             }
         }
         if (auto extra = applyOperation(state, *this, operation, cylinder)) {
@@ -205,7 +214,7 @@ std::vector<Feature::NumericField> CylinderFeature::numericFields()
 {
     return {field("x", "Posición X", x), field("y", "Posición Y", y), field("z", "Posición Z", z),
             field("diameter", "Diámetro", diameter), field("height", "Alto", height),
-            field("baseRound", "Redondeo de la base", baseRound)};
+            field("baseRound", "Redondeo de la base", baseRound), field("topChamfer", "Chaflán de arriba", topChamfer)};
 }
 
 // --- Engranaje -----------------------------------------------------------------

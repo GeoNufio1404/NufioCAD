@@ -1093,7 +1093,9 @@ namespace nuf::app {
 
 std::optional<FeatureTool::Arrow> EdgeTool::dimensionArrow(const std::string& key) const
 {
-    if (key != "size" || edges_.empty()) {
+    // Radio o distancia, la segunda (o el radio del final) y el del medio: todas salen de la arista hacia dentro.
+    const QDoubleSpinBox* measure = key == "size" ? size_ : key == "size2" ? size2_ : key == "middle" ? middle_ : nullptr;
+    if (measure == nullptr || edges_.empty()) {
         return std::nullopt;
     }
     const auto hit = before().findEdge(edges_.front());
@@ -1116,7 +1118,7 @@ std::optional<FeatureTool::Arrow> EdgeTool::dimensionArrow(const std::string& ke
     if (length < 1e-9) {
         return std::nullopt;
     }
-    return arrowAlong(line->first, {v.x / length, v.y / length, v.z / length}, size_->value());
+    return arrowAlong(line->first, {v.x / length, v.y / length, v.z / length}, measure->value());
 }
 
 std::optional<FeatureTool::Arrow> ShellTool::dimensionArrow(const std::string& key) const
@@ -1140,6 +1142,28 @@ std::optional<FeatureTool::Arrow> ShellTool::dimensionArrow(const std::string& k
 
 std::optional<FeatureTool::Arrow> HoleTool::dimensionArrow(const std::string& key) const
 {
+    if (faceMode()) {
+        // Sobre una cara: el agujero entra por el punto elegido, hacia dentro de la pieza.
+        if (key == "x" || key == "y") {
+            return placementArrow(placement_, key);
+        }
+        const sketch::Plane face = document::attachmentPlane(before(), placementAttachment(placement_));
+        const sketch::Vec3 c = face.toWorld({placement_.x->value(), placement_.y->value()});
+        const double side = flip_->isChecked() ? 1.0 : -1.0;
+        const auto across = [&](const QDoubleSpinBox* box) {
+            return arrowAlong(moved(c, face.xAxis, -box->value() / 2.0), face.xAxis, box->value());
+        };
+        if (key == "diameter") {
+            return across(diameter_);
+        }
+        if (key == "headDiameter") {
+            return across(headDiameter_);
+        }
+        if (key == "depth" || key == "headDepth") {
+            return arrowAlong(c, face.normal, side * (key == "depth" ? depth_ : headDepth_)->value());
+        }
+        return std::nullopt;
+    }
     const auto out = before().sketches.find(sketch_);
     if (out == before().sketches.end()) {
         return std::nullopt;

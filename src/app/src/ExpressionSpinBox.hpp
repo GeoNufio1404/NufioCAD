@@ -31,7 +31,7 @@ public:
     static void setDocument(const document::Document* document);
 
     // La expresión que dio el valor actual; vacía si es un número a secas.
-    QString expression() const { return expression_; }
+    QString expression() const { return matches(value()) ? expression_ : QString(); }
     // Cuadro de longitud: el valor (value(), el mínimo y el máximo) está siempre en milímetros, pero se
     // muestra y se escribe en la unidad elegida en Configuración; un número a secas se entiende en esa unidad.
     void setLength(bool on);
@@ -45,6 +45,9 @@ public:
     void stepBy(int steps) override;
 
 private:
+    // ¿Es «v» el valor que dio la expresión? (con la precisión del cuadro)
+    bool matches(double v) const;
+
     bool length_ = false;
     mutable QString expression_;
     mutable double expressionValue_ = 0.0;

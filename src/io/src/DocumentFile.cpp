@@ -637,6 +637,7 @@ FeatureRow rowOf(const Feature& f)
         row.type = "cylinder";
         params = {{"base", toJson(c.base)}, {"x", c.x}, {"y", c.y}, {"z", c.z}, {"diameter", c.diameter},
                   {"height", c.height}, {"symmetric", c.symmetric}, {"baseRound", c.baseRound},
+                  {"topChamfer", c.topChamfer},
                   {"operation", nameOf(kOperations, c.operation)}};
         break;
     }
@@ -944,6 +945,7 @@ std::unique_ptr<Feature> featureOf(const FeatureRow& row, const NufFile& file)
         c->height = number(p, "height");
         c->symmetric = p.at("symmetric").get<bool>();
         c->baseRound = p.value("baseRound", 0.0);
+        c->topChamfer = p.value("topChamfer", 0.0);
         c->operation = parseEnum(kOperations, text(p, "operation"), "operación");
         feature = std::move(c);
     } else if (row.type == "thread") {

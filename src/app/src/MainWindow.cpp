@@ -989,6 +989,7 @@ void MainWindow::finishTool(bool accepted)
     propertiesDock_->setWidget(propertiesPlaceholder_);
     propertiesDock_->setFloating(false);
     propertiesDock_->hide();  // como los diálogos de Fusion: solo mientras hay un comando
+    tool_->leaveViewport();
     tool_.release()->deleteLater();
     updateStartCard();
     timeline_->setEditing(std::nullopt);
