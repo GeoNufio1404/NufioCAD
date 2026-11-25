@@ -1,7 +1,7 @@
 # NufioCAD
 
 CAD paramétrico de escritorio para **Windows y Linux**: **offline**, con **archivos locales privados** y la facilidad de
-uso de **Fusion 360** como meta. Pensado para diseñar piezas e imprimirlas en 3D.
+uso de **Fusion 360** como meta. Para diseñar piezas y modelos 3D: para imprimirlos, fabricarlos o lo que necesites.
 
 > **NufioCAD** es el nombre de trabajo. En el código se usa el prefijo `nuf` (espacio de nombres `nuf::`, bibliotecas
 > `nuf::<módulo>`), igual que la extensión de los diseños, `.nuf`.
@@ -27,7 +27,7 @@ flowchart LR
 - **Más:** planos y ejes de construcción, mover y girar cuerpos con el ratón, uniones, medir, sección, revisión para
   imprimir, roscas, engranajes, unidades mm/cm/m/in, temas claro y oscuro, copia de recuperación.
 
-**Estado:** versión **0.2.1** (25 nov. 2026; el instalador de la Release es el de la 0.2.0 hasta que se publique). Instalador y ZIP para Windows en las [Releases](https://github.com/GeoNufio1404/NufioCAD/releases); Fedora por probar; el trabajo sigue en la rama `develop`. Lo
+**Estado:** versión **0.2.1** (25 nov. 2026). Instalador y ZIP para Windows en las [Releases](https://github.com/GeoNufio1404/NufioCAD/releases); Fedora por probar; el trabajo sigue en la rama `develop`. Lo
 hecho y lo que falta: [hoja de ruta](docs/hoja-de-ruta.md).
 
 ## Con qué está hecho

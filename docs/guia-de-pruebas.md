@@ -132,7 +132,7 @@ Código: **UNI**.
 | UNI.1 | Abre Sólido › Rosca y mira Diámetro, Paso y Largo | El «mm» sale como una etiqueta gris a la derecha del número, junto a las flechas; el número va solo |
 | UNI.2 | Haz doble clic en el valor de un cuadro o pulsa Ctrl+A dentro | Solo se selecciona el número, no el «mm» |
 | UNI.3 | Escribe `10` y Enter; luego `diametro*2` con un parámetro; luego `5 mm` | Las tres se aceptan |
-| UNI.4 | Revisa Sección, Exportar/Imprimir (impresora) y la altura del texto del sketch | También con la unidad como etiqueta |
+| UNI.4 | Revisa Sección, Imprimir (impresora) y la altura del texto del sketch | También con la unidad como etiqueta |
 
 #### 1.3.2 Unidades de longitud
 
@@ -200,18 +200,20 @@ Código: **ARC**. Las pruebas **31–38** están en la hoja de ruta («Pruebas m
 
 **Fíjate en:** ¿los mensajes de error al abrir un archivo malo son comprensibles? ¿Alguna vez pierdes trabajo?
 
-#### 1.7.2 Revisión para imprimir (Exportar)
+#### 1.7.2 Revisión para imprimir (Imprimir)
+
+Desde la v0.2.1 la revisión y «Mi impresora» están solo en **Archivo › Imprimir…**; Exportar no habla de impresión (ARC.23).
 
 | ID | Haz esto | Debe pasar |
 |---|---|---|
-| ARC.6 | Archivo › **Exportar** con una pieza normal, formato STL | Debajo del resumen de triángulos aparece «✓ Todo en orden para imprimir con tu impresora» |
-| ARC.7 | Hacer una extrusión de `0.3` mm de grosor y exportar | Aviso naranja «Pared de 0.30 mm … más fina que tu boquilla … no se imprimirá» |
+| ARC.6 | Archivo › **Imprimir…** con una pieza normal | Debajo del resumen de triángulos aparece «✓ Todo en orden para imprimir con tu impresora» |
+| ARC.7 | Hacer una extrusión de `0.3` mm de grosor y abrir Imprimir | Aviso naranja «Pared de 0.30 mm … más fina que tu boquilla … no se imprimirá» |
 | ARC.8 | Grosor `0.6` | Aviso de «menos de dos líneas de boquilla … saldrá débil» |
-| ARC.9 | Vaciar una caja con espesor `0.3` y exportar | Aviso de pared fina en esa pieza |
+| ARC.9 | Vaciar una caja con espesor `0.3` y abrir Imprimir | Aviso de pared fina en esa pieza |
 | ARC.10 | Dos cuerpos que se solapan (copia desplazada 15 mm de una caja de 20) | Aviso «Cuerpo1 y Cuerpo2 se solapan (… mm³)»; si los separas, desaparece |
 | ARC.11 | En «Mi impresora», poner la cama en `10 × 256 × 256` | Aviso «no cabe en tu cama» (el resumen se actualiza al cambiar el número); al volver a `256` desaparece |
 | ARC.12 | Cerrar el diálogo y abrirlo de nuevo, o reiniciar el programa | La boquilla y la cama se recuerdan |
-| ARC.13 | Cambiar el formato a STEP | La revisión y «Mi impresora» se ocultan (no es malla) |
+| ARC.13 | En Imprimir, mirar el formato | Siempre STL, y no se puede cambiar |
 | ARC.14 | Pieza con muchos detalles (engranaje de 60 dientes) | La revisión no se queda colgada (puede tardar un poco) |
 
 #### 1.7.3 Imprimir (slicer)
@@ -225,6 +227,7 @@ Código: **ARC**. Las pruebas **31–38** están en la hoja de ruta («Pruebas m
 | ARC.19 | Exporta un cubo y un par de engranajes a STL y vuelve a traer el STL con Archivo › **Importar STEP, STL u OBJ…** (o arrastrándolo a la ventana) | El cubo aparece como un cuerpo con su volumen y las caras planas; el aviso dice que se tomó en milímetros. Sobre una cara plana grande se puede hacer un sketch y cortar |
 | ARC.20 | Importa un STL con **huecos** (borra una cara en un programa de mallas) y uno de más de 30 000 triángulos | Un mensaje explica que no es hermética o que es demasiado grande; el diseño no cambia |
 | ARC.21 | Exportar con la casilla **Un archivo por componente** (con un Lightbox y un cuerpo suelto en el diseño) | Elige una carpeta; salen `Lightbox 1.stl` con la caja y la tapa juntas y un archivo aparte para el cuerpo suelto; «Un archivo por cuerpo» y esta se desmarcan entre sí |
+| ARC.23 | Archivo › **Exportar** con cualquier pieza (también una lámina de 0,3 mm) y pasa por los cuatro formatos | Ni revisión para imprimir, ni «Mi impresora», ni palabras de impresión: formato, calidad, cuerpos y triángulos. Solo sale un aviso si la malla que se va a escribir tiene un defecto (abierta, triángulos al revés o muy apartada del sólido) |
 | ARC.22 | Guarda un diseño como `uno.nuf`, y luego **Guardar como** `dos.nuf` | El título pasa a «dos» y en Recientes sale «dos»; si antes le habías puesto otro nombre (Renombrar diseño), se queda con el tuyo |
 
 **Fíjate en:** ¿los avisos se entienden sin explicación? ¿Hay falsos avisos (te avisa de una pared que no existe)? ¿Echas de menos que señale dónde está el problema en la vista? ¿Los valores de tu impresora son los correctos (anota tu modelo)?
@@ -303,7 +306,7 @@ Código: **USA**. Rama `feature/fase-15-usabilidad`.
 | USA.29 | Con la ventana a 1366 × 768 (con una herramienta abierta, que ocupa el lado derecho), mira la cinta de Sólido | Se ven **todos los grupos** (Crear, Modificar, Organizar, Construir, Generar e Inspeccionar) solo con iconos, sin el botón «Más »» |
 | USA.30 | Pon varios pasos en el historial y pulsa **▶** de la línea de tiempo; deja que llegue al final (o pulsa ⏸); luego **Ctrl+Z** | El marcador vuelve **de una vez** a donde estaba al empezar (un solo paso de Deshacer para toda la reproducción) |
 | USA.31 | Reduce la ventana a unos 560 px de alto | La barra de acceso rápido (guardar, deshacer, rehacer, nombre del diseño) **sigue a la vista**; por debajo de 520 px se esconde |
-| USA.32 | Archivo › Exportar o Imprimir: mira la sección «Mi impresora» | Los tres cuadros de la cama (X, Y, Z) tienen sitio para «256.00 mm» y sus flechas, sin apretarse |
+| USA.32 | Archivo › Imprimir: mira la sección «Mi impresora» | Los tres cuadros de la cama (X, Y, Z) tienen sitio para «256.00 mm» y sus flechas, sin apretarse |
 | FLU.32 | Herramientas › Bote con tapa (rosca) y Aceptar; justo después mira el Navegador | La ventana no se congela al aceptar; los cuerpos salen primero como «Cuerpo1», «Cuerpo2» y, en cuanto termina el cálculo, pasan a «Bote» y «Tapa» dentro del componente «Bote con tapa». Deshacer enseguida (antes de que termine) no deja nombres sueltos |
 | FLU.33 | Clic derecho en la vista, a unos píxeles del borde (arriba a la izquierda, abajo a la derecha, junto a un panel) | El centro del menú radial queda justo bajo el cursor, sin correrse; solo se corre si no cabe en la pantalla |
 | FLU.31 | Diseño con piezas grandes: Archivo › Exportar › STL y, con la insignia «ocupado» visible, pulsa su botón Cancelar | La exportación se para, sale «Cancelado: el diseño no cambió», no queda archivo a medias y el diseño sigue igual |
@@ -738,7 +741,7 @@ Código: **GEN**.
 | MOD.9 | Sólido › **Dividir cuerpo**: elige una caja, el plano YZ y una posición de 5 | La caja se parte en dos cuerpos (el original y «Parte 1»); cambiar la posición los rehace; un plano que no la atraviesa da un error claro |
 | MOD.10 | Sólido › Barrido con «Escala al final» 0,5 | El perfil se va afinando a lo largo de la trayectoria hasta la mitad de su tamaño |
 | MOD.11 | Sólido › Medir: elige dos caras | Además del panel, se dibuja en la vista la línea de la distancia más corta entre ellas |
-| MOD.12 | Exportar o Imprimir un cuerpo con una pieza en voladizo (un escalón ancho sobre una base estrecha) | La revisión de abajo avisa de «cm² de voladizo» y de que necesitará soportes o girar la pieza |
+| MOD.12 | Imprimir (Ctrl+P) un cuerpo con una pieza en voladizo (un escalón ancho sobre una base estrecha) | La revisión de abajo avisa de «cm² de voladizo» y de que necesitará soportes o girar la pieza |
 | MOD.13 | Exportar › Calidad de malla **Personalizada…** | Salen dos casillas (desviación y giro máximos); al bajar la desviación sube el número de triángulos; se acuerdan |
 | MOD.14 | Guarda un diseño con la vista girada y con zoom, ciérralo y ábrelo | Se abre mirando igual que cuando lo guardaste (sin «encuadrar todo»); un diseño anterior se abre encuadrado como siempre |
 | MOD.15 | Importa un STEP, cámbialo en tu programa de CAD y usa Archivo › **Actualizar importación desde su archivo…** | El sólido se sustituye por el nuevo, lo que hiciste encima se rehace solo y se puede deshacer; si el archivo ya no está en la ruta, te pregunta dónde está |
@@ -873,7 +876,7 @@ Código: **INS**.
 | INS.9 | Cambiar de plano XY / XZ / YZ | El corte vuelve al centro de la pieza en ese eje |
 | INS.10 | «Ver el otro lado» | Se ve la mitad contraria |
 | INS.11 | Esc, o iniciar un sketch | La pieza vuelve entera; el modelo no cambió |
-| INS.12 | Una lámina fina (por ejemplo, una caja de 20 × 10 × 0,3) → Archivo › **Imprimir…** (o Exportar) y mira el aviso de la pared | El aviso «Pared de 0,3 mm…» lleva el enlace **«ver en la vista»**; al pulsarlo, se dibuja en azul el contorno de las dos caras de la pared sobre el modelo (mueve el diálogo si lo tapa). Al cerrar el diálogo se quita |
+| INS.12 | Una lámina fina (por ejemplo, una caja de 20 × 10 × 0,3) → Archivo › **Imprimir…** y mira el aviso de la pared | El aviso «Pared de 0,3 mm…» lleva el enlace **«ver en la vista»**; al pulsarlo, se dibuja en azul el contorno de las dos caras de la pared sobre el modelo (mueve el diálogo si lo tapa). Al cerrar el diálogo se quita |
 | INS.13 | Sólido › **Medir** sobre una cara circular o dos caras (con el idioma del sistema en español) | Los números del panel salen con **coma** decimal («12,50 mm²») y Ctrl+C copia lo mismo |
 
 ---
@@ -894,7 +897,7 @@ Código: **LIG**.
 | LIG.6 | Sólido › Parámetros | Aparecen ancho, alto, profundidad, pared, frente, tapa, labio, holgura y cable; al cambiar uno, todo se recalcula |
 | LIG.7 | Ctrl+Z | Desaparece todo de una vez (operaciones, parámetros y componente) |
 | LIG.8 | Genera un segundo Lightbox | Sus parámetros salen como ancho_2, alto_2… y no pisan los del primero |
-| LIG.9 | Exporta o imprime los dos cuerpos | La revisión no avisa de paredes finas con los valores por defecto |
+| LIG.9 | Abre Imprimir con los dos cuerpos | La revisión no avisa de paredes finas con los valores por defecto |
 | LIG.10 | Sólido › Caja / Cilindro | Primitivas con posición, centradas o no, con alto ± y operación; doble clic en una operación «Lightbox: …» del historial abre su panel |
 | LIG.11 | Compara con tus lightboxes de referencia (Illescas, Aguilar) | Las medidas son las de `docs/generadores.md`: 175 × 131 × 37 con pared 2; para igualar la de Illescas pon ancho 174,664, alto 132,036, profundidad 37 y holgura 0 |
 | LIG.12 | Aceptar y selecciona la tapa en el Navegador o con un clic en ella | Se marca **toda** la tapa (placa y labio) como un solo cuerpo; no hay marco, labio ni cara sueltos |
@@ -1082,7 +1085,7 @@ Fase 13, F2. Todas estas acciones ya no deben dejar la ventana sin responder. Us
 | FLU.1 | Archivo › Exportar, STL, calidad Alta; mientras escribe, gira la vista y mueve el ratón | La ventana responde; la barra dice «Exportando a …» y al terminar «Exportado a …». El archivo abre bien en el slicer |
 | FLU.2 | Lanza una exportación y, sin esperar, otra | La segunda dice «Ya se está exportando; espera a que termine» |
 | FLU.3 | Abre Exportar con varios cuerpos; marca y desmarca cuerpos y cambia la calidad (Baja, Media, Alta) | Aparece «Contando los triángulos…» y luego «Unos N triángulos». Marcar y desmarcar no congela el diálogo; repetir una combinación ya contada es instantáneo |
-| FLU.4 | En ese diálogo, cambia la boquilla o la cama | «Revisando la pieza para imprimir…» y después el resultado, sin congelar |
+| FLU.4 | En Archivo › Imprimir, cambia la boquilla o la cama | «Revisando la pieza para imprimir…» y después el resultado, sin congelar |
 | FLU.5 | Archivo › Imprimir con un slicer configurado | «Preparando el STL para el slicer…» y luego se abre el slicer con el archivo |
 | FLU.6 | Importa un STEP grande (de otro programa); mientras importa, mueve la vista | La ventana responde y dice «Importando …»; al terminar aparece la ficha «Importación» y el cuerpo, igual que antes |
 | FLU.7 | Importa un STEP y, antes de que termine, abre otro diseño (Archivo › Nuevo o Abrir) | Al terminar avisa «Se descartó la importación…» y no añade nada al diseño nuevo. Otra prueba: con un sketch abierto al terminar, avisa que lo cierres y vuelvas a importar |

@@ -38,10 +38,11 @@ ExportDialog::ExportDialog(const std::vector<document::Body>& bodies, const std:
     setMinimumWidth(380);
 
     format_ = new QComboBox(this);
-    format_->addItem(QStringLiteral("STL — malla para imprimir (.stl)"), int(Format::Stl));
+    // Los nombres de los formatos no hablan de impresión: sirven igual para intercambiar modelos.
+    format_->addItem(QStringLiteral("STL — malla (.stl)"), int(Format::Stl));
     format_->addItem(QStringLiteral("OBJ — malla (.obj)"), int(Format::Obj));
     format_->addItem(QStringLiteral("STEP — sólido exacto (.step)"), int(Format::Step));
-    format_->addItem(QStringLiteral("3MF — varios cuerpos con color por filamento (.3mf)"), int(Format::ThreeMf));
+    format_->addItem(QStringLiteral("3MF — malla con varios cuerpos y colores (.3mf)"), int(Format::ThreeMf));
 
     quality_ = new QComboBox(this);
     quality_->addItem(QStringLiteral("Baja (rápida, facetada)"));
@@ -339,10 +340,13 @@ void ExportDialog::runReview()
     auto review = std::make_shared<Review>();
     const geometry::PrintSettings settings = printSettings();
     const geometry::MeshQuality meshQuality = quality();
+    const bool printing = mode_ == Mode::Print;
     reviewRun_.start(
-        [review, chosen = std::move(chosen), settings, meshQuality] {
+        [review, chosen = std::move(chosen), settings, meshQuality, printing] {
             try {
-                review->issues = geometry::checkPrintable(chosen, settings);
+                if (printing) {
+                    review->issues = geometry::checkPrintable(chosen, settings);
+                }
                 // La malla que saldría con la calidad elegida: cerrada, bien orientada y fiel al sólido.
                 for (const auto& [name, shape] : chosen) {
                     const geometry::MeshReport mesh = geometry::analyzeMesh(shape, meshQuality);
@@ -350,7 +354,7 @@ void ExportDialog::runReview()
                     const std::string label = "«" + name + "»: ";
                     if (mesh.openEdges > 0) {
                         review->issues.push_back({Level::Error, label + "la malla queda abierta (" + std::to_string(mesh.openEdges) +
-                                                                    " bordes sin pareja): el slicer puede decir que no es estanca"});
+                                                                    " bordes sin pareja)" + (printing ? ": el slicer puede decir que no es estanca" : ": otros programas pueden no leerla como un sólido")});
                     }
                     if (mesh.nonManifoldEdges > 0) {
                         review->issues.push_back({Level::Warning, label + "la malla tiene " + std::to_string(mesh.nonManifoldEdges) +
@@ -360,7 +364,7 @@ void ExportDialog::runReview()
                         review->issues.push_back({Level::Warning, label + "hay triángulos orientados al revés (" +
                                                                       std::to_string(mesh.flippedEdges) + " bordes)"});
                     }
-                    if (mesh.degenerateTriangles > 0) {
+                    if (printing && mesh.degenerateTriangles > 0) {
                         review->issues.push_back({Level::Info, label + std::to_string(mesh.degenerateTriangles) +
                                                                    " triángulos casi sin área (el slicer los ignora)"});
                     }
@@ -382,6 +386,14 @@ void ExportDialog::runReview()
 
 void ExportDialog::showReview(const std::vector<geometry::PrintIssue>& issues, const std::string& failure)
 {
+    if (mode_ == Mode::Export) {
+        // Al exportar no se comenta la pieza: solo se avisa si la malla que va a salir tiene algún defecto.
+        review_->setVisible(!issues.empty());
+        if (issues.empty()) {
+            review_->clear();
+            return;
+        }
+    }
     if (!failure.empty()) {
         review_->setText(QStringLiteral("<span style='color:%1'>No se pudo revisar la pieza: %2</span>")
                              .arg(toneColor(Tone::Warning), QString::fromStdString(failure).toHtmlEscaped()));
@@ -488,10 +500,16 @@ void ExportDialog::updateSummary()
     const std::size_t count = selected().size();
     const bool mesh = format() != Format::Step;
     quality_->setEnabled(mesh);
-    review_->setVisible(mesh && count > 0);
-    printer_->setVisible(mesh);
+    const bool printing = mode_ == Mode::Print;
+    review_->setVisible(printing && count > 0);
+    printer_->setVisible(printing);
+    if (!mesh) {
+        review_->clear();
+        reviewRun_.cancel();
+        reviewTimer_->stop();
+    }
     if (mesh && count > 0) {
-        review_->setText(QStringLiteral("Revisando la pieza para imprimir…"));
+        review_->setText(printing ? QStringLiteral("Revisando la pieza para imprimir…") : QString());
         reviewRun_.cancel();  // lo que estuviera revisándose ya no vale
         reviewTimer_->start();
     }

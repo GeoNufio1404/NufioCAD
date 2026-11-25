@@ -42,6 +42,7 @@
 #include <QAbstractScrollArea>
 #include <QKeyEvent>
 #include <QScrollBar>
+#include <QGroupBox>
 #include <QLabel>
 #include <QDockWidget>
 #include <QRegularExpression>
@@ -2855,7 +2856,49 @@ int InterfaceCheck::run()
         }
         std::unique_ptr<ExportDialog> dialog;
         timed(QStringLiteral("abrir el diálogo"), [&] { dialog = std::make_unique<ExportDialog>(bodies, keys, &window_); });
-        // El conteo de triángulos y la revisión para imprimir corren en segundo plano: se espera a que terminen.
+        // Exportar no habla de impresión 3D (hay quien solo modela); Imprimir conserva su revisión y «Mi impresora».
+        const auto printWords = [](QDialog& shown) {
+            QStringList found;
+            const auto look = [&](const QString& text) {
+                for (const char* word : {"imprim", "impres", "slicer", "boquilla", "filamento", "voladizo", "cama x"}) {
+                    if (text.contains(QString::fromUtf8(word), Qt::CaseInsensitive)) {
+                        found << text;
+                        break;
+                    }
+                }
+            };
+            for (const QLabel* label : shown.findChildren<QLabel*>()) {
+                if (label->isVisibleTo(&shown)) {
+                    look(label->text());
+                }
+            }
+            for (const QGroupBox* box : shown.findChildren<QGroupBox*>()) {
+                if (box->isVisibleTo(&shown)) {
+                    look(box->title());
+                }
+            }
+            for (const QComboBox* combo : shown.findChildren<QComboBox*>()) {
+                for (int i = 0; i < combo->count(); ++i) {
+                    look(combo->itemText(i));
+                }
+            }
+            for (const QWidget* widget : shown.findChildren<QWidget*>()) {
+                if (widget->isVisibleTo(&shown)) {
+                    look(widget->toolTip());
+                }
+            }
+            return found;
+        };
+        const auto noPrinting = [&](const QString& when) {
+            const QStringList found = printWords(*dialog);
+            expect(found.isEmpty(), QStringLiteral("Exportar habla de impresión (%1): %2").arg(when, found.join(QStringLiteral(" / "))));
+        };
+        noPrinting(QStringLiteral("al abrir"));
+        {
+            ExportDialog print(bodies, keys, &window_, ExportDialog::Mode::Print);
+            expect(!printWords(print).isEmpty(), QStringLiteral("Imprimir perdió su revisión y su impresora"));
+        }
+        // El conteo de triángulos y la revisión de la malla corren en segundo plano: se espera a que terminen.
         const auto working = [&] {
             for (const QLabel* label : dialog->findChildren<QLabel*>()) {
                 if (label->text().startsWith(QStringLiteral("Contando")) || label->text().startsWith(QStringLiteral("Revisando"))) {
@@ -2873,6 +2916,8 @@ int InterfaceCheck::run()
             note(QStringLiteral("%1 listo en %2 ms").arg(what).arg(total.elapsed()));
         };
         finishWork(QStringLiteral("el conteo y la revisión iniciales"));
+        settle(1500);  // la revisión espera 250 ms y llega después: sus textos tampoco pueden hablar de impresión
+        noPrinting(QStringLiteral("tras revisar la malla"));
         if (QListWidget* list = dialog->findChild<QListWidget*>()) {
             for (int row = 0; row < list->count(); ++row) {
                 timed(QStringLiteral("quitar la marca de un cuerpo"), [&] { list->item(row)->setCheckState(Qt::Unchecked); });
@@ -2888,6 +2933,14 @@ int InterfaceCheck::run()
                 finishWork(QStringLiteral("el conteo en calidad Alta"));
                 timed(QStringLiteral("calidad Baja"), [&] { combo->setCurrentIndex(0); });
                 finishWork(QStringLiteral("el conteo en calidad Baja"));
+            }
+        }
+        for (QComboBox* combo : dialog->findChildren<QComboBox*>()) {
+            if (combo->itemText(0).startsWith(QStringLiteral("STL"))) {
+                for (int i = 0; i < combo->count(); ++i) {
+                    timed(QStringLiteral("cambiar el formato"), [&] { combo->setCurrentIndex(i); });
+                    noPrinting(combo->itemText(i));
+                }
             }
         }
         dialog.reset();
