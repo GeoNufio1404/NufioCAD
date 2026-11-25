@@ -61,6 +61,7 @@ FeatureTool::~FeatureTool()
     viewport_.hideDistanceHandle();
     viewport_.hideDimensionArrow();
     if (movable_ != nullptr) {
+        viewport_.hideGhost();
         viewport_.hideGizmo();
     }
     viewport_.setAdditiveSelection(false);
@@ -309,6 +310,14 @@ void FeatureTool::createPlacement(QFormLayout* form, Placement& p, const documen
         dragStartX_ = movable_->x->value();
         dragStartY_ = movable_->y->value();
         viewport_.isolateGizmo(axis);  // la otra flecha se quita mientras se arrastra esta
+        // Lo nuevo se quita de su sitio de antes y queda su sombra, que es lo que sigue al arrastrar: así se ve dónde caerá
+        // sin esperar a que se vuelva a calcular (un engranaje tarda).
+        previewRun_.cancel();
+        emit computingChanged(false);
+        viewport_.showBodies(before().bodies);
+        viewport_.clearToolPreview();
+        viewport_.showGhost(previewShapes_);
+        viewport_.setGhostMotion({0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0});
     });
     connect(&viewport_, &render::Viewport::gizmoDragged, this, [this](int axis, double amount) {
         if (!placementDragging_ || movable_ == nullptr || axis < 0 || axis > 1) {
@@ -319,7 +328,13 @@ void FeatureTool::createPlacement(QFormLayout* form, Placement& p, const documen
         const double step = Units::instance().factor();
         const double raw = (axis == 0 ? dragStartX_ : dragStartY_) + amount;
         const double value = grid ? std::round(raw / step) * step : std::round(raw * 100.0) / 100.0;
-        (axis == 0 ? movable_->x : movable_->y)->setValue(value);
+        {
+            // Sin recalcular la vista previa a cada paso: solo se mueve la sombra; el cálculo es al soltar.
+            const QSignalBlocker block(axis == 0 ? movable_->x : movable_->y);
+            (axis == 0 ? movable_->x : movable_->y)->setValue(value);
+        }
+        viewport_.setGhostMotion({0.0, 0.0, 0.0}, {0.0, 0.0, 0.0},
+                                 {movable_->x->value() - dragStartX_, movable_->y->value() - dragStartY_, 0.0});
         emit message(QStringLiteral("Colocar en %1: %2").arg(QString(QLatin1Char("XY"[axis])), Units::instance().formatWithUnit(value)));
     });
     connect(&viewport_, &render::Viewport::gizmoReleased, this, [this](int) {
@@ -327,7 +342,9 @@ void FeatureTool::createPlacement(QFormLayout* form, Placement& p, const documen
             return;
         }
         placementDragging_ = false;
+        viewport_.hideGhost();
         viewport_.isolateGizmo(-1);
+        updatePreview();  // el cuerpo vuelve a dibujarse en su nueva posición
         syncPlacementGizmo();
     });
 }
@@ -506,6 +523,20 @@ void FeatureTool::updatePreview()
 
 void FeatureTool::showPreview(const document::Feature& feature, const document::Preview& result, const geometry::Shape& tool)
 {
+    if (placementDragging_) {
+        return;  // se arrastra una flecha: manda la sombra
+    }
+    // Lo que esta vista previa trae de nuevo (para la sombra al arrastrar las flechas de colocación).
+    previewShapes_.clear();
+    for (const document::Body& body : result.state.bodies) {
+        const bool known = std::ranges::any_of(before().bodies, [&](const document::Body& other) { return other.key == body.key; });
+        if (!known && !body.shape.isNull()) {
+            previewShapes_.push_back(body.shape);
+        }
+    }
+    if (previewShapes_.empty() && !tool.isNull()) {
+        previewShapes_.push_back(tool);
+    }
     viewport_.showBodies(result.state.bodies);
     showPlanes(viewport_, document_, result.state, &feature);
 

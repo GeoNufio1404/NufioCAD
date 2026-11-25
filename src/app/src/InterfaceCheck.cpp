@@ -1249,6 +1249,33 @@ int InterfaceCheck::run()
         }
     }
 
+    // Colocar un cuerpo nuevo arrastrando las flechas X e Y: la posición cambia al arrastrar (con la sombra siguiendo, sin
+    // recalcular), y al soltar el cuerpo se calcula en su sitio nuevo.
+    step(QStringLiteral("Colocar un engranaje arrastrando las flechas"), [&] {
+        blocking(QStringLiteral("abrir Engranaje"), [&] { window_.gearAction_->trigger(); });
+        waitIdle();
+        settle(200);
+        auto* tool = dynamic_cast<GearTool*>(window_.tool_.get());
+        expect(tool != nullptr, QStringLiteral("no se abrió Engranaje"));
+        if (tool == nullptr) {
+            return;
+        }
+        auto* viewport = window_.viewport_;
+        blocking(QStringLiteral("agarrar la flecha X"), [&] { emit viewport->gizmoPressed(0); });
+        blocking(QStringLiteral("arrastrar la flecha X"), [&] { emit viewport->gizmoDragged(0, 40.0); });
+        expect(std::abs(tool->placement_.x->value() - 40.0) < 0.01, QStringLiteral("la flecha X no cambió la posición X (%1)").arg(tool->placement_.x->value()));
+        blocking(QStringLiteral("arrastrar la flecha X más"), [&] { emit viewport->gizmoDragged(0, 55.0); });
+        expect(std::abs(tool->placement_.x->value() - 55.0) < 0.01, QStringLiteral("la flecha X no siguió al cursor (%1)").arg(tool->placement_.x->value()));
+        blocking(QStringLiteral("soltar la flecha"), [&] { emit viewport->gizmoReleased(0); });
+        settle(300);
+        waitIdle();
+        expect(std::abs(tool->placement_.x->value() - 55.0) < 0.01, QStringLiteral("al soltar la posición X cambió (%1)").arg(tool->placement_.x->value()));
+        expect(tool->okButton_ != nullptr && tool->okButton_->isEnabled(), QStringLiteral("tras soltar no hay vista previa válida"));
+        blocking(QStringLiteral("cancelar la herramienta"), [&] { window_.finishTool(false); });
+        waitIdle();
+        undoAll();
+    });
+
     // Redondeo: una cara elige todas sus aristas; dos caras elegidas eligen solo la arista donde se unen; quitar una vuelve
     // a las de la otra. La zona de captura de aristas es más ancha mientras la herramienta está abierta.
     step(QStringLiteral("Redondeo: dos caras eligen la arista donde se unen"), [&] {

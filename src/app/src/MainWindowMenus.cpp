@@ -405,6 +405,45 @@ void MainWindow::createMenus()
              QStringLiteral("Cortar la vista con un plano para ver el interior (no cambia el modelo)"), QStringLiteral("Sección"));
     decorate(shellAction_, QStringLiteral("shell"), QStringLiteral("Vaciar un cuerpo dejando abiertas las caras elegidas"));
 
+    // El menú Sólido en submenús por familia (eran treinta entradas seguidas). Las acciones ya existen: se sacan del menú
+    // (removeAction no las borra) y se vuelven a poner donde toca; lo que no esté en la lista queda al final.
+    {
+        const QList<QAction*> all = solidMenu->actions();
+        for (QAction* action : all) {
+            solidMenu->removeAction(action);
+        }
+        std::vector<QAction*> placed;
+        const auto group = [&](const QString& title, std::initializer_list<QAction*> actions) {
+            QMenu* sub = solidMenu->addMenu(title);
+            for (QAction* action : actions) {
+                if (action == nullptr) {
+                    sub->addSeparator();
+                } else {
+                    sub->addAction(action);
+                    placed.push_back(action);
+                }
+            }
+        };
+        group(QStringLiteral("&Crear"), {extrudeAction_, revolveAction_, sweepAction_, loftAction_, nullptr, boxAction_, cylinderAction_,
+                                         nullptr, gearAction_, threadAction_});
+        group(QStringLiteral("&Modificar"), {filletAction_, chamferAction_, shellAction_, holeAction_, nullptr, mirrorAction_,
+                                             splitAction_, patternAction_, nullptr, moveAction_, combineAction_});
+        group(QStringLiteral("&Organizar"), {organizeAction_, duplicateAction_, dragAction_, nullptr, alignAction_, jointAction_,
+                                             linkAction_});
+        group(QStringLiteral("C&onstruir"), {planeAction_, axisAction_, parametersAction_});
+        group(QStringLiteral("&Inspeccionar"), {measureAction_, sectionAction_, interferenceAction_});
+        bool separated = false;
+        for (QAction* action : all) {
+            if (std::ranges::find(placed, action) == placed.end() && !action->isSeparator()) {
+                if (!separated) {
+                    solidMenu->addSeparator();
+                    separated = true;
+                }
+                solidMenu->addAction(action);
+            }
+        }
+    }
+
     // Herramientas generadoras: hacen unas preguntas y crean un diseño normal en el historial.
     QMenu* toolsMenu = menuBar()->addMenu(QStringLiteral("&Herramientas"));
     QString currentGroup;
