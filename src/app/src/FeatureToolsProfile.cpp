@@ -595,6 +595,7 @@ EdgeTool::EdgeTool(document::Document& document, render::Viewport& viewport,
         style_ = e->kind() == document::FeatureKind::Chamfer ? Style::Chamfer : Style::Fillet;
         edges_ = e->edges;
     }
+    viewport_.setEdgeAssist(true);  // zona de captura más ancha y la arista cercana marcada en naranja
 }
 
 QString EdgeTool::title() const
@@ -679,6 +680,8 @@ void EdgeTool::createFields(QFormLayout* form)
     form->addRow(QString(), clear);
     connect(clear, &QPushButton::clicked, this, [this] {
         edges_.clear();
+        pickedFaces_.clear();
+        faceEdges_.clear();
         viewport_.clearModelSelection();
         updatePreview();
     });
@@ -689,28 +692,23 @@ void EdgeTool::selectionChanged(const render::ModelSelection& selection)
     // La lista de aristas es de la herramienta, no del visor (que redibuja el
     // resultado en cada cambio y pierde su selección): cada clic en una arista
     // la agrega o la quita, y el visor se deja sin selección.
-    // Un clic en una cara elige (o quita, si ya estaban todas) todas sus aristas (O2).
+    // Un clic en una cara la elige (o la quita si ya estaba): con una sola, sus aristas; con dos o más, las aristas que
+    // comparten, que es donde se unen (O2).
+    bool facesChanged = false;
     for (const render::ModelSelection::Face& face : selection.faces) {
-        const auto hit = before().findFace(face.ref);
-        if (!hit) {
+        if (!before().findFace(face.ref)) {
             continue;
         }
-        const geometry::Shape& shape = before().bodies[hit->body].shape;
-        std::vector<geometry::ElementRef> around;
-        for (const int edge : shape.faceEdges(hit->face)) {
-            around.push_back(shape.edgeRef(edge));
+        const auto it = std::ranges::find(pickedFaces_, face.ref);
+        if (it == pickedFaces_.end()) {
+            pickedFaces_.push_back(face.ref);
+        } else {
+            pickedFaces_.erase(it);
         }
-        const bool allIn = !around.empty() && std::ranges::all_of(around, [&](const geometry::ElementRef& ref) {
-            return std::ranges::find(edges_, ref) != edges_.end();
-        });
-        for (const geometry::ElementRef& ref : around) {
-            const auto it = std::ranges::find(edges_, ref);
-            if (allIn && it != edges_.end()) {
-                edges_.erase(it);
-            } else if (!allIn && it == edges_.end()) {
-                edges_.push_back(ref);
-            }
-        }
+        facesChanged = true;
+    }
+    if (facesChanged) {
+        applyFaces();
     }
     for (const render::ModelSelection::Edge& edge : selection.edges) {
         if (!before().findEdge(edge.ref)) {
@@ -721,10 +719,48 @@ void EdgeTool::selectionChanged(const render::ModelSelection& selection)
             edges_.push_back(edge.ref);
         } else {
             edges_.erase(it);
+            std::erase(faceEdges_, edge.ref);  // la quitó a mano: que rehacer las caras no la devuelva
         }
     }
     if (!selection.empty()) {
         viewport_.clearModelSelection();
+    }
+}
+
+void EdgeTool::applyFaces()
+{
+    // Primero se quitan las que sumaron las caras la vez anterior.
+    for (const geometry::ElementRef& ref : faceEdges_) {
+        std::erase(edges_, ref);
+    }
+    faceEdges_.clear();
+    // Por cuerpo, cuántas de las caras elegidas toca cada arista.
+    std::map<std::size_t, std::vector<int>> facesOfBody;
+    for (const geometry::ElementRef& face : pickedFaces_) {
+        if (const auto hit = before().findFace(face)) {
+            facesOfBody[hit->body].push_back(hit->face);
+        }
+    }
+    const int needed = pickedFaces_.size() >= 2 ? 2 : 1;
+    for (const auto& [body, faces] : facesOfBody) {
+        const geometry::Shape& shape = before().bodies[body].shape;
+        std::map<int, int> touches;
+        for (const int face : faces) {
+            const std::vector<int> around = shape.faceEdges(face);
+            for (const int edge : std::set<int>(around.begin(), around.end())) {  // una arista con costura no cuenta doble
+                ++touches[edge];
+            }
+        }
+        for (const auto& [edge, count] : touches) {
+            if (count < needed) {
+                continue;
+            }
+            const geometry::ElementRef ref = shape.edgeRef(edge);
+            if (std::ranges::find(edges_, ref) == edges_.end()) {
+                edges_.push_back(ref);
+                faceEdges_.push_back(ref);
+            }
+        }
     }
 }
 
@@ -778,9 +814,11 @@ void EdgeTool::afterPreview(const document::ModelState& before)
 QString EdgeTool::inputsText() const
 {
     if (edges_.empty()) {
-        return QStringLiteral("Elige las aristas del cuerpo (varias con clics sucesivos) o una cara para elegir todas las suyas");
+        return QStringLiteral("Elige las aristas (se marcan en naranja al acercar el cursor; varias con clics sucesivos), una cara "
+                              "para elegir todas las suyas, o dos caras para elegir la arista donde se unen");
     }
-    return edges_.size() == 1 ? QStringLiteral("1 arista") : QStringLiteral("%1 aristas (un clic en una cara elige todas las suyas)").arg(edges_.size());
+    return edges_.size() == 1 ? QStringLiteral("1 arista")
+                              : QStringLiteral("%1 aristas (dos caras elegen la arista donde se unen)").arg(edges_.size());
 }
 
 // --- Vaciado -----------------------------------------------------------------------

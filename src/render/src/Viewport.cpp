@@ -347,6 +347,14 @@ void Viewport::selectProfiles(const std::vector<ModelSelection::Profile>& profil
 
 void Viewport::setAdditiveSelection(bool on) { impl_->setAdditiveSelection(on); }
 
+bool Viewport::edgeHoverActive() const { return !impl_->hoverEdge.IsNull(); }
+
+void Viewport::setEdgeAssist(bool on)
+{
+    impl_->setEdgeAssist(on);
+    update();
+}
+
 // Cambiar la ubicación de un objeto del contexto (SetLocation) o mostrarlo sin actualizar no marca la vista como
 // cambiada: sin Invalidate() la pantalla seguía con el cuadro anterior y la sombra no se veía.
 void Viewport::showGizmo(GizmoKind kind, const sketch::Vec3& origin)
