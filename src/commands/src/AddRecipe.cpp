@@ -33,6 +33,7 @@ void AddRecipe::execute(document::Document& doc)
         recipe_.features.front()->setId(lead);
     }
     std::size_t k = 0;
+    try {
     for (const auto& feature : recipe_.features) {
         auto instance = document::instantiate(*feature, recipeSketch, ids_);
         if (lead != 0) {
@@ -51,6 +52,11 @@ void AddRecipe::execute(document::Document& doc)
         feature->setId(id);
         feature->setName(doc.findFeature(id)->name());
         ids_.push_back(id);
+    }
+    } catch (...) {
+        // Todo o nada: ni operaciones sueltas ni parámetros de una receta que no se pudo aplicar entera.
+        undo(doc);
+        throw;
     }
 
     // Con el cálculo en segundo plano el resultado todavía es el de antes: los cuerpos nuevos se nombran (con el nombre y

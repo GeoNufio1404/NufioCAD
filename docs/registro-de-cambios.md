@@ -10,6 +10,19 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Versión 0.2.1 y auditoría 5: rendimiento, usabilidad, ACID y documentación (25 nov. 2026)
+
+Resumen de la 0.2.1 respecto de la 0.2.0: menú radial centrado, aristas fáciles de elegir, timeline nueva, colocar con flechas y sombra, cinta y menús ordenados, bayoneta con tope y grada, auditorías 4 y 5. Detalle de la 5 en [`auditorias/auditoria-5-acid-usabilidad.md`](auditorias/auditoria-5-acid-usabilidad.md).
+
+- **ACID:** órdenes todo o nada (`Batch`, `AddRecipe`, `CommandStack`), `SafeApplication` (`main.cpp`), archivo comprobado y con huella (`DocumentFile.cpp`, `NufFile.cpp`), temporal propio, reemplazo que espera al disco, abrir en solo lectura, exportar a un temporal (`Exchange.cpp`), aviso si el archivo cambió en el disco y nombres de los cuerpos incluidos aunque se guarde enseguida (`MainWindowFiles.cpp`).
+- **Rendimiento:** una herramienta cerrada deja de escuchar al visor; la sombra usa la malla que ya existe (`ViewportHandles.cpp`): agarrar la flecha de un engranaje pasa de 270–1470 ms a 31 ms y con su forma real. Parada máxima de la prueba de interfaz: 117–208 ms según la pasada.
+- **Usabilidad:** menú Sketch en cuatro submenús, letras de acceso sin repetir, ayuda en todas las acciones, y un paso de la prueba de interfaz que lo vigila.
+- **Documentación:** códigos de prueba únicos, sección 1.10 de la guía, enlaces y estado al día, opciones de línea de comandos que faltaban.
+- **Pruebas:** `tests/test_acid.cpp` (8) y dos pasos más de interfaz (67 en total).
+- **Volver atrás:** revertir la fusión de `feature/auditoria-rendimiento-consistencia` (lleva las auditorías 4 y 5). Un archivo guardado con tubos (versión 2 del esquema) no se abre en la 0.2.0, y lo dice.
+
+---
+
 ## Auditoría 4: rendimiento, fiabilidad y consistencia (25 nov. 2026)
 
 Detalle y medidas en [`auditorias/auditoria-4-rendimiento-consistencia.md`](auditorias/auditoria-4-rendimiento-consistencia.md).

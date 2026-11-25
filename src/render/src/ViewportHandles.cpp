@@ -1,5 +1,9 @@
 #include "ViewportImpl.hpp"
 
+#include <BRepMesh_IncrementalMesh.hxx>
+
+#include <algorithm>
+
 // Flechas de distancia y medida, gizmo de mover y girar, fantasma y líneas de ayuda.
 // Métodos de Viewport::Impl; el estado y las declaraciones están en ViewportImpl.hpp.
 
@@ -317,13 +321,20 @@ void Viewport::Impl::showGhost(const std::vector<geometry::Shape>& list, bool al
             continue;
         }
         any = true;
-        // Un cuerpo pesado (una rosca) sin malla, o con muchísimas caras (un engranaje), tardaría segundos en dibujarse aquí: su
-        // sombra es su caja.
-        if ((geometry::hasHeavySurface(body) && !geometry::hasMesh(body)) || body.faceCount() > 60) {
+        // Un cuerpo pesado (una rosca) o con muchas caras (un engranaje) que aún no tiene malla tardaría en dibujarse aquí: su
+        // sombra es su caja. Con la malla que ya hizo el visor en segundo plano se dibuja su forma, sin esperar.
+        if (!geometry::hasMesh(body) && (geometry::hasHeavySurface(body) || body.faceCount() > 60)) {
             const geometry::Box box = body.bounds();
-            builder.Add(shape, BRepPrimAPI_MakeBox(gp_Pnt(box.min.x, box.min.y, box.min.z),
-                                                   gp_Pnt(box.max.x, box.max.y, box.max.z)).Shape());
+            const TopoDS_Shape crate = BRepPrimAPI_MakeBox(gp_Pnt(box.min.x, box.min.y, box.min.z),
+                                                           gp_Pnt(box.max.x, box.max.y, box.max.z)).Shape();
+            BRepMesh_IncrementalMesh(crate, 1.0);
+            builder.Add(shape, crate);
         } else {
+            if (!geometry::hasMesh(body)) {
+                const geometry::Box box = body.bounds();
+                const double size = std::max({box.max.x - box.min.x, box.max.y - box.min.y, box.max.z - box.min.z});
+                BRepMesh_IncrementalMesh(geometry::occtShape(body), std::max(0.02, size / 300.0), false, 0.4);
+            }
             builder.Add(shape, geometry::occtShape(body));
         }
     }
@@ -333,9 +344,8 @@ void Viewport::Impl::showGhost(const std::vector<geometry::Shape>& list, bool al
     ghost = new AIS_Shape(shape);
     ghost->SetColor(alert ? rgb(0xE5, 0x39, 0x35) : rgb(0x6C, 0xA6, 0xFF));
     ghost->SetTransparency(alert ? 0.15 : 0.55);
-    // Es una sombra: un mallado grueso se ve igual de bien y no tarda segundos en un engranaje (los dientes).
-    ghost->SetOwnDeviationCoefficient(0.01);
-    ghost->SetOwnDeviationAngle(0.5);
+    // Con la malla que ya tiene cada forma: si no, el visor la borra (es la misma del cuerpo) y la rehace en este hilo.
+    ghost->Attributes()->SetAutoTriangulation(false);
     ghost->Attributes()->SetFaceBoundaryDraw(false);
     context->Display(ghost, AIS_Shaded, -1, false);
 }

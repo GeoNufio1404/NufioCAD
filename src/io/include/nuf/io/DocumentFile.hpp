@@ -28,6 +28,8 @@ struct ViewState {
     // La cámara al guardar (O6): ojo (3), centro (3), arriba (3), escala y 1 si es ortogonal; vacía en los archivos anteriores. Es de
     // visualización: no cuenta para decidir si hay cambios sin guardar.
     std::vector<double> camera;
+    // Solo al abrir: un aviso para quien lo abre (el contenido no coincide con su huella). No se guarda ni cuenta como cambio.
+    std::string warning;
 
     friend bool operator==(const ViewState& a, const ViewState& b)
     {

@@ -91,6 +91,8 @@ DbHandle openHandle(const std::filesystem::path& path, int flags)
     if (rc != SQLITE_OK) {
         fail(db.get(), "No se pudo abrir " + toUtf8(path));
     }
+    // Otro programa (OneDrive, un antivirus, otra ventana) puede tenerlo cogido un instante.
+    sqlite3_busy_timeout(db.get(), 3000);
     return db;
 }
 
@@ -116,11 +118,21 @@ NufFile NufFile::create(const std::filesystem::path& path)
 
 NufFile NufFile::open(const std::filesystem::path& path)
 {
+    return openWith(path, SQLITE_OPEN_READWRITE);
+}
+
+NufFile NufFile::openReadOnly(const std::filesystem::path& path)
+{
+    return openWith(path, SQLITE_OPEN_READONLY);
+}
+
+NufFile NufFile::openWith(const std::filesystem::path& path, int flags)
+{
     if (!std::filesystem::exists(path)) {
         throw NufError("No existe el archivo " + toUtf8(path));
     }
 
-    DbHandle db = openHandle(path, SQLITE_OPEN_READWRITE);
+    DbHandle db = openHandle(path, flags);
 
     // Si no es SQLite, la primera lectura falla con "file is not a database".
     if (pragmaInt(db.get(), "application_id") != kApplicationId) {
@@ -160,6 +172,27 @@ NufFile::~NufFile()
 int NufFile::schemaVersion() const
 {
     return pragmaInt(db_, "user_version");
+}
+
+void NufFile::setSchemaVersion(int version)
+{
+    exec(db_, ("PRAGMA user_version = " + std::to_string(version) + ";").c_str(), "No se pudo marcar la versión del archivo");
+}
+
+void NufFile::checkIntegrity() const
+{
+    sqlite3_stmt* raw = nullptr;
+    if (sqlite3_prepare_v2(db_, "PRAGMA quick_check(1);", -1, &raw, nullptr) != SQLITE_OK) {
+        fail(db_, "El archivo está dañado");
+    }
+    std::unique_ptr<sqlite3_stmt, decltype(&sqlite3_finalize)> stmt(raw, &sqlite3_finalize);
+    if (sqlite3_step(stmt.get()) != SQLITE_ROW) {
+        fail(db_, "El archivo está dañado");
+    }
+    const auto* text = reinterpret_cast<const char*>(sqlite3_column_text(stmt.get(), 0));
+    if (text == nullptr || std::string(text) != "ok") {
+        throw NufError(std::string("El archivo está dañado: ") + (text != nullptr ? text : "no se pudo comprobar"));
+    }
 }
 
 void NufFile::setMeta(std::string_view key, std::string_view value)
@@ -344,8 +377,12 @@ std::vector<std::pair<std::string, std::string>> NufFile::allMeta() const
 {
     Stmt stmt = prepare(db_, "SELECT key, value FROM meta ORDER BY key;", "No se pudo leer meta");
     std::vector<std::pair<std::string, std::string>> entries;
-    while (sqlite3_step(stmt.get()) == SQLITE_ROW) {
+    int rc = 0;
+    while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
         entries.emplace_back(columnText(stmt.get(), 0), columnText(stmt.get(), 1));
+    }
+    if (rc != SQLITE_DONE) {
+        fail(db_, "No se pudo leer meta");
     }
     return entries;
 }

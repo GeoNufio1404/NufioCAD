@@ -35,7 +35,8 @@ add_executable(nuf_tests
     test_sketch_text_info.cpp
     test_svg.cpp
     test_assembly.cpp
-    test_generators_audit.cpp)
+    test_generators_audit.cpp
+    test_acid.cpp)
 
 nuf_set_warnings(nuf_tests)
 target_compile_definitions(nuf_tests PRIVATE NUF_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")

@@ -13,7 +13,7 @@
 | Las medidas y convenciones de cada generador (Lightbox, Caja con tapa…) | [`generadores.md`](generadores.md) |
 | Cifras de rendimiento y cómo medir | [`rendimiento/mediciones.md`](rendimiento/mediciones.md) |
 | Ver cómo se ve la interfaz (capturas) | [`capturas/`](capturas/) |
-| Revisiones de código y sus hallazgos | [`auditorias/`](auditorias/) |
+| Revisiones de código y sus hallazgos | [`auditorias/`](auditorias/): [2](auditorias/auditoria-2.md), [3](auditorias/auditoria-3-fluidez.md), [4](auditorias/auditoria-4-rendimiento-consistencia.md) y [5](auditorias/auditoria-5-acid-usabilidad.md) |
 
 ## Orden recomendado para alguien nuevo
 
@@ -40,7 +40,8 @@ docs/
 └── auditorias/
     ├── auditoria-2.md         segunda auditoría (6 nov. 2026)
     ├── auditoria-3-fluidez.md tercera auditoría: que la ventana no se congele (16 nov. 2026)
-    └── auditoria-4-rendimiento-consistencia.md cuarta: el bote, las flechas y editar sin perder nada (25 nov. 2026)
+    ├── auditoria-4-rendimiento-consistencia.md cuarta: el bote, las flechas y editar sin perder nada (25 nov. 2026)
+    └── auditoria-5-acid-usabilidad.md quinta: rendimiento, usabilidad, ACID y documentación (25 nov. 2026)
 ```
 
 ## Convenciones

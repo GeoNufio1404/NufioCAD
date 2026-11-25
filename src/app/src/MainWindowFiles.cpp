@@ -21,6 +21,7 @@
 #include <QDir>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QCryptographicHash>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFrame>
@@ -204,6 +205,7 @@ void MainWindow::newDocument()
     commands_.clear();
     commands_.markSaved();
     path_.clear();
+    stamp_.reset();
     viewDirty_ = false;
     updateTitle();
     refreshModel();
@@ -244,6 +246,7 @@ bool MainWindow::openPath(const std::filesystem::path& path, bool recovered, con
     commands_.clear();
     commands_.markSaved();
     path_ = recovered ? original : path;
+    stamp_ = recovered ? std::nullopt : stampOf(path);
     viewDirty_ = recovered;  // lo recuperado sigue sin guardarse
     if (!recovered) {
         recovery_->discard();
@@ -252,6 +255,9 @@ bool MainWindow::openPath(const std::filesystem::path& path, bool recovered, con
     }
     updateTitle();
     refreshModel();
+    if (!view.warning.empty()) {
+        QMessageBox::warning(this, QStringLiteral("Abrir"), QString::fromStdString(view.warning) + QLatin1Char('.'));
+    }
     // El modelo se calcula en segundo plano: encuadre y resumen cuando esté listo.
     whenComputed([this, path] {
         if (savedCamera_.size() == 11) {
@@ -272,9 +278,62 @@ bool MainWindow::openPath(const std::filesystem::path& path, bool recovered, con
     return true;
 }
 
+std::optional<MainWindow::FileStamp> MainWindow::stampOf(const std::filesystem::path& path)
+{
+    QFile file(fromPath(path));
+    std::error_code error;
+    const auto time = std::filesystem::last_write_time(path, error);
+    if (error || !file.open(QIODevice::ReadOnly)) {
+        return std::nullopt;
+    }
+    QCryptographicHash hash(QCryptographicHash::Sha1);
+    if (!hash.addData(&file)) {
+        return std::nullopt;
+    }
+    return FileStamp{file.size(), time, hash.result()};
+}
+
+bool MainWindow::changedOnDisk() const
+{
+    if (!stamp_ || path_.empty()) {
+        return false;
+    }
+    std::error_code error;
+    const auto time = std::filesystem::last_write_time(path_, error);
+    if (error) {
+        return false;  // ya no está: guardar lo vuelve a crear
+    }
+    const auto size = qint64(std::filesystem::file_size(path_, error));
+    if (!error && time == stamp_->time && size == stamp_->size) {
+        return false;  // lo normal: ni se lee
+    }
+    // Otra fecha con el mismo contenido (OneDrive, una copia) no es un cambio.
+    const auto now = stampOf(path_);
+    return now && now->hash != stamp_->hash;
+}
+
 bool MainWindow::saveDocument()
 {
-    return path_.empty() ? saveDocumentAs() : writeTo(path_);
+    if (path_.empty()) {
+        return saveDocumentAs();
+    }
+    if (changedOnDisk()) {
+        QMessageBox box(QMessageBox::Warning, QStringLiteral("Guardar"),
+                        QStringLiteral("«%1» cambió en el disco desde que lo abriste.").arg(fromPath(path_.filename())), QMessageBox::NoButton, this);
+        box.setInformativeText(QStringLiteral("Otra ventana u otro equipo lo guardó mientras tanto. Si lo sobrescribes, esos cambios se pierden."));
+        QPushButton* other = box.addButton(QStringLiteral("Guardar con otro nombre…"), QMessageBox::AcceptRole);
+        QPushButton* overwrite = box.addButton(QStringLiteral("Sobrescribir"), QMessageBox::DestructiveRole);
+        box.addButton(QStringLiteral("Cancelar"), QMessageBox::RejectRole);
+        box.setDefaultButton(other);
+        box.exec();
+        if (box.clickedButton() == static_cast<QAbstractButton*>(other)) {
+            return saveDocumentAs();
+        }
+        if (box.clickedButton() != static_cast<QAbstractButton*>(overwrite)) {
+            return false;
+        }
+    }
+    return writeTo(path_);
 }
 
 bool MainWindow::saveDocumentAs()
@@ -365,6 +424,9 @@ bool MainWindow::writeTo(const std::filesystem::path& path)
     QApplication::setOverrideCursor(Qt::WaitCursor);
     QString error;
     try {
+        if (document_.hasPendingActions()) {
+            document_.waitForCompute();  // los nombres de los cuerpos recién generados llegan con el resultado: también se guardan
+        }
         io::saveDocument(path, document_, currentView(), thumbnailPng());
     } catch (const std::exception& e) {
         error = QString::fromUtf8(e.what());
@@ -377,6 +439,7 @@ bool MainWindow::writeTo(const std::filesystem::path& path)
         return false;
     }
     path_ = path;
+    stamp_ = stampOf(path);
     commands_.markSaved();
     viewDirty_ = false;
     recovery_->discard();

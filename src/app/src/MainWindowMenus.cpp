@@ -72,6 +72,44 @@
 
 namespace nuf::app {
 
+namespace {
+
+// Dos entradas del mismo menú no pueden tener la misma letra de acceso (Alt): la primera se la queda y a las demás se les da
+// otra de su texto que esté libre, o ninguna.
+void resolveMnemonics(const QList<QAction*>& actions)
+{
+    std::vector<QChar> used;
+    for (QAction* action : actions) {
+        if (action->menu() != nullptr) {
+            resolveMnemonics(action->menu()->actions());
+        }
+        QString text = action->text();
+        const qsizetype mark = text.indexOf(QLatin1Char('&'));
+        if (action->isSeparator() || mark < 0 || mark + 1 >= text.size()) {
+            continue;
+        }
+        const QChar letter = text.at(mark + 1).toLower();
+        if (std::ranges::find(used, letter) == used.end()) {
+            used.push_back(letter);
+            continue;
+        }
+        text.remove(mark, 1);
+        for (qsizetype i = 0; i < text.size(); ++i) {
+            const QChar candidate = text.at(i).toLower();
+            if (candidate.isLetter() && std::ranges::find(used, candidate) == used.end()) {
+                used.push_back(candidate);
+                text.insert(i, QLatin1Char('&'));
+                break;
+            }
+        }
+        const QString iconText = action->iconText();  // cambiar el texto no debe cambiar el nombre del botón de la cinta
+        action->setText(text);
+        action->setIconText(iconText);
+    }
+}
+
+} // namespace
+
 void MainWindow::createMenus()
 {
     // Barras con icono y el nombre debajo; el tooltip da el detalle.
@@ -187,6 +225,7 @@ void MainWindow::createMenus()
                             QStringLiteral("file-open"), &MainWindow::importStep);
     reimportAction_ = addFile(QStringLiteral("Actualizar &importación desde su archivo…"), QKeySequence(), QStringLiteral("file-open"),
                               &MainWindow::reimportStep);
+    addHint(reimportAction_, QStringLiteral("Vuelve a leer del disco un STEP o una malla ya importados y rehace lo que se hizo sobre ellos"));
     exportAction_ = addFile(QStringLiteral("&Exportar…"), QKeySequence(), QStringLiteral("file-export"),
                             &MainWindow::exportBodies);
     exportAction_->setEnabled(false);
@@ -194,12 +233,14 @@ void MainWindow::createMenus()
                            &MainWindow::printBodies);
     printAction_->setEnabled(false);
     file->addSeparator();
-    file->addAction(QStringLiteral("&Configuración…"), this, [this] {
+    QAction* settingsAction = file->addAction(QStringLiteral("&Configuración…"), this, [this] {
         SettingsDialog dialog(this);
         dialog.exec();
     });
+    addHint(settingsAction, QStringLiteral("Unidades, tema, navegación y lo que se recuerda entre sesiones"));
     file->addSeparator();
-    file->addAction(QStringLiteral("&Salir"), QKeySequence(QKeySequence::Quit), this, &QWidget::close);
+    QAction* quitAction = file->addAction(QStringLiteral("&Salir"), QKeySequence(QKeySequence::Quit), this, &QWidget::close);
+    addHint(quitAction, QStringLiteral("Cierra el programa; si hay cambios sin guardar, pregunta antes"));
 
     QMenu* edit = menuBar()->addMenu(QStringLiteral("&Editar"));
     // Mientras se edita un sketch, deshacer/rehacer actúan dentro del sketch.
@@ -618,7 +659,47 @@ void MainWindow::createMenus()
             sketch_->importDxf(path);
         }
     });
-    decorate(importDxfAction_, QStringLiteral("import-dxf"));
+    decorate(importDxfAction_, QStringLiteral("import-dxf"), QStringLiteral("Trae a este sketch las curvas de un dibujo DXF o SVG"));
+    // El menú Sketch en submenús, como el de Sólido (eran veintiocho entradas seguidas). Lo que no está en la lista queda al final.
+    {
+        const QList<QAction*> all = sketchMenu->actions();
+        for (QAction* action : all) {
+            sketchMenu->removeAction(action);
+        }
+        std::vector<QAction*> placed;
+        const auto put = [&](QMenu* into, QAction* action) {
+            into->addAction(action);
+            placed.push_back(action);
+        };
+        put(sketchMenu, createSketchAction_);
+        put(sketchMenu, finishSketchAction_);
+        sketchMenu->addSeparator();
+        const auto group = [&](const QString& title, std::initializer_list<const char*> names) {
+            QMenu* sub = sketchMenu->addMenu(title);
+            for (const char* name : names) {
+                const QString wanted = QString::fromUtf8(name);
+                for (QAction* action : all) {
+                    if (action->text().remove(QLatin1Char('&')) == wanted) {
+                        put(sub, action);
+                    }
+                }
+            }
+        };
+        group(QStringLiteral("&Dibujar"), {"Línea", "Rectángulo", "Círculo", "Arco", "Polígono", "Ranura", "Elipse", "Spline", "Curva cónica", "Punto"});
+        group(QStringLiteral("&Modificar"), {"Recortar", "Empalme", "Desfase", "Simetría", "Mover", "Patrón", "Borrar", "Alternar construcción", "Alternar bloqueo"});
+        group(QStringLiteral("&Acotar y restringir"), {"Cota", "Restricciones"});
+        group(QStringLiteral("&Insertar"), {"Proyectar aristas", "Intersección con la pieza", "Texto", "Editar texto…", "Importar DXF o SVG…"});
+        bool separated = false;
+        for (QAction* action : all) {
+            if (std::ranges::find(placed, action) == placed.end() && !action->isSeparator()) {
+                if (!separated) {
+                    sketchMenu->addSeparator();
+                    separated = true;
+                }
+                sketchMenu->addAction(action);
+            }
+        }
+    }
 
     // Cinta al estilo de Fusion 360: pestaña Sólido y, mientras se edita un
     // sketch, la pestaña Sketch con «Terminar sketch» al final.
@@ -854,13 +935,14 @@ void MainWindow::createMenus()
     QMenu* panels = view->addMenu(QStringLiteral("&Paneles"));
     panels->addAction(navigatorDock_->toggleViewAction());
     panels->addAction(propertiesDock_->toggleViewAction());
-    view->addAction(QStringLiteral("&Restablecer paneles"), this, [this] {
+    QAction* resetPanels = view->addAction(QStringLiteral("&Restablecer paneles"), this, [this] {
         restoreState(defaultLayout_, kLayoutVersion);
         for (QDockWidget* dock : {navigatorDock_, propertiesDock_, timelineDock_}) {
             dock->setFloating(false);
             dock->show();
         }
     });
+    addHint(resetPanels, QStringLiteral("Devuelve el navegador, las propiedades y la timeline a su sitio de fábrica"));
     view->addSeparator();
     QMenu* themeMenu = view->addMenu(QStringLiteral("&Tema"));
     auto* themeGroup = new QActionGroup(this);
@@ -887,6 +969,7 @@ void MainWindow::createMenus()
     }
     assignShortcuts();
     createSketchPalette();
+    resolveMnemonics(menuBar()->actions());
 }
 
 void MainWindow::createSketchPalette()

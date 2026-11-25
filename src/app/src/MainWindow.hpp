@@ -115,6 +115,16 @@ private:
     bool saveDocument();
     bool saveDocumentAs();
     bool writeTo(const std::filesystem::path& path);
+    // La huella del archivo del diseño la última vez que se abrió o guardó: si al guardar es otra, alguien (otra ventana, otro
+    // equipo por OneDrive) lo cambió mientras tanto y guardar sin preguntar borraría sus cambios.
+    struct FileStamp {
+        qint64 size = 0;
+        std::filesystem::file_time_type time;
+        QByteArray hash;
+    };
+    static std::optional<FileStamp> stampOf(const std::filesystem::path& path);
+    bool changedOnDisk() const;
+    std::optional<FileStamp> stamp_;
 
     void createSketch();
     void startSketch(const sketch::Plane& plane, const QString& description,

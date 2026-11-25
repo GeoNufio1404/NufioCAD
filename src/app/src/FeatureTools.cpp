@@ -69,6 +69,9 @@ void FeatureTool::leaveViewport()
         return;
     }
     left_ = true;
+    // Una herramienta cerrada no escucha más al visor: hasta que se destruye, agarrar una flecha de la siguiente la despertaba
+    // y redibujaba sus cuerpos y su sombra.
+    disconnect(&viewport_, nullptr, this, nullptr);
     viewport_.clearToolPreview();
     viewport_.hideDistanceHandle();
     viewport_.hideDimensionArrow();

@@ -138,14 +138,53 @@ std::string utf8(const std::filesystem::path& path)
     return {text.begin(), text.end()};
 }
 
-std::ofstream openForWriting(const std::filesystem::path& path)
-{
-    std::ofstream out(path, std::ios::binary | std::ios::trunc);
-    if (!out) {
-        throw GeometryError("No se pudo crear el archivo " + utf8(path));
+// Lo que se exporta se escribe en un archivo aparte, junto al destino, y lo reemplaza al final: si falla o se cancela, el que
+// hubiera con ese nombre queda como estaba y no queda nada a medias.
+class OutputFile {
+public:
+    explicit OutputFile(const std::filesystem::path& path)
+        : path_(path)
+        , temp_(path)
+    {
+        temp_ += ".exportando";
+        out.open(temp_, std::ios::binary | std::ios::trunc);
+        if (!out) {
+            throw GeometryError("No se pudo crear el archivo " + utf8(path));
+        }
     }
-    return out;
-}
+    OutputFile(const OutputFile&) = delete;
+    OutputFile& operator=(const OutputFile&) = delete;
+    ~OutputFile()
+    {
+        if (!done_) {
+            out.close();
+            std::error_code ignored;
+            std::filesystem::remove(temp_, ignored);
+        }
+    }
+    void finish()
+    {
+        out.flush();
+        const bool written = bool(out);
+        out.close();
+        if (!written || out.fail()) {
+            throw GeometryError("No se pudo escribir el archivo " + utf8(path_));
+        }
+        std::error_code error;
+        std::filesystem::rename(temp_, path_, error);
+        if (error) {
+            throw GeometryError("No se pudo reemplazar el archivo " + utf8(path_) + " (¿está abierto en otro programa?)");
+        }
+        done_ = true;
+    }
+
+    std::ofstream out;
+
+private:
+    std::filesystem::path path_;
+    std::filesystem::path temp_;
+    bool done_ = false;
+};
 
 void requireShapes(const std::vector<Shape>& shapes)
 {
@@ -155,14 +194,6 @@ void requireShapes(const std::vector<Shape>& shapes)
         }
     }
     throw GeometryError("No hay ningún cuerpo que exportar");
-}
-
-void finish(std::ofstream& out, const std::filesystem::path& path)
-{
-    out.flush();
-    if (!out) {
-        throw GeometryError("No se pudo escribir el archivo " + utf8(path));
-    }
 }
 
 template <typename T>
@@ -273,8 +304,9 @@ MeshReport analyzeMesh(const Shape& shape, const MeshQuality& quality)
 void writeStl(const std::filesystem::path& path, const std::vector<Shape>& shapes, const MeshQuality& quality)
 {
     requireShapes(shapes);
-    std::ofstream out = openForWriting(path);
-    try {
+    OutputFile file(path);
+    std::ofstream& out = file.out;
+    {
         std::array<char, 80> header{};
         constexpr char kTitle[] = "NufioCAD STL (mm)";
         std::memcpy(header.data(), kTitle, sizeof(kTitle) - 1);
@@ -299,20 +331,16 @@ void writeStl(const std::filesystem::path& path, const std::vector<Shape>& shape
         out.seekp(static_cast<std::streamoff>(header.size()));
         putLittleEndian<std::uint32_t>(out, count);
         out.seekp(0, std::ios::end);
-        finish(out, path);
-    } catch (...) {
-        out.close();
-        std::error_code ignored;
-        std::filesystem::remove(path, ignored);  // sin archivo a medias
-        throw;
+        file.finish();
     }
 }
 
 void writeObj(const std::filesystem::path& path, const std::vector<Shape>& shapes, const MeshQuality& quality)
 {
     requireShapes(shapes);
-    std::ofstream out = openForWriting(path);
-    try {
+    OutputFile file(path);
+    std::ofstream& out = file.out;
+    {
         out.imbue(std::locale::classic());
         out.precision(8);
         out << "# NufioCAD (mm)\n";
@@ -336,12 +364,7 @@ void writeObj(const std::filesystem::path& path, const std::vector<Shape>& shape
             const std::size_t n = i + 1;
             out << "f " << v << "//" << n << ' ' << v + 1 << "//" << n << ' ' << v + 2 << "//" << n << '\n';
         }
-        finish(out, path);
-    } catch (...) {
-        out.close();
-        std::error_code ignored;
-        std::filesystem::remove(path, ignored);
-        throw;
+        file.finish();
     }
 }
 
@@ -530,9 +553,10 @@ void writeThreeMf(const std::filesystem::path& path, const std::vector<ThreeMfPa
         "Type=\"http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel\"/>\n"
         "</Relationships>\n";
     const std::string archive = zipStored({{"[Content_Types].xml", types}, {"_rels/.rels", rels}, {"3D/3dmodel.model", model.str()}});
-    std::ofstream out = openForWriting(path);
+    OutputFile file(path);
+    std::ofstream& out = file.out;
     out.write(archive.data(), std::streamsize(archive.size()));
-    finish(out, path);
+    file.finish();
 }
 
 void writeStep(const std::filesystem::path& path, const std::vector<Shape>& shapes)
@@ -559,11 +583,12 @@ void writeStep(const std::filesystem::path& path, const std::vector<Shape>& shap
     }
 #if OCC_VERSION_HEX >= 0x070700
     // Por flujo, no por nombre: así las rutas con acentos funcionan en Windows.
-    std::ofstream out = openForWriting(path);
+    OutputFile file(path);
+    std::ofstream& out = file.out;
     if (writer.WriteStream(out) != IFSelect_RetDone) {
         throw GeometryError("No se pudo escribir el archivo STEP");
     }
-    finish(out, path);
+    file.finish();
 #else
     // OCCT < 7.7 no tiene WriteStream: se escribe por nombre (en Linux la ruta UTF-8 sirve tal cual).
     if (writer.Write(utf8(path).c_str()) != IFSelect_RetDone) {

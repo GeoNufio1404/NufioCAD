@@ -306,6 +306,14 @@ Código: **USA**. Rama `feature/fase-15-usabilidad`.
 | USA.32 | Archivo › Exportar o Imprimir: mira la sección «Mi impresora» | Los tres cuadros de la cama (X, Y, Z) tienen sitio para «256.00 mm» y sus flechas, sin apretarse |
 | FLU.32 | Herramientas › Bote con tapa (rosca) y Aceptar; justo después mira el Navegador | La ventana no se congela al aceptar; los cuerpos salen primero como «Cuerpo1», «Cuerpo2» y, en cuanto termina el cálculo, pasan a «Bote» y «Tapa» dentro del componente «Bote con tapa». Deshacer enseguida (antes de que termine) no deja nombres sueltos |
 | FLU.33 | Clic derecho en la vista, a unos píxeles del borde (arriba a la izquierda, abajo a la derecha, junto a un panel) | El centro del menú radial queda justo bajo el cursor, sin correrse; solo se corre si no cabe en la pantalla |
+| FLU.31 | Diseño con piezas grandes: Archivo › Exportar › STL y, con la insignia «ocupado» visible, pulsa su botón Cancelar | La exportación se para, sale «Cancelado: el diseño no cambió», no queda archivo a medias y el diseño sigue igual |
+
+### 1.10 Novedades de la v0.2.1 (`ARI`, `TL`, `AJU`, `REN`, `ACI`)
+
+Elegir aristas, timeline, colocar con flechas, menús, bote con tapa, rendimiento y guardar sin perder nada.
+
+| ID | Pasos | Qué debe pasar |
+|---|---|---|
 | ARI.1 | Redondeo o Chaflán: acerca el cursor a una línea del cuerpo (sin llegar a tocarla) | La arista más cercana se marca en naranja y en negrita, y un clic la elige aunque haya una cara detrás; otro clic la quita |
 | ARI.2 | Elige una cara | Se eligen todas sus aristas (como antes) |
 | ARI.3 | Elige una segunda cara vecina | Quedan solo las aristas que comparten (la unión entre las dos); quitar una de las caras (clic otra vez) vuelve a las de la otra |
@@ -318,11 +326,12 @@ Código: **USA**. Rama `feature/fase-15-usabilidad`.
 | TL.6 | Clic derecho sobre una de varias elegidas | Menú con «Suprimir/Reactivar las N», «Mover el marcador tras la última» y «Borrar las N» |
 | TL.7 | Arrastra una ficha hasta el borde derecho o izquierdo de lo visible | La timeline se desplaza sola mientras sigues cerca del borde |
 | TL.8 | Mira los iconos de las fichas | Cada ficha lleva el mismo dibujo que su herramienta (Extruir, Redondeo, Caja…), con los colores del tema, y su número de orden arriba a la izquierda |
+| TL.9 | Mira los botones de inicio, atrás, reproducir, adelante y final sobre la timeline; pulsa reproducir | Llevan iconos del mismo estilo que las herramientas; al reproducir el icono pasa a pausa y vuelve a reproducir al parar |
 | AJU.1 | Abre Caja (o Engranaje) con algo ya en el origen y arrastra la flecha roja o la verde que sale en la vista | La sombra se mueve y los cuadros «Posición X/Y» cambian; al aceptar la caja queda aparte, sin fusionarse con la del origen. Con Ctrl se pega a la rejilla |
 | AJU.2 | En Caja, cambia «Plano o cara» a otro plano | Las flechas desaparecen (solo salen sobre el plano XY) |
 | AJU.3 | Mira la pestaña SÓLIDO | Las herramientas parecidas están en botones con desplegable (Extruir…, Caja/Cilindro, Redondeo/Chaflán…); el botón recuerda la última usada y todo sigue funcionando |
 | AJU.4 | Genera un Bote con tapa de bayoneta, deja la tapa sobre el bote y gírala sin levantarla | No gira: hay que levantarla un poco; al girar hasta el final topa y cae en su hueco; seguir girando no la abre; para abrir se levanta y se gira de vuelta |
-| AJU.5 | Abre Engranaje y arrastra la flecha roja o la verde | Aparece una sombra azul (la caja del engranaje) que sigue al cursor; al soltar vuelve a dibujarse el engranaje en su sitio, con la posición X/Y de los cuadros |
+| AJU.5 | Abre Engranaje y arrastra la flecha roja o la verde | Aparece una sombra azul con la forma del engranaje que sigue al cursor; al soltar vuelve a dibujarse el engranaje en su sitio, con la posición X/Y de los cuadros |
 | AJU.6 | Mira el menú «Sólido» de la barra superior | Tiene cinco submenús (Crear, Modificar, Organizar, Construir, Inspeccionar) y todas las herramientas siguen funcionando, también con su atajo (así se ve: [captura](capturas/menu-solido.png)) |
 | AJU.7 | Bote con tapa de bayoneta: junta la tapa y gírala hasta el tope, suéltala, e intenta abrir solo girando | Los pines descansan en la grada junto al tope; girando sin levantar no se abre, hay que levantar la tapa (la «Altura de la grada») y girar de vuelta |
 | REN.1 | Herramientas › Bote con tapa, con «Restablecer valores» | La vista previa sale en torno a un segundo, sin avisos; con Sección se ve hueco y con un hombro inclinado bajo el cuello |
@@ -335,8 +344,12 @@ Código: **USA**. Rama `feature/fase-15-usabilidad`.
 | REN.8 | En el bote de bayoneta pon «Alto del cuello» 6 | Un mensaje dice que el cuello es corto y qué cambiar |
 | REN.9 | Bote de bayoneta con pines de 4 mm (y con otros): mira la tapa por fuera y por dentro junto a las entradas | La pared no tiene agujeros ni cavidades más hondas que el carril; la grada y el tope siguen igual |
 | REN.10 | Cilindro con «Diámetro interior» 12 y diámetro 20 | Sale un tubo, con la flecha en el diámetro interior; con 25 dice que debe ser menor que el diámetro |
-| TL.9 | Mira los botones de inicio, atrás, reproducir, adelante y final sobre la timeline; pulsa reproducir | Llevan iconos del mismo estilo que las herramientas; al reproducir el icono pasa a pausa y vuelve a reproducir al parar |
-| FLU.31 | Diseño con piezas grandes: Archivo › Exportar › STL y, con la insignia «ocupado» visible, pulsa su botón Cancelar | La exportación se para, sale «Cancelado: el diseño no cambió», no queda archivo a medias y el diseño sigue igual |
+| ACI.1 | Abre el mismo `.nuf` en dos ventanas; cambia y guarda en una; cambia y guarda en la otra | La segunda avisa de que cambió en el disco y ofrece guardar con otro nombre, sobrescribir o cancelar |
+| ACI.2 | Herramientas › Caja con tapa, Aceptar y Ctrl+S enseguida; cierra y vuelve a abrir | Los cuerpos conservan sus nombres (Caja y Tapa) y su componente |
+| ACI.3 | Exporta un STL encima de otro y cancélalo con la insignia de «ocupado» | El STL de antes sigue intacto y no queda ningún archivo `.exportando` |
+| ACI.4 | Guarda un diseño en una carpeta sin permiso de escritura | Error claro; el archivo de antes sigue entero y no queda ningún `.guardando` |
+| ACI.5 | Menú Sketch de la barra superior, y Alt + letra en los menús | Cuatro submenús (Dibujar, Modificar, Acotar y restringir, Insertar); ninguna letra repetida dentro de un menú |
+| ACI.6 | Abre Engranaje y agarra una de sus flechas | La sombra es el engranaje (no una caja) y no se queda pensando |
 
 ## 2. Sketch
 
@@ -710,10 +723,10 @@ Código: **GEN**.
 | GEN.6 | Sólido › **Rosca**; medida M8 × 1.25, largo `10` | Varilla roscada; el panel dice el diámetro menor (6.47 mm) |
 | GEN.7 | Cambiar «Medida» a M6; luego tocar el diámetro a mano | La medida pasa a «Personalizada» |
 | GEN.8 | «Rosca a izquierdas» | La hélice gira al otro lado |
-| GEN.9 | Caja con tapa › **Forma: Redonda** (diámetro 100) y, aparte, «Cierre: Tornillos» | La caja es un cilindro hueco con la tapa redonda al lado; con tornillos, los cuatro postes quedan sobre la circunferencia, a 45° |
-| GEN.10 | Caja con tapa rectangular › **Bisagra atrás** (nudillos de 7 mm, largo 40) | La tapa queda cerrada sobre la caja (0,2 mm por encima) y unida por tres nudillos al borde de atrás; cada cuerpo sigue siendo suyo (Navegador: Caja y Tapa); el agujero del pasador cruza los tres; mete un trozo de filamento y la tapa gira |
-| GEN.11 | Caja con tapa › «Ranuras por pared» 3 y «Paredes con ranuras: Las cuatro» | Salen tres ranuras de 2 mm una sobre otra, a media altura, en cada pared |
-| GEN.12 | Caja con tapa › **Clips para cerrarla**, solos y con bisagra | Dos resaltes en los lados cortos de la caja y dos lengüetas con gancho en la tapa; al cerrar la tapa los ganchos quedan justo bajo los resaltes (imprime y prueba que encajan con un clic) |
+| GEN.25 | Caja con tapa › **Forma: Redonda** (diámetro 100) y, aparte, «Cierre: Tornillos» | La caja es un cilindro hueco con la tapa redonda al lado; con tornillos, los cuatro postes quedan sobre la circunferencia, a 45° |
+| GEN.26 | Caja con tapa rectangular › **Bisagra atrás** (nudillos de 7 mm, largo 40) | La tapa queda cerrada sobre la caja (0,2 mm por encima) y unida por tres nudillos al borde de atrás; cada cuerpo sigue siendo suyo (Navegador: Caja y Tapa); el agujero del pasador cruza los tres; mete un trozo de filamento y la tapa gira |
+| GEN.27 | Caja con tapa › «Ranuras por pared» 3 y «Paredes con ranuras: Las cuatro» | Salen tres ranuras de 2 mm una sobre otra, a media altura, en cada pared |
+| GEN.28 | Caja con tapa › **Clips para cerrarla**, solos y con bisagra | Dos resaltes en los lados cortos de la caja y dos lengüetas con gancho en la tapa; al cerrar la tapa los ganchos quedan justo bajo los resaltes (imprime y prueba que encajan con un clic) |
 | MOD.1 | Sólido › Chaflán: elige una arista y el tipo **Dos distancias** (2 y 4) | El chaflán sale asimétrico (2 por una cara, 4 por la otra); «Medir desde la otra cara» lo gira al revés; con **Distancia y ángulo** (3 y 60°) el otro lado sale de 3·tan 60° |
 | MOD.2 | Sólido › Redondeo o Chaflán: haz clic en **una cara** del cuerpo | Se eligen todas sus aristas a la vez; otro clic en la misma cara las quita |
 | MOD.3 | Sólido › Vaciado: marca **Vaciado cerrado** y haz clic en una cara de una caja | El panel pide solo un clic; la caja queda con una cavidad cerrada por dentro (úsala con la Sección para verla) y el volumen baja en lo que mide el hueco |
@@ -987,14 +1000,14 @@ Código: **PAR**.
 | PAR.45 | Lo mismo con **Engranaje interno** (la corona) y con **Cremallera** | En la corona, un anillo ranurado a media altura sobre los dientes; en la barra, una ranura a lo largo de todos los dientes, a media altura. Ninguno se parte en dos piezas |
 | PAR.46 | Par de engranajes › **Colocación de las ruedas: Separadas, para imprimir** | La rueda 2 queda al lado de la 1, sin tocarla (unos 5 mm entre las puntas); con «Engranadas» vuelven a encajar |
 | PAR.43 | Crea con las herramientas sueltas una Caja, un Cilindro, una Extrusión y un Engranaje | Los cuerpos se llaman «Caja 1», «Cilindro 1», «Extrusión 1», «Engranaje 1» (en lugar de «Cuerpo1», «Cuerpo2»…), y la segunda caja «Caja 2» |
-| GEN.1 | Sketch › **Importar DXF o SVG…** y elige un SVG con un logotipo hecho de trazados (con curvas) | El dibujo aparece en el primer cuadrante, con el tamaño en mm del archivo y el eje Y hacia arriba; las curvas son splines; el mensaje dice cuántas entidades y qué se omitió (texto, imágenes) |
-| GEN.2 | Con ese dibujo cerrado: Extruir | Sale el sólido con la forma del logotipo; un SVG con esquinas redondeadas o círculos sale con arcos y círculos reales |
-| GEN.3 | Crea una caja y un cilindro; Exportar › formato **3MF** y ábrelo en Bambu Studio u Orca Slicer | Salen dos objetos con sus nombres y un filamento de color cada uno, sin avisos de malla abierta; se puede asignar otro filamento a cada cuerpo |
-| GEN.4 | Herramientas › **Letrero o llavero**: escribe dos líneas (Intro) y cambia la alineación | El texto sale en dos líneas, centrado, a la izquierda o a la derecha según elijas; «Espacio entre líneas» las separa más; la vista previa se actualiza al escribir |
-| GEN.5 | Herramientas › **Lightbox** con «Canal para tira LED» y una tira de 10 mm | Aparece un muro bajo dentro de la caja, a 10 mm de las paredes, que deja un canal para la tira; con una tira demasiado ancha el formulario avisa |
-| GEN.6 | Herramientas › **Caja con tapa**: 2 divisiones, patas, 5 ranuras de ventilación y «Cierre: Tornillos» con M4 | Dos paredes parten la caja; cuatro patas salen por debajo; la tapa lleva 5 ranuras; los postes y agujeros son los de M4 (poste 10, roscar 3,3, tapa 4,5) |
-| GEN.7 | Abre el programa con un diseño nuevo y vacío | Sale la tarjeta **«Empieza un diseño»** sobre el lienzo con los comandos a un clic; desaparece al abrir una herramienta y vuelve si se cancela; «×» la cierra; con «No mostrar más» no vuelve a salir |
-| GEN.8 | Exportar un engranaje con calidad **Baja** y luego **Alta** | La revisión de abajo avisa con calidad baja de que la malla se aparta del volumen del sólido (más del 2 %) y con alta ya no |
+| GEN.31 | Sketch › **Importar DXF o SVG…** y elige un SVG con un logotipo hecho de trazados (con curvas) | El dibujo aparece en el primer cuadrante, con el tamaño en mm del archivo y el eje Y hacia arriba; las curvas son splines; el mensaje dice cuántas entidades y qué se omitió (texto, imágenes) |
+| GEN.32 | Con ese dibujo cerrado: Extruir | Sale el sólido con la forma del logotipo; un SVG con esquinas redondeadas o círculos sale con arcos y círculos reales |
+| GEN.33 | Crea una caja y un cilindro; Exportar › formato **3MF** y ábrelo en Bambu Studio u Orca Slicer | Salen dos objetos con sus nombres y un filamento de color cada uno, sin avisos de malla abierta; se puede asignar otro filamento a cada cuerpo |
+| GEN.34 | Herramientas › **Letrero o llavero**: escribe dos líneas (Intro) y cambia la alineación | El texto sale en dos líneas, centrado, a la izquierda o a la derecha según elijas; «Espacio entre líneas» las separa más; la vista previa se actualiza al escribir |
+| GEN.35 | Herramientas › **Lightbox** con «Canal para tira LED» y una tira de 10 mm | Aparece un muro bajo dentro de la caja, a 10 mm de las paredes, que deja un canal para la tira; con una tira demasiado ancha el formulario avisa |
+| GEN.36 | Herramientas › **Caja con tapa**: 2 divisiones, patas, 5 ranuras de ventilación y «Cierre: Tornillos» con M4 | Dos paredes parten la caja; cuatro patas salen por debajo; la tapa lleva 5 ranuras; los postes y agujeros son los de M4 (poste 10, roscar 3,3, tapa 4,5) |
+| GEN.37 | Abre el programa con un diseño nuevo y vacío | Sale la tarjeta **«Empieza un diseño»** sobre el lienzo con los comandos a un clic; desaparece al abrir una herramienta y vuelve si se cancela; «×» la cierra; con «No mostrar más» no vuelve a salir |
+| GEN.38 | Exportar un engranaje con calidad **Baja** y luego **Alta** | La revisión de abajo avisa con calidad baja de que la malla se aparta del volumen del sólido (más del 2 %) y con alta ya no |
 
 ### 4.5 Todos los generadores: reabrir, recordar y restablecer
 

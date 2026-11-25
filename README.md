@@ -27,7 +27,7 @@ flowchart LR
 - **Más:** planos y ejes de construcción, mover y girar cuerpos con el ratón, uniones, medir, sección, revisión para
   imprimir, roscas, engranajes, unidades mm/cm/m/in, temas claro y oscuro, copia de recuperación.
 
-**Estado:** versión **0.2.0** (24 nov. 2026). Instalador y ZIP para Windows en las [Releases](https://github.com/GeoNufio1404/NufioCAD/releases); Fedora por probar; el trabajo sigue en la rama `develop`. Lo
+**Estado:** versión **0.2.1** (25 nov. 2026; el instalador de la Release es el de la 0.2.0 hasta que se publique). Instalador y ZIP para Windows en las [Releases](https://github.com/GeoNufio1404/NufioCAD/releases); Fedora por probar; el trabajo sigue en la rama `develop`. Lo
 hecho y lo que falta: [hoja de ruta](docs/hoja-de-ruta.md).
 
 ## Con qué está hecho

@@ -63,7 +63,8 @@ de los paquetes de Qt y de OpenCASCADE de la distribución. Un Flatpak (con su m
 
 1. Todo lo de la versión fusionado en `main`, con la versión puesta en `project(NufioCAD VERSION …)` de `CMakeLists.txt` (de ahí sale la
    del programa, la del instalador y la de los paquetes).
-2. `git tag v0.2.0 && git push origin v0.2.0`. El flujo **Publicar** compila Windows y Linux, empaqueta, firma (si hay certificado), calcula
+2. `git tag vX.Y.Z && git push origin vX.Y.Z` (ojo: empujar una etiqueta `v*` **dispara** el flujo Publicar y gasta minutos de Actions; para
+   publicar a mano, `gh release create` sin flujo). El flujo **Publicar** compila Windows y Linux, empaqueta, firma (si hay certificado), calcula
    los SHA-256 y deja la versión **en borrador** en GitHub, con los archivos y los SHA-256 en las notas.
 3. Se revisa el borrador (notas, archivos), se instala y prueba el instalador en un Windows limpio y se publica.
 
@@ -125,7 +126,7 @@ certificación; Microsoft firma el paquete. Queda como paso posterior.
 página de licencia. PlaneGCS (LGPL-2.1+) se enlaza estáticamente: se ofrece su código (`third_party/planegcs/`) y el de NufioCAD para volver
 a compilar. Al subir de versión una biblioteca o añadir otra, **actualiza este archivo** (y `README.md`).
 
-## Lista antes de publicar la v0.2.0
+## Lista antes de publicar una versión
 
 - [ ] Elegir y añadir la licencia de NufioCAD (`LICENSE`).
 - [ ] Elegir el firmante y poner los secretos (o publicar sin firmar, sabiendo lo de Smart App Control).

@@ -5,9 +5,22 @@
 #include <nlohmann/json.hpp>
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <thread>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 namespace nuf::io {
 
@@ -1132,6 +1145,55 @@ ViewState viewOf(const Json& j)
     return v;
 }
 
+// Huella del contenido (FNV-1a de 64 bits, con el largo de cada pieza para que no se puedan correr de una a otra): detecta un
+// byte cambiado que SQLite y el JSON dan por bueno (un dígito de una medida).
+class Digest {
+public:
+    void add(std::string_view piece)
+    {
+        mix(std::to_string(piece.size()));
+        mix(piece);
+    }
+    std::string text() const
+    {
+        char buffer[17];
+        std::snprintf(buffer, sizeof buffer, "%016llx", static_cast<unsigned long long>(hash_));
+        return buffer;
+    }
+
+private:
+    void mix(std::string_view piece)
+    {
+        for (const char c : piece) {
+            hash_ = (hash_ ^ static_cast<unsigned char>(c)) * 1099511628211ULL;
+        }
+    }
+    unsigned long long hash_ = 14695981039346656037ULL;
+};
+
+std::string digestOf(const std::string& name, const std::string& marker, const std::string& nextId, const std::string& view,
+                     const std::optional<std::string>& bodies, const std::vector<FeatureRow>& rows,
+                     const std::vector<std::pair<std::string, std::string>>& parameters)
+{
+    Digest digest;
+    for (const std::string* piece : {&name, &marker, &nextId, &view}) {
+        digest.add(*piece);
+    }
+    digest.add(bodies ? *bodies : std::string());
+    for (const FeatureRow& row : rows) {
+        digest.add(std::to_string(row.id));
+        digest.add(row.type);
+        digest.add(row.name);
+        digest.add(row.suppressed ? "1" : "0");
+        digest.add(row.params);
+    }
+    for (const auto& [parameter, expression] : parameters) {
+        digest.add(parameter);
+        digest.add(expression);
+    }
+    return digest.text();
+}
+
 std::string metaOrThrow(const NufFile& file, const char* key)
 {
     const auto value = file.meta(key);
@@ -1141,12 +1203,50 @@ std::string metaOrThrow(const NufFile& file, const char* key)
     return *value;
 }
 
+// Reemplaza «to» por «from» de una vez (o queda el de antes, o el nuevo) y espera a que esté en el disco: si se va la luz justo
+// después de «Guardado», el archivo está.
+std::error_code replaceDurably(const std::filesystem::path& from, const std::filesystem::path& to)
+{
+#ifdef _WIN32
+    if (MoveFileExW(from.c_str(), to.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0) {
+        return {};
+    }
+    return {int(GetLastError()), std::system_category()};
+#else
+    std::error_code error;
+    std::filesystem::rename(from, to, error);
+    if (!error) {
+        // El cambio de nombre vive en la carpeta: también se baja al disco.
+        const int folder = ::open((to.has_parent_path() ? to.parent_path() : std::filesystem::path(".")).c_str(), O_RDONLY);
+        if (folder >= 0) {
+            ::fsync(folder);
+            ::close(folder);
+        }
+    }
+    return error;
+#endif
+}
+
+// Un nombre temporal que no usa nadie más: dos ventanas que guardan el mismo archivo a la vez no se pisan el temporal.
+std::filesystem::path temporaryFor(const std::filesystem::path& path)
+{
+    static std::atomic<unsigned> counter{0};
+#ifdef _WIN32
+    const unsigned long process = GetCurrentProcessId();
+#else
+    const unsigned long process = static_cast<unsigned long>(::getpid());
+#endif
+    std::filesystem::path temp = path;
+    temp += "." + std::to_string(process) + "-" + std::to_string(++counter) + ".guardando";
+    return temp;
+}
+
 // Con OneDrive o un antivirus mirando, el reemplazo puede fallar un instante.
 void replaceFile(const std::filesystem::path& from, const std::filesystem::path& to)
 {
     std::error_code error;
     for (int attempt = 0; attempt < 5; ++attempt) {
-        std::filesystem::rename(from, to, error);
+        error = replaceDurably(from, to);
         if (!error) {
             return;
         }
@@ -1167,6 +1267,7 @@ struct SavePlan::Impl {
     std::vector<std::pair<std::string, std::string>> parameters;
     std::vector<std::pair<std::string, std::shared_ptr<const std::string>>> imports;  // clave del blob y su BREP
     std::string thumbnail;
+    int schemaVersion = 1;
 };
 
 SavePlan prepareSave(const Document& document, const ViewState& view, const std::string& thumbnailPng)
@@ -1178,6 +1279,11 @@ SavePlan prepareSave(const Document& document, const ViewState& view, const std:
     plan->view = toJson(view).dump();
     for (std::size_t i = 0; i < document.featureCount(); ++i) {
         plan->rows.push_back(rowOf(document.feature(i)));
+        if (const auto* c = dynamic_cast<const CylinderFeature*>(&document.feature(i));
+            c != nullptr && (c->topChamfer > 0.0 || c->innerDiameter > 0.0 || c->expressions.contains("topChamfer")
+                             || c->expressions.contains("innerDiameter"))) {
+            plan->schemaVersion = 2;
+        }
     }
     for (const Parameter& p : document.parameters()) {
         plan->parameters.emplace_back(p.name, p.expression);
@@ -1213,16 +1319,21 @@ void writeSave(const std::filesystem::path& path, const SavePlan& savePlan)
         throw NufError("No hay nada que guardar");
     }
     const SavePlan::Impl& plan = *savePlan.impl;
-    std::filesystem::path temp = path;
-    temp += ".guardando";
+    const std::filesystem::path temp = temporaryFor(path);
     std::error_code ignored;
-    std::filesystem::remove(temp, ignored);
+    const auto removeTemp = [&] {
+        std::filesystem::remove(temp, ignored);
+        std::filesystem::path journal = temp;
+        journal += "-journal";
+        std::filesystem::remove(journal, ignored);
+    };
 
     try {
         {
             NufFile file = NufFile::create(temp);
             file.begin();
             try {
+                file.setSchemaVersion(plan.schemaVersion);
                 file.setMeta("nombre", plan.name);
                 file.setMeta("unidades", kUnits);
                 file.setMeta("marcador", plan.marker);
@@ -1230,6 +1341,7 @@ void writeSave(const std::filesystem::path& path, const SavePlan& savePlan)
                 file.setMeta("vista", plan.view);
                 file.writeFeatures(plan.rows);
                 file.writeParameters(plan.parameters);
+                file.setMeta("huella", digestOf(plan.name, plan.marker, plan.nextId, plan.view, plan.bodies, plan.rows, plan.parameters));
                 if (plan.bodies) {
                     file.setMeta("cuerpos", *plan.bodies);
                 }
@@ -1244,10 +1356,15 @@ void writeSave(const std::filesystem::path& path, const SavePlan& savePlan)
                 file.rollback();
                 throw;
             }
+            // Antes de tocar el archivo bueno, se comprueba que el nuevo está entero.
+            file.checkIntegrity();
+            if (file.readFeatures().size() != plan.rows.size() || file.readParameters().size() != plan.parameters.size()) {
+                throw NufError("Lo escrito no coincide con el diseño: no se reemplaza el archivo");
+            }
         }  // se cierra antes de moverlo (Windows no mueve un archivo abierto)
         replaceFile(temp, path);
     } catch (...) {
-        std::filesystem::remove(temp, ignored);
+        removeTemp();
         throw;
     }
 }
@@ -1261,7 +1378,7 @@ void saveDocument(const std::filesystem::path& path, const Document& document, c
 std::optional<std::string> readThumbnail(const std::filesystem::path& path) noexcept
 {
     try {
-        return NufFile::open(path).readBlob("thumbnail");
+        return NufFile::openReadOnly(path).readBlob("thumbnail");
     } catch (...) {
         return std::nullopt;
     }
@@ -1277,7 +1394,8 @@ void loadDocument(const std::filesystem::path& path, Document& document, ViewSta
     FeatureId nextId = 1;
     ViewState loadedView;
     try {
-        const NufFile file = NufFile::open(path);
+        const NufFile file = NufFile::openReadOnly(path);
+        file.checkIntegrity();
         const auto units = file.meta("unidades");
         if (units && *units != kUnits) {
             throw NufError("El archivo usa unidades que esta versión no admite: " + *units);
@@ -1286,8 +1404,16 @@ void loadDocument(const std::filesystem::path& path, Document& document, ViewSta
         marker = std::stoull(metaOrThrow(file, "marcador"));
         nextId = std::stoull(metaOrThrow(file, "siguiente_id"));
         loadedView = viewOf(Json::parse(metaOrThrow(file, "vista")));
-        for (const FeatureRow& row : file.readFeatures()) {
+        const std::vector<FeatureRow> rows = file.readFeatures();
+        for (const FeatureRow& row : rows) {
             features.push_back(featureOf(row, file));
+        }
+        // Los archivos anteriores no la llevan. Si no coincide, se abre igual (negarse sería perder el diseño) y se avisa.
+        if (const auto expected = file.meta("huella");
+            expected && *expected != digestOf(name, metaOrThrow(file, "marcador"), metaOrThrow(file, "siguiente_id"), metaOrThrow(file, "vista"),
+                                              file.meta("cuerpos"), rows, file.readParameters())) {
+            loadedView.warning = "El contenido del archivo no coincide con su huella: algún dato cambió desde que se guardó (disco, copia "
+                                 "interrumpida o edición a mano). Revisa las medidas antes de seguir, o abre una copia anterior";
         }
         if (const auto bodies = file.meta("cuerpos")) {
             const Json parsed = Json::parse(*bodies);  // con nombre: items() de un temporal queda colgando
@@ -1311,7 +1437,7 @@ void loadDocument(const std::filesystem::path& path, Document& document, ViewSta
     try {
         document.restore(std::move(name), std::move(features), marker, nextId, std::move(parameters));
         document.setBodyInfo(std::move(bodyInfo));
-    } catch (const std::invalid_argument& e) {
+    } catch (const std::exception& e) {
         throw NufError(std::string("El archivo está dañado: ") + e.what());
     }
     view = std::move(loadedView);
@@ -1320,7 +1446,8 @@ void loadDocument(const std::filesystem::path& path, Document& document, ViewSta
 std::string dumpDocument(const std::filesystem::path& path)
 {
     try {
-        const NufFile file = NufFile::open(path);
+        const NufFile file = NufFile::openReadOnly(path);
+        file.checkIntegrity();
         Json meta = Json::object();
         for (const auto& [key, value] : file.allMeta()) {
             // «vista» ya es JSON: se muestra anidado.
@@ -1331,7 +1458,8 @@ std::string dumpDocument(const std::filesystem::path& path)
             features.push_back({{"id", row.id}, {"type", row.type}, {"name", row.name},
                                 {"suppressed", row.suppressed}, {"params", Json::parse(row.params)}});
         }
-        return Json{{"meta", meta}, {"features", features}}.dump(2);
+        // Es para depurar: un nombre con bytes que no son UTF-8 (archivo dañado) se muestra como se pueda.
+        return Json{{"meta", meta}, {"features", features}}.dump(2, ' ', false, Json::error_handler_t::replace);
     } catch (const NufError&) {
         throw;
     } catch (const std::exception& e) {

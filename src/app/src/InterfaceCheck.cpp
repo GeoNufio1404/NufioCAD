@@ -1350,6 +1350,116 @@ int InterfaceCheck::run()
         undoAll();
     });
 
+    // Aislamiento (ACID): si otra ventana guardó el mismo archivo, guardar no lo pisa sin preguntar; un cambio solo de fecha no
+    // cuenta. Y los nombres de los cuerpos recién generados entran en el archivo aunque se guarde antes de acabar el cálculo.
+    step(QStringLiteral("Guardar: detecta que el archivo cambió en el disco y espera los nombres"), [&] {
+        const std::filesystem::path path = std::filesystem::temp_directory_path() / "nufiocad-prueba-disco.nuf";
+        std::error_code ignored;
+        std::filesystem::remove(path, ignored);
+        for (QAction* action : window_.generatorActions_) {
+            if (action->text() == QStringLiteral("Caja con tapa")) {
+                blocking(QStringLiteral("abrir el generador"), [&] { action->trigger(); });
+                waitIdle();
+                blocking(QStringLiteral("aceptar"), [&] { window_.finishTool(true); });
+                expect(window_.writeTo(path), QStringLiteral("no se pudo guardar"));  // sin esperar a que acabe el cálculo
+            }
+        }
+        document::Document saved;
+        io::ViewState view;
+        io::loadDocument(path, saved, view);
+        expect(view.warning.empty(), QStringLiteral("el archivo recién guardado no coincide con su huella"));
+        int named = 0;
+        for (const auto& [key, info] : saved.bodyInfo()) {
+            named += info.name == "Caja" || info.name == "Tapa" ? 1 : 0;
+        }
+        expect(named == 2, QStringLiteral("los nombres de los cuerpos no se guardaron (%1 de 2)").arg(named));
+        expect(!window_.changedOnDisk(), QStringLiteral("dice que cambió en el disco nada más guardar"));
+        std::filesystem::last_write_time(path, std::filesystem::last_write_time(path) + std::chrono::seconds(10), ignored);
+        expect(!window_.changedOnDisk(), QStringLiteral("un cambio solo de fecha cuenta como cambio"));
+        document::Document other;
+        io::saveDocument(path, other, {});
+        expect(window_.changedOnDisk(), QStringLiteral("no detecta que otra ventana guardó el archivo"));
+        expect(window_.writeTo(path), QStringLiteral("no se pudo sobrescribir"));
+        expect(!window_.changedOnDisk(), QStringLiteral("tras sobrescribir sigue diciendo que cambió"));
+        waitIdle();
+        undoAll();
+        window_.path_.clear();
+        window_.stamp_.reset();
+        window_.commands_.clear();
+        window_.commands_.markSaved();
+        window_.updateTitle();
+        std::filesystem::remove(path, ignored);
+    });
+
+    // Heurísticas de usabilidad que se pueden comprobar solas: atajos y letras de menú que no chocan (consistencia), ayuda en
+    // cada acción (reconocer mejor que recordar), botones que se pueden acertar y menús que no abruman (diseño mínimo).
+    step(QStringLiteral("Heurísticas: atajos, menús, ayudas y tamaños"), [&] {
+        QStringList findings;
+        const auto plain = [](QString text) { return text.remove(QLatin1Char('&')); };
+        // Atajos: dos acciones disponibles a la vez no pueden compartirlo.
+        std::map<QString, QStringList> byShortcut;
+        for (const QAction* action : window_.findChildren<QAction*>()) {
+            for (const QKeySequence& key : action->shortcuts()) {
+                if (!key.isEmpty() && action->isEnabled()) {
+                    byShortcut[key.toString()] << plain(action->text());
+                }
+            }
+        }
+        for (auto& [key, names] : byShortcut) {
+            names.removeDuplicates();
+            if (names.size() > 1) {
+                findings << QStringLiteral("atajo %1 repetido: %2").arg(key, names.join(QStringLiteral(" / ")));
+            }
+        }
+        // Menús: letra de acceso repetida, acciones sin ayuda y demasiadas entradas.
+        const auto review = [&](const QList<QAction*>& actions, const QString& where, const auto& self) -> void {
+            std::map<QChar, QStringList> letters;
+            int entries = 0;
+            for (QAction* action : actions) {
+                if (action->isSeparator() || !action->isVisible()) {
+                    continue;
+                }
+                ++entries;
+                const qsizetype mark = action->text().indexOf(QLatin1Char('&'));
+                if (mark >= 0 && mark + 1 < action->text().size()) {
+                    letters[action->text().at(mark + 1).toLower()] << plain(action->text());
+                }
+                if (action->menu() != nullptr) {
+                    self(action->menu()->actions(), where + QStringLiteral(" › ") + plain(action->text()), self);
+                } else if (!action->toolTip().contains(QStringLiteral("<br>")) && !action->isCheckable()) {
+                    findings << QStringLiteral("sin ayuda: %1 › %2").arg(where, plain(action->text()));
+                }
+            }
+            for (const auto& [letter, names] : letters) {
+                if (names.size() > 1) {
+                    findings << QStringLiteral("letra «%1» repetida en %2: %3").arg(letter).arg(where, names.join(QStringLiteral(" / ")));
+                }
+            }
+            if (entries > 22) {
+                findings << QStringLiteral("menú largo (%1 entradas): %2").arg(entries).arg(where);
+            }
+        };
+        review(window_.menuBar()->actions(), QStringLiteral("Barra"), review);
+        // Botones visibles: al menos 20 px de alto y de ancho, y con nombre o ayuda (los de solo icono).
+        for (const QAbstractButton* button : window_.findChildren<QAbstractButton*>()) {
+            if (!button->isVisible() || qobject_cast<const QCheckBox*>(button) != nullptr) {
+                continue;
+            }
+            const QString name = !button->text().isEmpty() ? button->text() : button->toolTip();
+            const QString parent = button->parentWidget() != nullptr ? QString::fromLatin1(button->parentWidget()->metaObject()->className()) : QString();
+            if (parent.contains(QStringLiteral("DockWidgetTitle")) || parent.contains(QStringLiteral("QDockWidget")) || parent.contains(QStringLiteral("QTabBar"))) {
+                continue;  // los de Qt
+            }
+            if (button->width() < 20 || button->height() < 20) {
+                findings << QStringLiteral("botón pequeño (%1×%2): %3 [%4]").arg(button->width()).arg(button->height()).arg(name, parent);
+            }
+            if (name.isEmpty()) {
+                findings << QStringLiteral("botón sin nombre ni ayuda [%1 %2]").arg(parent, button->objectName());
+            }
+        }
+        expect(findings.isEmpty(), findings.join(QStringLiteral("; ")));
+    });
+
     // Consistencia: en todas las herramientas, cada medida que se puede escribir se señala en la vista con su flecha o su arco.
     step(QStringLiteral("Cada medida de cada herramienta tiene su flecha"), [&] {
         expect(openChangeAccept(window_.boxAction_, 3) == 1, QStringLiteral("no se creó la caja de apoyo"));
@@ -1735,10 +1845,8 @@ int InterfaceCheck::run()
                 move->click();
             }
             // Mover: arrastrar la flecha X 12,5 mm.
-            blocking(QStringLiteral("arrastrar la flecha X"), [&] {
-                emit window_.viewport_->gizmoPressed(0);
-                emit window_.viewport_->gizmoDragged(0, 12.5);
-            });
+            blocking(QStringLiteral("agarrar la flecha X"), [&] { emit window_.viewport_->gizmoPressed(0); });
+            blocking(QStringLiteral("arrastrar la flecha X"), [&] { emit window_.viewport_->gizmoDragged(0, 12.5); });
             settle(400);
             // La sombra (azul translúcida) se ve mientras se arrastra: antes de quitar el redibujado forzado se veía, y al
             // quitarlo la vista no se enteraba de que había cambiado (771 píxeles azulados, solo las flechas, contra 137 000).
