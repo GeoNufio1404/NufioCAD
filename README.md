@@ -18,6 +18,8 @@ flowchart LR
     hist <--> nuf[("Diseño .nuf")]
 ```
 
+![Ventana de NufioCAD (tema oscuro) con la herramienta Caja: las flechas X (roja) e Y (verde) colocan el cuerpo nuevo](docs/capturas/ventana-caja-flechas.png)
+
 - **Sketch:** líneas, rectángulos, círculos, arcos, polígonos, ranuras, elipses, splines, cónicas, texto, imagen de
   referencia y DXF; restricciones automáticas al dibujar con líneas guía al estilo Onshape; cotas sobre el lienzo.
 - **Modelado paramétrico:** cada operación guarda sus parámetros (pueden ser expresiones como `alto*2`) y al cambiar una

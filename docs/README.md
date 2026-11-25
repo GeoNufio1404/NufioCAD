@@ -12,6 +12,7 @@
 | Probar la aplicación a mano, sección por sección | [`guia-de-pruebas.md`](guia-de-pruebas.md) |
 | Las medidas y convenciones de cada generador (Lightbox, Caja con tapa…) | [`generadores.md`](generadores.md) |
 | Cifras de rendimiento y cómo medir | [`rendimiento/mediciones.md`](rendimiento/mediciones.md) |
+| Ver cómo se ve la interfaz (capturas) | [`capturas/`](capturas/) |
 | Revisiones de código y sus hallazgos | [`auditorias/`](auditorias/) |
 
 ## Orden recomendado para alguien nuevo
@@ -33,6 +34,7 @@ docs/
 ├── registro-de-cambios.md     entregas, archivos tocados y cómo volver atrás
 ├── guia-de-pruebas.md         pruebas manuales con IDs (SKC.12, ACA.6…)
 ├── generadores.md             medidas de cada generador
+├── capturas/                  capturas de la interfaz (se rehacen con --captura-temas)
 ├── rendimiento/
 │   └── mediciones.md          tiempos medidos (Debug y Release, Fedora y Windows)
 └── auditorias/
@@ -43,7 +45,8 @@ docs/
 ## Convenciones
 
 - Todo en español; el código y los nombres de archivo también.
-- Diagramas en [Mermaid](https://mermaid.js.org) dentro de los `.md` (no imágenes sueltas), para que se puedan editar.
+- Diagramas en [Mermaid](https://mermaid.js.org) dentro de los `.md` (no imágenes sueltas), para que se puedan editar. Las
+  capturas de la interfaz van en [`capturas/`](capturas/), generadas por el propio programa (`--captura-temas`).
 - Cada bloque de la hoja de ruta termina con su línea **«Pendiente de …»**; cada prueba manual tiene un ID único.
 - Las rutas de código se citan relativas a `src/` (`document/src/Document.cpp`) o a la raíz del repositorio.
 

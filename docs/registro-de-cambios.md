@@ -17,6 +17,7 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 - **Sombra al arrastrar las flechas de colocación** (`FeatureTools.cpp`): al agarrar una flecha de Caja, Cilindro, Engranaje, Rosca… el cuerpo nuevo se quita de su sitio y queda una sombra translúcida que sigue al arrastre, sin recalcular; al soltar se calcula en su sitio nuevo. Un cuerpo con más de 60 caras (un engranaje) usa como sombra su caja envolvente, para que agarrar la flecha no se quede pensando; el mallado de las sombras es más grueso (`ViewportHandles.cpp`).
 - Al abrir Mover y girar se piden los tres ejes del gizmo aunque una colocación los hubiera dejado en dos.
 - Prueba de interfaz: paso nuevo que arrastra las flechas en Engranaje y comprueba que la posición sigue al arrastre y que al soltar queda una vista previa válida.
+- **Documentación:** README del proyecto con una captura; `docs/capturas/` (ventana con la herramienta Caja y las flechas, menú Sólido en submenús); el apartado de la bayoneta en `generadores.md`; un bloque «AJ» en la hoja de ruta con lo pendiente; `desarrollo.md` dice de dónde salen las capturas.
 - **Volver atrás:** revertir la fusión de `feature/menu-solido-grada`.
 
 ---
