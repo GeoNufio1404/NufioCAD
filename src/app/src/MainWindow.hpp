@@ -200,6 +200,10 @@ private:
     // Editar una operación (doble clic en el timeline).
     void activateFeature(document::FeatureId id);
     void showFeatureMenu(document::FeatureId id, const QPoint& globalPos);
+    // Varias operaciones del timeline a la vez (elegidas seguidas): menú, borrar y mover como un solo paso del historial.
+    void showSelectionMenu(const std::vector<document::FeatureId>& ids, const QPoint& globalPos);
+    void deleteFeatures(const std::vector<document::FeatureId>& ids);
+    void moveFeatures(const std::vector<document::FeatureId>& ids, std::size_t gap);
 
     // Muestra el modelo: cuerpos, sketches visibles, navegador y timeline.
     void refreshModel();

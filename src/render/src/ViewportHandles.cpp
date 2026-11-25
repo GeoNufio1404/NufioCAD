@@ -74,6 +74,7 @@ void Viewport::Impl::hideGizmo()
 {
     clearGizmoShapes();
     gizmoKind = Viewport::GizmoKind::None;
+    gizmoMask = 7;
     gizmoActive = -1;
     gizmoHiddenForZoom = false;
     if (gizmoSettle != nullptr) {
@@ -89,7 +90,7 @@ void Viewport::Impl::updateGizmoForZoom()
     const double pixel = pixelSize();
     const bool zooming = std::abs(pixel - gizmoLastPixel) > 1e-9 * std::max(pixel, 1e-12);
     gizmoLastPixel = pixel;
-    if (!gizmoShapes[0].IsNull() && std::abs(90.0 * pixel - gizmoBuiltSize) > 0.08 * gizmoBuiltSize) {
+    if (gizmoBuilt() && std::abs(90.0 * pixel - gizmoBuiltSize) > 0.08 * gizmoBuiltSize) {
         clearGizmoShapes();
         gizmoHiddenForZoom = true;
     }
@@ -124,9 +125,11 @@ void Viewport::Impl::showGizmo(Viewport::GizmoKind kind, const sketch::Vec3& ori
     shift.SetTranslation(gp_Vec(gp_Pnt(0.0, 0.0, 0.0), gizmoOrigin));
     const TopLoc_Location place(shift);
     // Mientras se arrastra solo cambia de lugar (rehacerlo cortaría el arrastre).
-    if (!gizmoShapes[0].IsNull() && gizmoKind == kind && (gizmoActive >= 0 || std::abs(size - gizmoBuiltSize) < 0.05 * gizmoBuiltSize)) {
+    if (gizmoBuilt() && gizmoKind == kind && (gizmoActive >= 0 || std::abs(size - gizmoBuiltSize) < 0.05 * gizmoBuiltSize)) {
         for (const Handle(AIS_Shape)& shape : gizmoShapes) {
-            context->SetLocation(shape, place);
+            if (!shape.IsNull()) {
+                context->SetLocation(shape, place);
+            }
         }
         return;
     }
@@ -136,6 +139,9 @@ void Viewport::Impl::showGizmo(Viewport::GizmoKind kind, const sketch::Vec3& ori
     gizmoBuiltSize = size;
     const Quantity_Color colors[3] = {rgb(0xE5, 0x48, 0x4D), rgb(0x46, 0xC4, 0x6E), rgb(0x4C, 0x8D, 0xF6)};
     for (int k = 0; k < 3; ++k) {
+        if (((gizmoMask >> k) & 1) == 0) {
+            continue;
+        }
         BRep_Builder builder;
         TopoDS_Compound shape;
         builder.MakeCompound(shape);

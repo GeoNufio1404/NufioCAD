@@ -1,10 +1,13 @@
 #include <nuf/commands/CommandStack.hpp>
+#include <nuf/commands/FeatureCommands.hpp>
 #include <nuf/commands/RenameDocument.hpp>
 #include <nuf/document/Document.hpp>
+#include <nuf/document/Features.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <memory>
+#include <vector>
 
 using nuf::commands::CommandStack;
 using nuf::commands::RenameDocument;
@@ -103,4 +106,42 @@ TEST_CASE("Punto guardado: limpio al volver a él, sucio si se pierde", "[comman
     REQUIRE_FALSE(stack.isClean());
     stack.markSaved();
     REQUIRE(stack.isClean());
+}
+
+TEST_CASE("Un Batch borra y mueve varias operaciones con un solo Deshacer", "[commands]")
+{
+    Document doc;
+    CommandStack stack(doc);
+    for (int i = 0; i < 5; ++i) {
+        stack.push(std::make_unique<nuf::commands::AddFeature>(std::make_unique<nuf::document::BoxFeature>()));
+    }
+    std::vector<nuf::document::FeatureId> original;
+    for (std::size_t i = 0; i < doc.featureCount(); ++i) {
+        original.push_back(doc.feature(i).id());
+    }
+    const auto order = [&] {
+        std::vector<nuf::document::FeatureId> ids;
+        for (std::size_t i = 0; i < doc.featureCount(); ++i) {
+            ids.push_back(doc.feature(i).id());
+        }
+        return ids;
+    };
+
+    std::vector<std::unique_ptr<nuf::commands::Command>> steps;
+    steps.push_back(std::make_unique<nuf::commands::DeleteFeature>(original[3]));
+    steps.push_back(std::make_unique<nuf::commands::DeleteFeature>(original[1]));
+    stack.push(std::make_unique<nuf::commands::Batch>("Borrar 2 operaciones", std::move(steps)));
+    REQUIRE(order() == std::vector{original[0], original[2], original[4]});
+    REQUIRE(stack.undoLabel() == "Borrar 2 operaciones");
+
+    stack.undo();  // un solo paso las devuelve, en su sitio
+    REQUIRE(order() == original);
+
+    std::vector<std::unique_ptr<nuf::commands::Command>> moves;
+    moves.push_back(std::make_unique<nuf::commands::MoveFeature>(original[0], 4));
+    moves.push_back(std::make_unique<nuf::commands::MoveFeature>(original[1], 4));
+    stack.push(std::make_unique<nuf::commands::Batch>("Mover 2 operaciones", std::move(moves)));
+    REQUIRE(order() == std::vector{original[2], original[3], original[4], original[0], original[1]});
+    stack.undo();
+    REQUIRE(order() == original);
 }

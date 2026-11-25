@@ -9,6 +9,12 @@
         <file alias="app/128.png">icons/app/nufiocad-128.png</file>
         <file alias="app/256.png">icons/app/nufiocad-256.png</file>
         <!-- Iconos de la interfaz (ver icons/ui/LICENSE.md) -->
+        <file alias="ui/timeline-start.svg">icons/ui/timeline-start.svg</file>
+        <file alias="ui/timeline-prev.svg">icons/ui/timeline-prev.svg</file>
+        <file alias="ui/timeline-play.svg">icons/ui/timeline-play.svg</file>
+        <file alias="ui/timeline-pause.svg">icons/ui/timeline-pause.svg</file>
+        <file alias="ui/timeline-next.svg">icons/ui/timeline-next.svg</file>
+        <file alias="ui/timeline-end.svg">icons/ui/timeline-end.svg</file>
         <file alias="ui/arc.svg">icons/ui/arc.svg</file>
         <file alias="ui/arc-center.svg">icons/ui/arc-center.svg</file>
         <file alias="ui/arc-tangent.svg">icons/ui/arc-tangent.svg</file>

@@ -123,6 +123,9 @@ protected:
     bool placementSelection(Placement& placement, const render::ModelSelection& selection);
     document::SketchAttachment placementAttachment(const Placement& placement) const;
     bool placementOnFace(const Placement& placement) const;
+    // Flechas X e Y en la vista para arrastrar la posición de lo que se está colocando (sobre un plano de origen XY): así
+    // se aparta el cuerpo nuevo de lo que ya hay en el origen sin escribir números. createPlacement() lo activa.
+    void syncPlacementGizmo();
     // Registra un cuadro numérico como el campo «key» de la operación, para
     // poder ligarlo a parámetros (se llama al crearlo en createFields).
     void field(const char* key, QDoubleSpinBox* box)
@@ -176,6 +179,10 @@ protected:
     QLabel* statusLabel_ = nullptr;
     QPushButton* okButton_ = nullptr;
     bool updating_ = false;  // al rellenar los campos, sin vista previa
+    Placement* movable_ = nullptr;        // la colocación que se arrastra con flechas, si la herramienta tiene
+    bool placementDragging_ = false;
+    double dragStartX_ = 0.0;
+    double dragStartY_ = 0.0;
 
     // Aviso que no viene del cálculo sino de algo que la herramienta puso sola (un ángulo recomendado, por ejemplo): sale
     // en naranja bajo los cuadros y el cuadro «field» se marca también; se quita al cambiar ese cuadro a mano.

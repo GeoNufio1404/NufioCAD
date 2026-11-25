@@ -193,6 +193,9 @@ public:
     // al soltar (gizmoReleased) calcula.
     enum class GizmoKind { None, Move, Rotate };
     void showGizmo(GizmoKind kind, const sketch::Vec3& origin);
+    // Qué ejes dibuja el gizmo: bits 0, 1 y 2 = X, Y y Z (7 = todos). Volver a ocultarlo los restablece a todos.
+    // Colocar un cuerpo nuevo solo usa X e Y.
+    void setGizmoAxes(int mask);
     void hideGizmo();
     // Deja solo la flecha o el anillo «axis» (0 = X, 1 = Y, 2 = Z) y quita los otros dos, para ver el efecto sin
     // estorbos mientras se arrastra uno; con -1 vuelven todos.

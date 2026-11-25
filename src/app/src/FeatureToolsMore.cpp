@@ -457,6 +457,7 @@ void MoveTool::refreshGizmo()
     }
     // Las flechas y los anillos van donde queda el cuerpo (el pivote, desplazado).
     const std::array<double, 3> at = positionValues();
+    viewport_.setGizmoAxes(7);  // por si una colocación lo dejó solo con X e Y
     viewport_.showGizmo(moveMode_->isChecked() ? render::Viewport::GizmoKind::Move : render::Viewport::GizmoKind::Rotate,
                         {center->x + at[0], center->y + at[1], center->z + at[2]});
 }
@@ -575,6 +576,7 @@ void MoveTool::gizmoDragged(int axis, double amount)
         }
     } else if (const auto center = pivot()) {
         // Al girar, el centro no se mueve: solo las flechas de mover siguen a la pieza.
+        viewport_.setGizmoAxes(7);  // por si una colocación lo dejó solo con X e Y
         viewport_.showGizmo(render::Viewport::GizmoKind::Move,
                             {center->x + position[0], center->y + position[1], center->z + position[2]});
     }

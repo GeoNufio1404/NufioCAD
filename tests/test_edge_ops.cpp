@@ -3853,10 +3853,15 @@ TEST_CASE("La tapa de bayoneta entra por las entradas, gira y queda retenida", "
                                                           {{lidX, 0.0, 0.0}, {0.0, 0.0, 1.0}}, 0.0, false, {0.0, 0.0, turn}, {lidX, 0.0, 0.0});
         return std::abs(geometry::boolean(geometry::BooleanOp::Common, jar, placed).volume());
     };
-    CHECK(overlap(0.0, 0.0) < 1.0);                          // entra por las entradas
-    CHECK(overlap(std::numbers::pi / 4.0, 0.0) < 1.0);       // gira libre por la guía
-    CHECK(overlap(std::numbers::pi / 4.0, 3.0) > 5.0);       // girada, no se puede levantar: los pines topan
-    CHECK(overlap(0.0, 3.0) < 1.0);                          // alineada, sí sale
+    const auto rad = [](double degrees) { return degrees * std::numbers::pi / 180.0; };
+    CHECK(overlap(0.0, 0.0) < 1.0);                // entra por las entradas
+    CHECK(overlap(rad(60.0), 0.0) > 5.0);          // la guía va un peldaño más arriba: sin levantar la tapa no gira
+    CHECK(overlap(rad(60.0), 1.1) < 1.0);          // levantándola un poco, gira por la guía
+    CHECK(overlap(rad(75.0), 0.0) < 1.0);          // al final cae en el hueco de cierre
+    CHECK(overlap(rad(75.0), 3.0) > 5.0);          // cerrada, no se puede levantar del todo: los pines topan
+    CHECK(overlap(rad(79.0), 1.1) > 5.0);          // el tope no deja seguir girando hasta la entrada siguiente
+    CHECK(overlap(rad(-8.0), 1.1) > 5.0);          // y al otro lado de la entrada hay otro tope
+    CHECK(overlap(0.0, 3.0) < 1.0);                // alineada con las entradas, sí sale
 }
 
 TEST_CASE("La tapa deslizante entra en las guías y no se levanta", "[generator][jar][.fit]")

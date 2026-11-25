@@ -10,6 +10,16 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Ajustes: colocar con flechas, cinta con desplegables y bayoneta con tope (24 nov. 2026)
+
+- **Colocar un cuerpo nuevo con flechas** (`FeatureTools.cpp`: `syncPlacementGizmo`; `Viewport::setGizmoAxes`): en Caja, Cilindro, Engranaje, Rosca y las demás herramientas con «Plano o cara» y posición X/Y, mientras el plano es el XY de origen aparecen las flechas X (roja) e Y (verde) del gizmo de mover (sin la Z). Arrastrar una cambia la posición X o Y (con Ctrl se pega a la rejilla) y la sombra se mueve con ella, así el cuerpo nuevo se aparta del origen sin que se fusione con lo que haya ahí. Los cuadros de posición siguen valiendo.
+- **Cinta SÓLIDO con desplegables** (`MainWindowMenus.cpp`): las herramientas parecidas van juntas en un botón con menú que recuerda la última usada: Extruir/Revolución/Barrido/Loft, Caja/Cilindro, Redondeo/Chaflán, Simetría/Dividir/Patrón, Alinear/Unión/Vínculo y Plano/Eje. De 30 botones pasa a 20.
+- **Bayoneta del bote con tapa** (`Generators.cpp`, `JarWithLid`): la guía de la tapa va un peldaño más arriba que las entradas, así que para girar hay que levantar la tapa un poco; al final del giro hay un tope (un muro junto a cada entrada) que no deja seguir hasta la entrada siguiente, y un hueco de cierre donde el pin cae al soltar. Para abrir hay que levantar la tapa y girar de vuelta hasta las entradas. Prueba de ajuste actualizada (`test_edge_ops.cpp`).
+- Se incluye la rama de la timeline (`feature/timeline-mejoras`) porque aún no estaba en `develop`.
+- **Volver atrás:** revertir la fusión de `feature/ajustes-colocacion-menus-bayoneta`.
+
+---
+
 ## Hotfix: elegir aristas en Redondeo y Chaflán (24 nov. 2026)
 
 - `Viewport::setEdgeAssist` (`ViewportHandles.cpp`, `ViewportScene.cpp`): mientras Redondeo o Chaflán están abiertos, la zona donde el cursor agarra una arista es más ancha (7 px en vez de 2; las aristas pesan más que las caras, así que ganan a la cara de detrás) y la arista más cercana se marca en naranja y en negrita (una arista temporal encima, que no se puede agarrar).
@@ -17,6 +27,15 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 - Prueba de interfaz: dos caras vecinas dejan solo su arista común y quitar una vuelve a las de la otra; al barrer el cursor se marca una arista y se ve naranja en pantalla.
 - Nota de compilación: tras cambiar un `.hpp` de la interfaz hay que tocar (o recompilar) todos los `.cpp` que lo incluyen; con una compilación parcial la prueba se cayó por corrupción de memoria (tamaños distintos de `EdgeTool`).
 - **Volver atrás:** revertir la fusión de `feature/hotfix-seleccion-aristas`.
+## Timeline: barra de desplazamiento, selección múltiple e iconos nuevos (24 nov. 2026)
+
+- `ModelPanels.cpp/.hpp` (`TimelineWidget`): el ancho mínimo es el de todas las fichas, así que el área de desplazamiento saca su barra horizontal (antes las de la derecha se perdían); rueda del ratón de lado, desplazamiento automático al arrastrar cerca de un borde y al añadir operaciones.
+- Selección de varias fichas **seguidas** (Mayús+clic rango, Ctrl+clic suma o quita un extremo, Ctrl+A, flechas, Esc); Supr las borra, arrastrar o Alt+←/→ las mueve juntas y el menú del clic derecho actúa sobre todas.
+- `FeatureCommands`: `Batch` (varias órdenes como un solo paso de Deshacer). `MainWindow`: `deleteFeatures`, `moveFeatures` (comprueba que el bloque no cruce lo que necesita o lo que lo usa), `showSelectionMenu`.
+- Los botones de reproducción (inicio, atrás, reproducir/pausa, adelante, final) usan iconos SVG nuevos (`timeline-*.svg`) en vez de símbolos de texto.
+- Iconos: cada ficha usa el icono de su herramienta (`resources/icons/ui`) en vez de un símbolo de texto, más su número de orden. Solo se pintan las fichas visibles.
+- Pruebas: `Batch` en `test_command_stack.cpp`; en la interfaz, un paso con 24 operaciones (barra, borrar y mover bloques con un solo Deshacer).
+- **Volver atrás:** revertir la fusión de `feature/timeline-mejoras`.
 
 ---
 

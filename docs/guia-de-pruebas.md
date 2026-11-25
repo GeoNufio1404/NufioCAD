@@ -310,6 +310,19 @@ Código: **USA**. Rama `feature/fase-15-usabilidad`.
 | ARI.2 | Elige una cara | Se eligen todas sus aristas (como antes) |
 | ARI.3 | Elige una segunda cara vecina | Quedan solo las aristas que comparten (la unión entre las dos); quitar una de las caras (clic otra vez) vuelve a las de la otra |
 | ARI.4 | Elige dos caras, luego una arista suelta con clic, y quita una cara | La arista suelta se conserva; «Quitar selección» limpia todo |
+| TL.1 | Con muchas operaciones (unas 20 o más), mira la timeline | Aparece una barra de desplazamiento abajo; la rueda del ratón también la mueve; con la última ficha a la vista se ve el marcador naranja |
+| TL.2 | Añade una operación con la timeline desplazada a la izquierda | La timeline se mueve sola para dejar a la vista el marcador |
+| TL.3 | Clic en una ficha, Mayús+clic en otra | Se eligen todas las de en medio (resaltadas); Ctrl+clic en la ficha de al lado suma o quita una del extremo; Ctrl+A elige todas; Esc las suelta |
+| TL.4 | Con varias elegidas, pulsa Supr | Se borran juntas (si algo que se queda depende de ellas, pregunta antes) y un solo Deshacer las devuelve todas en su sitio |
+| TL.5 | Arrastra una de las elegidas a otro hueco; o Alt+← / Alt+→ | Se mueve el bloque entero, en su orden; con un solo Deshacer vuelve. Si quedaría antes de lo que necesita, avisa en la barra de estado y no mueve |
+| TL.6 | Clic derecho sobre una de varias elegidas | Menú con «Suprimir/Reactivar las N», «Mover el marcador tras la última» y «Borrar las N» |
+| TL.7 | Arrastra una ficha hasta el borde derecho o izquierdo de lo visible | La timeline se desplaza sola mientras sigues cerca del borde |
+| TL.8 | Mira los iconos de las fichas | Cada ficha lleva el mismo dibujo que su herramienta (Extruir, Redondeo, Caja…), con los colores del tema, y su número de orden arriba a la izquierda |
+| AJU.1 | Abre Caja (o Engranaje) con algo ya en el origen y arrastra la flecha roja o la verde que sale en la vista | La sombra se mueve y los cuadros «Posición X/Y» cambian; al aceptar la caja queda aparte, sin fusionarse con la del origen. Con Ctrl se pega a la rejilla |
+| AJU.2 | En Caja, cambia «Plano o cara» a otro plano | Las flechas desaparecen (solo salen sobre el plano XY) |
+| AJU.3 | Mira la pestaña SÓLIDO | Las herramientas parecidas están en botones con desplegable (Extruir…, Caja/Cilindro, Redondeo/Chaflán…); el botón recuerda la última usada y todo sigue funcionando |
+| AJU.4 | Genera un Bote con tapa de bayoneta, deja la tapa sobre el bote y gírala sin levantarla | No gira: hay que levantarla un poco; al girar hasta el final topa y cae en su hueco; seguir girando no la abre; para abrir se levanta y se gira de vuelta |
+| TL.9 | Mira los botones de inicio, atrás, reproducir, adelante y final sobre la timeline; pulsa reproducir | Llevan iconos del mismo estilo que las herramientas; al reproducir el icono pasa a pausa y vuelve a reproducir al parar |
 | FLU.31 | Diseño con piezas grandes: Archivo › Exportar › STL y, con la insignia «ocupado» visible, pulsa su botón Cancelar | La exportación se para, sale «Cancelado: el diseño no cambió», no queda archivo a medias y el diseño sigue igual |
 
 ## 2. Sketch
