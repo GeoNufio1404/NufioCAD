@@ -10,6 +10,16 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Hotfix: elegir aristas en Redondeo y Chaflán (24 nov. 2026)
+
+- `Viewport::setEdgeAssist` (`ViewportHandles.cpp`, `ViewportScene.cpp`): mientras Redondeo o Chaflán están abiertos, la zona donde el cursor agarra una arista es más ancha (7 px en vez de 2; las aristas pesan más que las caras, así que ganan a la cara de detrás) y la arista más cercana se marca en naranja y en negrita (una arista temporal encima, que no se puede agarrar).
+- `EdgeTool` (`FeatureToolsProfile.cpp`): se recuerdan las caras elegidas; con una, todas sus aristas (como antes); con dos o más, solo las que comparten (la unión entre ellas). Las aristas elegidas a mano no se tocan al rehacer.
+- Prueba de interfaz: dos caras vecinas dejan solo su arista común y quitar una vuelve a las de la otra; al barrer el cursor se marca una arista y se ve naranja en pantalla.
+- Nota de compilación: tras cambiar un `.hpp` de la interfaz hay que tocar (o recompilar) todos los `.cpp` que lo incluyen; con una compilación parcial la prueba se cayó por corrupción de memoria (tamaños distintos de `EdgeTool`).
+- **Volver atrás:** revertir la fusión de `feature/hotfix-seleccion-aristas`.
+
+---
+
 ## Hotfix: el menú radial se abre centrado en el cursor (24 nov. 2026)
 
 - `RadialMenu.cpp`: ahora es una ventana emergente propia; como hijo de la vista se corría para no salirse de ella (a menos de ~142 px de un borde), y se veía desfasado del cursor. Solo lo limita la pantalla.

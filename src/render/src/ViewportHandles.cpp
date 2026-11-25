@@ -386,6 +386,59 @@ void Viewport::Impl::hideAlignmentLine()
     }
 }
 
+void Viewport::Impl::setEdgeAssist(bool on)
+{
+    edgeAssist = on;
+    // 2 px es lo de fábrica; con la ayuda se agarra una arista desde unos píxeles más lejos (las aristas pesan más que las
+    // caras cuando están a la misma profundidad, así que ganan a la cara de detrás).
+    context->SetPixelTolerance(on ? 7 : 2);
+    if (!on) {
+        hideEdgeHover();
+    }
+}
+
+void Viewport::Impl::hideEdgeHover()
+{
+    if (!hoverEdge.IsNull()) {
+        context->Remove(hoverEdge, false);
+        hoverEdge.Nullify();
+        hoverEdgeShape.Nullify();
+        view->Invalidate();
+    }
+}
+
+bool Viewport::Impl::updateEdgeHover()
+{
+    if (!edgeAssist) {
+        return false;
+    }
+    TopoDS_Shape edge;
+    if (context->HasDetected()) {
+        const Handle(StdSelect_BRepOwner) owner = Handle(StdSelect_BRepOwner)::DownCast(context->DetectedOwner());
+        if (!owner.IsNull() && owner->HasShape() && owner->Shape().ShapeType() == TopAbs_EDGE
+            && bodyOf(context->DetectedInteractive()) != nullptr) {
+            edge = owner->Shape().Moved(owner->Location());
+        }
+    }
+    if (edge.IsNull()) {
+        const bool was = !hoverEdge.IsNull();
+        hideEdgeHover();
+        return was;
+    }
+    if (!hoverEdge.IsNull() && hoverEdgeShape.IsSame(edge)) {
+        return false;  // ya está marcada
+    }
+    hideEdgeHover();
+    hoverEdgeShape = edge;
+    hoverEdge = new AIS_Shape(edge);
+    hoverEdge->SetColor(rgb(0xF2, 0xA3, 0x4B));
+    hoverEdge->Attributes()->WireAspect()->SetWidth(5.0);
+    hoverEdge->SetZLayer(Graphic3d_ZLayerId_Topmost);
+    context->Display(hoverEdge, AIS_WireFrame, -1, false);  // sin modo de selección: solo se ve, no se agarra
+    view->Invalidate();
+    return true;
+}
+
 void Viewport::Impl::showAlignmentLine(const sketch::Vec3& from, const sketch::Vec3& to)
 {
     hideAlignmentLine();

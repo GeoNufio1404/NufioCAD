@@ -40,6 +40,7 @@
 #include <QDockWidget>
 #include <QRegularExpression>
 #include <QColor>
+#include <cstdio>
 #include <optional>
 #include <QCheckBox>
 #include <QComboBox>
@@ -1244,6 +1245,91 @@ int InterfaceCheck::run()
             arrowCheck(name + QStringLiteral(" (módulo)"), action, 0);
         }
     }
+
+    // Redondeo: una cara elige todas sus aristas; dos caras elegidas eligen solo la arista donde se unen; quitar una vuelve
+    // a las de la otra. La zona de captura de aristas es más ancha mientras la herramienta está abierta.
+    step(QStringLiteral("Redondeo: dos caras eligen la arista donde se unen"), [&] {
+        expect(openChangeAccept(window_.boxAction_, 3) == 1, QStringLiteral("no se creó la caja de apoyo"));
+        blocking(QStringLiteral("abrir Redondeo"), [&] { window_.filletAction_->trigger(); });
+        waitIdle();
+        auto* tool = dynamic_cast<EdgeTool*>(window_.tool_.get());
+        expect(tool != nullptr, QStringLiteral("no se abrió Redondeo"));
+        if (tool == nullptr || window_.document_.result().bodies.empty()) {
+            undoAll();
+            return;
+        }
+        const geometry::Shape shape = window_.document_.result().bodies.front().shape;
+        const std::string key = window_.document_.result().bodies.front().key;
+        // Al barrer el cursor sobre la pieza, alguna arista se marca en naranja (y se ve en pantalla).
+        blocking(QStringLiteral("encuadrar"), [&] { window_.viewport_->fitAll(); });
+        settle(300);
+        bool marked = false;
+        long orange = 0;
+        for (int y = window_.viewport_->height() / 3; y <= 2 * window_.viewport_->height() / 3 && !marked; y += window_.viewport_->height() / 9) {
+            for (int x = 0; x < window_.viewport_->width() && !marked; x += 8) {
+                const QPointF at(x, y);
+                QMouseEvent move(QEvent::MouseMove, at, at, Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+                QApplication::sendEvent(window_.viewport_, &move);
+                settle(25);  // el cuadro que decide qué hay bajo el cursor
+                if (window_.viewport_->edgeHoverActive()) {
+                    marked = true;
+                    settle(100);
+                    const QImage image = window_.viewport_->grabFramebuffer();
+                    for (int py = 0; py < image.height(); ++py) {
+                        for (int px = 0; px < image.width(); ++px) {
+                            const QColor c = image.pixelColor(px, py);
+                            if (std::abs(c.red() - 0xF2) < 14 && std::abs(c.green() - 0xA3) < 14 && std::abs(c.blue() - 0x4B) < 14) {
+                                ++orange;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        expect(marked, QStringLiteral("al acercar el cursor a una arista no se marcó ninguna"));
+        expect(!marked || orange > 30, QStringLiteral("la arista marcada no se ve en naranja (%1 píxeles)").arg(orange));
+        // Dos caras vecinas: comparten exactamente una arista.
+        int a = -1;
+        int b = -1;
+        int shared = -1;
+        for (int i = 0; i < shape.faceCount() && a < 0; ++i) {
+            for (int j = i + 1; j < shape.faceCount() && a < 0; ++j) {
+                std::vector<int> common;
+                const std::vector<int> ei = shape.faceEdges(i);
+                for (const int e : shape.faceEdges(j)) {
+                    if (std::ranges::find(ei, e) != ei.end()) {
+                        common.push_back(e);
+                    }
+                }
+                if (common.size() == 1) {
+                    a = i;
+                    b = j;
+                    shared = common.front();
+                }
+            }
+        }
+        expect(a >= 0, QStringLiteral("la caja no tiene dos caras vecinas"));
+        if (a >= 0) {
+            const auto pick = [&](int face) {
+                render::ModelSelection s;
+                s.faces.push_back({key, shape.faceRef(face)});
+                blocking(QStringLiteral("elegir una cara"), [&] { tool->selectionChanged(s); });
+                waitIdle();
+            };
+            pick(a);
+            expect(tool->edges_.size() == shape.faceEdges(a).size(), QStringLiteral("una cara no eligió todas sus aristas"));
+            pick(b);
+            expect(tool->edges_.size() == 1 && tool->edges_.front() == shape.edgeRef(shared),
+                   QStringLiteral("dos caras no dejaron solo su arista común (%1)").arg(tool->edges_.size()));
+            pick(b);  // quitar una vuelve a las de la otra
+            expect(tool->edges_.size() == shape.faceEdges(a).size(), QStringLiteral("quitar una cara no volvió a las de la otra"));
+            pick(a);
+            expect(tool->edges_.empty(), QStringLiteral("quitar la última cara no vació la elección"));
+        }
+        window_.finishTool(false);
+        waitIdle();
+        undoAll();
+    });
 
     // La vista previa de un generador es azul translúcida y, al terminar de calcular, no queda el «Calculando…».
     step(QStringLiteral("Vista previa translúcida de un generador"), [&] {

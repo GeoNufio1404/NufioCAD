@@ -179,6 +179,14 @@ public:
 
     void setAdditiveSelection(bool on);
 
+    // Ayuda para elegir aristas: tolerancia de captura más ancha y la arista cercana marcada (ver Viewport::setEdgeAssist).
+    bool edgeAssist = false;
+    Handle(AIS_Shape) hoverEdge;
+    TopoDS_Shape hoverEdgeShape;
+    void setEdgeAssist(bool on);
+    bool updateEdgeHover();  // true si cambió la arista marcada
+    void hideEdgeHover();
+
     // --- Flecha de distancia -------------------------------------------------
 
     void showDistanceHandle(const sketch::Vec3& origin, const sketch::Vec3& direction, double distance);

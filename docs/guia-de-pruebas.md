@@ -306,6 +306,10 @@ Código: **USA**. Rama `feature/fase-15-usabilidad`.
 | USA.32 | Archivo › Exportar o Imprimir: mira la sección «Mi impresora» | Los tres cuadros de la cama (X, Y, Z) tienen sitio para «256.00 mm» y sus flechas, sin apretarse |
 | FLU.32 | Herramientas › Bote con tapa (rosca) y Aceptar; justo después mira el Navegador | La ventana no se congela al aceptar; los cuerpos salen primero como «Cuerpo1», «Cuerpo2» y, en cuanto termina el cálculo, pasan a «Bote» y «Tapa» dentro del componente «Bote con tapa». Deshacer enseguida (antes de que termine) no deja nombres sueltos |
 | FLU.33 | Clic derecho en la vista, a unos píxeles del borde (arriba a la izquierda, abajo a la derecha, junto a un panel) | El centro del menú radial queda justo bajo el cursor, sin correrse; solo se corre si no cabe en la pantalla |
+| ARI.1 | Redondeo o Chaflán: acerca el cursor a una línea del cuerpo (sin llegar a tocarla) | La arista más cercana se marca en naranja y en negrita, y un clic la elige aunque haya una cara detrás; otro clic la quita |
+| ARI.2 | Elige una cara | Se eligen todas sus aristas (como antes) |
+| ARI.3 | Elige una segunda cara vecina | Quedan solo las aristas que comparten (la unión entre las dos); quitar una de las caras (clic otra vez) vuelve a las de la otra |
+| ARI.4 | Elige dos caras, luego una arista suelta con clic, y quita una cara | La arista suelta se conserva; «Quitar selección» limpia todo |
 | FLU.31 | Diseño con piezas grandes: Archivo › Exportar › STL y, con la insignia «ocupado» visible, pulsa su botón Cancelar | La exportación se para, sale «Cancelado: el diseño no cambió», no queda archivo a medias y el diseño sigue igual |
 
 ## 2. Sketch

@@ -308,8 +308,14 @@ protected:
 
 private:
     friend class InterfaceCheck;  // la prueba de interfaz elige una cara sin ratón (flechas de Redondeo)
+    // Las aristas que salen de las caras elegidas: con una cara, todas las suyas; con dos o más, solo las que comparten
+    // (la unión entre ellas). Se rehacen al elegir o quitar una cara; las aristas elegidas una a una no se tocan.
+    void applyFaces();
+
     Style style_;
     std::vector<geometry::ElementRef> edges_;
+    std::vector<geometry::ElementRef> pickedFaces_;
+    std::vector<geometry::ElementRef> faceEdges_;  // las que sumó applyFaces (para quitarlas al rehacer)
     QDoubleSpinBox* size_ = nullptr;
     QCheckBox* variable_ = nullptr;      // redondeo: radio variable
     QComboBox* chamferKind_ = nullptr;  // chaflán: igual, dos distancias, distancia y ángulo

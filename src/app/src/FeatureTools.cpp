@@ -60,6 +60,7 @@ FeatureTool::~FeatureTool()
     viewport_.hideDistanceHandle();
     viewport_.hideDimensionArrow();
     viewport_.setAdditiveSelection(false);
+    viewport_.setEdgeAssist(false);
     if (panel_) {
         panel_->deleteLater();
     }

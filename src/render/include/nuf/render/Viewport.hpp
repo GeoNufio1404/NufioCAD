@@ -175,6 +175,11 @@ public:
     // Con una operación en curso, un clic agrega o quita de la selección
     // (sin Shift), como en Fusion 360.
     void setAdditiveSelection(bool on);
+    // Ayuda para elegir aristas (Redondeo, Chaflán…): la zona donde el cursor "agarra" una arista es más ancha (así no
+    // se cae en la cara de detrás) y la arista que se agarraría se marca en naranja y en negrita al acercar el cursor.
+    void setEdgeAssist(bool on);
+    // ¿Hay una arista marcada en naranja bajo el cursor? (la prueba de interfaz lo mira)
+    bool edgeHoverActive() const;
 
     // Flecha para arrastrar la distancia de una extrusión: sale de «origin»
     // en «direction» y su punta está a «distance». Al arrastrarla se emite

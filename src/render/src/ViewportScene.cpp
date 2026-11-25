@@ -24,6 +24,11 @@ void Viewport::Impl::handleViewRedraw(const Handle(AIS_InteractiveContext)& ctx,
     }
     updateGizmoForZoom();
     AIS_ViewController::handleViewRedraw(ctx, v);
+    // Con la ayuda de aristas, ya con lo que hay bajo el cursor decidido en este cuadro, se marca (o se desmarca) la arista;
+    // el cambio se ve en el cuadro siguiente.
+    if (edgeAssist && updateEdgeHover()) {
+        widget_.update();
+    }
     if (toAskNextFrame()) {
         widget_.update();
     }
