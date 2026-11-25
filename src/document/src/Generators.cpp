@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <numbers>
 #include <stdexcept>
 
 namespace nuf::document {
@@ -49,6 +50,29 @@ std::vector<GeneratorField> grouped(std::vector<GeneratorField> fields, std::ini
 // Como la «Light Box» de MakerLab: una caja abierta por delante (fondo cerrado y paredes), y una tapa delantera
 // hecha de un marco, un labio que entra en la caja y la cara central (donde va la imagen). La caja y la tapa son
 // dos cuerpos; la tapa es un solo cuerpo (placa más labio), sin piezas sueltas que manejar.
+
+// Una respuesta, o «missing» si el diseño es anterior a esa pregunta.
+double answer(const GeneratorValues& v, const char* key, double missing = 0.0)
+{
+    const auto it = v.find(key);
+    return it != v.end() ? it->second : missing;
+}
+
+// Una flecha que empieza en un punto del diseño (ver Generator::kWorld): mide el valor de la pregunta, o «length».
+Generator::ArrowSpec worldArrow(char axis, std::function<std::array<double, 3>(const GeneratorValues&)> at,
+                                std::function<double(const GeneratorValues&)> length = {}, bool centered = false)
+{
+    Generator::ArrowSpec spec{Generator::kWorld, axis, false, centered};
+    spec.at = std::move(at);
+    spec.length = std::move(length);
+    return spec;
+}
+
+// La misma medida hacia el lado negativo del eje.
+std::function<double(const GeneratorValues&)> backwards(const char* key)
+{
+    return [key](const GeneratorValues& v) { return -answer(v, key); };
+}
 
 class Lightbox final : public Generator {
 public:
@@ -126,6 +150,31 @@ public:
         lipWall.at = [](const GeneratorValues& v) {
             return std::array<double, 3>{v.at("pared") + v.at("holgura"), kCenter, v.at("frente") + v.at("labio") / 2.0};
         };
+        // El cable: por el fondo, o por una pared (las de arriba y abajo se miden a lo ancho; las de los lados, a lo alto).
+        const auto width = [](const GeneratorValues& v) { return v.at("forma") >= 0.5 ? v.at("diametro") : v.at("ancho"); };
+        const auto height = [](const GeneratorValues& v) { return v.at("forma") >= 0.5 ? v.at("diametro") : v.at("alto"); };
+        ArrowSpec cable = worldArrow('x', [width, height](const GeneratorValues& v) {
+            const double z = v.at("fondo") + (v.at("profundidad") - v.at("fondo")) / 2.0;
+            switch (int(answer(v, "pared_cable"))) {
+            case 1: return std::array<double, 3>{0.0, -height(v) / 2.0, z};
+            case 2: return std::array<double, 3>{0.0, height(v) / 2.0, z};
+            case 3: return std::array<double, 3>{-width(v) / 2.0, 0.0, z};
+            case 4: return std::array<double, 3>{width(v) / 2.0, 0.0, z};
+            default: return std::array<double, 3>{0.0, -height(v) / 4.0, 0.0};
+            }
+        }, {}, true);
+        cable.axisOf = [](const GeneratorValues& v) { return answer(v, "pared_cable") >= 2.5 ? 'y' : 'x'; };
+        // El canal de la tira LED, en la pared izquierda: el hueco, y el muro con su alto y su grosor.
+        const ArrowSpec strip = worldArrow('x', [width](const GeneratorValues& v) {
+            return std::array<double, 3>{-width(v) / 2.0 + v.at("pared"), 0.0, v.at("fondo")};
+        });
+        const ArrowSpec wallHeight = worldArrow('z', [width](const GeneratorValues& v) {
+            return std::array<double, 3>{-width(v) / 2.0 + v.at("pared") + answer(v, "tira_ancho"), 0.0, v.at("fondo")};
+        });
+        const ArrowSpec wallThick = worldArrow('x', [width](const GeneratorValues& v) {
+            return std::array<double, 3>{-width(v) / 2.0 + v.at("pared") + answer(v, "tira_ancho"), 0.0,
+                                         v.at("fondo") + answer(v, "canal_alto")};
+        });
         // La holgura: el aire entre la cara interior de la pared de la caja y el labio de la tapa.
         ArrowSpec gap{1, 'x', false};
         gap.at = [](const GeneratorValues& v) {
@@ -134,7 +183,8 @@ public:
         return {{"ancho", {0, 'x', false}}, {"diametro", {0, 'x', false}}, {"alto", {0, 'y', false}},
                 {"profundidad", {0, 'z', false}}, {"pared", {0, 'x', true}}, {"fondo", {0, 'z', false}},
                 {"frente", {1, 'z', false}}, {"labio", {1, 'z', true}}, {"labio_pared", lipWall},
-                {"esquina", corner}, {"holgura", gap}};
+                {"esquina", corner}, {"holgura", gap}, {"cable", cable}, {"tira_ancho", strip}, {"canal_alto", wallHeight},
+                {"canal_pared", wallThick}};
     }
 
     Recipe make(const GeneratorValues& values, const std::string& suffix) const override
@@ -381,6 +431,9 @@ public:
         wallVents.choices = {"Las largas (delante y detrás)", "Las cortas (los lados)", "Las cuatro"};
         wallVents.showKey = "forma";
         wallVents.showIndex = 0;
+        GeneratorField wallSlotCount = length("ranuras_pared", "Ranuras por pared", 0.0, 0.0, 8.0,
+                                              "0 = sin ranuras; cada una de 2 mm de alto, una sobre otra", "forma", 0);
+        wallSlotCount.kind = K::Count;  // una cantidad: sin «mm»
         GeneratorField clips;
         clips.key = "clips";
         clips.label = "Clips para cerrarla";
@@ -415,7 +468,7 @@ public:
                 feet,
                 length("pata_diametro", "Diámetro de las patas", 10.0, 4.0, 40.0, {}, "patas", 1),
                 length("pata_alto", "Alto de las patas", 3.0, 1.0, 20.0, "Salen por debajo del fondo", "patas", 1),
-                length("ranuras_pared", "Ranuras por pared", 0.0, 0.0, 8.0, "0 = sin ranuras; cada una de 2 mm de alto, una sobre otra", "forma", 0),
+                wallSlotCount,
                 wallVents,
                 hinge,
                 length("bisagra_diametro", "Diámetro de los nudillos", 7.0, 5.0, 20.0, {}, "bisagra", 1),
@@ -428,29 +481,72 @@ public:
 
     std::map<std::string, ArrowSpec> arrows() const override
     {
-        // Los postes están en las cuatro esquinas, por dentro: se marca el de la esquina de X e Y máximos, en lo alto.
-        const auto post = [](const char* heightKey, int body) {
-            ArrowSpec spec{body, 'x', false, true};
-            spec.at = [heightKey](const GeneratorValues& v) {
-                const double inset = v.at("pared") + v.at("poste") / 2.0 - 0.5;
-                return std::array<double, 3>{v.at("ancho") - inset, v.at("fondo") - inset, v.at(heightKey)};
-            };
-            return spec;
+        // Todo en coordenadas del diseño: la caja de cada cuerpo se corre con las patas, los clips o la bisagra.
+        using Point = std::array<double, 3>;
+        const auto round = [](const GeneratorValues& v) { return answer(v, "forma") >= 0.5; };
+        const auto width = [round](const GeneratorValues& v) { return round(v) ? v.at("diametro") : v.at("ancho"); };
+        const auto depth = [round](const GeneratorValues& v) { return round(v) ? v.at("diametro") : v.at("fondo"); };
+        const auto hinged = [round](const GeneratorValues& v) { return !round(v) && answer(v, "bisagra") >= 0.5; };
+        // El centro de la tapa y la altura de su cara de abajo.
+        const auto lidX = [width, hinged](const GeneratorValues& v) { return hinged(v) ? 0.0 : width(v) + 10.0; };
+        const auto lidZ = [hinged](const GeneratorValues& v) { return hinged(v) ? v.at("alto") + 0.2 : 0.0; };
+        // A media altura del labio (sale hacia arriba con la tapa aparte y hacia abajo con la tapa puesta).
+        const auto lipZ = [hinged, lidZ](const GeneratorValues& v) {
+            return hinged(v) ? lidZ(v) - answer(v, "labio") / 2.0 : v.at("tapa") + answer(v, "labio") / 2.0;
         };
-        ArrowSpec corner{0, 'x', false};
-        corner.at = [](const GeneratorValues& v) { return std::array<double, 3>{0.0, 0.0, v.at("alto")}; };
-        ArrowSpec lipWall{1, 'x', false};
-        lipWall.at = [](const GeneratorValues& v) {
-            return std::array<double, 3>{v.at("pared") + v.at("holgura"), kCenter, v.at("tapa") + v.at("labio") / 2.0};
+        // El poste y la pata de la esquina de X e Y máximos (en la redonda, a 45°).
+        const auto corner = [round](const GeneratorValues& v, double inset) {
+            const double r = std::cos(std::numbers::pi / 4.0);
+            return round(v) ? std::array<double, 2>{(v.at("diametro") / 2.0 - inset) * r, (v.at("diametro") / 2.0 - inset) * r}
+                            : std::array<double, 2>{v.at("ancho") / 2.0 - inset, v.at("fondo") / 2.0 - inset};
         };
-        ArrowSpec gap{1, 'x', false};
-        gap.at = [](const GeneratorValues& v) {
-            return std::array<double, 3>{v.at("pared"), kCenter, v.at("tapa") + v.at("labio") / 2.0};
+        const auto post = [corner](const GeneratorValues& v) { return corner(v, v.at("pared") + answer(v, "poste") / 2.0 - 0.5); };
+        const auto leg = [corner](const GeneratorValues& v) { return corner(v, v.at("pared") + answer(v, "pata_diametro") / 2.0); };
+        const auto onPost = worldArrow('x', [post](const GeneratorValues& v) {
+            return Point{post(v)[0], post(v)[1], v.at("alto")};
+        }, {}, true);
+        const auto hingeAt = [](const GeneratorValues& v) {
+            const double d = answer(v, "bisagra_diametro");
+            return Point{-answer(v, "bisagra_largo") / 2.0, v.at("fondo") / 2.0 + d / 2.0 - 1.0, v.at("alto") - d / 2.0};
         };
-        return {{"ancho", {0, 'x', false}}, {"fondo", {0, 'y', false}}, {"alto", {0, 'z', false}},
-                {"pared", {0, 'x', true}}, {"base", {0, 'z', false}}, {"tapa", {1, 'z', false}}, {"labio", {1, 'z', true}},
-                {"esquina", corner}, {"labio_pared", lipWall}, {"holgura", gap}, {"poste", post("alto", 0)}, {"tornillo", post("alto", 0)},
-                {"pasante", post("tapa", 1)}};
+        return {
+            {"ancho", worldArrow('x', [depth, width](const GeneratorValues& v) { return Point{-width(v) / 2.0, -depth(v) / 2.0, v.at("alto")}; })},
+            {"fondo", worldArrow('y', [depth, width](const GeneratorValues& v) { return Point{-width(v) / 2.0, -depth(v) / 2.0, v.at("alto")}; })},
+            {"diametro", worldArrow('x', [](const GeneratorValues& v) { return Point{0.0, 0.0, v.at("alto")}; }, {}, true)},
+            {"alto", worldArrow('z', [width, depth, round](const GeneratorValues& v) {
+                 return Point{-width(v) / 2.0, round(v) ? 0.0 : -depth(v) / 2.0, 0.0};
+             })},
+            {"pared", worldArrow('x', [width](const GeneratorValues& v) { return Point{width(v) / 2.0, 0.0, v.at("alto")}; }, backwards("pared"))},
+            {"base", worldArrow('z', [depth](const GeneratorValues& v) { return Point{0.0, -depth(v) / 2.0, 0.0}; })},
+            {"interior", worldArrow('z', [width](const GeneratorValues& v) { return Point{width(v) / 2.0 - v.at("pared"), 0.0, v.at("base")}; })},
+            {"esquina", worldArrow('x', [depth, width](const GeneratorValues& v) { return Point{-width(v) / 2.0, -depth(v) / 2.0, v.at("alto")}; })},
+            {"tapa", worldArrow('z', [lidX, lidZ, width](const GeneratorValues& v) { return Point{lidX(v) + width(v) / 2.0, 0.0, lidZ(v)}; })},
+            {"labio", worldArrow('z', [lidX, lidZ, width, hinged](const GeneratorValues& v) {
+                 return Point{lidX(v) - width(v) / 2.0 + v.at("pared") + v.at("holgura"), 0.0, hinged(v) ? lidZ(v) : v.at("tapa")};
+             }, [hinged](const GeneratorValues& v) { return hinged(v) ? -v.at("labio") : v.at("labio"); })},
+            {"labio_pared", worldArrow('x', [lidX, lipZ, width](const GeneratorValues& v) {
+                 return Point{lidX(v) - width(v) / 2.0 + v.at("pared") + v.at("holgura"), 0.0, lipZ(v)};
+             })},
+            {"holgura", worldArrow('x', [lidX, lipZ, width](const GeneratorValues& v) {
+                 return Point{lidX(v) - width(v) / 2.0 + v.at("pared"), 0.0, lipZ(v)};
+             })},
+            {"poste", onPost},
+            {"tornillo", onPost},
+            {"pasante", worldArrow('x', [post, lidX, lidZ](const GeneratorValues& v) {
+                 return Point{lidX(v) + post(v)[0], post(v)[1], lidZ(v) + v.at("tapa")};
+             }, {}, true)},
+            {"pata_diametro", worldArrow('x', [leg](const GeneratorValues& v) { return Point{leg(v)[0], leg(v)[1], -answer(v, "pata_alto")}; }, {}, true)},
+            {"pata_alto", worldArrow('z', [leg](const GeneratorValues& v) { return Point{leg(v)[0], leg(v)[1], 0.0}; }, backwards("pata_alto"))},
+            {"bisagra_diametro", worldArrow('z', hingeAt, {}, true)},
+            {"bisagra_largo", worldArrow('x', hingeAt)},
+            {"bisagra_pasador", worldArrow('z', hingeAt, {}, true)},
+            {"clip_ancho", worldArrow('y', [lidX, lidZ, hinged, width](const GeneratorValues& v) {
+                 const double reach = answer(v, "clip_largo");
+                 return Point{lidX(v) + width(v) / 2.0 + 2.6, 0.0, hinged(v) ? lidZ(v) - reach : v.at("tapa") + reach};
+             }, {}, true)},
+            {"clip_largo", worldArrow('z', [lidX, lidZ, hinged, width](const GeneratorValues& v) {
+                 return Point{lidX(v) + width(v) / 2.0 + 2.6, 0.0, hinged(v) ? lidZ(v) : v.at("tapa")};
+             }, [hinged](const GeneratorValues& v) { return hinged(v) ? -answer(v, "clip_largo") : answer(v, "clip_largo"); })}};
     }
 
     Recipe make(const GeneratorValues& values, const std::string& suffix) const override
@@ -872,8 +968,23 @@ public:
         ring.at = [](const GeneratorValues& v) { return std::array<double, 3>{0.0, kCenter, v.at("grosor")}; };
         ArrowSpec hole{0, 'x', false, true};
         hole.at = [](const GeneratorValues& v) { return std::array<double, 3>{v.at("anilla") / 2.0, kCenter, v.at("grosor")}; };
-        return {{"grosor", {0, 'z', false}}, {"relieve", {1, 'z', false}}, {"margen", margin}, {"esquina", corner},
-                {"anilla", ring}, {"agujero", hole}};
+        // El relieve sale de la placa, entra en ella (grabado) o es la altura de las letras sueltas.
+        ArrowSpec relief{0, 'z', false};
+        relief.at = [](const GeneratorValues& v) {
+            const int mode = int(v.at("modo"));
+            return std::array<double, 3>{kCenter, kCenter, mode == 2 ? 0.0 : mode == 1 ? v.at("grosor") - v.at("relieve") : v.at("grosor")};
+        };
+        // El tamaño del texto, desde el borde de abajo de las letras (dentro del margen de la placa), y el espacio entre líneas
+        // a continuación.
+        const auto bottom = [](const GeneratorValues& v) { return int(v.at("modo")) == 2 ? 0.0 : v.at("margen"); };
+        ArrowSpec textHeight{0, 'y', false};
+        textHeight.at = [bottom](const GeneratorValues& v) { return std::array<double, 3>{kCenter, bottom(v), v.at("grosor")}; };
+        ArrowSpec spacing{0, 'y', false};
+        spacing.at = [bottom](const GeneratorValues& v) {
+            return std::array<double, 3>{kCenter, bottom(v) + v.at("altura_texto"), v.at("grosor")};
+        };
+        return {{"grosor", {0, 'z', false}}, {"relieve", relief}, {"margen", margin}, {"esquina", corner},
+                {"anilla", ring}, {"agujero", hole}, {"altura_texto", textHeight}, {"interlinea", spacing}};
     }
 
     Recipe make(const GeneratorValues& values, const std::string& suffix) const override
@@ -1121,6 +1232,16 @@ std::vector<GeneratorField> tuningFields()
 
 // Cómo se colocan las dos ruedas del par: engranadas (a la distancia entre ejes) o separadas, una al lado de la otra,
 // para imprimirlas sin que se toquen.
+// Las flechas de los ajustes que son una medida sobre la rueda que está en el origen: el surco de la espina de pescado (a
+// media altura) y el chaflán de la base. «radius» es el radio primitivo de esa rueda.
+void addTuningArrows(std::map<std::string, Generator::ArrowSpec>& arrows, std::function<double(const GeneratorValues&)> radius)
+{
+    arrows["surco"] = worldArrow('z', [radius](const GeneratorValues& v) {
+        return std::array<double, 3>{radius(v), 0.0, v.at("ancho_rueda") / 2.0};
+    }, {}, true);
+    arrows["chaflan_base"] = worldArrow('z', [radius](const GeneratorValues& v) { return std::array<double, 3>{radius(v), 0.0, 0.0}; });
+}
+
 GeneratorField placementField()
 {
     GeneratorField f;
@@ -1232,9 +1353,12 @@ public:
         const auto pitch = [](const char* teeth) {
             return [teeth](const GeneratorValues& v) { return v.at("modulo") * v.at(teeth); };
         };
-        return {{"ancho_rueda", {0, 'z', false}}, {"agujero_1", centeredOn(0)}, {"agujero_2", centeredOn(1)},
-                {"modulo", centeredOn(0, pitch("dientes_1"))}, {"dientes_1", centeredOn(0, pitch("dientes_1"))},
-                {"dientes_2", centeredOn(1, pitch("dientes_2"))}};
+        std::map<std::string, ArrowSpec> all{
+            {"ancho_rueda", {0, 'z', false}}, {"agujero_1", centeredOn(0)}, {"agujero_2", centeredOn(1)},
+            {"modulo", centeredOn(0, pitch("dientes_1"))}, {"dientes_1", centeredOn(0, pitch("dientes_1"))},
+            {"dientes_2", centeredOn(1, pitch("dientes_2"))}};
+        addTuningArrows(all, [](const GeneratorValues& v) { return v.at("modulo") * v.at("dientes_1") / 2.0; });
+        return all;
     }
 
     Recipe make(const GeneratorValues& values, const std::string& suffix) const override
@@ -1379,10 +1503,14 @@ public:
         const auto pitch = [](const char* teeth) {
             return [teeth](const GeneratorValues& v) { return v.at("modulo") * v.at(teeth); };
         };
-        return {{"ancho_rueda", {0, 'z', false}}, {"agujero_pinon", centeredArrow(1)},
-                {"modulo", centeredArrow(0, pitch("dientes_corona"))},
-                {"dientes_corona", centeredArrow(0, pitch("dientes_corona"))},
-                {"dientes_pinon", centeredArrow(1, pitch("dientes_pinon"))}};
+        std::map<std::string, ArrowSpec> all{
+            {"ancho_rueda", {0, 'z', false}}, {"agujero_pinon", centeredArrow(1)},
+            {"modulo", centeredArrow(0, pitch("dientes_corona"))},
+            {"dientes_corona", centeredArrow(0, pitch("dientes_corona"))},
+            {"dientes_pinon", centeredArrow(1, pitch("dientes_pinon"))},
+            {"aro", {0, 'x', true}}};  // desde el borde de fuera de la corona, hacia dentro
+        addTuningArrows(all, [](const GeneratorValues& v) { return v.at("modulo") * v.at("dientes_corona") / 2.0; });
+        return all;
     }
 
     Recipe make(const GeneratorValues& values, const std::string& suffix) const override
@@ -1490,6 +1618,24 @@ public:
                           ? " · AVISO: (dientes del sol + de la corona) ÷ planetas no es entero: los planetas no pueden engranar todos a la vez"
                           : "");
         return text;
+    }
+
+    std::map<std::string, ArrowSpec> arrows() const override
+    {
+        const auto pitch = [](const char* teeth) {
+            return [teeth](const GeneratorValues& v) { return v.at("modulo") * v.at(teeth); };
+        };
+        std::map<std::string, ArrowSpec> all{
+            {"ancho_rueda", {0, 'z', false}}, {"modulo", centeredArrow(0, pitch("dientes_sol"))},
+            {"dientes_sol", centeredArrow(0, pitch("dientes_sol"))}, {"dientes_planeta", centeredArrow(1, pitch("dientes_planeta"))},
+            {"agujero_sol", centeredArrow(0)}, {"agujero_planeta", centeredArrow(1)},
+            // El aro, por fuera de los huecos de los dientes de la corona (que tiene sol + 2 × planeta dientes).
+            {"aro", worldArrow('x', [](const GeneratorValues& v) {
+                 const double teeth = v.at("dientes_sol") + 2.0 * v.at("dientes_planeta");
+                 return std::array<double, 3>{v.at("modulo") * (teeth / 2.0 + 1.25), 0.0, v.at("ancho_rueda")};
+             })}};
+        addTuningArrows(all, [](const GeneratorValues& v) { return v.at("modulo") * v.at("dientes_sol") / 2.0; });
+        return all;
     }
 
     Recipe make(const GeneratorValues& values, const std::string& suffix) const override
@@ -1750,8 +1896,12 @@ public:
     std::map<std::string, ArrowSpec> arrows() const override
     {
         const auto pitch = [](const GeneratorValues& v) { return v.at("modulo") * v.at("dientes_rueda"); };
-        return {{"ancho_rueda", {0, 'z', false}}, {"agujero_rueda", centeredArrow(0)},
-                {"modulo", centeredArrow(0, pitch)}, {"dientes_rueda", centeredArrow(0, pitch)}};
+        std::map<std::string, ArrowSpec> all{
+            {"ancho_rueda", {0, 'z', false}}, {"agujero_rueda", centeredArrow(0)},
+            {"modulo", centeredArrow(0, pitch)}, {"dientes_rueda", centeredArrow(0, pitch)},
+            {"largo_exacto", {1, 'x', false}}, {"largo_aprox", {1, 'x', false}}, {"base", {1, 'y', false}}};
+        addTuningArrows(all, [](const GeneratorValues& v) { return v.at("modulo") * v.at("dientes_rueda") / 2.0; });
+        return all;
     }
 
     Recipe make(const GeneratorValues& values, const std::string& suffix) const override
@@ -1885,7 +2035,12 @@ public:
 
     std::map<std::string, ArrowSpec> arrows() const override
     {
-        return {{"ancho_rueda", {0, 'z', false}}};
+        const auto pitch = [](const GeneratorValues& v) { return v.at("modulo") * v.at("dientes_rueda"); };
+        // El tornillo va tumbado a lo largo de X: su diámetro se mide en vertical, por el centro.
+        ArrowSpec screw{1, 'z', false, true};
+        screw.at = [](const GeneratorValues&) { return std::array<double, 3>{kCenter, kCenter, kCenter}; };
+        return {{"ancho_rueda", {0, 'z', false}}, {"modulo", centeredArrow(0, pitch)}, {"dientes_rueda", centeredArrow(0, pitch)},
+                {"agujero_rueda", centeredArrow(0)}, {"diam_tornillo", screw}, {"largo_tornillo", {1, 'x', false}}};
     }
 
     Recipe make(const GeneratorValues& values, const std::string& suffix) const override
@@ -1993,7 +2148,22 @@ public:
 
     std::map<std::string, ArrowSpec> arrows() const override
     {
-        return {};
+        // El piñón tiene el eje vertical; la corona, el eje X (su diámetro se mide a lo largo de Y).
+        const auto pitch = [](const char* teeth) {
+            return [teeth](const GeneratorValues& v) { return v.at("modulo") * v.at(teeth); };
+        };
+        const auto onCrown = [](std::function<double(const GeneratorValues&)> length = {}) {
+            ArrowSpec spec{1, 'y', false, true};
+            spec.at = [](const GeneratorValues&) { return std::array<double, 3>{kCenter, kCenter, kCenter}; };
+            spec.length = std::move(length);
+            return spec;
+        };
+        // El ancho de cara va por el cono: se dibuja lo que sube en vertical.
+        ArrowSpec face{0, 'z', false};
+        face.length = [](const GeneratorValues& v) { return v.at("ancho_cara") * std::cos(std::atan2(v.at("dientes_1"), v.at("dientes_2"))); };
+        return {{"modulo", centeredArrow(0, pitch("dientes_1"))}, {"dientes_1", centeredArrow(0, pitch("dientes_1"))},
+                {"dientes_2", onCrown(pitch("dientes_2"))}, {"agujero_1", centeredArrow(0)}, {"agujero_2", onCrown()},
+                {"ancho_cara", face}};
     }
 
     Recipe make(const GeneratorValues& values, const std::string& suffix) const override
@@ -2184,10 +2354,125 @@ public:
                        {{"forma", "Medidas"}, {"tapa", "Tapa y ajuste"}, {"cierre", "Cierre"}});
     }
 
+    std::map<std::string, ArrowSpec> arrows() const override
+    {
+        using Point = std::array<double, 3>;
+        const auto round = [](const GeneratorValues& v) { return v.at("forma") < 0.5; };
+        const auto bayonet = [round](const GeneratorValues& v) { return round(v) && v.at("cierre") >= 0.5; };
+        const auto halfX = [round](const GeneratorValues& v) { return (round(v) ? v.at("diametro") : v.at("ancho")) / 2.0; };
+        const auto halfY = [round](const GeneratorValues& v) { return (round(v) ? v.at("diametro") : v.at("fondo")) / 2.0; };
+        // Donde acaba el cuerpo (en el de rosca, debajo del cuello).
+        const auto bodyTop = [round, bayonet](const GeneratorValues& v) {
+            return round(v) && !bayonet(v) ? v.at("alto") - v.at("rosca_alto") : v.at("alto");
+        };
+        // El centro de la tapa y su radio por fuera.
+        const auto lidX = [round](const GeneratorValues& v) {
+            return round(v) ? v.at("diametro") + v.at("pared") + 12.0 : v.at("ancho") + 10.0;
+        };
+        const auto lidR = [bayonet](const GeneratorValues& v) {
+            return v.at("diametro") / 2.0 + v.at("pared") + (bayonet(v) ? answer(v, "pin_sale") : 0.0);
+        };
+        const auto neckR = [](const GeneratorValues& v) { return v.at("diametro") / 2.0 - 0.3; };
+        const auto pinZ = [](const GeneratorValues& v) { return v.at("alto") - v.at("pin_baja"); };
+        // La guía de la tapa deslizante: donde empieza en altura.
+        const auto slotZ = [](const GeneratorValues& v) { return v.at("alto") - v.at("labio") - v.at("tapa") - 2.0 * v.at("holgura"); };
+        return {
+            {"diametro", worldArrow('x', [bodyTop](const GeneratorValues& v) { return Point{0.0, 0.0, bodyTop(v)}; }, {}, true)},
+            {"ancho", worldArrow('x', [halfX, halfY](const GeneratorValues& v) { return Point{-halfX(v), -halfY(v), v.at("alto")}; })},
+            {"fondo", worldArrow('y', [halfX, halfY](const GeneratorValues& v) { return Point{-halfX(v), -halfY(v), v.at("alto")}; })},
+            {"alto", worldArrow('z', [halfX, halfY, round](const GeneratorValues& v) { return Point{-halfX(v), round(v) ? 0.0 : -halfY(v), 0.0}; })},
+            {"pared", worldArrow('x', [halfX, bodyTop](const GeneratorValues& v) { return Point{halfX(v), 0.0, bodyTop(v)}; }, backwards("pared"))},
+            {"base", worldArrow('z', [halfY](const GeneratorValues& v) { return Point{0.0, -halfY(v), 0.0}; })},
+            {"interior", worldArrow('z', [halfX](const GeneratorValues& v) { return Point{halfX(v) - v.at("pared"), 0.0, v.at("base")}; })},
+            {"esquina", worldArrow('x', [halfX, halfY](const GeneratorValues& v) { return Point{-halfX(v), -halfY(v), v.at("alto")}; })},
+            {"tapa", worldArrow('z', [lidX, lidR, round](const GeneratorValues& v) { return Point{lidX(v) + (round(v) ? lidR(v) : 0.0), 0.0, 0.0}; })},
+            {"holgura", worldArrow('x', [round, bayonet, lidX, neckR, slotZ](const GeneratorValues& v) {
+                 if (!round(v)) {
+                     return Point{v.at("ancho") / 2.0 - v.at("pared") + v.at("ranura") - v.at("holgura"), 0.0, slotZ(v)};
+                 }
+                 return bayonet(v) ? Point{lidX(v) + v.at("diametro") / 2.0, 0.0, v.at("tapa") + v.at("cuello")}
+                                   : Point{lidX(v) + neckR(v), 0.0, v.at("tapa") + v.at("rosca_alto") + 1.0};
+             })},
+            {"paso", worldArrow('z', [neckR, bodyTop](const GeneratorValues& v) { return Point{neckR(v), 0.0, bodyTop(v)}; })},
+            {"rosca_alto", worldArrow('z', [neckR, bodyTop](const GeneratorValues& v) { return Point{-neckR(v), 0.0, bodyTop(v)}; })},
+            {"pin_diametro", worldArrow('z', [pinZ](const GeneratorValues& v) { return Point{v.at("diametro") / 2.0 + v.at("pin_sale"), 0.0, pinZ(v)}; }, {}, true)},
+            {"pin_sale", worldArrow('x', [pinZ](const GeneratorValues& v) { return Point{v.at("diametro") / 2.0, 0.0, pinZ(v)}; })},
+            {"pin_baja", worldArrow('z', [](const GeneratorValues& v) { return Point{v.at("diametro") / 2.0, 0.0, v.at("alto")}; }, backwards("pin_baja"))},
+            {"cuello", worldArrow('z', [lidX, lidR](const GeneratorValues& v) { return Point{lidX(v) + lidR(v), 0.0, v.at("tapa")}; })},
+            {"grada", worldArrow('z', [lidX](const GeneratorValues& v) {
+                 return Point{lidX(v) + v.at("diametro") / 2.0 + v.at("pin_sale") + v.at("holgura"), 0.0,
+                              v.at("tapa") + v.at("pin_baja") - v.at("pin_diametro") / 2.0 - v.at("holgura")};
+             })},
+            {"ranura", worldArrow('x', [slotZ](const GeneratorValues& v) { return Point{v.at("ancho") / 2.0 - v.at("pared"), 0.0, slotZ(v)}; })},
+            {"labio", worldArrow('z', [](const GeneratorValues& v) { return Point{v.at("ancho") / 2.0 - v.at("pared"), 0.0, v.at("alto")}; }, backwards("labio"))}};
+    }
+
+    // Las medidas con las que el bote no puede funcionar, dichas por su nombre (si no, saldría un sólido válido que no cierra,
+    // o un error del kernel que no dice qué cambiar).
+    static void checkSizes(const GeneratorValues& v, bool round, bool bayonet)
+    {
+        const auto fail = [](const char* text) { throw std::runtime_error(text); };
+        const double wall = v.at("pared"), base = v.at("base"), gap = v.at("holgura"), height = v.at("alto");
+        if (!round) {
+            if (std::min(v.at("ancho"), v.at("fondo")) - 2.0 * wall < 5.0) {
+                fail("La pared es demasiado gruesa para esas medidas: no queda hueco");
+            }
+            if (v.at("ranura") > wall - 0.4) {
+                fail("El hondo de la guía casi atraviesa la pared: usa menos hondo de guía o más pared");
+            }
+            if (v.at("ranura") < gap + 0.3) {
+                fail("El hondo de la guía es menor que la holgura: la tapa no se sujetaría; usa más hondo de guía o menos holgura");
+            }
+            if (height - base - v.at("labio") - v.at("tapa") - 2.0 * gap < 3.0) {
+                fail("El bote es demasiado bajo para esa tapa y ese labio");
+            }
+            return;
+        }
+        const double diameter = v.at("diametro");
+        if (diameter - 2.0 * wall < 5.0) {
+            fail("La pared es demasiado gruesa para ese diámetro: no queda hueco");
+        }
+        if (!bayonet) {
+            const double depth = 0.6134 * v.at("paso");
+            if (diameter - 0.6 - 2.0 * (depth + wall) < 5.0) {
+                fail("El cuello sale macizo: usa menos pared, menos paso de rosca o más diámetro");
+            }
+            if (height - v.at("rosca_alto") - base < 3.0) {
+                fail("El bote es demasiado bajo para esa rosca: usa más alto o menos alto de rosca");
+            }
+            if (v.at("rosca_alto") < v.at("paso")) {
+                fail("La rosca debe medir al menos un paso de alto");
+            }
+            return;
+        }
+        const double pin = v.at("pin_diametro"), out = v.at("pin_sale"), drop = v.at("pin_baja");
+        const double groove = pin + 2.0 * gap;
+        if (drop < groove / 2.0 + 0.3) {
+            fail("Los pines quedan pegados al borde: usa más «Altura de los pines» o pines más finos");
+        }
+        if (height - base < drop + pin / 2.0 + 1.0) {
+            fail("El bote es demasiado bajo para la altura de esos pines");
+        }
+        // Encima de la guía tiene que quedar material en la tapa: es lo que sujeta los pines.
+        if (v.at("cuello") < drop + groove / 2.0 + gap + answer(v, "grada", 1.5) + 0.8) {
+            fail("El cuello de la tapa es demasiado corto: los pines no quedarían sujetos; usa más «Alto del cuello» o menos «Altura de los pines»");
+        }
+        if (out < gap + 0.5) {
+            fail("Los pines salen menos que la holgura: la tapa no se sujetaría; usa «Lo que salen los pines» mayor");
+        }
+        // El tope y la grada ocupan un tramo de la guía al lado de cada entrada: en un bote muy estrecho no caben.
+        const double end = groove / 2.0 + 0.8 * pin + groove + 0.2 * pin;
+        const double neck = diameter / 2.0 + gap, guide = diameter / 2.0 + out + gap;
+        if (end * end + 0.81 * neck * neck > guide * guide) {
+            fail("El bote es demasiado estrecho para esos pines: usa pines más finos o más diámetro");
+        }
+    }
+
     Recipe make(const GeneratorValues& values, const std::string& suffix) const override
     {
         const bool round = values.at("forma") < 0.5;
         const bool bayonet = round && values.at("cierre") >= 0.5;
+        checkSizes(values, round, bayonet);
         const auto p = [&](const char* name) { return std::string(name) + suffix; };
         const auto v = [&](const char* key) { return values.at(key); };
         Recipe recipe;
@@ -2259,25 +2544,33 @@ public:
             const std::string inD = diametro + " - 2*" + pared;
             const std::string beside = diametro + " + " + pared + " + 12";
             if (!bayonet) {
-                // Rosca: el cuello es una varilla roscada del diámetro del bote, con la boca un poco más estrecha.
+                // Rosca: primero el vaso liso con su hueco (cilindros, al instante) y solo después el cuello roscado, así las
+                // operaciones con la rosca (las caras) son dos. El hueco acaba en un hombro a 45° hasta la boca, que es más
+                // estrecha que el cuerpo: sin él, el cuello colgaría de un anillo de medio milímetro. El cuello es un poco más
+                // delgado que el cuerpo (crestas y pared en la misma superficie dan booleanas lentas y frágiles).
                 param(paso, v("paso"));
                 param(roscaAlto, v("rosca_alto"));
                 const std::string depth = "0.6134*" + paso;
                 const std::string bodyH = alto + " - " + roscaAlto;
-                const std::string mouth = diametro + " - 2*(" + depth + " + " + pared + ")";
+                const std::string neckD = diametro + " - 0.6";
+                const std::string mouth = neckD + " - 2*(" + depth + " + " + pared + ")";
+                const std::string hollowTop = bodyH + " - 0.4*" + pared;
+                const std::string hollowH = "(" + hollowTop + " - " + base + ")";
                 recipe.features.push_back(cylinder("Bote: cuerpo", Operation::NewBody, diametro, "0", bodyH, ""));
-                recipe.features.push_back(thread("Bote: rosca", Operation::Join, diametro, alto, "-(" + roscaAlto + " + 0.5)", "0"));
-                auto hollow = cylinder("Bote: hueco", Operation::Cut, inD, base, bodyH + " - " + base, "");
+                auto hollow = cylinder("Bote: hueco", Operation::Cut, inD, base, hollowH, "");
+                hollow->expressions["topChamfer"] = "min((" + inD + " - (" + mouth + "))/2; 0.45*" + hollowH + ")";
                 if (v("interior") > 0.0) {
                     param(interior, v("interior"));
-                    hollow->expressions["baseRound"] = "min(" + interior + "; min((" + inD + ")/2 - 0.1; " + bodyH + " - " + base + " - 0.1))";
+                    hollow->expressions["baseRound"] = "min(" + interior + "; min((" + inD + ")/2 - 0.1; 0.45*" + hollowH + "))";
                 }
                 recipe.features.push_back(std::move(hollow));
-                recipe.features.push_back(cylinder("Bote: boca", Operation::Cut, mouth, bodyH + " - 0.5", roscaAlto + " + 1", ""));
+                recipe.features.push_back(thread("Bote: rosca", Operation::Join, neckD, alto, "-(" + roscaAlto + " + 0.2*" + pared + ")", "0"));
+                recipe.features.push_back(cylinder("Bote: boca", Operation::Cut, mouth, hollowTop + " - 0.2",
+                                                   roscaAlto + " + 0.4*" + pared + " + 1.2", ""));
                 // La tapa: un vaso con la rosca por dentro (la misma rosca, más la holgura).
                 recipe.features.push_back(cylinder("Tapa: cuerpo", Operation::NewBody, diametro + " + 2*" + pared, "0",
                                                    tapa + " + " + roscaAlto + " + 1", beside));
-                recipe.features.push_back(thread("Tapa: rosca", Operation::Cut, diametro, tapa, roscaAlto + " + 2", beside));
+                recipe.features.push_back(thread("Tapa: rosca", Operation::Cut, neckD, tapa, roscaAlto + " + 2", beside));
             } else {
                 // Bayoneta: cuatro pines en el cuello y, en la tapa, una guía redonda con cuatro entradas.
                 param(pinD, v("pin_diametro"));
@@ -2316,8 +2609,11 @@ public:
                 const std::string outerR = "min(" + guideR + " + 0.3; (" + capD + ")/2 - 0.1)";
                 const std::string g = "(" + groove + ")";
                 const std::string stopW = "(0.8*" + pinD + ")";
-                const std::string midR = "((" + neckR + " + " + outerR + ")/2)";
-                const std::string lenR = "(" + outerR + " - " + neckR + ")";
+                // El tope llega un poco más allá de la guía (para unirse a la pared), sin que su esquina asome por fuera de la tapa.
+                const std::string stopEnd = "(" + g + "/2 + " + stopW + ")";
+                const std::string stopR = "min(" + outerR + "; sqrt(((" + capD + ")/2)*((" + capD + ")/2) - " + stopEnd + "*" + stopEnd + ") - 0.05)";
+                const std::string midR = "((" + neckR + " + " + stopR + ")/2)";
+                const std::string lenR = "(" + stopR + " - " + neckR + ")";
                 // El hueco de cierre empieza más adentro: el pin, ya girado, entra en él inclinado respecto del radio.
                 const std::string pocketR0 = "(0.9*" + neckR + ")";
                 const std::string pocketMid = "((" + pocketR0 + " + " + outerR + ")/2)";
@@ -2360,14 +2656,19 @@ public:
                         }
                     }
                 }
-                // Las entradas y los huecos de cierre bajan hasta el suelo hondo, y se cortan después de poner los topes.
+                // Las gradas y las entradas bajan hasta el suelo hondo, y se cortan después de poner los topes.
+                for (auto& part : later) {
+                    recipe.features.push_back(std::move(part));
+                }
+                // Las gradas son rectas y sus esquinas llegan más afuera que la guía, que es redonda (con algunos pines, hasta
+                // atravesar la pared): la pared vuelve a ponerse entera por fuera, así la grada acaba justo en el fondo del carril.
+                auto wall = cylinder("Tapa: pared de la guía", Operation::Join, capD, grooveZ, groove + " + " + lift, beside);
+                wall->expressions["innerDiameter"] = span + " + 2*" + holgura;
+                recipe.features.push_back(std::move(wall));
                 recipe.features.push_back(box("Tapa: entradas en X", Operation::Cut, span + " + 2*" + pared + " + 2", groove, grooveZ,
                                               capH + " - (" + grooveZ + ") + 1", beside, "", ""));
                 recipe.features.push_back(box("Tapa: entradas en Y", Operation::Cut, groove, span + " + 2*" + pared + " + 2", grooveZ,
                                               capH + " - (" + grooveZ + ") + 1", beside, "", ""));
-                for (auto& part : later) {
-                    recipe.features.push_back(std::move(part));
-                }
             }
         } else {
             // Tapa deslizante: guías en las paredes largas y una ranura en la pared de delante para meter la tapa.
@@ -2424,11 +2725,16 @@ const Generator* findGenerator(const std::string& id)
 
 std::string freeSuffix(const Document& doc, const Generator& generator, const GeneratorValues& values)
 {
+    return freeSuffix(doc.parameters(), generator, values);
+}
+
+std::string freeSuffix(const std::vector<Parameter>& used, const Generator& generator, const GeneratorValues& values)
+{
     for (int n = 1; n < 1000; ++n) {
         const std::string suffix = n == 1 ? std::string() : "_" + std::to_string(n);
         const Recipe recipe = generator.make(values, suffix);
         const bool clash = std::ranges::any_of(recipe.parameters, [&](const Parameter& p) {
-            return std::ranges::any_of(doc.parameters(), [&](const Parameter& old) { return old.name == p.name; });
+            return std::ranges::any_of(used, [&](const Parameter& old) { return old.name == p.name; });
         });
         if (!clash) {
             return suffix;

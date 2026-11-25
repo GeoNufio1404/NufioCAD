@@ -121,6 +121,13 @@ ExpressionSpinBox::ExpressionSpinBox(QWidget* parent)
     QLocale locale;
     locale.setNumberOptions(QLocale::OmitGroupSeparator);
     setLocale(locale);
+    // Si el valor ya no es el de la expresión (se cambió a mano o con la flecha de la vista), la expresión deja de valer.
+    connect(this, &QDoubleSpinBox::valueChanged, this, [this](double v) {
+        if (!expression_.isEmpty() && !matches(v)) {
+            expression_.clear();
+            setToolTip(QString());
+        }
+    });
 }
 
 void ExpressionSpinBox::setDocument(const document::Document* document)
@@ -170,18 +177,20 @@ double ExpressionSpinBox::valueFromText(const QString& text) const
 
 QString ExpressionSpinBox::textFromValue(double v) const
 {
-    // Si el valor ya no es el de la expresión (se cambió a mano o con la
-    // flecha de la vista), la expresión deja de valer.
-    if (!expression_.isEmpty() && std::abs(v - expressionValue_) > 0.5 * std::pow(10.0, -decimals()) + 1e-9) {
-        expression_.clear();
-    }
-    if (!expression_.isEmpty()) {
+    // Qt llama aquí con otros valores que el del cuadro (con el mínimo y el máximo, para calcular su tamaño): no se puede
+    // olvidar la expresión por eso; solo se deja de mostrar si el valor no es el suyo.
+    if (matches(v)) {
         return expression_;
     }
     if (length_) {
         return locale().toString(Units::instance().toDisplay(v), 'f', decimals() + Units::instance().extraDecimals());
     }
     return QDoubleSpinBox::textFromValue(v);
+}
+
+bool ExpressionSpinBox::matches(double v) const
+{
+    return !expression_.isEmpty() && std::abs(v - expressionValue_) <= 0.5 * std::pow(10.0, -decimals()) + 1e-9;
 }
 
 void ExpressionSpinBox::stepBy(int steps)

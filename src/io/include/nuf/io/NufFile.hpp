@@ -19,7 +19,9 @@ namespace nuf::io {
 inline constexpr std::int32_t kApplicationId = 0x4E554631;
 
 // Versión del esquema que escribe esta compilación.
-inline constexpr int kSchemaVersion = 1;
+// La versión más nueva que se sabe leer. Al guardar se escribe la más baja que entiende el diseño: 2 solo si usa algo que una
+// aplicación que solo conoce la 1 se saltaría sin decirlo (un tubo le saldría macizo).
+inline constexpr int kSchemaVersion = 2;
 
 class NufError : public std::runtime_error {
 public:
@@ -42,6 +44,8 @@ public:
 
     // Abre un archivo existente y valida que sea un .nuf compatible.
     static NufFile open(const std::filesystem::path& path);
+    // Lo mismo solo para leer: abrir un diseño (o su miniatura) no toca el archivo.
+    static NufFile openReadOnly(const std::filesystem::path& path);
 
     NufFile(const NufFile&) = delete;
     NufFile& operator=(const NufFile&) = delete;
@@ -50,6 +54,10 @@ public:
     ~NufFile();
 
     int schemaVersion() const;
+    void setSchemaVersion(int version);
+
+    // Lanza NufError si la base está dañada (páginas truncadas o pisadas, índices que no cuadran).
+    void checkIntegrity() const;
 
     // Tabla meta: unidades, versión de la app, etc.
     void setMeta(std::string_view key, std::string_view value);
@@ -82,6 +90,7 @@ public:
     static std::string sqliteVersion();
 
 private:
+    static NufFile openWith(const std::filesystem::path& path, int flags);
     explicit NufFile(sqlite3* db) noexcept;
 
     sqlite3* db_ = nullptr;

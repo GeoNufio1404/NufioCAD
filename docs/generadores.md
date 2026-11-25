@@ -150,14 +150,15 @@ Un bote con tapa que se elige por su **forma**: la **redonda** cierra con **rosc
 con una **tapa deslizante**. La tapa sale aparte, al lado, con la cara de arriba sobre la cama. Una sola **holgura de
 ajuste** (0,3 mm por cada lado por defecto) manda en los tres cierres; cámbiala según cómo imprima tu impresora.
 
-- **Rosca:** el cuello es una varilla roscada (paso y alto a tu gusto; el paso grande imprime mejor) y la boca queda un poco
-  más estrecha que el bote para que la pared del cuello no se quede fina. La tapa es un vaso con la rosca por dentro, más la holgura.
+- **Rosca:** el cuello es una varilla roscada (paso y alto a tu gusto; el paso grande imprime mejor), 0,6 mm más delgada que
+  el bote, y la boca queda más estrecha para que la pared del cuello no se quede fina. Por dentro, un **hombro a 45°** une el
+  cuerpo con la boca: se imprime sin soportes y el cuello queda bien sujeto. La tapa es un vaso con la rosca por dentro, más la holgura.
 - **Bayoneta:** cuatro pines en el cuello (diámetro, cuánto salen y a qué altura). La tapa lleva una guía redonda a esa altura
   con cuatro entradas hasta el borde. Se alinean los pines con las entradas y se empuja hasta el fondo; para girar hay que
   **levantar la tapa un poco**, porque la guía va un escalón más arriba que las entradas (la **altura de la grada**, 1,5 mm
   por defecto, es lo que hay que levantar). Se gira hasta un **tope** (un muro junto a cada entrada, que impide seguir hasta
   la entrada siguiente) y, al soltar, los pines bajan a la **grada de cierre**: un escalón más hondo que la guía, del ancho
-  justo de un pin, donde descansan. Para abrir hay que volver a levantar la tapa por encima del escalón y girar de vuelta;
+  justo de un pin y hasta el fondo del carril (no entra más en la pared de la tapa), donde descansan. Para abrir hay que volver a levantar la tapa por encima del escalón y girar de vuelta;
   solo girando no se abre. El ajuste está comprobado con una prueba de volúmenes (`test_edge_ops.cpp`, «La tapa de bayoneta…»).
 - **Deslizante:** guías en las paredes largas (hondo de la guía y labio que sujeta la tapa por arriba) y una ranura en la pared
   de delante para meter la tapa; la pared de atrás hace de tope.

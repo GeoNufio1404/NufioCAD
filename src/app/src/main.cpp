@@ -9,6 +9,7 @@
 #include <nuf/render/Viewport.hpp>
 
 #include <QApplication>
+#include <QMessageBox>
 #include <QDir>
 #include <QIcon>
 #include <QSettings>
@@ -19,6 +20,45 @@
 #include <iostream>
 #include <memory>
 #include <string_view>
+
+namespace {
+
+// Una excepción que se escapa de una acción (un clic, una tecla) cerraría el programa y con él lo que no se había guardado.
+// Las órdenes son todo o nada (si fallan, el diseño queda como estaba), así que se puede seguir: se avisa y ya.
+class SafeApplication final : public QApplication {
+public:
+    using QApplication::QApplication;
+
+    bool notify(QObject* receiver, QEvent* event) override
+    {
+        try {
+            return QApplication::notify(receiver, event);
+        } catch (const std::exception& e) {
+            report(QString::fromUtf8(e.what()));
+        } catch (...) {
+            report(QStringLiteral("error desconocido"));
+        }
+        return true;
+    }
+
+private:
+    void report(const QString& what)
+    {
+        qWarning("Excepción en una acción: %s", qUtf8Printable(what));
+        if (reporting_) {
+            return;  // una detrás de otra no apila diálogos
+        }
+        reporting_ = true;
+        QTimer::singleShot(0, this, [this, what] {
+            QMessageBox::warning(activeWindow(), QStringLiteral("NufioCAD"),
+                                 QStringLiteral("No se pudo hacer eso, y el diseño quedó como estaba.\n\n%1").arg(what));
+            reporting_ = false;
+        });
+    }
+    bool reporting_ = false;
+};
+
+} // namespace
 
 int main(int argc, char* argv[])
 {
@@ -111,7 +151,7 @@ int main(int argc, char* argv[])
         }
     }
     QSurfaceFormat::setDefaultFormat(nuf::render::Viewport::defaultFormat());
-    QApplication app(argc, argv);
+    SafeApplication app(argc, argv);
     QApplication::setOrganizationName(QStringLiteral("NufioCAD"));
     QApplication::setApplicationName(QStringLiteral("NufioCAD"));
     QApplication::setApplicationDisplayName(QStringLiteral("NufioCAD"));

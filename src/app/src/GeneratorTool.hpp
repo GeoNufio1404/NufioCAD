@@ -48,6 +48,7 @@ protected:
     void updatePreview() override;
 
 private:
+    friend class InterfaceCheck;  // la prueba de interfaz recorre sus preguntas
     // Lo que se calcula en el hilo de trabajo: el diseño que saldría, en un documento aparte (solo lo generado).
     struct Calculation {
         std::shared_ptr<const document::Recipe> recipe;
@@ -57,7 +58,7 @@ private:
     void showResult(const Calculation& calculation, bool first);
     // La receta de la última vista previa que salió bien, con las respuestas que la hicieron: al aceptar se reutiliza
     // (armarla otra vez en el hilo de la interfaz repetía, por ejemplo, el contorno de las letras del Letrero).
-    std::string lastKey_;
+    std::string lastKey_;  // las respuestas, codificadas
     std::shared_ptr<const document::Recipe> lastRecipe_;
     document::GeneratorValues values() const;
     void resetValues();

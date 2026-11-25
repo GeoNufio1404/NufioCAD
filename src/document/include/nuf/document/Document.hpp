@@ -156,6 +156,8 @@ public:
     // Hace «action» cuando el resultado ya es el de los últimos cambios: en el acto si no hay nada calculándose, y si no,
     // en cuanto termine el cálculo (en el hilo del documento, sin bloquear). Las que quedan pendientes se descartan al cerrar.
     void afterCompute(std::function<void()> action);
+    // ¿Hay algo esperando el resultado (nombrar los cuerpos de un generador recién aceptado)? Al guardar hay que esperarlo.
+    bool hasPendingActions() const noexcept { return !afterCompute_.empty(); }
     // Al empezar (true) y al acabar (false) un cálculo en segundo plano.
     Signal<bool> computingChanged;
 

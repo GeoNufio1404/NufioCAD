@@ -165,8 +165,17 @@ Batch::Batch(std::string label, std::vector<std::unique_ptr<Command>> commands)
 
 void Batch::execute(document::Document& doc)
 {
-    for (auto& command : commands_) {
-        command->execute(doc);
+    // Todo o nada: si una falla, se deshacen las que ya se habían hecho y el documento queda como estaba.
+    std::size_t done = 0;
+    try {
+        for (; done < commands_.size(); ++done) {
+            commands_[done]->execute(doc);
+        }
+    } catch (...) {
+        while (done > 0) {
+            commands_[--done]->undo(doc);
+        }
+        throw;
     }
 }
 

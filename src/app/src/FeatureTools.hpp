@@ -78,6 +78,9 @@ public:
     // Al cerrar la herramienta: se cancela la vista previa que estuviera esperando su turno (si no, se
     // calcularía y se dibujaría después de aceptar o cancelar).
     virtual void stopPreview();
+    // Quita de la vista todo lo de la herramienta (flechas, sombra, ayuda de aristas…). Se llama al cerrarla: su destrucción
+    // llega después, cuando la herramienta siguiente ya puede haber puesto lo suyo.
+    void leaveViewport();
 
 signals:
     void accepted();
@@ -179,6 +182,7 @@ protected:
     QLabel* statusLabel_ = nullptr;
     QPushButton* okButton_ = nullptr;
     bool updating_ = false;  // al rellenar los campos, sin vista previa
+    bool left_ = false;      // ya se quitó de la vista
     Placement* movable_ = nullptr;        // la colocación que se arrastra con flechas, si la herramienta tiene
     bool placementDragging_ = false;
     double dragStartX_ = 0.0;
@@ -202,6 +206,7 @@ protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
+    friend class InterfaceCheck;  // la prueba de interfaz recorre los campos y sus flechas
     std::vector<std::pair<std::string, QDoubleSpinBox*>> fields_;
     std::vector<std::pair<std::string, QDoubleSpinBox*>> arrowBoxes_;  // los que tienen flecha
     std::string focusedKey_;                                           // la medida que se edita ahora
@@ -443,6 +448,7 @@ protected:
     void createFields(QFormLayout* form) override;
     void selectionChanged(const render::ModelSelection& selection) override;
     QString inputsText() const override;
+    std::optional<Arrow> dimensionArrow(const std::string& key) const override;
     bool removesMaterial() const override { return false; }
 
 private:
@@ -606,6 +612,9 @@ private:
     QDoubleSpinBox* z_ = nullptr;
     QDoubleSpinBox* diameter_ = nullptr;
     QDoubleSpinBox* height_ = nullptr;
+    QDoubleSpinBox* baseRound_ = nullptr;
+    QDoubleSpinBox* topChamfer_ = nullptr;
+    QDoubleSpinBox* innerDiameter_ = nullptr;
     QCheckBox* symmetric_ = nullptr;
     QComboBox* operation_ = nullptr;
 };
@@ -879,6 +888,7 @@ private:
     double cylinderDiameter_ = 0.0;
     bool cylinderHole_ = false;
     double cylinderLength_ = 0.0;
+    QDoubleSpinBox* z_ = nullptr;
     QDoubleSpinBox* clearance_ = nullptr;
     QComboBox* standard_ = nullptr;
     QComboBox* profile_ = nullptr;

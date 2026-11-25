@@ -30,10 +30,10 @@ void CommandStack::undo()
     if (done_.empty()) {
         return;
     }
-    auto command = std::move(done_.back());
+    // Si deshacer falla, la orden sigue en la pila: no se pierde.
+    done_.back()->undo(doc_);
+    undone_.push_back(std::move(done_.back()));
     done_.pop_back();
-    command->undo(doc_);
-    undone_.push_back(std::move(command));
     changed.notify();
 }
 
@@ -42,10 +42,9 @@ void CommandStack::redo()
     if (undone_.empty()) {
         return;
     }
-    auto command = std::move(undone_.back());
+    undone_.back()->execute(doc_);
+    done_.push_back(std::move(undone_.back()));
     undone_.pop_back();
-    command->execute(doc_);
-    done_.push_back(std::move(command));
     changed.notify();
 }
 

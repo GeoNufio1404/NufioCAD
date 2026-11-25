@@ -3818,13 +3818,14 @@ TEST_CASE("La tapa de rosca del bote encaja en el cuello al girarla", "[generato
     const double capH = 2.4 + 10.0 + 1.0;
     const double lidX = (lid.bounds().min.x + lid.bounds().max.x) / 2.0;
     double best = 1e18;
-    for (int step = 0; step < 6; ++step) {
-        // La tapa se da la vuelta (se imprime boca arriba) y se baja sobre el cuello, girada un poco más cada vez.
+    for (int step = 0; step < 12; ++step) {
+        // La tapa se da la vuelta (se imprime boca arriba) y se baja sobre el cuello hasta apoyar en el hombro, girada un
+        // poco más cada vez.
         const geometry::Shape flipped =
             geometry::moveBody("t", lid, {0.0, 0.0, 0.0}, {{lidX, 0.0, capH / 2.0}, {1.0, 0.0, 0.0}}, std::numbers::pi, false);
-        const geometry::Shape placed = geometry::moveBody("t", flipped, {-lidX, 0.0, 50.0 - capH + 2.4},
+        const geometry::Shape placed = geometry::moveBody("t", flipped, {-lidX, 0.0, 40.05},
                                                           {{lidX, 0.0, 0.0}, {0.0, 0.0, 1.0}}, 0.0, false,
-                                                          {0.0, 0.0, step * std::numbers::pi / 3.0}, {lidX, 0.0, 0.0});
+                                                          {0.0, 0.0, step * std::numbers::pi / 6.0}, {lidX, 0.0, 0.0});
         const double overlap = std::abs(geometry::boolean(geometry::BooleanOp::Common, jar, placed).volume());
         best = std::min(best, overlap);
     }

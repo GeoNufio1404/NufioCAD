@@ -3,6 +3,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QSaveFile>
 #include <QStandardPaths>
 #include <QUuid>
 
@@ -68,9 +69,10 @@ bool Recovery::writeAsync(const document::Document& document, const io::ViewStat
     writer_ = std::thread([this, plan = std::move(plan), info, file, infoFile] {
         try {
             io::writeSave(file, plan);
-            QFile out(infoFile);
-            if (out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            QSaveFile out(infoFile);
+            if (out.open(QIODevice::WriteOnly)) {
                 out.write(info.toUtf8());
+                out.commit();
             }
         } catch (...) {
             // No es grave: se reintenta en la siguiente vuelta.

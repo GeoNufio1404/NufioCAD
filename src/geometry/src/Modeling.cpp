@@ -1,6 +1,7 @@
 #include "Naming.hpp"
 
 #include <nuf/geometry/Cancel.hpp>
+#include <nuf/geometry/DisplayMesh.hpp>
 #include <nuf/geometry/Modeling.hpp>
 #include <nuf/geometry/Occt.hpp>
 
@@ -910,6 +911,59 @@ std::optional<Overlap> overlap(const Shape& a, const Shape& b, double minVolume)
     }
 }
 
+namespace {
+
+// ¿Algún punto de «points» está dentro del sólido «body» o sobre su superficie?
+bool anyInside(const Shape& body, const std::vector<gp_Pnt>& points)
+{
+    if (points.empty()) {
+        return false;
+    }
+    BRepClass3d_SolidClassifier classifier(occtShape(body));
+    for (const gp_Pnt& point : points) {
+        throwIfCancelled();
+        classifier.Perform(point, 1e-6);
+        if (classifier.State() == TopAbs_IN || classifier.State() == TopAbs_ON) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Puntos del borde de «shape» (mitades de aristas y vértices) que caen en la caja «box»; como mucho «limit», repartidos.
+std::vector<gp_Pnt> boundaryPoints(const Shape& shape, const Box& box, std::size_t limit)
+{
+    std::vector<gp_Pnt> points;
+    const auto add = [&](const gp_Pnt& p) {
+        constexpr double gap = 1e-6;
+        if (p.X() >= box.min.x - gap && p.X() <= box.max.x + gap && p.Y() >= box.min.y - gap && p.Y() <= box.max.y + gap
+            && p.Z() >= box.min.z - gap && p.Z() <= box.max.z + gap) {
+            points.push_back(p);
+        }
+    };
+    for (int i = 0; i < shape.edgeCount(); ++i) {
+        const TopoDS_Edge& edge = edgeAt(shape, i);
+        if (BRep_Tool::Degenerated(edge)) {
+            continue;
+        }
+        const BRepAdaptor_Curve curve(edge);
+        const double first = curve.FirstParameter();
+        const double last = curve.LastParameter();
+        add(curve.Value(first));
+        add(curve.Value(0.5 * (first + last)));
+    }
+    if (points.size() > limit) {
+        std::vector<gp_Pnt> some;
+        for (std::size_t k = 0; k < limit; ++k) {
+            some.push_back(points[k * points.size() / limit]);
+        }
+        points = std::move(some);
+    }
+    return points;
+}
+
+} // namespace
+
 bool touches(const Shape& a, const Shape& b)
 {
     if (a.isNull() || b.isNull()) {
@@ -922,28 +976,46 @@ bool touches(const Shape& a, const Shape& b)
         || bb.max.y < ba.min.y - gap || ba.max.z < bb.min.z - gap || bb.max.z < ba.min.z - gap) {
         return false;
     }
-    // Solo cuentan las caras de «a» cuya caja se cruza con la de «b»: medir la
-    // distancia contra el cuerpo entero crece con todas sus caras.
-    Bnd_Box toolBox;
-    BRepBndLib::AddOptimal(occtShape(b), toolBox, false, false);
-    toolBox.Enlarge(gap);
-    BRep_Builder builder;
-    TopoDS_Compound near;
-    builder.MakeCompound(near);
-    bool any = false;
+    // Primero, ¿hay algún punto de uno dentro del otro? Es lo que pasa casi siempre que se tocan, y es barato; además es
+    // lo único que ve una herramienta metida entera dentro del cuerpo (un hueco cerrado), cuyas superficies no se rozan.
+    // Se empieza por clasificar contra el más sencillo de los dos: contra una rosca, cada punto cuesta más.
+    const bool heavyA = hasHeavySurface(a);
+    const bool heavyB = hasHeavySurface(b);
+    const auto inA = [&] { return anyInside(a, boundaryPoints(b, ba, heavyA ? 6 : 24)); };
+    const auto inB = [&] { return anyInside(b, boundaryPoints(a, bb, heavyB ? 6 : 24)); };
+    if (heavyA && !heavyB ? (inB() || inA()) : (inA() || inB())) {
+        return true;
+    }
+    // Si no, se tocan solo si se tocan sus caras. Solo cuentan las parejas de caras cuyas cajas se cruzan: medir la distancia
+    // entre los cuerpos enteros (o ajustar las cajas de una rosca con AddOptimal) costaba segundos.
+    const auto boxes = [](const Shape& shape) {
+        std::vector<Bnd_Box> list(std::size_t(shape.faceCount()));
+        for (int i = 0; i < shape.faceCount(); ++i) {
+            BRepBndLib::Add(faceAt(shape, i), list[std::size_t(i)], false);
+            list[std::size_t(i)].Enlarge(gap);
+        }
+        return list;
+    };
+    const std::vector<Bnd_Box> facesA = boxes(a);
+    const std::vector<Bnd_Box> facesB = boxes(b);
     for (int i = 0; i < a.faceCount(); ++i) {
-        Bnd_Box box;
-        BRepBndLib::AddOptimal(faceAt(a, i), box, false, false);
-        if (!box.IsOut(toolBox)) {
-            builder.Add(near, faceAt(a, i));
-            any = true;
+        for (int j = 0; j < b.faceCount(); ++j) {
+            if (facesA[std::size_t(i)].IsOut(facesB[std::size_t(j)])) {
+                continue;
+            }
+            throwIfCancelled();
+            BRepExtrema_DistShapeShape distance;
+            distance.SetFlag(Extrema_ExtFlag_MIN);
+            distance.SetMultiThread(true);
+            distance.LoadS1(faceAt(a, i));
+            distance.LoadS2(faceAt(b, j));
+            distance.Perform();
+            if (distance.IsDone() && distance.Value() < gap) {
+                return true;
+            }
         }
     }
-    if (!any) {
-        return false;
-    }
-    BRepExtrema_DistShapeShape distance(near, occtShape(b));
-    return distance.IsDone() && distance.Value() < 1e-6;
+    return false;
 }
 
 // Redondeo y chaflán comparten todo salvo la herramienta del kernel.
@@ -2300,10 +2372,11 @@ double threadMinorDiameter(const ThreadSpec& spec)
 // Varilla cuya sección es una curva r(φ) que gira al avanzar (un tornillo de una o más entradas): a cada altura la
 // misma curva girada, así que la hélice es UNA superficie por tramos más dos tapas. «radiusAt(s)» da el radio de la
 // superficie a la distancia axial s (periódica); «lead» es el avance por vuelta; «what» y «wall» solo dan nombre
-// a los mensajes y a la cara lateral.
+// a los mensajes y a la cara lateral. «envelope», si está, es el radio máximo a cada distancia del extremo inicial (el
+// chaflán de entrada): la propia superficie se estrecha ahí, sin ninguna booleana.
 static Shape twistedRod(const std::string& tag, const sketch::Plane& plane, const std::function<double(double)>& radiusAt,
                  double lead, double length, bool leftHanded, int kPoints, int sectionsPerTurn, double smooth, const std::string& wall,
-                 const char* what, const char* hint)
+                 const char* what, const char* hint, const std::function<double(double)>& envelope = {})
 {
     constexpr double kPi = std::numbers::pi;
     try {
@@ -2369,7 +2442,17 @@ static Shape twistedRod(const std::string& tag, const sketch::Plane& plane, cons
                 throwIfCancelled();
                 occ::handle<HPntArray> path = new HPntArray(1, count + 1);
                 for (int k = 0; k <= count; ++k) {
-                    path->SetValue(k + 1, curve->Pole(j).Transformed(moves[std::size_t(k0 + k)]));
+                    gp_Pnt pole = curve->Pole(j).Transformed(moves[std::size_t(k0 + k)]);
+                    if (envelope) {
+                        const double from = std::abs(length) * double(k0 + k) / sections;
+                        const gp_Pnt axisPoint = origin.Translated(gp_Vec(normal) * (length * double(k0 + k) / sections));
+                        const gp_Vec radial(axisPoint, pole);
+                        const double limit = envelope(from);
+                        if (radial.Magnitude() > limit) {
+                            pole = axisPoint.Translated(radial.Normalized() * limit);
+                        }
+                    }
+                    path->SetValue(k + 1, pole);
                 }
                 GeomAPI_Interpolate along(path, parameters, false, 1e-9);
                 along.Perform();
@@ -2509,38 +2592,21 @@ Shape thread(std::string_view tagView, const sketch::Plane& plane, const ThreadS
         }
         return rMin + (rMax - rMin) * (s - crest - flank - root) / flank;
     };
-    const Shape rod = twistedRod(tag, plane, profile, pitch, spec.length, spec.leftHanded, 32, 8, pitch / 12.0, "rosca", "la rosca",
-                                 "revisa el paso y el diámetro: el diámetro menor (diámetro − 1,23 × paso, o diámetro − paso en la trapezoidal) debe ser positivo");
-    if (spec.entryChamfer <= kTiny) {
-        return rod;
-    }
-    // Chaflán de entrada: se queda con lo que cabe en una envolvente cilíndrica con el extremo inicial en cono a 45°
-    // (el cono sigue más allá de las crestas para no rozarlas, y el cilindro es algo más ancho que la rosca).
-    try {
-        const gp_Pnt origin = toPnt(plane.origin);
-        const gp_Dir along = spec.length >= 0.0 ? toDir(plane.normal) : toDir(plane.normal).Reversed();
-        const gp_Dir across = toDir(plane.xAxis);
-        const double c = spec.entryChamfer;
-        const double wide = rMax + 0.5;
-        const double length = std::abs(spec.length);
-        const auto at = [&](double r, double z) {
-            return gp_Pnt(origin.XYZ() + r * gp_Vec(across).XYZ() + z * gp_Vec(along).XYZ());
+    // Chaflán de entrada: el extremo por donde empieza la rosca se estrecha en cono a 45°. Se hace en la propia superficie
+    // (con una booleana contra un cono tardaba cien veces más que la rosca entera); la esquina entre el cono y las crestas
+    // se suaviza un poco para que la curva por puntos no se pase del diámetro.
+    std::function<double(double)> envelope;
+    if (spec.entryChamfer > kTiny) {
+        const double soft = 0.15 * std::min(spec.entryChamfer, pitch);
+        envelope = [rMax, c = spec.entryChamfer, soft](double from) {
+            const double cone = rMax - c + from;
+            const double over = std::max(0.0, soft - std::abs(cone - rMax)) / soft;
+            return std::min(cone, rMax) - 0.25 * soft * over * over;
         };
-        BRepBuilderAPI_MakePolygon outline;
-        outline.Add(at(0.0, 0.0));
-        outline.Add(at(rMax - c, 0.0));
-        outline.Add(at(wide, c + (wide - rMax)));
-        outline.Add(at(wide, length));
-        outline.Add(at(0.0, length));
-        outline.Close();
-        const BRepBuilderAPI_MakeFace face(outline.Wire());
-        BRepPrimAPI_MakeRevol envelope(face.Face(), gp_Ax1(origin, along), 2.0 * std::numbers::pi);
-        Namer namer(envelope.Shape());
-        namer.nameUnnamed(tag + ":entrada");
-        return boolean(BooleanOp::Common, rod, namer.finish(tag));
-    } catch (const Standard_Failure& e) {
-        throw kernelFailure("achaflanar la entrada de la rosca", "prueba con un chaflán más pequeño", e);
     }
+    return twistedRod(tag, plane, profile, pitch, spec.length, spec.leftHanded, 32, 8, pitch / 12.0, "rosca", "la rosca",
+                      "revisa el paso y el diámetro: el diámetro menor (diámetro − 1,23 × paso, o diámetro − paso en la trapezoidal) debe ser positivo",
+                      envelope);
 }
 
 Shape threadOnCylinderTool(std::string_view tag, const Shape::CylinderInfo& info, const ThreadSpec& spec)

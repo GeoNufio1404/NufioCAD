@@ -377,8 +377,15 @@ erDiagram
 
 - `PRAGMA application_id` identifica el archivo como `.nuf` y `PRAGMA user_version` es la versión del esquema (para
   migraciones). `tests/data/v1.nuf` es un archivo de referencia: si un cambio rompe el formato, una prueba falla.
-- **Guardado atómico:** se escribe en `<archivo>.guardando` y se reemplaza el original (con reintentos si OneDrive o
-  un antivirus lo bloquean un instante); el original nunca se borra antes.
+- **Guardado (ACID):** se escribe en un temporal propio (`<archivo>.<proceso>-<n>.guardando`) dentro de una transacción, se
+  comprueba que está entero (`PRAGMA quick_check` y las filas escritas) y solo entonces reemplaza al original, de una vez y
+  esperando al disco (con reintentos si OneDrive o un antivirus lo bloquean un instante). El original nunca se borra antes.
+  Abrir es de solo lectura.
+- **Huella:** `meta.huella` resume las operaciones, los parámetros y la vista. Si al abrir no coincide, el diseño se abre y se
+  avisa. La `user_version` es 2 solo si el diseño usa algo que una aplicación anterior se saltaría (tubos, chaflán de arriba).
+- **Órdenes todo o nada:** `Batch` y `AddRecipe` deshacen lo hecho si fallan a medias; una orden que falla al deshacerse sigue
+  en la pila. Una excepción en una acción de la interfaz se avisa y no cierra el programa (`SafeApplication`).
+- **Dos ventanas con el mismo archivo:** al guardar, si el contenido del disco no es el que se abrió, se pregunta.
 - Código: `io/src/NufFile.cpp` (esquema y SQLite) y `io/src/DocumentFile.cpp` (JSON de cada tipo de operación).
 - `NufioCAD --dump archivo.nuf` imprime el contenido como JSON legible.
 

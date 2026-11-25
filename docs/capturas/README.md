@@ -16,3 +16,14 @@ la timeline con sus botones de reproducción.
 Cinco submenús por familia de herramientas: Crear, Modificar, Organizar, Construir e Inspeccionar.
 
 ![Menú Sólido en submenús](menu-solido.png)
+
+## Bote con tapa
+
+Las flechas turquesa señalan la medida que se edita. De rosca (alto de la rosca), de bayoneta (los pines, las entradas y las
+gradas de la tapa) y el de rosca cortado por la mitad: el hueco, el hombro a 45° y la rosca de la tapa.
+
+![Bote de rosca](bote-rosca.png)
+
+![Bote de bayoneta](bote-bayoneta.png)
+
+![Bote de rosca cortado](bote-rosca-corte.png)

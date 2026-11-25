@@ -1,7 +1,7 @@
 # Hoja de ruta — NufioCAD (CAD paramétrico de escritorio en C++)
 
 > **Cómo leer este documento.** Todo el trabajo se ordena en **fases** numeradas. Las **0–13 están hechas** y las
-> **14–19 son lo que sigue, en el orden en que se harán**. Arriba está [dónde estamos](#dónde-estamos-16-nov-2026);
+> **14–19 son lo que sigue, en el orden en que se harán**. Arriba está [dónde estamos](#dónde-estamos-25-nov-2026);
 > después, [lo que sigue](#lo-que-sigue-en-orden); al final, el [historial de las fases hechas](#fases-hechas) y los
 > [fundamentos](#fundamentos-decisiones-de-partida). Cada punto pendiente lleva un identificador (P1, U3, E2…) para
 > nombrarlo en ramas, commits y la guía de pruebas. **Convención:** cada bloque termina con su «**Pendiente de …**»
@@ -20,9 +20,9 @@ Un CAD paramétrico de escritorio para **Windows y Linux**, **offline y con arch
 
 ---
 
-## Dónde estamos (20 nov. 2026)
+## Dónde estamos (25 nov. 2026)
 
-`main` está en la **v0.1.0** (9 nov. 2026). `develop` tiene además todo lo hecho desde entonces: la parte nueva de la 10 y las Fases 11, 12, 13, 15, 16, 17, 18, 19, 20 y 21, con los pendientes O1–O6 y los menores de la 15 (todas las ramas `feature/…` de esas fases ya están fusionadas). Casi todo lo nuevo espera la prueba manual: es la Fase 14, lo único que queda antes de la v0.2.0 junto con las decisiones de la Fase 19 (licencia y certificado).
+`main` está en la **v0.1.0** (9 nov. 2026) y `develop` en la **v0.2.1** (25 nov. 2026; la v0.2.0, del 24 nov. 2026, es un borrador de Release en GitHub). `develop` tiene además todo lo hecho desde entonces: la parte nueva de la 10 y las Fases 11, 12, 13, 15, 16, 17, 18, 19, 20 y 21, con los pendientes O1–O6 y los menores de la 15 (todas las ramas `feature/…` de esas fases ya están fusionadas). Casi todo lo nuevo espera la prueba manual: es la Fase 14, lo único que queda antes de la v0.2.0 junto con las decisiones de la Fase 19 (licencia y certificado).
 
 | Fase | Estado |
 |---|---|
@@ -322,10 +322,18 @@ Rama `feature/pendientes-u-interfaz` (23 nov. 2026, sin fusionar hasta la prueba
 - [x] **Bote con tapa ✅ (24 nov. 2026, rama `feature/bote-con-tapa`; falta la prueba manual BOT.1–BOT.8 y CAJ.7):** rosca, bayoneta y tapa deslizante en un generador con holgura de ajuste editable, y redondeo del fondo por dentro en la caja redonda. **Aceptar un generador ya no espera al cálculo ✅ (24 nov. 2026, rama `feature/aceptar-sin-esperar`; falta FLU.32):** los cuerpos nuevos se nombran cuando llega el resultado (`Document::afterCompute`), así que el bote de rosca acepta en 53 ms en Release en vez de congelar la ventana. **Pendiente de BOT:** la tapa deslizante como cierre de la Caja con tapa y del Lightbox; bisagra y snap-fit en el bote; ajustar la holgura por defecto con tu impresora (hoy 0,3 mm); el redondeo del fondo en la caja rectangular; flechas de medida de las medidas nuevas.
 
 ### AJ — Ajustes de las pruebas de la v0.2.0 ✅ (24–25 nov. 2026)
-- [x] **Colocar con flechas ✅:** Caja, Cilindro, Engranaje, Rosca y las demás herramientas con posición X/Y sacan las flechas X e Y sobre el plano de origen XY; al arrastrar una queda una sombra translúcida que sigue al cursor (la caja envolvente si el cuerpo tiene más de 60 caras) y al soltar se calcula en su sitio. **Pendiente de AJ:** solo sobre el plano XY de origen (otros planos y caras no tienen flechas); los generadores (cajas, lightbox, letreros) no se colocan con flechas; la sombra del engranaje es una caja, no su forma.
+- [x] **Colocar con flechas ✅:** Caja, Cilindro, Engranaje, Rosca y las demás herramientas con posición X/Y sacan las flechas X e Y sobre el plano de origen XY; al arrastrar una queda una sombra translúcida que sigue al cursor y al soltar se calcula en su sitio. **Pendiente de AJ:** solo sobre el plano XY de origen (otros planos y caras no tienen flechas); los generadores (cajas, lightbox, letreros) no se colocan con flechas.
 - [x] **Menús ordenados ✅:** la cinta SÓLIDO agrupa herramientas parecidas en botones con desplegable (de 30 botones a 20) y el menú Sólido de la barra superior tiene cinco submenús (Crear, Modificar, Organizar, Construir, Inspeccionar). **Pendiente de AJ:** ordenar de la misma forma los menús Herramientas y Ver si crecen.
 - [x] **Bayoneta con tope y grada ✅:** guía un escalón más arriba, tope junto a cada entrada y grada de cierre donde descansan los pines; campo «Altura de la grada». **Pendiente de AJ:** la prueba manual AJU.4 y AJU.7 (la comprobación hecha es geométrica, de volúmenes); imprimirla para ver si el ajuste y la altura de la grada se sienten bien; el deslizante de la Caja con tapa sigue sin una grada parecida.
 - [x] **Capturas de la interfaz en la documentación ✅:** `docs/capturas/` con la ventana (herramienta Caja con sus flechas) y el menú Sólido, generadas con `--captura-temas`. **Pendiente de AJ:** capturas de la bayoneta y de la timeline (el programa no genera aún capturas de un generador ni de una timeline llena).
+
+### AU4 — Auditoría 4: rendimiento, fiabilidad y consistencia ✅ (25 nov. 2026)
+- [x] **Hecho:** 13 hallazgos corregidos (ver [auditoría 4](auditorias/auditoria-4-rendimiento-consistencia.md)): el bote de rosca, `touches`, las expresiones al editar, las flechas de todas las medidas.
+- [ ] **Pendiente de AU4:** que Aceptar un generador no recalcule lo que la vista previa ya calculó (M1); flecha al redondear aristas curvas; revisar con la prueba de interfaz las medidas de Extruir, Revolución, Agujero y Unión; la prueba manual REN.1–REN.10.
+
+### AU5 — Auditoría 5: rendimiento, usabilidad, ACID y documentación ✅ (25 nov. 2026, v0.2.1)
+- [x] **Hecho:** ver [auditoría 5](auditorias/auditoria-5-acid-usabilidad.md). Órdenes todo o nada, archivo comprobado antes de reemplazar y con huella, aviso si cambió en el disco, exportar sin perder el archivo anterior, parada máxima de la interfaz de 117–208 ms, menú Sketch en submenús y una prueba automática de usabilidad.
+- [ ] **Pendiente de AU5:** que Aceptar un generador no recalcule la vista previa (M1); un bloqueo visible al abrir un archivo que ya está abierto en otra ventana (hoy se avisa al guardar); la huella no cubre los sólidos importados ni la miniatura; revisar la usabilidad con una persona que no conozca el programa; las pruebas manuales ACI.1–ACI.6; medir en Linux.
 
 ### D — Distribución (después de la v0.2.0)
 - [ ] Flatpak (D1); winget y Microsoft Store (MSIX) con una versión firmada (D6); reputación de SmartScreen con descargas reales (D4).

@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.25)
 # NufioCAD (nombre de trabajo). Internamente el código usa el prefijo corto
 # "nuf" (namespaces, targets), igual que la extensión de archivo .nuf.
 project(NufioCAD
-    VERSION 0.2.0
+    VERSION 0.2.1
     DESCRIPTION "CAD paramétrico de escritorio (Windows y Linux)"
     LANGUAGES CXX)
 

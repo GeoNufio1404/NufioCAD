@@ -288,12 +288,12 @@ document::GeneratorValues GeneratorTool::values() const
 document::Recipe GeneratorTool::recipe() const
 {
     const document::GeneratorValues v = values();
-    const std::string suffix = lead_ != 0 ? suffix_ : document::freeSuffix(document_, generator_, v);
-    if (lastRecipe_ && lastKey_ == suffix + '\n' + document::encodeValues(v)) {
+    if (lastRecipe_ && lastKey_ == document::encodeValues(v)) {
         // Las mismas respuestas que la vista previa: se copia su receta en vez de armarla otra vez.
         document::Recipe copy;
         copy.parameters = lastRecipe_->parameters;
         copy.bodyNames = lastRecipe_->bodyNames;
+        copy.fixedBodies = lastRecipe_->fixedBodies;
         copy.component = lastRecipe_->component;
         copy.origin = lastRecipe_->origin;
         for (const auto& feature : lastRecipe_->features) {
@@ -301,6 +301,7 @@ document::Recipe GeneratorTool::recipe() const
         }
         return copy;
     }
+    const std::string suffix = lead_ != 0 ? suffix_ : document::freeSuffix(document_, generator_, v);
     document::Recipe made = generator_.make(v, suffix);
     made.origin = {generator_.id(), suffix, document::encodeValues(v), 0};
     return made;
@@ -366,9 +367,8 @@ void GeneratorTool::updatePreview()
     // aplicarla corren en el hilo de trabajo, sobre copias.
     auto calculation = std::make_shared<Calculation>();
     const document::GeneratorValues v = values();
-    const std::string suffix = lead_ != 0 ? suffix_ : document::freeSuffix(document_, generator_, v);
     const document::Generator& generator = generator_;  // un generador es un objeto fijo, sin estado
-    const std::string key = suffix + '\n' + document::encodeValues(v);
+    const std::string key = document::encodeValues(v);
     const auto present = [this, calculation, first, key] {
         emit computingChanged(false);
         if (panel_) {
@@ -387,7 +387,9 @@ void GeneratorTool::updatePreview()
     });
     emit computingChanged(true);
     previewRun_.start(
-        [calculation, v, suffix, &generator] {
+        // El sufijo libre de los parámetros también se busca allí: arma la receta (con medidas imposibles lanza una excepción,
+        // que aquí se explica y en el hilo de la interfaz cerraría el programa).
+        [calculation, v, &generator, fixed = lead_ != 0, own = suffix_, used = document_.parameters()] {
             document::Document& scratch = calculation->scratch;
             std::string& problem = calculation->problem;
             const auto explain = [&problem](const char* what) {
@@ -397,6 +399,7 @@ void GeneratorTool::updatePreview()
                 }
             };
             try {
+                const std::string suffix = fixed ? own : document::freeSuffix(used, generator, v);
                 document::Recipe made = generator.make(v, suffix);
                 made.origin = {generator.id(), suffix, document::encodeValues(v), 0};
                 calculation->recipe = std::make_shared<const document::Recipe>(std::move(made));
@@ -469,14 +472,29 @@ std::optional<FeatureTool::Arrow> GeneratorTool::dimensionArrow(const std::strin
     const auto specs = generator_.arrows();
     const auto spec = specs.find(key);
     const auto row = std::ranges::find_if(rows_, [&](const Row& r) { return r.field.key == key; });
-    if (spec == specs.end() || row == rows_.end() || spec->second.body < 0 || std::size_t(spec->second.body) >= bounds_.size()) {
+    if (spec == specs.end() || row == rows_.end()) {
+        return std::nullopt;
+    }
+    const document::GeneratorValues answers = values();
+    const char axis = spec->second.axisOf ? spec->second.axisOf(answers) : spec->second.axis;
+    if (spec->second.body == document::Generator::kWorld) {
+        // Un punto del diseño: no hace falta la vista previa (la flecha sale aunque la pieza aún se esté calculando).
+        const std::array<double, 3> start = spec->second.at(answers);
+        const double length = spec->second.length ? spec->second.length(answers) : static_cast<QDoubleSpinBox*>(row->widget)->value();
+        const sketch::Vec3 along = axis == 'x' ? sketch::Vec3{1.0, 0.0, 0.0} : axis == 'y' ? sketch::Vec3{0.0, 1.0, 0.0} : sketch::Vec3{0.0, 0.0, 1.0};
+        sketch::Vec3 first{start[0], start[1], start[2]};
+        if (spec->second.centered) {
+            first = {first.x - along.x * length / 2.0, first.y - along.y * length / 2.0, first.z - along.z * length / 2.0};
+        }
+        return arrowAlong(first, along, length);
+    }
+    if (spec->second.body < 0 || std::size_t(spec->second.body) >= bounds_.size()) {
         return std::nullopt;
     }
     const geometry::Box& box = bounds_[std::size_t(spec->second.body)];
     if (box.empty) {
         return std::nullopt;
     }
-    const document::GeneratorValues answers = values();
     const double value = spec->second.length ? spec->second.length(answers) : static_cast<QDoubleSpinBox*>(row->widget)->value();
     const sketch::Vec3 center{(box.min.x + box.max.x) / 2.0, (box.min.y + box.max.y) / 2.0, (box.min.z + box.max.z) / 2.0};
     sketch::Vec3 from = center;
@@ -487,14 +505,13 @@ std::optional<FeatureTool::Arrow> GeneratorTool::dimensionArrow(const std::strin
         const std::array<double, 3> offset = spec->second.at(answers);
         const auto place = [](double low, double middle, double shift) { return std::isnan(shift) ? middle : low + shift; };
         from = {place(box.min.x, center.x, offset[0]), place(box.min.y, center.y, offset[1]), place(box.min.z, center.z, offset[2])};
-        const char axis = spec->second.axis;
         dir = axis == 'x' ? sketch::Vec3{1.0, 0.0, 0.0} : axis == 'y' ? sketch::Vec3{0.0, 1.0, 0.0} : sketch::Vec3{0.0, 0.0, 1.0};
         if (centered) {
             return arrowAlong({from.x - dir.x * value / 2.0, from.y - dir.y * value / 2.0, from.z - dir.z * value / 2.0}, dir, value);
         }
         return arrowAlong(from, dir, value);
     }
-    switch (spec->second.axis) {
+    switch (axis) {
     case 'x':
         from.x = spec->second.fromMax ? box.max.x : box.min.x;
         dir = {1.0, 0.0, 0.0};

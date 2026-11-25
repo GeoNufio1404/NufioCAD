@@ -10,6 +10,9 @@
 #include "ParametersDialog.hpp"
 #include "SettingsDialog.hpp"
 #include "FeatureToolsCommon.hpp"
+#include "GeneratorTool.hpp"
+
+#include <nuf/document/Expression.hpp>
 #include "MainWindow.hpp"
 #include "SketchSession.hpp"
 #include "Ribbon.hpp"
@@ -384,6 +387,63 @@ int InterfaceCheck::captureThemes(const QString& folder)
         }
         window_.finishSketch();
         waitIdle();
+    }
+    // El bote con tapa (rosca y bayoneta) con la flecha de una de sus medidas: la pieza y la vista previa del generador.
+    for (QAction* action : window_.generatorActions_) {
+        if (action->text() != QStringLiteral("Bote con tapa")) {
+            continue;
+        }
+        undoAll();
+        QSettings().remove(QStringLiteral("generator/bote-con-tapa"));
+        action->trigger();
+        waitIdle();
+        auto* tool = dynamic_cast<GeneratorTool*>(window_.tool_.get());
+        if (tool == nullptr) {
+            continue;
+        }
+        for (const auto& [file, closure, key] : {std::tuple{"bote-rosca", 0, "rosca_alto"}, std::tuple{"bote-bayoneta", 1, "pin_sale"}}) {
+            for (const GeneratorTool::Row& row : tool->rows_) {
+                if (row.field.key == "cierre") {
+                    static_cast<QComboBox*>(row.widget)->setCurrentIndex(closure);
+                }
+            }
+            waitIdle();
+            window_.viewport_->resetView();
+            settle(800);
+            window_.viewport_->fitAll();
+            if (const auto arrow = tool->dimensionArrow(key)) {
+                window_.viewport_->showDimensionArrow(arrow->first, arrow->second);
+            }
+            settle(500);
+            window_.viewport_->grabFramebuffer().save(QDir(folder).filePath(QString::fromLatin1(file) + QStringLiteral(".png")));
+        }
+        // El bote de rosca aceptado y cortado por la mitad, para ver el hueco y el hombro del cuello.
+        for (const GeneratorTool::Row& row : tool->rows_) {
+            if (row.field.key == "cierre") {
+                static_cast<QComboBox*>(row.widget)->setCurrentIndex(0);
+            }
+        }
+        waitIdle();
+        window_.finishTool(true);
+        waitIdle();
+        {
+            auto split = std::make_unique<document::BoxFeature>();
+            split->base.origin = document::OriginPlane::XY;
+            split->x = -100.0;
+            split->y = -200.0;
+            split->z = -10.0;
+            split->width = 400.0;
+            split->depth = 200.0;
+            split->height = 200.0;
+            split->operation = document::Operation::Cut;
+            window_.commands_.push(std::make_unique<commands::AddFeature>(std::move(split)));
+        }
+        waitIdle();
+        window_.viewport_->resetView();
+            settle(800);
+            window_.viewport_->fitAll();
+        settle(500);
+        window_.viewport_->grabFramebuffer().save(QDir(folder).filePath(QStringLiteral("bote-rosca-corte.png")));
     }
     // Sin cambios pendientes, para que cerrar la ventana no pregunte si guardar.
     undoAll();
@@ -1174,7 +1234,21 @@ int InterfaceCheck::run()
                     }
                 };
                 focusBox();
-                settle(400);
+                if (!box->hasFocus() && !window_.isActiveWindow()) {
+                    // Alguien está usando el equipo y Windows no cede el primer plano: sin foco no hay flecha que mirar (que
+                    // todas las medidas tengan la suya lo comprueba, sin foco, el paso «Cada medida de cada herramienta…»).
+                    current_->detail += QStringLiteral(" OMITIDO: Windows no dio el foco a la ventana");
+                    if (QPushButton* cancel = button(QStringLiteral("Cancelar"))) {
+                        cancel->click();
+                    }
+                    settle(200);
+                    undoAll();
+                    return;
+                }
+                // La flecha sale cuando el foco asienta y el visor repinta: se espera a verla, no un tiempo fijo.
+                for (int attempt = 0; attempt < 10 && turquoise(true) <= withoutExact + kMinArrowPixels; ++attempt) {
+                    settle(200);
+                }
                 const long with = turquoise();
                 const long withExact = turquoise(true);
                 expect(box->hasFocus(), QStringLiteral("el cuadro no recibió el foco"));
@@ -1219,7 +1293,7 @@ int InterfaceCheck::run()
     };
     arrowCheck(QStringLiteral("Caja"), window_.boxAction_, 3);
     arrowCheck(QStringLiteral("Cilindro"), window_.cylinderAction_, 3);
-    arrowCheck(QStringLiteral("Rosca"), window_.threadAction_, 2);
+    arrowCheck(QStringLiteral("Rosca"), window_.threadAction_, 3);
     arrowCheck(QStringLiteral("Engranaje"), window_.gearAction_, 2);
     arrowCheck(QStringLiteral("Plano (ángulo)"), window_.planeAction_, 1, false, 30.0);
     arrowCheck(QStringLiteral("Mover cuerpo (X)"), window_.moveAction_, 0, true, 20.0);
@@ -1274,6 +1348,281 @@ int InterfaceCheck::run()
         blocking(QStringLiteral("cancelar la herramienta"), [&] { window_.finishTool(false); });
         waitIdle();
         undoAll();
+    });
+
+    // Aislamiento (ACID): si otra ventana guardó el mismo archivo, guardar no lo pisa sin preguntar; un cambio solo de fecha no
+    // cuenta. Y los nombres de los cuerpos recién generados entran en el archivo aunque se guarde antes de acabar el cálculo.
+    step(QStringLiteral("Guardar: detecta que el archivo cambió en el disco y espera los nombres"), [&] {
+        const std::filesystem::path path = std::filesystem::temp_directory_path() / "nufiocad-prueba-disco.nuf";
+        std::error_code ignored;
+        std::filesystem::remove(path, ignored);
+        for (QAction* action : window_.generatorActions_) {
+            if (action->text() == QStringLiteral("Caja con tapa")) {
+                blocking(QStringLiteral("abrir el generador"), [&] { action->trigger(); });
+                waitIdle();
+                blocking(QStringLiteral("aceptar"), [&] { window_.finishTool(true); });
+                expect(window_.writeTo(path), QStringLiteral("no se pudo guardar"));  // sin esperar a que acabe el cálculo
+            }
+        }
+        document::Document saved;
+        io::ViewState view;
+        io::loadDocument(path, saved, view);
+        expect(view.warning.empty(), QStringLiteral("el archivo recién guardado no coincide con su huella"));
+        int named = 0;
+        for (const auto& [key, info] : saved.bodyInfo()) {
+            named += info.name == "Caja" || info.name == "Tapa" ? 1 : 0;
+        }
+        expect(named == 2, QStringLiteral("los nombres de los cuerpos no se guardaron (%1 de 2)").arg(named));
+        expect(!window_.changedOnDisk(), QStringLiteral("dice que cambió en el disco nada más guardar"));
+        std::filesystem::last_write_time(path, std::filesystem::last_write_time(path) + std::chrono::seconds(10), ignored);
+        expect(!window_.changedOnDisk(), QStringLiteral("un cambio solo de fecha cuenta como cambio"));
+        document::Document other;
+        io::saveDocument(path, other, {});
+        expect(window_.changedOnDisk(), QStringLiteral("no detecta que otra ventana guardó el archivo"));
+        expect(window_.writeTo(path), QStringLiteral("no se pudo sobrescribir"));
+        expect(!window_.changedOnDisk(), QStringLiteral("tras sobrescribir sigue diciendo que cambió"));
+        waitIdle();
+        undoAll();
+        window_.path_.clear();
+        window_.stamp_.reset();
+        window_.commands_.clear();
+        window_.commands_.markSaved();
+        window_.updateTitle();
+        std::filesystem::remove(path, ignored);
+    });
+
+    // Heurísticas de usabilidad que se pueden comprobar solas: atajos y letras de menú que no chocan (consistencia), ayuda en
+    // cada acción (reconocer mejor que recordar), botones que se pueden acertar y menús que no abruman (diseño mínimo).
+    step(QStringLiteral("Heurísticas: atajos, menús, ayudas y tamaños"), [&] {
+        QStringList findings;
+        const auto plain = [](QString text) { return text.remove(QLatin1Char('&')); };
+        // Atajos: dos acciones disponibles a la vez no pueden compartirlo.
+        std::map<QString, QStringList> byShortcut;
+        for (const QAction* action : window_.findChildren<QAction*>()) {
+            for (const QKeySequence& key : action->shortcuts()) {
+                if (!key.isEmpty() && action->isEnabled()) {
+                    byShortcut[key.toString()] << plain(action->text());
+                }
+            }
+        }
+        for (auto& [key, names] : byShortcut) {
+            names.removeDuplicates();
+            if (names.size() > 1) {
+                findings << QStringLiteral("atajo %1 repetido: %2").arg(key, names.join(QStringLiteral(" / ")));
+            }
+        }
+        // Menús: letra de acceso repetida, acciones sin ayuda y demasiadas entradas.
+        const auto review = [&](const QList<QAction*>& actions, const QString& where, const auto& self) -> void {
+            std::map<QChar, QStringList> letters;
+            int entries = 0;
+            for (QAction* action : actions) {
+                if (action->isSeparator() || !action->isVisible()) {
+                    continue;
+                }
+                ++entries;
+                const qsizetype mark = action->text().indexOf(QLatin1Char('&'));
+                if (mark >= 0 && mark + 1 < action->text().size()) {
+                    letters[action->text().at(mark + 1).toLower()] << plain(action->text());
+                }
+                if (action->menu() != nullptr) {
+                    self(action->menu()->actions(), where + QStringLiteral(" › ") + plain(action->text()), self);
+                } else if (!action->toolTip().contains(QStringLiteral("<br>")) && !action->isCheckable()) {
+                    findings << QStringLiteral("sin ayuda: %1 › %2").arg(where, plain(action->text()));
+                }
+            }
+            for (const auto& [letter, names] : letters) {
+                if (names.size() > 1) {
+                    findings << QStringLiteral("letra «%1» repetida en %2: %3").arg(letter).arg(where, names.join(QStringLiteral(" / ")));
+                }
+            }
+            if (entries > 22) {
+                findings << QStringLiteral("menú largo (%1 entradas): %2").arg(entries).arg(where);
+            }
+        };
+        review(window_.menuBar()->actions(), QStringLiteral("Barra"), review);
+        // Botones visibles: al menos 20 px de alto y de ancho, y con nombre o ayuda (los de solo icono).
+        for (const QAbstractButton* button : window_.findChildren<QAbstractButton*>()) {
+            if (!button->isVisible() || qobject_cast<const QCheckBox*>(button) != nullptr) {
+                continue;
+            }
+            const QString name = !button->text().isEmpty() ? button->text() : button->toolTip();
+            const QString parent = button->parentWidget() != nullptr ? QString::fromLatin1(button->parentWidget()->metaObject()->className()) : QString();
+            if (parent.contains(QStringLiteral("DockWidgetTitle")) || parent.contains(QStringLiteral("QDockWidget")) || parent.contains(QStringLiteral("QTabBar"))) {
+                continue;  // los de Qt
+            }
+            if (button->width() < 20 || button->height() < 20) {
+                findings << QStringLiteral("botón pequeño (%1×%2): %3 [%4]").arg(button->width()).arg(button->height()).arg(name, parent);
+            }
+            if (name.isEmpty()) {
+                findings << QStringLiteral("botón sin nombre ni ayuda [%1 %2]").arg(parent, button->objectName());
+            }
+        }
+        expect(findings.isEmpty(), findings.join(QStringLiteral("; ")));
+    });
+
+    // Consistencia: en todas las herramientas, cada medida que se puede escribir se señala en la vista con su flecha o su arco.
+    step(QStringLiteral("Cada medida de cada herramienta tiene su flecha"), [&] {
+        expect(openChangeAccept(window_.boxAction_, 3) == 1, QStringLiteral("no se creó la caja de apoyo"));
+        QStringList missing;
+        int checked = 0;
+        // Sin dibujo a propósito: cantidades, factores y holguras de centésimas.
+        const std::vector<std::string> exempt = {"count", "profileShift", "mateTeeth", "backlash", "endScale"};
+        const auto review = [&](const QString& name) {
+            FeatureTool* tool = window_.tool_.get();
+            if (tool == nullptr) {
+                missing << name + QStringLiteral(": no abrió");
+                return;
+            }
+            const auto* generator = dynamic_cast<GeneratorTool*>(tool);
+            for (const auto& [key, box] : tool->arrowBoxes_) {
+                if (!box->isVisibleTo(tool->panel()) || std::ranges::find(exempt, key) != exempt.end()) {
+                    continue;
+                }
+                ++checked;
+                if (!tool->dimensionArrow(key) && !tool->dimensionArc(key)) {
+                    missing << name + QStringLiteral(" · ") + QString::fromStdString(key);
+                }
+            }
+            if (generator != nullptr) {
+                for (const GeneratorTool::Row& row : generator->rows_) {
+                    const bool tracked = std::ranges::any_of(tool->arrowBoxes_, [&](const auto& b) { return b.first == row.field.key; });
+                    if (row.field.kind == document::GeneratorField::Kind::Length && row.widget->isVisibleTo(tool->panel()) && !tracked &&
+                        row.field.key != "juego" && row.field.key != "adelgazar") {
+                        missing << name + QStringLiteral(" · ") + QString::fromStdString(row.field.key) + QStringLiteral(" (sin flecha)");
+                    }
+                }
+            } else {
+                for (QDoubleSpinBox* box : tool->panel()->findChildren<QDoubleSpinBox*>()) {
+                    const bool tracked = std::ranges::any_of(tool->arrowBoxes_, [&](const auto& b) { return b.second == box; });
+                    if (!tracked && box->isVisibleTo(tool->panel())) {
+                        missing << name + QStringLiteral(" · un cuadro numérico sin registrar (%1)").arg(box->value());
+                    }
+                }
+            }
+        };
+        const std::vector<std::pair<QString, QAction*>> all = {
+            {QStringLiteral("Caja"), window_.boxAction_},       {QStringLiteral("Cilindro"), window_.cylinderAction_},
+            {QStringLiteral("Engranaje"), window_.gearAction_}, {QStringLiteral("Rosca"), window_.threadAction_},
+            {QStringLiteral("Plano"), window_.planeAction_},    {QStringLiteral("Mover"), window_.moveAction_},
+            {QStringLiteral("Patrón"), window_.patternAction_}, {QStringLiteral("Dividir"), window_.splitAction_}};
+        for (const auto& [name, action] : all) {
+            blocking(QStringLiteral("abrir ") + name, [&] { action->trigger(); });
+            waitIdle();
+            review(name);
+            blocking(QStringLiteral("cerrar ") + name, [&] { window_.finishTool(false); });
+            waitIdle();
+        }
+        for (QAction* action : window_.generatorActions_) {
+            blocking(QStringLiteral("abrir ") + action->text(), [&] { action->trigger(); });
+            waitIdle();
+            review(action->text());
+            blocking(QStringLiteral("cerrar ") + action->text(), [&] { window_.finishTool(false); });
+            waitIdle();
+        }
+        expect(missing.isEmpty(), QStringLiteral("sin flecha: ") + missing.join(QStringLiteral(", ")));
+        current_->detail += QStringLiteral(" medidas revisadas: %1").arg(checked);
+        undoAll();
+    });
+
+    // Fiabilidad: abrir una operación para editarla y aceptar sin tocar nada no puede cambiarla (el redondeo de un hueco
+    // generado o la altura de una rosca se perdían). Se prueba con todo lo que sacan los generadores.
+    step(QStringLiteral("Editar sin tocar nada no cambia la operación"), [&] {
+        QStringList changed;
+        int checked = 0;
+        for (QAction* action : window_.generatorActions_) {
+            expect(openChangeAccept(action, 0) >= 1, QStringLiteral("no añadió operaciones: ") + action->text());
+            waitIdle();
+            std::vector<document::FeatureId> ids;
+            std::vector<std::string> seen;
+            for (std::size_t i = 0; i < window_.document_.featureCount(); ++i) {
+                const document::Feature& f = window_.document_.feature(i);
+                // Una de cada clase de operación por generador (las demás se editan igual).
+                std::string kind = std::to_string(int(f.kind()));
+                for (const auto& [key, expression] : f.expressions) {
+                    kind += key;
+                }
+                if ((f.kind() == document::FeatureKind::Box || f.kind() == document::FeatureKind::Cylinder ||
+                     f.kind() == document::FeatureKind::Gear || f.kind() == document::FeatureKind::Thread ||
+                     f.kind() == document::FeatureKind::Extrude) &&
+                    std::ranges::find(seen, kind) == seen.end()) {
+                    seen.push_back(kind);
+                    ids.push_back(f.id());
+                }
+            }
+            for (const document::FeatureId id : ids) {
+                std::unique_ptr<document::Feature> before = window_.document_.findFeature(id)->clone();
+                blocking(QStringLiteral("editar"), [&] { window_.activateFeature(id); });
+                settle(60);
+                FeatureTool* tool = window_.tool_.get();
+                if (tool == nullptr || dynamic_cast<GeneratorTool*>(tool) != nullptr) {
+                    changed << QString::fromStdString(before->name()) + QStringLiteral(": no se abrió su herramienta");
+                    continue;
+                }
+                std::unique_ptr<document::Feature> after = tool->make();
+                ++checked;
+                if (!after) {
+                    changed << QString::fromStdString(before->name()) + QStringLiteral(": no se pudo rehacer");
+                } else {
+                    const auto a = before->numericFields();
+                    const auto b = after->numericFields();
+                    for (std::size_t i = 0; i < a.size() && i < b.size(); ++i) {
+                        // Con dos decimales en el cuadro, media centésima de redondeo es lo normal.
+                        if (std::abs(a[i].get() - b[i].get()) > 6e-3 && !before->expressions.contains(a[i].key)) {
+                            changed << QStringLiteral("%1 · %2: %3 → %4").arg(QString::fromStdString(before->name()), QString::fromStdString(a[i].label))
+                                           .arg(a[i].get()).arg(b[i].get());
+                        }
+                    }
+                    for (const auto& [key, expression] : before->expressions) {
+                        // Un número a secas («0», «-1») pasa a ser el valor del cuadro: lo que no puede perderse es un vínculo.
+                        const auto value = std::ranges::find_if(b, [&](const auto& n) { return n.key == key; });
+                        const bool linked = !document::expressionNames(expression).empty();
+                        if (!linked && value != b.end() && value->scale == 1.0 &&
+                            std::abs(value->get() - document::evaluateExpression(expression, window_.document_.lookup())) > 6e-3) {
+                            changed << QStringLiteral("%1 · %2 ya no vale %3").arg(QString::fromStdString(before->name()), QString::fromStdString(key),
+                                                                                 QString::fromStdString(expression));
+                        }
+                        if (linked && !after->expressions.contains(key)) {
+                            changed << QStringLiteral("%1 · perdió la expresión de %2").arg(QString::fromStdString(before->name()), QString::fromStdString(key));
+                        }
+                    }
+                }
+                blocking(QStringLiteral("cerrar"), [&] { window_.finishTool(false); });
+                settle(60);
+            }
+            waitIdle();
+            undoAll();
+        }
+        expect(changed.isEmpty(), QStringLiteral("cambian al editar: ") + changed.mid(0, 12).join(QStringLiteral(", ")));
+        current_->detail += QStringLiteral(" operaciones revisadas: %1").arg(checked);
+    });
+
+    // El bote de rosca (lo que más tardaba): abrir el formulario con sus valores de fábrica y tener la vista previa sin
+    // errores, y poder aceptar.
+    step(QStringLiteral("Bote con tapa: la vista previa sale rápido y sin avisos"), [&] {
+        for (QAction* action : window_.generatorActions_) {
+            if (action->text() != QStringLiteral("Bote con tapa")) {
+                continue;
+            }
+            QSettings().remove(QStringLiteral("generator/bote-con-tapa"));
+            QElapsedTimer timer;
+            timer.start();
+            blocking(QStringLiteral("abrir el bote"), [&] { action->trigger(); });
+            expect(waitFor([this] { return window_.tool_ != nullptr && !window_.tool_->previewing(); }, 30000),
+                   QStringLiteral("la vista previa no terminó"));
+            const qint64 preview = timer.elapsed();
+            expect(window_.tool_->okButton_->isEnabled(), QStringLiteral("la vista previa no deja aceptar"));
+            timer.restart();
+            blocking(QStringLiteral("aceptar"), [&] { window_.finishTool(true); });
+            expect(waitFor([this] { return !window_.document_.computing(); }, 30000), QStringLiteral("no terminó de calcularse"));
+            const qint64 accepted = timer.elapsed();
+            waitIdle();
+            for (std::size_t i = 0; i < window_.document_.featureCount(); ++i) {
+                const auto& status = window_.document_.status(window_.document_.feature(i).id());
+                expect(status.health == document::Health::Ok, QString::fromStdString(window_.document_.feature(i).name() + ": " + status.message));
+            }
+            current_->detail += QStringLiteral(" vista previa %1 ms, aceptar %2 ms").arg(preview).arg(accepted);
+            undoAll();
+        }
     });
 
     // Redondeo: una cara elige todas sus aristas; dos caras elegidas eligen solo la arista donde se unen; quitar una vuelve
@@ -1496,10 +1845,8 @@ int InterfaceCheck::run()
                 move->click();
             }
             // Mover: arrastrar la flecha X 12,5 mm.
-            blocking(QStringLiteral("arrastrar la flecha X"), [&] {
-                emit window_.viewport_->gizmoPressed(0);
-                emit window_.viewport_->gizmoDragged(0, 12.5);
-            });
+            blocking(QStringLiteral("agarrar la flecha X"), [&] { emit window_.viewport_->gizmoPressed(0); });
+            blocking(QStringLiteral("arrastrar la flecha X"), [&] { emit window_.viewport_->gizmoDragged(0, 12.5); });
             settle(400);
             // La sombra (azul translúcida) se ve mientras se arrastra: antes de quitar el redibujado forzado se veía, y al
             // quitarlo la vista no se enteraba de que había cambiado (771 píxeles azulados, solo las flechas, contra 137 000).
@@ -1774,6 +2121,13 @@ int InterfaceCheck::run()
                    QStringLiteral("el botón %1 no lleva un icono").arg(QString::fromLatin1(name)));
         }
         constexpr int kCount = 24;
+        // En una ventana baja la timeline se esconde sola (según la pantalla, la de la prueba puede serlo).
+        const QSize size = window_.size();
+        if (window_.timelineDock_->isHidden()) {
+            window_.resize(std::max(size.width(), 1280), std::max(size.height(), 760));
+            window_.timelineDock_->show();
+            settle(200);
+        }
         for (int i = 0; i < kCount; ++i) {
             auto box = std::make_unique<document::BoxFeature>();
             box->base.origin = document::OriginPlane::XY;

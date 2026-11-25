@@ -89,6 +89,7 @@ Cómo medir el rendimiento de forma comparable: [`rendimiento/mediciones.md`](re
 | `--prueba-interfaz` | Prueba automática de la interfaz (ver arriba) |
 | `--captura-sketch <carpeta>` | Arma casos del sketch (punto, recortar y extender con elipse y spline, cota con ƒ, arcos concéntricos) y guarda una captura recortada de cada uno (`s-<caso>-antes.png` y `-despues.png`), para mirarlos. Los clics pasan por el snap de la rejilla (10 mm a ese zoom): los puntos van en múltiplos de 10 |
 | `--captura-temas <carpeta>` | Guarda capturas de la ventana, menús y diálogos en tema claro y oscuro (las de [`docs/capturas/`](capturas/) salen de aquí: `tema-oscuro-ventana.png` y `tema-oscuro-menu3.png`, el menú Sólido) |
+| `--inventario <carpeta>` | Recorre la ventana, las herramientas, los generadores y los diálogos, guarda capturas y `inventario.txt`; sale con código 3 si algo no cabe. Con `--tamano AnchoxAlto` fija el tamaño de la ventana y con `--escala N` la escala de la pantalla |
 | `--probar-cierre` | Provoca un fallo para comprobar el informe de cierres |
 
 ### Variables de entorno
