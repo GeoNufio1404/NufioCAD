@@ -1772,7 +1772,7 @@ int InterfaceCheck::run()
         // La timeline más ancha que la ventana: hay barra y llega hasta la última ficha.
         auto* area = qobject_cast<QAbstractScrollArea*>(window_.timeline_->parentWidget()->parentWidget());
         expect(area != nullptr && area->horizontalScrollBar()->maximum() > 0,
-               QStringLiteral("la timeline no tiene barra de desplazamiento con %1 operaciones").arg(kCount));
+               QStringLiteral("la timeline no tiene barra de desplazamiento con %1 operaciones (pista %2, mínimo %3, ancho %4, visible %5)").arg(kCount).arg(window_.timeline_->sizeHint().width()).arg(window_.timeline_->minimumSizeHint().width()).arg(window_.timeline_->width()).arg(window_.timeline_->isVisible()));
         if (area != nullptr) {
             area->horizontalScrollBar()->setValue(area->horizontalScrollBar()->maximum());
             settle(50);
