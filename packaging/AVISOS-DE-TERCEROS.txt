@@ -43,6 +43,9 @@ bibliotecas de abajo mantienen cada una su propia licencia.
 8. zlib, libpng, FreeType, Brotli y bzip2 — licencias libres permisivas (zlib/libpng, FreeType License o GPLv2, MIT, bzip2)
    Dependencias de Qt y de OpenCASCADE que viajan en la carpeta bin.
 
+9. Bibliotecas de Microsoft Visual C++ (vcruntime140, msvcp140, concrt140) — © Microsoft Corporation
+   Se distribuyen sin cambios, como «código distribuible» de Visual Studio 2022, en la carpeta bin.
+
 Catch2 (BSL-1.0) solo se usa para las pruebas del código fuente y no viaja en el instalador.
 
 
