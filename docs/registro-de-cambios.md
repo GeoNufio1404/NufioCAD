@@ -10,6 +10,17 @@ Qué cambió en cada entrega, en qué archivos y **cómo volver atrás** si algo
 
 ---
 
+## Segunda tanda de ajustes: menú Sólido, grada de la bayoneta y sombra al colocar (25 nov. 2026)
+
+- **Menú «Sólido» de la barra superior en submenús** (`MainWindowMenus.cpp`): Crear, Modificar, Organizar, Construir e Inspeccionar, en vez de treinta entradas seguidas. Las acciones y sus atajos son los mismos.
+- **Bayoneta con grada** (`Generators.cpp`): el hueco de cierre pasa a ser una grada de cierre, pegada al tope y del ancho justo de un pin, más hondo que la guía. Los pines descansan en ella al cerrar; para abrir hay que levantar la tapa por encima del escalón. Campo nuevo «Altura de la grada» (1,5 mm por defecto) que es lo que hay que levantar. Prueba de ajuste ampliada (`test_edge_ops.cpp`).
+- **Sombra al arrastrar las flechas de colocación** (`FeatureTools.cpp`): al agarrar una flecha de Caja, Cilindro, Engranaje, Rosca… el cuerpo nuevo se quita de su sitio y queda una sombra translúcida que sigue al arrastre, sin recalcular; al soltar se calcula en su sitio nuevo. Un cuerpo con más de 60 caras (un engranaje) usa como sombra su caja envolvente, para que agarrar la flecha no se quede pensando; el mallado de las sombras es más grueso (`ViewportHandles.cpp`).
+- Al abrir Mover y girar se piden los tres ejes del gizmo aunque una colocación los hubiera dejado en dos.
+- Prueba de interfaz: paso nuevo que arrastra las flechas en Engranaje y comprueba que la posición sigue al arrastre y que al soltar queda una vista previa válida.
+- **Volver atrás:** revertir la fusión de `feature/menu-solido-grada`.
+
+---
+
 ## Ajustes: colocar con flechas, cinta con desplegables y bayoneta con tope (24 nov. 2026)
 
 - **Colocar un cuerpo nuevo con flechas** (`FeatureTools.cpp`: `syncPlacementGizmo`; `Viewport::setGizmoAxes`): en Caja, Cilindro, Engranaje, Rosca y las demás herramientas con «Plano o cara» y posición X/Y, mientras el plano es el XY de origen aparecen las flechas X (roja) e Y (verde) del gizmo de mover (sin la Z). Arrastrar una cambia la posición X o Y (con Ctrl se pega a la rejilla) y la sombra se mueve con ella, así el cuerpo nuevo se aparta del origen sin que se fusione con lo que haya ahí. Los cuadros de posición siguen valiendo.

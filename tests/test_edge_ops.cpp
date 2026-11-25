@@ -3856,11 +3856,12 @@ TEST_CASE("La tapa de bayoneta entra por las entradas, gira y queda retenida", "
     const auto rad = [](double degrees) { return degrees * std::numbers::pi / 180.0; };
     CHECK(overlap(0.0, 0.0) < 1.0);                // entra por las entradas
     CHECK(overlap(rad(60.0), 0.0) > 5.0);          // la guía va un peldaño más arriba: sin levantar la tapa no gira
-    CHECK(overlap(rad(60.0), 1.1) < 1.0);          // levantándola un poco, gira por la guía
-    CHECK(overlap(rad(75.0), 0.0) < 1.0);          // al final cae en el hueco de cierre
+    CHECK(overlap(rad(60.0), 1.5) < 1.0);          // levantándola lo que mide la grada, gira por la guía
+    CHECK(overlap(rad(75.0), 0.0) < 1.0);          // al final los pines bajan a la grada
+    CHECK(overlap(rad(66.0), 0.0) > 5.0);          // de la grada no se sale girando: hay que levantarla
     CHECK(overlap(rad(75.0), 3.0) > 5.0);          // cerrada, no se puede levantar del todo: los pines topan
-    CHECK(overlap(rad(79.0), 1.1) > 5.0);          // el tope no deja seguir girando hasta la entrada siguiente
-    CHECK(overlap(rad(-8.0), 1.1) > 5.0);          // y al otro lado de la entrada hay otro tope
+    CHECK(overlap(rad(79.0), 1.5) > 5.0);          // el tope no deja seguir girando hasta la entrada siguiente
+    CHECK(overlap(rad(-8.0), 1.5) > 5.0);          // y al otro lado de la entrada hay otro tope
     CHECK(overlap(0.0, 3.0) < 1.0);                // alineada con las entradas, sí sale
 }
 

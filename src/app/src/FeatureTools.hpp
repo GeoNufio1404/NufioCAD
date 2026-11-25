@@ -183,6 +183,9 @@ protected:
     bool placementDragging_ = false;
     double dragStartX_ = 0.0;
     double dragStartY_ = 0.0;
+    // Lo que la última vista previa dibujó de nuevo (el cuerpo que se está colocando): al arrastrar las flechas se
+    // muestra como una sombra que sigue al cursor, sin recalcular nada hasta soltar.
+    std::vector<geometry::Shape> previewShapes_;
 
     // Aviso que no viene del cálculo sino de algo que la herramienta puso sola (un ángulo recomendado, por ejemplo): sale
     // en naranja bajo los cuadros y el cuadro «field» se marca también; se quita al cambiar ese cuadro a mano.
@@ -526,6 +529,7 @@ protected:
     bool removesMaterial() const override { return false; }
 
 private:
+    friend class InterfaceCheck;  // la prueba de interfaz arrastra las flechas de colocación
     // En una cara, «Cortar» va hacia dentro de la pieza y lo demás hacia fuera (el signo del ancho).
     void adjustDirection();
     // Pone los valores de fábrica del tipo elegido (dientes, módulo, ancho…), sin tocar la colocación ni la operación.

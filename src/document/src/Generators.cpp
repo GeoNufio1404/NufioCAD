@@ -2170,13 +2170,15 @@ public:
                         length("tapa", "Grosor de la tapa", 2.4, 0.8, 20.0),
                         length("holgura", "Holgura de ajuste", 0.3, 0.0, 2.0,
                                "Aire entre las piezas que encajan, por cada lado: sube si queda apretado, baja si baila"),
-                        choice("cierre", "Cierre", {"Rosca", "Bayoneta"}, "Rosca: se enrosca varias vueltas. Bayoneta: entra, se levanta un poco para girar hasta el tope y cae en su hueco", "forma", 0),
+                        choice("cierre", "Cierre", {"Rosca", "Bayoneta"}, "Rosca: se enrosca varias vueltas. Bayoneta: entra, gira hasta el tope y descansa en una grada; para abrir hay que levantarla", "forma", 0),
                         length("paso", "Paso de la rosca", 3.0, 1.0, 8.0, "Avance por vuelta: más grande imprime mejor", "cierre", 0),
                         length("rosca_alto", "Alto de la rosca", 10.0, 4.0, 40.0, "Lo que sube el cuello roscado", "cierre", 0),
                         length("pin_diametro", "Diámetro de los pines", 4.0, 2.0, 12.0, "Cuatro pines en el cuello", "cierre", 1),
                         length("pin_sale", "Lo que salen los pines", 2.5, 1.0, 8.0, {}, "cierre", 1),
                         length("pin_baja", "Altura de los pines", 6.0, 3.0, 40.0, "Desde el borde del bote hacia abajo", "cierre", 1),
                         length("cuello", "Alto del cuello", 12.0, 6.0, 40.0, "Lo que entra la tapa", "cierre", 1),
+                        length("grada", "Altura de la grada", 1.5, 0.6, 4.0,
+                               "Cuánto hay que levantar la tapa para sacar los pines de la grada donde descansan al cerrar", "cierre", 1),
                         length("ranura", "Hondo de la guía", 1.2, 0.6, 6.0, "Cuánto entra en la pared; deja al menos 0,8 mm", "forma", 1),
                         length("labio", "Labio sobre la tapa", 1.6, 0.8, 6.0, "El borde de pared que sujeta la tapa por arriba", "forma", 1)},
                        {{"forma", "Medidas"}, {"tapa", "Tapa y ajuste"}, {"cierre", "Cierre"}});
@@ -2195,7 +2197,7 @@ public:
         const std::string alto = p("alto"), pared = p("pared"), base = p("base"), tapa = p("tapa"), holgura = p("holgura"),
                           diametro = p("diametro"), ancho = p("ancho"), fondo = p("fondo"), esquina = p("esquina"),
                           interior = p("interior"), paso = p("paso"), roscaAlto = p("rosca_alto"), pinD = p("pin_diametro"),
-                          pinSale = p("pin_sale"), pinBaja = p("pin_baja"), cuello = p("cuello"), ranura = p("ranura"),
+                          pinSale = p("pin_sale"), pinBaja = p("pin_baja"), cuello = p("cuello"), grada = p("grada"), ranura = p("ranura"),
                           labio = p("labio");
         param(alto, v("alto"));
         param(pared, v("pared"));
@@ -2282,6 +2284,7 @@ public:
                 param(pinSale, v("pin_sale"));
                 param(pinBaja, v("pin_baja"));
                 param(cuello, v("cuello"));
+                param(grada, v("grada"));
                 const std::string span = diametro + " + 2*" + pinSale;
                 const std::string pinZ = alto + " - " + pinBaja;
                 recipe.features.push_back(cylinder("Bote: cuerpo", Operation::NewBody, diametro, "0", alto, ""));
@@ -2299,13 +2302,14 @@ public:
                     hollow->expressions["baseRound"] = "min(" + interior + "; min((" + inD + ")/2 - 0.1; " + alto + " - " + base + " - 0.1))";
                 }
                 recipe.features.push_back(std::move(hollow));
-                // La tapa: un vaso con la guía de los pines. Cada pin entra por una de las cuatro entradas, gira por la guía
-                // y se detiene contra un tope (no puede seguir girando hasta la entrada siguiente); ahí cae en un hueco más
-                // hondo, de modo que para abrir hay que levantar la tapa un poco antes de girar de vuelta.
+                // La tapa: un vaso con la guía de los pines. Cada pin entra por una de las cuatro entradas, se levanta la
+                // tapa para girar por la guía hasta el tope (no puede seguir hasta la entrada siguiente) y al soltarla los
+                // pines bajan a la grada (un escalón más hondo que la guía) donde descansan. Para abrir hay que volver a
+                // levantar la tapa por encima del escalón antes de girar de vuelta.
                 const std::string capD = span + " + 2*" + pared;
                 const std::string capH = tapa + " + " + cuello;
                 const std::string groove = pinD + " + 2*" + holgura;
-                const std::string lift = "(" + holgura + " + 0.8)";  // lo que sube la guía sobre las entradas y los huecos
+                const std::string lift = "(" + holgura + " + " + grada + ")";  // lo que sube la guía sobre las entradas y la grada
                 const std::string grooveZ = tapa + " + " + pinBaja + " - (" + groove + ")/2";
                 const std::string neckR = "((" + diametro + " + 2*" + holgura + ")/2)";
                 const std::string guideR = "((" + span + " + 2*" + holgura + ")/2)";
@@ -2335,8 +2339,8 @@ public:
                 };
                 const std::vector<Piece> pieces = {
                     {"tope", Operation::Join, "(" + g + "/2 + " + stopW + "/2)", stopW, midR, lenR, pathZ, groove},
-                    {"hueco de cierre", Operation::Cut, "(" + g + "/2 + " + stopW + " + (" + g + " + " + pinSale + ")/2)",
-                     "(" + g + " + " + pinSale + ")", pocketMid, pocketLen, grooveZ, groove + " + " + lift}};
+                    {"grada de cierre", Operation::Cut, "(" + g + "/2 + " + stopW + " + (" + g + " + 0.2*" + pinD + ")/2)",
+                     "(" + g + " + 0.2*" + pinD + ")", pocketMid, pocketLen, grooveZ, groove + " + " + lift}};
                 std::vector<std::unique_ptr<Feature>> later;
                 for (const Piece& piece : pieces) {
                     for (int k = 0; k < 4; ++k) {

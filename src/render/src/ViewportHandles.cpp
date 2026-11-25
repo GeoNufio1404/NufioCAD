@@ -317,8 +317,9 @@ void Viewport::Impl::showGhost(const std::vector<geometry::Shape>& list, bool al
             continue;
         }
         any = true;
-        // Un cuerpo pesado (una rosca) sin malla tardaría segundos en dibujarse aquí: su sombra es su caja.
-        if (geometry::hasHeavySurface(body) && !geometry::hasMesh(body)) {
+        // Un cuerpo pesado (una rosca) sin malla, o con muchísimas caras (un engranaje), tardaría segundos en dibujarse aquí: su
+        // sombra es su caja.
+        if ((geometry::hasHeavySurface(body) && !geometry::hasMesh(body)) || body.faceCount() > 60) {
             const geometry::Box box = body.bounds();
             builder.Add(shape, BRepPrimAPI_MakeBox(gp_Pnt(box.min.x, box.min.y, box.min.z),
                                                    gp_Pnt(box.max.x, box.max.y, box.max.z)).Shape());
@@ -332,6 +333,9 @@ void Viewport::Impl::showGhost(const std::vector<geometry::Shape>& list, bool al
     ghost = new AIS_Shape(shape);
     ghost->SetColor(alert ? rgb(0xE5, 0x39, 0x35) : rgb(0x6C, 0xA6, 0xFF));
     ghost->SetTransparency(alert ? 0.15 : 0.55);
+    // Es una sombra: un mallado grueso se ve igual de bien y no tarda segundos en un engranaje (los dientes).
+    ghost->SetOwnDeviationCoefficient(0.01);
+    ghost->SetOwnDeviationAngle(0.5);
     ghost->Attributes()->SetFaceBoundaryDraw(false);
     context->Display(ghost, AIS_Shaded, -1, false);
 }
