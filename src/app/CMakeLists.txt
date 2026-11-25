@@ -109,8 +109,17 @@ if(WIN32)
     qt_generate_deploy_app_script(
         TARGET nuf_app
         OUTPUT_SCRIPT nuf_qt_deploy_script
-        NO_UNSUPPORTED_PLATFORM_ERROR)
+        NO_UNSUPPORTED_PLATFORM_ERROR
+        # Sin vc_redist.x64.exe: windeployqt lo copiaba pero nadie lo ejecutaba, y sin esas bibliotecas el programa no arranca.
+        DEPLOY_TOOL_OPTIONS --no-compiler-runtime)
     install(SCRIPT ${nuf_qt_deploy_script})
+    # Las bibliotecas de Microsoft (vcruntime140, msvcp140…) van junto al programa: no hay que instalar nada más, tampoco con el ZIP.
+    set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION ${CMAKE_INSTALL_BINDIR})
+    set(CMAKE_INSTALL_UCRT_LIBRARIES OFF)  # el resto (UCRT) viene con Windows 10 y 11
+    include(InstallRequiredSystemLibraries)
+    if(NOT CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS)
+        message(WARNING "No se encontraron las bibliotecas de Microsoft: el paquete no arrancaría en un Windows sin ellas")
+    endif()
     install(FILES "${PROJECT_SOURCE_DIR}/packaging/AVISOS-DE-TERCEROS.txt"
             DESTINATION .)
     install(FILES "${PROJECT_SOURCE_DIR}/LICENSE" DESTINATION . RENAME LICENSE.txt)

@@ -66,7 +66,9 @@ de los paquetes de Qt y de OpenCASCADE de la distribución. Un Flatpak (con su m
 2. `git tag vX.Y.Z && git push origin vX.Y.Z` (ojo: empujar una etiqueta `v*` **dispara** el flujo Publicar y gasta minutos de Actions; para
    publicar a mano, `gh release create` sin flujo). El flujo **Publicar** compila Windows y Linux, empaqueta, firma (si hay certificado), calcula
    los SHA-256 y deja la versión **en borrador** en GitHub, con los archivos y los SHA-256 en las notas.
-3. Se revisa el borrador (notas, archivos), se instala y prueba el instalador en un Windows limpio y se publica.
+3. Con el ZIP desempaquetado, `packaging\windows\comprobar-dependencias.ps1 -Carpeta <carpeta>` tiene que decir OK: comprueba que el paquete
+   lleva todo lo que necesita (también las bibliotecas de Visual C++, que en el equipo de desarrollo siempre están y por eso no se notan).
+4. Se revisa el borrador (notas, archivos), se instala y prueba el instalador en un Windows limpio y se publica.
 
 ## Firma de código (D3)
 

@@ -1,6 +1,6 @@
 # Empaquetado (Fase 19, D1): `cpack --config build/<preset>/CPackConfig.cmake`.
-#   Windows: instalador NSIS (NufioCAD-<versión>-win64.exe) y ZIP portátil, con las DLL de Qt, de OpenCASCADE y de todo lo que
-#            enlaza, los plugins de Qt (windeployqt), la asociación de .nuf, el acceso del menú Inicio, el desinstalador y los
+#   Windows: instalador NSIS (NufioCAD-<versión>-win64.exe) y ZIP portátil, con las DLL de Qt, de OpenCASCADE, de Visual C++ y de todo lo
+#            que enlaza, los plugins de Qt (windeployqt), la asociación de .nuf, el acceso del menú Inicio, el desinstalador y los
 #            avisos de licencias de terceros.
 #   Linux:   .tar.gz, .deb y .rpm con el ejecutable, la entrada de menú, los iconos y el tipo MIME; el AppImage se hace con
 #            packaging/linux/crear-appimage.sh.
@@ -13,7 +13,7 @@ endif()
 set(CPACK_PACKAGE_NAME "NufioCAD")
 set(CPACK_PACKAGE_VENDOR "NufioCAD")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "CAD paramétrico de escritorio para diseñar piezas e imprimirlas en 3D")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "CAD paramétrico de escritorio para diseñar piezas y modelos 3D")
 set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/GeoNufio1404/NufioCAD")
 set(CPACK_PACKAGE_INSTALL_DIRECTORY "NufioCAD")
 set(CPACK_PACKAGE_CONTACT "NufioCAD <https://github.com/GeoNufio1404/NufioCAD/issues>")
