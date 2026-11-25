@@ -364,6 +364,15 @@ void Viewport::showGizmo(GizmoKind kind, const sketch::Vec3& origin)
     update();
 }
 
+void Viewport::setGizmoAxes(int mask)
+{
+    mask &= 7;
+    if (impl_->gizmoMask != mask) {
+        impl_->gizmoMask = mask;
+        impl_->clearGizmoShapes();  // la próxima vez se dibuja solo con esos ejes
+    }
+}
+
 void Viewport::hideGizmo()
 {
     impl_->hideGizmo();

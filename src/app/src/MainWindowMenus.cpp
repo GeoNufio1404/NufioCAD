@@ -586,34 +586,33 @@ void MainWindow::createMenus()
     ribbon_ = new Ribbon(this);
     solidTab_ = ribbon_->addTab(QStringLiteral("SÓLIDO"));
     sketchTab_ = ribbon_->addTab(QStringLiteral("SKETCH"));
+    // Las herramientas parecidas van juntas en un desplegable (el botón se queda con la última usada), para que la pestaña no
+    // sea una hilera interminable de botones.
+    const auto solidFamily = [this](std::initializer_list<QAction*> actions) {
+        auto* menu = new QMenu(this);
+        for (QAction* action : actions) {
+            menu->addAction(action);
+        }
+        return ribbon_->addFamily(solidTab_, menu, std::vector<QAction*>(actions));
+    };
     ribbon_->addGroup(solidTab_, QStringLiteral("CREAR"));
     ribbon_->addAction(solidTab_, createSketchAction_);
-    ribbon_->addAction(solidTab_, extrudeAction_);
-    ribbon_->addAction(solidTab_, revolveAction_);
-    ribbon_->addAction(solidTab_, sweepAction_);
-    ribbon_->addAction(solidTab_, loftAction_);
-    ribbon_->addAction(solidTab_, boxAction_);
-    ribbon_->addAction(solidTab_, cylinderAction_);
+    solidFamily({extrudeAction_, revolveAction_, sweepAction_, loftAction_});
+    solidFamily({boxAction_, cylinderAction_});
     ribbon_->addGroup(solidTab_, QStringLiteral("MODIFICAR"));
-    ribbon_->addAction(solidTab_, filletAction_);
-    ribbon_->addAction(solidTab_, chamferAction_);
+    solidFamily({filletAction_, chamferAction_});
     ribbon_->addAction(solidTab_, shellAction_);
     ribbon_->addAction(solidTab_, holeAction_);
-    ribbon_->addAction(solidTab_, mirrorAction_);
-    ribbon_->addAction(solidTab_, splitAction_);
-    ribbon_->addAction(solidTab_, patternAction_);
+    solidFamily({mirrorAction_, splitAction_, patternAction_});
     ribbon_->addAction(solidTab_, moveAction_);
     ribbon_->addAction(solidTab_, combineAction_);
     ribbon_->addGroup(solidTab_, QStringLiteral("ORGANIZAR"));
     ribbon_->addAction(solidTab_, organizeAction_);
     ribbon_->addAction(solidTab_, duplicateAction_);
     ribbon_->addAction(solidTab_, dragAction_);
-    ribbon_->addAction(solidTab_, alignAction_);
-    ribbon_->addAction(solidTab_, jointAction_);
-    ribbon_->addAction(solidTab_, linkAction_);
+    solidFamily({alignAction_, jointAction_, linkAction_});
     ribbon_->addGroup(solidTab_, QStringLiteral("CONSTRUIR"));
-    ribbon_->addAction(solidTab_, planeAction_);
-    ribbon_->addAction(solidTab_, axisAction_);
+    solidFamily({planeAction_, axisAction_});
     ribbon_->addAction(solidTab_, parametersAction_);
     ribbon_->addGroup(solidTab_, QStringLiteral("GENERAR"));
     ribbon_->addAction(solidTab_, gearAction_);

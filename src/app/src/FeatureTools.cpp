@@ -7,6 +7,7 @@
 #include <nuf/geometry/Modeling.hpp>
 #include <nuf/render/Viewport.hpp>
 
+#include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
@@ -59,6 +60,9 @@ FeatureTool::~FeatureTool()
     viewport_.clearToolPreview();
     viewport_.hideDistanceHandle();
     viewport_.hideDimensionArrow();
+    if (movable_ != nullptr) {
+        viewport_.hideGizmo();
+    }
     viewport_.setAdditiveSelection(false);
     viewport_.setEdgeAssist(false);
     if (panel_) {
@@ -295,6 +299,52 @@ void FeatureTool::createPlacement(QFormLayout* form, Placement& p, const documen
     for (QDoubleSpinBox* box : {p.x, p.y}) {
         connect(box, &QDoubleSpinBox::valueChanged, this, [this] { updatePreview(); });
     }
+    // Las flechas para arrastrar la posición en la vista.
+    movable_ = &p;
+    connect(&viewport_, &render::Viewport::gizmoPressed, this, [this](int axis) {
+        if (movable_ == nullptr || axis < 0 || axis > 1) {
+            return;
+        }
+        placementDragging_ = true;
+        dragStartX_ = movable_->x->value();
+        dragStartY_ = movable_->y->value();
+        viewport_.isolateGizmo(axis);  // la otra flecha se quita mientras se arrastra esta
+    });
+    connect(&viewport_, &render::Viewport::gizmoDragged, this, [this](int axis, double amount) {
+        if (!placementDragging_ || movable_ == nullptr || axis < 0 || axis > 1) {
+            return;
+        }
+        // Con Ctrl se pega a una rejilla de una unidad entera (como al mover).
+        const bool grid = QApplication::keyboardModifiers().testFlag(Qt::ControlModifier);
+        const double step = Units::instance().factor();
+        const double raw = (axis == 0 ? dragStartX_ : dragStartY_) + amount;
+        const double value = grid ? std::round(raw / step) * step : std::round(raw * 100.0) / 100.0;
+        (axis == 0 ? movable_->x : movable_->y)->setValue(value);
+        emit message(QStringLiteral("Colocar en %1: %2").arg(QString(QLatin1Char("XY"[axis])), Units::instance().formatWithUnit(value)));
+    });
+    connect(&viewport_, &render::Viewport::gizmoReleased, this, [this](int) {
+        if (!placementDragging_) {
+            return;
+        }
+        placementDragging_ = false;
+        viewport_.isolateGizmo(-1);
+        syncPlacementGizmo();
+    });
+}
+
+void FeatureTool::syncPlacementGizmo()
+{
+    if (movable_ == nullptr || !panel_) {
+        return;
+    }
+    const Placement& p = *movable_;
+    // Solo sobre el plano XY de origen (los ejes de la flecha son los del mundo) y mientras la colocación se use.
+    if (p.base == nullptr || p.base->isHidden() || p.base->currentIndex() != 0) {
+        viewport_.hideGizmo();
+        return;
+    }
+    viewport_.setGizmoAxes(3);
+    viewport_.showGizmo(render::Viewport::GizmoKind::Move, {p.x->value(), p.y->value(), 0.0});
 }
 
 bool FeatureTool::placementSelection(Placement& p, const render::ModelSelection& selection)
@@ -482,6 +532,7 @@ void FeatureTool::showPreview(const document::Feature& feature, const document::
     }
     afterPreview(before());
     refreshArrow();
+    syncPlacementGizmo();
 }
 
 std::vector<std::pair<std::string, QWidget*>> FeatureTool::markableFields() const

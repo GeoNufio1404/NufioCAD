@@ -201,6 +201,8 @@ public:
 
     Viewport::GizmoKind gizmoKind = Viewport::GizmoKind::None;
     Handle(AIS_Shape) gizmoShapes[3];
+    int gizmoMask = 7;  // los ejes que se dibujan (bit k = eje k)
+    bool gizmoBuilt() const { return !gizmoShapes[0].IsNull() || !gizmoShapes[1].IsNull() || !gizmoShapes[2].IsNull(); }
     gp_Pnt gizmoOrigin;
     double gizmoBuiltSize = 0.0;
     // Arrastrar piezas (Fase 21)

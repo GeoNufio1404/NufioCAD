@@ -2170,7 +2170,7 @@ public:
                         length("tapa", "Grosor de la tapa", 2.4, 0.8, 20.0),
                         length("holgura", "Holgura de ajuste", 0.3, 0.0, 2.0,
                                "Aire entre las piezas que encajan, por cada lado: sube si queda apretado, baja si baila"),
-                        choice("cierre", "Cierre", {"Rosca", "Bayoneta"}, "Rosca: se enrosca varias vueltas. Bayoneta: entra y gira un poco", "forma", 0),
+                        choice("cierre", "Cierre", {"Rosca", "Bayoneta"}, "Rosca: se enrosca varias vueltas. Bayoneta: entra, se levanta un poco para girar hasta el tope y cae en su hueco", "forma", 0),
                         length("paso", "Paso de la rosca", 3.0, 1.0, 8.0, "Avance por vuelta: más grande imprime mejor", "cierre", 0),
                         length("rosca_alto", "Alto de la rosca", 10.0, 4.0, 40.0, "Lo que sube el cuello roscado", "cierre", 0),
                         length("pin_diametro", "Diámetro de los pines", 4.0, 2.0, 12.0, "Cuatro pines en el cuello", "cierre", 1),
@@ -2299,18 +2299,71 @@ public:
                     hollow->expressions["baseRound"] = "min(" + interior + "; min((" + inD + ")/2 - 0.1; " + alto + " - " + base + " - 0.1))";
                 }
                 recipe.features.push_back(std::move(hollow));
-                // La tapa: un vaso con la guía (un anillo de la altura del pin más holgura) y cuatro entradas hasta el borde.
+                // La tapa: un vaso con la guía de los pines. Cada pin entra por una de las cuatro entradas, gira por la guía
+                // y se detiene contra un tope (no puede seguir girando hasta la entrada siguiente); ahí cae en un hueco más
+                // hondo, de modo que para abrir hay que levantar la tapa un poco antes de girar de vuelta.
                 const std::string capD = span + " + 2*" + pared;
                 const std::string capH = tapa + " + " + cuello;
                 const std::string groove = pinD + " + 2*" + holgura;
+                const std::string lift = "(" + holgura + " + 0.8)";  // lo que sube la guía sobre las entradas y los huecos
                 const std::string grooveZ = tapa + " + " + pinBaja + " - (" + groove + ")/2";
+                const std::string neckR = "((" + diametro + " + 2*" + holgura + ")/2)";
+                const std::string guideR = "((" + span + " + 2*" + holgura + ")/2)";
+                const std::string outerR = "min(" + guideR + " + 0.3; (" + capD + ")/2 - 0.1)";
+                const std::string g = "(" + groove + ")";
+                const std::string stopW = "(0.8*" + pinD + ")";
+                const std::string midR = "((" + neckR + " + " + outerR + ")/2)";
+                const std::string lenR = "(" + outerR + " - " + neckR + ")";
+                // El hueco de cierre empieza más adentro: el pin, ya girado, entra en él inclinado respecto del radio.
+                const std::string pocketR0 = "(0.9*" + neckR + ")";
+                const std::string pocketMid = "((" + pocketR0 + " + " + outerR + ")/2)";
+                const std::string pocketLen = "(" + outerR + " - " + pocketR0 + ")";
                 recipe.features.push_back(cylinder("Tapa: cuerpo", Operation::NewBody, capD, "0", capH, beside));
                 recipe.features.push_back(cylinder("Tapa: hueco", Operation::Cut, diametro + " + 2*" + holgura, tapa, cuello + " + 1", beside));
-                recipe.features.push_back(cylinder("Tapa: guía de los pines", Operation::Cut, span + " + 2*" + holgura, grooveZ, groove, beside));
+                // La guía va un peldaño más arriba que las entradas y que el hueco de cierre: los pines solo la recorren
+                // levantando la tapa un poco.
+                const std::string pathZ = grooveZ + " + " + lift;
+                recipe.features.push_back(cylinder("Tapa: guía de los pines", Operation::Cut, span + " + 2*" + holgura, pathZ, groove, beside));
+                // Los topes: un muro junto a cada entrada, del lado hacia donde llega el pin al girar.
+                // (cx, cy) y (w, d) se giran 90° para cada una de las cuatro entradas.
+                struct Piece {
+                    const char* name;
+                    Operation op;
+                    std::string cx, w;  // a lo largo del giro
+                    std::string cy, d;  // a lo largo del radio
+                    std::string z, h;
+                };
+                const std::vector<Piece> pieces = {
+                    {"tope", Operation::Join, "(" + g + "/2 + " + stopW + "/2)", stopW, midR, lenR, pathZ, groove},
+                    {"hueco de cierre", Operation::Cut, "(" + g + "/2 + " + stopW + " + (" + g + " + " + pinSale + ")/2)",
+                     "(" + g + " + " + pinSale + ")", pocketMid, pocketLen, grooveZ, groove + " + " + lift}};
+                std::vector<std::unique_ptr<Feature>> later;
+                for (const Piece& piece : pieces) {
+                    for (int k = 0; k < 4; ++k) {
+                        std::string cx = piece.cx, cy = piece.cy, w = piece.w, d = piece.d;
+                        for (int turn = 0; turn < k; ++turn) {
+                            const std::string nx = "-(" + cy + ")", ny = cx;
+                            cx = nx;
+                            cy = ny;
+                            std::swap(w, d);
+                        }
+                        const std::string name = std::string("Tapa: ") + piece.name + " " + std::to_string(k + 1);
+                        auto part = box(name, piece.op, w, d, piece.z, piece.h, beside + " + (" + cx + ")", cy, "");
+                        if (piece.op == Operation::Join) {
+                            recipe.features.push_back(std::move(part));
+                        } else {
+                            later.push_back(std::move(part));
+                        }
+                    }
+                }
+                // Las entradas y los huecos de cierre bajan hasta el suelo hondo, y se cortan después de poner los topes.
                 recipe.features.push_back(box("Tapa: entradas en X", Operation::Cut, span + " + 2*" + pared + " + 2", groove, grooveZ,
                                               capH + " - (" + grooveZ + ") + 1", beside, "", ""));
                 recipe.features.push_back(box("Tapa: entradas en Y", Operation::Cut, groove, span + " + 2*" + pared + " + 2", grooveZ,
                                               capH + " - (" + grooveZ + ") + 1", beside, "", ""));
+                for (auto& part : later) {
+                    recipe.features.push_back(std::move(part));
+                }
             }
         } else {
             // Tapa deslizante: guías en las paredes largas y una ranura en la pared de delante para meter la tapa.

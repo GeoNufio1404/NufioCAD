@@ -318,6 +318,10 @@ Código: **USA**. Rama `feature/fase-15-usabilidad`.
 | TL.6 | Clic derecho sobre una de varias elegidas | Menú con «Suprimir/Reactivar las N», «Mover el marcador tras la última» y «Borrar las N» |
 | TL.7 | Arrastra una ficha hasta el borde derecho o izquierdo de lo visible | La timeline se desplaza sola mientras sigues cerca del borde |
 | TL.8 | Mira los iconos de las fichas | Cada ficha lleva el mismo dibujo que su herramienta (Extruir, Redondeo, Caja…), con los colores del tema, y su número de orden arriba a la izquierda |
+| AJU.1 | Abre Caja (o Engranaje) con algo ya en el origen y arrastra la flecha roja o la verde que sale en la vista | La sombra se mueve y los cuadros «Posición X/Y» cambian; al aceptar la caja queda aparte, sin fusionarse con la del origen. Con Ctrl se pega a la rejilla |
+| AJU.2 | En Caja, cambia «Plano o cara» a otro plano | Las flechas desaparecen (solo salen sobre el plano XY) |
+| AJU.3 | Mira la pestaña SÓLIDO | Las herramientas parecidas están en botones con desplegable (Extruir…, Caja/Cilindro, Redondeo/Chaflán…); el botón recuerda la última usada y todo sigue funcionando |
+| AJU.4 | Genera un Bote con tapa de bayoneta, deja la tapa sobre el bote y gírala sin levantarla | No gira: hay que levantarla un poco; al girar hasta el final topa y cae en su hueco; seguir girando no la abre; para abrir se levanta y se gira de vuelta |
 | TL.9 | Mira los botones de inicio, atrás, reproducir, adelante y final sobre la timeline; pulsa reproducir | Llevan iconos del mismo estilo que las herramientas; al reproducir el icono pasa a pausa y vuelve a reproducir al parar |
 | FLU.31 | Diseño con piezas grandes: Archivo › Exportar › STL y, con la insignia «ocupado» visible, pulsa su botón Cancelar | La exportación se para, sale «Cancelado: el diseño no cambió», no queda archivo a medias y el diseño sigue igual |
 
